@@ -1,0 +1,17 @@
+relations:
+  default:
+    role: stranger
+    nickname: null
+    priority: 1
+    permissions:
+      agent_control: false
+      image_gen: false
+    extra_prompt: ''
+  '1043484516':
+    permissions:
+      agent_control: true
+      image_gen: true
+    role: lover
+    nickname: 风谕
+    priority: 10
+    extra_prompt: ''

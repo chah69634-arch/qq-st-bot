@@ -1,0 +1,245 @@
+"""
+用户画像模块
+存储从对话中提炼出的结构化用户信息
+持久化到 data/profiles/{user_id}.json
+"""
+
+import json
+import logging
+from pathlib import Path
+
+from core.config_loader import get_config
+from core.error_handler import log_error
+
+logger = logging.getLogger(__name__)
+
+PROFILES_DIR = Path("data/profiles")
+
+# 画像字段的默认结构
+_DEFAULT_PROFILE = {
+    "name": None,           # 真实姓名/常用称呼
+    "location": None,       # 所在地
+    "pets": None,           # 宠物
+    "interests": None,      # 兴趣爱好
+    "occupation": None,     # 职业/学校
+    "important_facts": [],  # 其他重要事实（列表）
+}
+
+
+def _profile_path(user_id: str) -> Path:
+    """返回该用户的画像文件路径"""
+    PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    return PROFILES_DIR / f"{user_id}.json"
+
+
+def load(user_id: str) -> dict:
+    """
+    读取用户画像，文件不存在时返回空模板
+    """
+    path = _profile_path(user_id)
+    try:
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            # 用默认模板填充缺失字段，保证结构完整
+            merged = dict(_DEFAULT_PROFILE)
+            merged.update(data)
+            return merged
+    except Exception as e:
+        log_error("user_profile.load", e)
+    return dict(_DEFAULT_PROFILE)
+
+
+def update(user_id: str, new_facts: dict):
+    """
+    合并更新用户画像，不覆盖已有非空值
+
+    new_facts 中 important_facts 列表会去重追加
+    其他字段只在原值为 None 时更新
+    """
+    profile = load(user_id)
+
+    for key, value in new_facts.items():
+        if key == "important_facts":
+            # 列表字段：去重追加
+            existing = profile.get("important_facts") or []
+            if isinstance(value, list):
+                for item in value:
+                    if item and item not in existing:
+                        existing.append(item)
+            elif value and value not in existing:
+                existing.append(value)
+            profile["important_facts"] = existing
+        else:
+            # 其他字段：只在原值为空时更新
+            if not profile.get(key) and value:
+                profile[key] = value
+
+    _save(user_id, profile)
+
+
+async def extract_and_update(user_id: str, recent_messages: list[dict]):
+    """
+    用 LLM 从最近对话中提取新的用户信息，并更新画像
+    应每 N 轮调用一次（N = summary_every_n_rounds）
+
+    LLM 被要求只返回 JSON，不输出其他内容
+    """
+    if not recent_messages:
+        return
+
+    # 把消息列表转换成可读文本
+    conv_text = "\n".join(
+        f"{'用户' if m['role'] == 'user' else 'AI'}: {m['content']}"
+        for m in recent_messages[-10:]  # 只取最近10条，省token
+    )
+
+    prompt_messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个信息提取助手。请从下面的对话中提取用户的个人信息。\n"
+                "只返回 JSON 对象，不要输出任何其他内容。\n"
+                "JSON 格式：\n"
+                '{"name": null或字符串, "location": null或字符串, '
+                '"pets": null或字符串, "interests": null或字符串, '
+                '"occupation": null或字符串, "important_facts": [字符串列表]}\n'
+                "没有提到的字段填 null，important_facts 放其他值得记住的事实。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"对话内容：\n{conv_text}",
+        },
+    ]
+
+    try:
+        from core import llm_client
+        import json as _json
+
+        raw = await llm_client.chat(prompt_messages)
+        # 清理可能的 markdown 代码块
+        raw = raw.strip().strip("```json").strip("```").strip()
+        new_facts = _json.loads(raw)
+        update(user_id, new_facts)
+        logger.info(f"[user_profile] 用户 {user_id} 画像已更新")
+    except Exception as e:
+        log_error("user_profile.extract_and_update", e)
+
+
+def _save(user_id: str, profile: dict):
+    """把画像写回磁盘"""
+    path = _profile_path(user_id)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(profile, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_error("user_profile._save", e)
+
+
+def save(user_id: str, profile: dict):
+    """公开接口：直接将 profile 写回磁盘（admin 覆盖编辑用）"""
+    _save(user_id, profile)
+
+
+def clear(user_id: str):
+    """清空用户画像（admin 用）"""
+    _save(user_id, dict(_DEFAULT_PROFILE))
+
+
+# ─── 好感度系统 ────────────────────────────────────────────────────────────────
+
+_AFFECTION_LEVELS = [
+    (0,   99,   "陌生人",   "叶瑄对她还不太了解"),
+    (100, 299,  "普通朋友", "叶瑄对她有些印象"),
+    (300, 499,  "好朋友",   "叶瑄很高兴认识她"),
+    (500, 699,  "亲密朋友", "叶瑄很珍惜和她在一起的时光"),
+    (700, 899,  "挚友",     "叶瑄对她有深厚的情感"),
+    (900, 1000, "灵魂伴侣", "叶瑄认为她是最重要的人"),
+]
+
+
+def get_affection(user_id: str) -> int:
+    """读取用户好感度，默认 0"""
+    path = _profile_path(user_id)
+    try:
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return int(data.get("affection", 0))
+    except Exception as e:
+        log_error("user_profile.get_affection", e)
+    return 0
+
+
+def add_affection(user_id: str, delta: int):
+    """增减好感度，结果限制在 0-1000"""
+    path = _profile_path(user_id)
+    try:
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = dict(_DEFAULT_PROFILE)
+        current = int(data.get("affection", 0))
+        data["affection"] = max(0, min(1000, current + delta))
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_error("user_profile.add_affection", e)
+
+
+def set_affection(user_id: str, value: int):
+    """直接设置好感度（管理员用）"""
+    path = _profile_path(user_id)
+    try:
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = dict(_DEFAULT_PROFILE)
+        data["affection"] = max(0, min(1000, int(value)))
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_error("user_profile.set_affection", e)
+
+
+def get_affection_level(user_id: str) -> dict:
+    """返回好感度等级信息：{value, label, description}"""
+    value = get_affection(user_id)
+    for lo, hi, label, desc in _AFFECTION_LEVELS:
+        if lo <= value <= hi:
+            return {"value": value, "label": label, "description": desc}
+    return {"value": value, "label": "灵魂伴侣", "description": _AFFECTION_LEVELS[-1][3]}
+
+
+class UserProfile:
+    """用户画像类，封装模块级函数，供外部按类方式导入使用"""
+
+    def load(self, user_id: str) -> dict:
+        return load(user_id)
+
+    def update(self, user_id: str, new_facts: dict):
+        update(user_id, new_facts)
+
+    async def extract_and_update(self, user_id: str, recent_messages: list[dict]):
+        await extract_and_update(user_id, recent_messages)
+
+    def save(self, user_id: str, profile: dict):
+        save(user_id, profile)
+
+    def clear(self, user_id: str):
+        clear(user_id)
+
+    def get_affection(self, user_id: str) -> int:
+        return get_affection(user_id)
+
+    def add_affection(self, user_id: str, delta: int):
+        add_affection(user_id, delta)
+
+    def set_affection(self, user_id: str, value: int):
+        set_affection(user_id, value)
+
+    def get_affection_level(self, user_id: str) -> dict:
+        return get_affection_level(user_id)

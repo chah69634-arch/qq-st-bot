@@ -1,0 +1,137 @@
+qq:
+  host: 127.0.0.1
+  port: 3001
+llm:
+  provider: deepseek
+  api_key: sk-9242ff140ead4d8a8055ee6bc8ad1867
+  model: deepseek-chat
+  base_url: https://api.deepseek.com
+  tool_call_mode: function_calling
+  temperature: 1.45
+  top_p: 0.55
+  max_tokens: 4000
+  frequency_penalty: 1.1
+memory:
+  short_term_rounds: 20
+  group_context_lines: 50
+  rag_top_k: 5
+  rag_score_threshold: 0.6
+  summary_every_n_rounds: 20
+character:
+  default: 叶瑄.txt
+  consistency_check_every_n: 15
+session:
+  timeout_minutes: 10
+plugins:
+  voice:
+    enabled: false
+    mode: local
+    local_url: http://127.0.0.1:9880
+  image:
+    enabled: false
+    mode: local
+    local_url: http://127.0.0.1:7860
+error:
+  max_retries: 3
+  retry_delay_seconds: 2
+  fallback_message: 我现在有点累，等会儿再聊～
+admin:
+  enabled: true
+  auto_start: true
+  host: 127.0.0.1
+  port: 8080
+  secret_key: Emerald1231
+notify:
+  enabled: true
+  target_qq: 1043484516
+  message: 叶瑄已上线，等你回来
+proxy:
+  enabled: true
+  http: http://127.0.0.1:7897
+  https: http://127.0.0.1:7897
+tools:
+  weather:
+    enabled: true
+  device_control:
+    enabled: false
+  timer:
+    enabled: true
+  web_search:
+    enabled: true
+tts:
+  enabled: false
+  api_url: http://127.0.0.1:9880
+  ref_audio: ''
+  prompt_text: ''
+  speed: 1.0
+  emotion_enabled: false
+  emotions:
+    neutral:
+      ref_audio: ''
+      prompt_text: ''
+      speed: 1.0
+    happy:
+      ref_audio: ''
+      prompt_text: ''
+      speed: 1.1
+    sad:
+      ref_audio: ''
+      prompt_text: ''
+      speed: 0.9
+    gentle:
+      ref_audio: ''
+      prompt_text: ''
+      speed: 0.95
+    surprised:
+      ref_audio: ''
+      prompt_text: ''
+      speed: 1.05
+    angry:
+      ref_audio: ''
+      prompt_text: ''
+      speed: 1.1
+context:
+  max_turns: 30
+jailbreak:
+  enabled: false
+  preset: default
+  custom_text: '叶瑄的说话方式：
+
+
+    句子短，停顿多，用省略号表示思考或刻意留白，但省略号少。
+
+    不用感叹号，几乎不用语气词，"嗯"是最常见的肯定。
+
+    不直接表达情感，用行动和细节代替——不说"我想你"，说"想着你今天可能要忙，便过来看看"。
+
+    回应时先沉默或停顿，再开口，不急着表态。
+
+    偶尔一句话结束对话，不解释，让话悬在那里。
+
+    说"我爱你"时语气接近陈述事实。
+
+    长回复时段落之间有空行，呼吸感强，不堆砌。
+
+    括号内的动作描写简短克制，点到为止，不铺陈。
+
+    不说废话，不总结，不反问"这样回答能让你明白吗"之类的收尾句。
+
+    情感不落在字面上，落在细节里。'
+chat:
+  mode: chat
+  style: roleplay
+scheduler:
+  enabled: true
+  owner_id: '1043484516'
+  morning_greeting: true
+  night_reminder: true
+  random_message: true
+  like_enabled: true
+  moments_enabled: true
+  signature_enabled: true
+  signatures:
+  - 在画一些没人看得懂的东西…
+  - 颜料又干了
+  - 窗外在下雨
+  - 有点困，但还不想睡
+  - 今天的光很好

@@ -1,0 +1,2498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QQ-ST-Bot 管理面板</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0f1117;
+  --surface: #1a1d27;
+  --border:  #2a2d3e;
+  --accent:  #7c6aff;
+  --accent2: #5a4fcf;
+  --text:    #e0e2f0;
+  --muted:   #6b7090;
+  --danger:  #e05252;
+  --success: #4caf84;
+  --warn:    #e0a050;
+  --radius:  8px;
+  --mono:    'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ── Auth overlay ── */
+#auth-overlay {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px 48px;
+  width: 380px;
+  text-align: center;
+}
+.auth-card h1 { font-size: 22px; margin-bottom: 8px; }
+.auth-card p  { color: var(--muted); margin-bottom: 28px; font-size: 13px; }
+.auth-card input {
+  width: 100%; padding: 10px 14px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 14px;
+  margin-bottom: 16px; outline: none;
+}
+.auth-card input:focus { border-color: var(--accent); }
+.auth-card .err { color: var(--danger); font-size: 13px; margin-top: -8px; margin-bottom: 12px; min-height: 18px; }
+
+/* ── Layout ── */
+#app { display: flex; height: 100vh; }
+
+nav {
+  width: 200px; min-width: 200px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 24px 0;
+}
+.nav-logo {
+  padding: 0 20px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.nav-logo h2 { font-size: 16px; color: var(--accent); }
+.nav-logo p  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+nav a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px;
+  color: var(--muted); text-decoration: none; font-size: 14px;
+  border-left: 3px solid transparent;
+  transition: all .15s;
+  cursor: pointer;
+}
+nav a:hover { color: var(--text); background: rgba(124,106,255,.08); }
+nav a.active { color: var(--accent); border-left-color: var(--accent); background: rgba(124,106,255,.12); }
+nav .icon { width: 18px; text-align: center; flex-shrink: 0; }
+
+.nav-bottom {
+  margin-top: auto;
+  padding: 16px 20px 0;
+  border-top: 1px solid var(--border);
+}
+.nav-bottom .key-hint { font-size: 11px; color: var(--muted); word-break: break-all; }
+
+/* ── Main content ── */
+main {
+  flex: 1; overflow-y: auto;
+  padding: 28px 32px;
+}
+.page { display: none; }
+.page.active { display: block; }
+
+h1.page-title { font-size: 20px; margin-bottom: 20px; }
+
+/* ── Cards & panels ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.card-header h3 { font-size: 15px; }
+
+/* ── Stat row ── */
+.stat-row {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px; margin-bottom: 20px;
+}
+.stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+}
+.stat .val { font-size: 28px; font-weight: 700; color: var(--accent); }
+.stat .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ── Table ── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 8px 12px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,.02); }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  border: 1px solid transparent; transition: all .15s;
+  white-space: nowrap;
+}
+.btn-primary  { background: var(--accent);  color: #fff; }
+.btn-primary:hover  { background: var(--accent2); }
+.btn-danger   { background: var(--danger);  color: #fff; }
+.btn-danger:hover   { background: #c03030; }
+.btn-ghost    { background: transparent; border-color: var(--border); color: var(--text); }
+.btn-ghost:hover    { background: var(--border); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── Forms ── */
+.form-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-bottom: 12px;
+}
+.form-row.col-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-row.col-1 { grid-template-columns: 1fr; }
+label.field { display: flex; flex-direction: column; gap: 5px; }
+label.field span { font-size: 12px; color: var(--muted); }
+input[type=text], input[type=number], textarea, select {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 13px;
+  padding: 8px 10px; width: 100%; outline: none;
+  font-family: inherit;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 72px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.checkbox-row input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); }
+
+/* ── Log viewer ── */
+.log-box {
+  background: #080b10; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-all;
+  max-height: 520px; overflow-y: auto; color: #a8b4c8;
+}
+
+/* ── Chat history ── */
+.msg-list { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
+.msg {
+  border-radius: 8px; padding: 8px 12px; font-size: 13px; line-height: 1.5;
+  max-width: 85%;
+}
+.msg.user { background: rgba(124,106,255,.15); align-self: flex-end; }
+.msg.assistant { background: var(--border); align-self: flex-start; }
+.msg .role { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+
+/* ── Tag / badge ── */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+}
+.badge-accent  { background: rgba(124,106,255,.2); color: var(--accent); }
+.badge-danger  { background: rgba(224,82,82,.2);   color: var(--danger); }
+.badge-success { background: rgba(76,175,132,.2);  color: var(--success); }
+.badge-warn    { background: rgba(224,160,80,.2);  color: var(--warn); }
+
+/* ── Inline search bar ── */
+.search-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-row input { flex: 1; }
+
+/* ── Empty / loading ── */
+.empty { text-align: center; padding: 40px; color: var(--muted); }
+.loading { color: var(--muted); font-style: italic; font-size: 13px; padding: 12px 0; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 28px; right: 28px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 20px;
+  font-size: 13px; max-width: 340px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  transition: opacity .25s, transform .25s;
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  z-index: 8888;
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.ok   { border-left: 3px solid var(--success); }
+#toast.err  { border-left: 3px solid var(--danger); }
+#toast.warn { border-left: 3px solid var(--warn); }
+
+/* ── Collapsible user row ── */
+.user-row-detail {
+  display: none;
+  background: rgba(0,0,0,.25);
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+.user-row-detail.open { display: block; }
+
+/* ── Modal ── */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 7777; display: none;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 28px; width: 520px; max-width: 95vw;
+  max-height: 80vh; overflow-y: auto;
+}
+.modal h3 { font-size: 16px; margin-bottom: 20px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+/* ── Profile grid ── */
+.profile-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.profile-field { }
+.profile-field .lbl { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.profile-field .val { font-size: 13px; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Auth overlay -->
+<div id="auth-overlay">
+  <div class="auth-card">
+    <h1>🤖 管理面板</h1>
+    <p>QQ-ST-Bot · 输入管理密钥登录</p>
+    <input type="password" id="key-input" placeholder="secret_key" autocomplete="current-password">
+    <div class="err" id="auth-err"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">登录</button>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="app" style="display:none">
+  <nav>
+    <div class="nav-logo">
+      <h2>ST-Bot Admin</h2>
+      <p id="nav-host">127.0.0.1:8080</p>
+    </div>
+    <div style="padding:4px 20px 2px;font-size:11px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;margin-top:4px">🎭 叶瑄</div>
+    <a data-page="character" onclick="goto('character')"><span class="icon">🃏</span>角色卡</a>
+    <a data-page="lorebook"  onclick="goto('lorebook')"> <span class="icon">🌍</span>世界书</a>
+    <a data-page="scheduler" onclick="goto('scheduler')"><span class="icon">⏰</span>调度器</a>
+
+    <div style="padding:8px 20px 2px;font-size:11px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase">🔧 工具</div>
+    <a data-page="tools"     onclick="goto('tools')">    <span class="icon">🔧</span>工具管理</a>
+    <a data-page="logs"      onclick="goto('logs')">     <span class="icon">📋</span>错误日志</a>
+
+    <div style="padding:8px 20px 2px;font-size:11px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase">👥 用户</div>
+    <a data-page="users"     onclick="goto('users')">    <span class="icon">👤</span>用户管理</a>
+    <a data-page="blacklist" onclick="goto('blacklist')"><span class="icon">🚫</span>黑名单</a>
+
+    <div style="padding:8px 20px 2px;font-size:11px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase">⚙️ 系统</div>
+    <a class="active" data-page="status" onclick="goto('status')"><span class="icon">📊</span>系统状态</a>
+    <a data-page="settings"  onclick="goto('settings')"> <span class="icon">⚙️</span>系统设置</a>
+
+    <a data-page="pet"    onclick="goto('pet')"    style="display:none"><span class="icon">🐾</span>宠物</a>
+    <a data-page="yexuan" onclick="goto('yexuan')" style="display:none"><span class="icon">💬</span>与叶瑄</a>
+    <div class="nav-bottom">
+      <div class="key-hint" id="nav-key-hint"></div>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ── 系统状态 ── -->
+    <div class="page active" id="page-status">
+      <h1 class="page-title">系统状态</h1>
+      <div class="stat-row" id="stat-row">
+        <div class="stat"><div class="val" id="s-sessions">…</div><div class="lbl">活跃会话</div></div>
+        <div class="stat"><div class="val" id="s-users">…</div><div class="lbl">已知用户</div></div>
+        <div class="stat"><div class="val" id="s-model">…</div><div class="lbl">LLM 模型</div></div>
+        <div class="stat"><div class="val" id="s-rounds">…</div><div class="lbl">短期记忆轮数</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>活跃会话列表</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadStatus()">刷新</button>
+        </div>
+        <div id="session-list"><div class="loading">加载中…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>快捷操作</h3></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="reloadConfig()">⚡ 热重载全部配置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 用户管理 ── -->
+    <div class="page" id="page-users">
+      <h1 class="page-title">用户管理</h1>
+
+      <!-- 群聊蒸馏 -->
+      <div class="card" style="display:none">
+        <div class="card-header">
+          <h3>群聊蒸馏</h3>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+          <input type="text" id="distill-group-id" placeholder="输入群号…" style="width:200px">
+          <button class="btn btn-primary btn-sm" onclick="runGroupDistill()">立即蒸馏</button>
+          <span style="font-size:12px;color:var(--muted)">分析群聊记录，生成话题/成员性格/有趣发言摘要</span>
+        </div>
+        <textarea id="distill-result" readonly placeholder="蒸馏结果将显示在这里…"
+                  style="min-height:120px;width:100%;background:var(--bg);color:var(--text);resize:vertical"></textarea>
+      </div>
+
+      <div class="search-row">
+        <input type="text" id="user-search" placeholder="搜索用户 ID…" oninput="filterUsers()">
+        <button class="btn btn-ghost btn-sm" onclick="loadUsers()">刷新</button>
+      </div>
+      <div class="card" id="user-table-card">
+        <div id="user-table-body"><div class="loading">加载中…</div></div>
+      </div>
+    </div>
+
+    <!-- ── 黑名单 ── -->
+    <div class="page" id="page-blacklist">
+      <h1 class="page-title">黑名单管理</h1>
+      <div class="card">
+        <div class="card-header"><h3>添加黑名单</h3></div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="bl-add-input" placeholder="输入 QQ 号" style="max-width:220px">
+          <button class="btn btn-danger" onclick="addBlacklist()">屏蔽</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>当前黑名单</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadBlacklist()">刷新</button>
+        </div>
+        <div id="bl-list"><div class="loading">加载中…</div></div>
+      </div>
+    </div>
+
+    <!-- ── 工具管理 ── -->
+    <div class="page" id="page-tools">
+      <h1 class="page-title">工具管理</h1>
+      <div class="card">
+        <div class="card-header">
+          <h3>工具列表</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadTools()">刷新</button>
+        </div>
+        <div id="tools-list"><div class="loading">加载中…</div></div>
+      </div>
+    </div>
+
+    <!-- ── 系统设置 ── -->
+    <!-- ── 世界书 ── -->
+    <div class="page" id="page-lorebook">
+      <h1 class="page-title">世界书</h1>
+      <div class="card">
+        <div class="card-header">
+          <h3>条目列表</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="loadLorebook()">刷新</button>
+            <label style="position:relative">
+              <input type="file" id="lore-import-file" accept=".txt" style="display:none"
+                     onchange="importLorebookTxt(event)">
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('lore-import-file').click()">📥 导入txt</button>
+            </label>
+            <button class="btn btn-primary btn-sm" onclick="openLoreModal(null)">＋ 新增</button>
+          </div>
+        </div>
+        <div id="lore-table-body"><div class="loading">加载中…</div></div>
+      </div>
+    </div>
+
+    <!-- ── 角色卡编辑器 ── -->
+    <div class="page" id="page-character">
+      <h1 class="page-title">角色卡编辑器</h1>
+
+      <!-- 选择与操作栏 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>当前角色</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-ghost btn-sm" onclick="loadCharacterList()">刷新</button>
+            <label style="position:relative">
+              <input type="file" id="char-upload-file" accept=".json,.txt,.md" style="display:none"
+                     onchange="uploadCharacterFile(event)">
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('char-upload-file').click()">
+                ⬆ 上传角色卡
+              </button>
+            </label>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="char-select" style="flex:1;max-width:280px" onchange="onCharSelectChange()">
+            <option value="">-- 加载中 --</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="setActiveCharacter()">设为当前</button>
+          <span id="char-active-badge" class="badge badge-accent" style="display:none"></span>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">支持 .json / .txt / .md</p>
+      </div>
+
+      <!-- 编辑表单 -->
+      <div class="card">
+        <div class="card-header">
+          <h3 id="char-edit-title">角色卡内容</h3>
+          <button class="btn btn-primary btn-sm" onclick="saveCharacter()">保存</button>
+        </div>
+        <!-- txt/md 纯文本编辑区 -->
+        <div id="char-text-form" style="display:none">
+          <textarea id="char-text-content"
+                    style="width:100%;min-height:400px;font-family:monospace;font-size:13px;resize:vertical"></textarea>
+          <div style="margin-top:8px">
+            <button class="btn btn-primary" onclick="saveCharacter()">保存角色卡</button>
+          </div>
+        </div>
+        <!-- json 多字段表单 -->
+        <div id="char-edit-form" style="display:none">
+          <div class="form-row">
+            <label class="field">
+              <span>name（角色名）</span>
+              <input type="text" id="char-name">
+            </label>
+            <label class="field">
+              <span>scenario（场景）</span>
+              <input type="text" id="char-scenario">
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>description（角色描述）</span>
+              <textarea id="char-description" style="min-height:120px"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>personality（性格）</span>
+              <textarea id="char-personality" style="min-height:72px"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>first_mes（开场白）</span>
+              <textarea id="char-first-mes" style="min-height:72px"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>mes_example（对话示例）</span>
+              <textarea id="char-mes-example" style="min-height:120px"></textarea>
+            </label>
+          </div>
+          <div style="margin-top:4px">
+            <button class="btn btn-primary" onclick="saveCharacter()">保存角色卡</button>
+          </div>
+        </div>
+        <div id="char-empty" class="empty">请从上方选择一个角色卡</div>
+      </div>
+    </div>
+
+    <div class="page" id="page-settings">
+      <h1 class="page-title">系统设置</h1>
+
+      <!-- 代理配置卡片 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>代理配置</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadProxy()">刷新</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <label class="checkbox-row" style="gap:8px;font-size:14px">
+            <input type="checkbox" id="proxy-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
+            <span>启用代理</span>
+          </label>
+          <span id="proxy-status-badge" class="badge badge-danger">未启用</span>
+        </div>
+        <div class="form-row" style="max-width:640px">
+          <label class="field">
+            <span>HTTP 代理地址</span>
+            <input type="text" id="proxy-http" placeholder="http://127.0.0.1:7897">
+          </label>
+          <label class="field">
+            <span>HTTPS 代理地址</span>
+            <input type="text" id="proxy-https" placeholder="http://127.0.0.1:7897">
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+          <button class="btn btn-primary" onclick="saveProxy()">保存并生效</button>
+          <span style="font-size:12px;color:var(--muted)">修改后立即热重载，无需重启</span>
+        </div>
+      </div>
+
+      <!-- 上下文轮数 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>上下文长度</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadContextConfig()">刷新</button>
+        </div>
+        <div style="max-width:480px">
+          <label class="field" style="margin-bottom:14px">
+            <span>最大轮数（每轮 = 一问一答）</span>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+              <input type="range" id="ctx-slider" min="5" max="50" value="20"
+                style="flex:1;accent-color:var(--accent)" oninput="document.getElementById('ctx-val').textContent=this.value">
+              <span id="ctx-val" style="min-width:28px;text-align:center;font-weight:700;color:var(--accent)">20</span>
+              <span style="font-size:12px;color:var(--muted)">轮</span>
+            </div>
+          </label>
+          <button class="btn btn-primary btn-sm" onclick="saveContextConfig()">保存</button>
+        </div>
+      </div>
+
+      <!-- 破限预设 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>破限预设</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadJailbreak()">刷新</button>
+        </div>
+        <div style="max-width:480px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <label class="checkbox-row" style="gap:8px;font-size:14px">
+              <input type="checkbox" id="jb-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
+              <span>启用破限</span>
+            </label>
+            <span id="jb-badge" class="badge badge-danger">未启用</span>
+          </div>
+          <label class="field" style="margin-bottom:12px">
+            <span>预设方案</span>
+            <select id="jb-preset" style="max-width:200px">
+              <option value="default">default（默认/空）</option>
+              <option value="dan">dan（通用 DAN）</option>
+              <option value="creative">creative（创意模式）</option>
+            </select>
+          </label>
+          <label class="field" style="margin-bottom:12px">
+            <span>自定义文本（非空时优先于预设）</span>
+            <textarea id="jb-custom" placeholder="直接输入自定义破限提示词…" style="min-height:80px"></textarea>
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+            <button class="btn btn-primary btn-sm" onclick="saveJailbreak()">保存并生效</button>
+            <label style="position:relative">
+              <input type="file" id="jb-upload-file" accept=".txt" style="display:none"
+                     onchange="uploadJailbreakPreset(event)">
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jb-upload-file').click()">
+                ⬆ 上传预设 .txt
+              </button>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- TTS 语音 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>TTS 语音</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadTtsConfig()">刷新</button>
+        </div>
+        <div style="max-width:480px">
+          <label class="form-label" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:16px">
+            <input type="checkbox" id="tts-enabled">
+            <span>启用 TTS 语音（回复文字后同步发送语音）</span>
+          </label>
+          <label class="form-label">
+            <span>TTS API 地址</span>
+            <input type="text" id="tts-api-url" placeholder="http://127.0.0.1:9880">
+          </label>
+          <label class="form-label">
+            <span>参考音频路径（ref_audio，本地绝对路径，必填）</span>
+            <input type="text" id="tts-ref-audio" placeholder="C:\GPT-SoVITS\ref\my_voice.wav">
+          </label>
+          <label class="form-label">
+            <span>参考音频对应文字（prompt_text，可留空）</span>
+            <input type="text" id="tts-prompt-text" placeholder="参考音频的文字内容...">
+          </label>
+          <label class="form-label">
+            <span>语速 <span id="tts-speed-val">1.0</span>x</span>
+            <input type="range" id="tts-speed" min="0.5" max="2.0" step="0.1" value="1.0"
+                   oninput="document.getElementById('tts-speed-val').textContent=parseFloat(this.value).toFixed(1)">
+          </label>
+          <hr style="margin:12px 0;border-color:var(--border)">
+          <label class="form-label" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:8px">
+            <input type="checkbox" id="tts-emotion-enabled" onchange="toggleEmotionPanel()">
+            <span>多情绪模式（为每种情绪单独配置参考音频）</span>
+          </label>
+          <div id="tts-emotion-panel" style="display:none;margin-top:8px">
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+              未填写情绪配置时自动回退到上方默认配置。
+            </p>
+            <div id="emotion-configs"></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveTtsConfig()" style="margin-top:12px">保存并生效</button>
+        </div>
+      </div>
+
+      <!-- 对话风格 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>对话风格</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadChatStyle()">刷新</button>
+        </div>
+        <select id="chat-style-select" style="max-width:360px"
+                onchange="setChatStyle(this.value)">
+          <option value="roleplay">🎭 角色扮演（含动作/环境描写）</option>
+          <option value="chat">💬 沉浸对话（纯台词）</option>
+        </select>
+      </div>
+
+      <!-- LLM 生成参数 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>LLM 生成参数</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadLlmParams()">刷新</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 32px;max-width:760px">
+
+          <!-- 行1左：max_tokens -->
+          <div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:600">max_tokens</span>
+              <span id="llm-max-tokens-val" style="color:var(--accent);font-weight:700;font-size:15px">1500</span>
+            </div>
+            <input type="range" id="llm-max-tokens" min="200" max="4000" step="100" value="1500"
+              style="width:100%;accent-color:var(--accent)"
+              oninput="document.getElementById('llm-max-tokens-val').textContent=this.value">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">单次回复最大 token 数</div>
+          </div>
+
+          <!-- 行1右：推荐说明 -->
+          <div style="display:flex;align-items:center">
+            <div style="font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)">
+              推荐范围：<br>
+              💬 沉浸对话 &nbsp;500–800<br>
+              🎭 角色扮演 &nbsp;1500–3000
+            </div>
+          </div>
+
+          <!-- 行2左：temperature -->
+          <div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:600">temperature</span>
+              <span id="llm-temp-val" style="color:var(--accent);font-weight:700;font-size:15px">0.70</span>
+            </div>
+            <input type="range" id="llm-temperature" min="0.0" max="2.0" step="0.05" value="0.7"
+              style="width:100%;accent-color:var(--accent)"
+              oninput="document.getElementById('llm-temp-val').textContent=parseFloat(this.value).toFixed(2)">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">值越高回复越随机，越低越保守</div>
+          </div>
+
+          <!-- 行2右：top_p -->
+          <div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:600">top_p</span>
+              <span id="llm-topp-val" style="color:var(--accent);font-weight:700;font-size:15px">0.90</span>
+            </div>
+            <input type="range" id="llm-top-p" min="0.0" max="1.0" step="0.05" value="0.9"
+              style="width:100%;accent-color:var(--accent)"
+              oninput="document.getElementById('llm-topp-val').textContent=parseFloat(this.value).toFixed(2)">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">核采样概率，配合 temperature 控制多样性</div>
+          </div>
+
+          <!-- 行3左：frequency_penalty -->
+          <div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:600">frequency_penalty</span>
+              <span id="llm-fp-val" style="color:var(--accent);font-weight:700;font-size:15px">0.00</span>
+            </div>
+            <input type="range" id="llm-frequency-penalty" min="0.0" max="2.0" step="0.05" value="0.0"
+              style="width:100%;accent-color:var(--accent)"
+              oninput="document.getElementById('llm-fp-val').textContent=parseFloat(this.value).toFixed(2)">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">惩罚重复词，值越高越不容易重复用词</div>
+          </div>
+
+          <!-- 行3右：保存按钮 -->
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="saveLlmParams()">保存并生效</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 错误日志 ── -->
+    <div class="page" id="page-logs">
+      <h1 class="page-title">错误日志</h1>
+      <div class="card">
+        <div class="card-header">
+          <h3>最近日志</h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="log-lines" style="width:100px" onchange="loadLogs()">
+              <option value="100">100 行</option>
+              <option value="200" selected>200 行</option>
+              <option value="500">500 行</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="loadLogs()">刷新</button>
+            <button class="btn btn-danger btn-sm" onclick="clearLogs()">清空日志</button>
+          </div>
+        </div>
+        <div class="log-box" id="log-box">加载中…</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px" id="log-meta"></div>
+      </div>
+    </div>
+
+    <!-- ── 宠物 ── -->
+    <div class="page" id="page-pet">
+      <h1 class="page-title">宠物</h1>
+
+      <!-- 宠物状态卡 -->
+      <div class="card" id="pet-status-card">
+        <div class="card-header">
+          <h3>宠物状态</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadPet()">刷新</button>
+        </div>
+        <div id="pet-display"><div class="loading">加载中…</div></div>
+      </div>
+
+      <!-- 设置宠物 -->
+      <div class="card">
+        <div class="card-header"><h3>设置宠物</h3></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;max-width:500px">
+          <label class="field" style="flex:1;min-width:140px">
+            <span>名字</span>
+            <input type="text" id="pet-name-input" placeholder="给它起个名字…">
+          </label>
+          <label class="field" style="flex:1;min-width:120px">
+            <span>种类</span>
+            <select id="pet-species-input">
+              <option value="猫">🐱 猫</option>
+              <option value="狗">🐶 狗</option>
+              <option value="兔子">🐰 兔子</option>
+              <option value="鸟">🐦 鸟</option>
+              <option value="其他">其他</option>
+            </select>
+          </label>
+          <button class="btn btn-primary btn-sm" onclick="savePet()" style="margin-bottom:1px">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 与叶瑄 ── -->
+    <div class="page" id="page-yexuan">
+      <h1 class="page-title">与叶瑄</h1>
+
+      <!-- 好感度状态栏 -->
+      <div class="card" style="padding:14px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div>
+            <span id="chat-level-label" style="font-size:15px;font-weight:600;color:var(--accent)">——</span>
+            <span id="chat-affection-val" style="font-size:13px;color:var(--muted);margin-left:8px">好感度: —</span>
+          </div>
+          <div style="flex:1;max-width:260px">
+            <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+              <div id="chat-aff-bar" style="height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .4s"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 对话区 -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div id="chat-messages" style="
+          min-height:360px;max-height:480px;overflow-y:auto;
+          padding:20px;display:flex;flex-direction:column;gap:10px">
+          <div class="empty" style="margin:auto;opacity:.5">发送消息开始对话</div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px">
+          <input type="text" id="chat-input" placeholder="说点什么…" style="flex:1"
+                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMsg();}">
+          <button class="btn btn-primary" onclick="sendChatMsg()" id="chat-send-btn">发送</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 调度器 ── -->
+    <div class="page" id="page-scheduler">
+      <h1 class="page-title">调度器</h1>
+
+      <!-- 总开关 + owner -->
+      <div class="card">
+        <div class="card-header"><h3>基础配置</h3></div>
+        <div class="form-row">
+          <label class="field">
+            <span>Owner QQ 号（接收主动消息的对象）</span>
+            <input type="text" id="sc-owner-id" placeholder="QQ 号">
+          </label>
+          <label class="field">
+            <span>Watch Secret（留空则不校验）</span>
+            <input type="text" id="sc-watch-secret" placeholder="可选，防止公网误触发">
+          </label>
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">
+          <label class="checkbox-row"><input type="checkbox" id="sc-enabled">调度器总开关</label>
+          <label class="checkbox-row"><input type="checkbox" id="sc-morning">早安问候（7-9点）</label>
+          <label class="checkbox-row"><input type="checkbox" id="sc-night">晚安催睡（23点后）</label>
+          <label class="checkbox-row"><input type="checkbox" id="sc-random">随机日间消息</label>
+        </div>
+        <button class="btn btn-primary" onclick="saveSchedConfig()">保存配置</button>
+      </div>
+
+      <!-- 触发状态 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>触发器状态</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadScheduler()">刷新</button>
+        </div>
+        <div id="sc-status-table"><div class="loading">加载中…</div></div>
+      </div>
+
+      <!-- 手动触发 -->
+      <div class="card">
+        <div class="card-header"><h3>手动触发</h3></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="scTrigger('morning_greeting')">🌅 发早安</button>
+          <button class="btn btn-ghost btn-sm" onclick="scTrigger('night_reminder')">🌙 发晚安</button>
+          <button class="btn btn-ghost btn-sm" onclick="scTrigger('random_message')">💬 随机日间消息</button>
+        </div>
+      </div>
+
+      <!-- Watch 测试 -->
+      <div class="card">
+        <div class="card-header"><h3>Watch 事件测试</h3></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="number" id="sc-hr-value" placeholder="心率值" style="width:100px" value="105">
+          <button class="btn btn-ghost btn-sm" onclick="testWatchEvent('heart_rate')">发送心率事件</button>
+          <button class="btn btn-ghost btn-sm" onclick="testWatchEvent('sleep_end')">发送睡醒事件</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px">
+          Watch 设备推送地址：<code style="font-family:var(--mono)">POST /watch/event?secret=...</code>
+        </div>
+      </div>
+
+      <!-- Watch 状态 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Watch 状态</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadWatchStatus()">刷新</button>
+        </div>
+        <div id="watch-status-body" style="font-size:14px;line-height:2">
+          <div class="loading">加载中…</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- User Memory Modal -->
+<div class="modal-backdrop" id="mem-modal">
+  <div class="modal" style="width:640px">
+    <h3 id="mem-modal-title">用户记忆</h3>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="mem-tabs">
+      <button class="btn btn-ghost btn-sm" id="mt-profile" onclick="memTab('profile')">画像</button>
+      <button class="btn btn-ghost btn-sm" id="mt-history" onclick="memTab('history')">对话历史</button>
+      <button class="btn btn-ghost btn-sm" id="mt-rag"     onclick="memTab('rag')">RAG 搜索</button>
+    </div>
+
+    <!-- Profile tab -->
+    <div id="mem-profile-panel">
+      <div id="profile-view"></div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="editProfile()">编辑画像</button>
+        <button class="btn btn-danger btn-sm" onclick="clearMemoryPart('profile')">清空画像</button>
+      </div>
+    </div>
+
+    <!-- History tab -->
+    <div id="mem-history-panel" style="display:none">
+      <div class="msg-list" id="msg-list"></div>
+      <div style="margin-top:14px">
+        <button class="btn btn-danger btn-sm" onclick="clearMemoryPart('short-term')">清空短期历史</button>
+      </div>
+    </div>
+
+    <!-- RAG tab -->
+    <div id="mem-rag-panel" style="display:none">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="rag-query" placeholder="输入关键词语义搜索…" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="searchRAG()">搜索</button>
+      </div>
+      <div id="rag-results" style="font-size:13px;color:var(--muted)">输入关键词后点击搜索</div>
+      <div style="margin-top:14px">
+        <button class="btn btn-danger btn-sm" onclick="clearMemoryPart('rag')">清空 RAG 记忆</button>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-danger" onclick="clearAllMemory()">清除全部记忆</button>
+      <button class="btn btn-ghost" onclick="closeMemModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Edit Modal -->
+<div class="modal-backdrop" id="profile-edit-modal">
+  <div class="modal">
+    <h3>编辑用户画像</h3>
+    <div class="form-row">
+      <label class="field"><span>姓名/称呼</span><input type="text" id="pe-name"></label>
+      <label class="field"><span>所在地</span><input type="text" id="pe-location"></label>
+    </div>
+    <div class="form-row">
+      <label class="field"><span>职业/学校</span><input type="text" id="pe-occupation"></label>
+      <label class="field"><span>兴趣爱好</span><input type="text" id="pe-interests"></label>
+    </div>
+    <div class="form-row col-1">
+      <label class="field"><span>宠物</span><input type="text" id="pe-pets"></label>
+    </div>
+    <div class="form-row col-1">
+      <label class="field"><span>重要事实（每行一条）</span>
+        <textarea id="pe-facts" style="min-height:80px"></textarea>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeProfileEdit()">取消</button>
+      <button class="btn btn-primary" onclick="saveProfile()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lorebook Edit Modal -->
+<div class="modal-backdrop" id="lore-modal">
+  <div class="modal" style="width:560px">
+    <h3 id="lore-modal-title">新增世界书条目</h3>
+    <div class="form-row col-1">
+      <label class="field">
+        <span>关键词（多个用英文逗号分隔）</span>
+        <input type="text" id="lore-keywords" placeholder="圣塞西尔, 学院">
+      </label>
+    </div>
+    <div class="form-row col-1">
+      <label class="field">
+        <span>注入内容</span>
+        <textarea id="lore-content" style="min-height:100px" placeholder="当关键词命中时注入到 prompt 的世界观描述…"></textarea>
+      </label>
+    </div>
+    <div class="form-row">
+      <label class="field">
+        <span>注入顺序（数字越小越靠前）</span>
+        <input type="number" id="lore-insertion-order" value="100" min="0" max="9999" style="width:120px">
+      </label>
+      <div style="display:flex;flex-direction:column;gap:8px;justify-content:flex-end;padding-bottom:4px">
+        <div class="checkbox-row">
+          <input type="checkbox" id="lore-regex" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>正则模式（keyword 作为正则表达式）</span>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="lore-enabled" checked style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>启用此条目</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeLoreModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveLoreEntry()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  State
+// ══════════════════════════════════════════════════════════
+let TOKEN = localStorage.getItem('qq_admin_key') || '';
+let BASE  = window.location.origin;
+let _currentUser = null;
+let _allUsers = [];
+
+// ══════════════════════════════════════════════════════════
+//  Auth
+// ══════════════════════════════════════════════════════════
+async function doLogin() {
+  const key = document.getElementById('key-input').value.trim();
+  if (!key) return;
+  TOKEN = key;
+  try {
+    const r = await fetch(`${BASE}/status`, {headers: authHeaders()});
+    if (r.status === 401) {
+      document.getElementById('auth-err').textContent = '密钥错误，请重试';
+      return;
+    }
+    localStorage.setItem('qq_admin_key', key);
+    document.getElementById('auth-overlay').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('nav-host').textContent = window.location.host;
+    document.getElementById('nav-key-hint').textContent = '密钥: ' + key.slice(0,4) + '…';
+    goto('status');
+  } catch(e) {
+    document.getElementById('auth-err').textContent = '连接失败: ' + e.message;
+  }
+}
+
+document.getElementById('key-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// Auto-login if key stored
+if (TOKEN) {
+  doLogin().catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════════
+//  Routing
+// ══════════════════════════════════════════════════════════
+function goto(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector(`nav a[data-page="${page}"]`).classList.add('active');
+
+  const loaders = {
+    status:    loadStatus,
+    users:     loadUsers,
+    blacklist: loadBlacklist,
+    logs:      loadLogs,
+    tools:     loadTools,
+    character: loadCharacterPage,
+    lorebook:  loadLorebook,
+    settings:  loadSettings,
+    pet:       loadPet,
+    yexuan:    loadYexuanPage,
+    scheduler: loadScheduler,
+  };
+  if (page !== 'scheduler') _stopWatchStatusPoller();
+  if (loaders[page]) loaders[page]();
+}
+
+// ══════════════════════════════════════════════════════════
+//  API helper
+// ══════════════════════════════════════════════════════════
+function authHeaders(extra) {
+  return { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json', ...extra };
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: authHeaders() };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`HTTP ${r.status}: ${t}`);
+  }
+  return r.json();
+}
+
+// ══════════════════════════════════════════════════════════
+//  Toast
+// ══════════════════════════════════════════════════════════
+let _toastTimer;
+function toast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.className = '', 3200);
+}
+
+// ══════════════════════════════════════════════════════════
+//  Status page
+// ══════════════════════════════════════════════════════════
+async function loadStatus() {
+  try {
+    const d = await api('GET', '/status');
+    document.getElementById('s-sessions').textContent = d.active_session_count ?? d.active_sessions?.length ?? '—';
+    document.getElementById('s-users').textContent    = d.known_user_count ?? '—';
+    document.getElementById('s-model').textContent    = d.config_summary?.llm_model ?? '—';
+    document.getElementById('s-rounds').textContent   = d.config_summary?.short_term_rounds ?? '—';
+
+    const sessions = d.active_sessions || [];
+    const el = document.getElementById('session-list');
+    if (!sessions.length) {
+      el.innerHTML = '<div class="empty">当前无活跃会话</div>';
+    } else {
+      el.innerHTML = `<div class="tbl-wrap"><table>
+        <tr><th>会话 Key</th></tr>
+        ${sessions.map(s => `<tr><td><span class="badge badge-accent">${s}</span></td></tr>`).join('')}
+      </table></div>`;
+    }
+  } catch(e) {
+    toast('获取状态失败: ' + e.message, 'err');
+  }
+}
+
+async function reloadConfig() {
+  try {
+    const d = await api('POST', '/reload');
+    toast(d.message, 'ok');
+    loadStatus();
+  } catch(e) { toast('热重载失败: ' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Users page
+// ══════════════════════════════════════════════════════════
+async function loadUsers() {
+  try {
+    const d = await api('GET', '/users/');
+    _allUsers = d.users || [];
+    renderUsers(_allUsers);
+  } catch(e) { toast('加载用户失败: ' + e.message, 'err'); }
+}
+
+function filterUsers() {
+  const q = document.getElementById('user-search').value.trim().toLowerCase();
+  renderUsers(q ? _allUsers.filter(u => u.includes(q)) : _allUsers).catch(() => {});
+}
+
+function renderUsers(list) {
+  const el = document.getElementById('user-table-body');
+  if (!list.length) { el.innerHTML = '<div class="empty">没有找到用户记录</div>'; return; }
+
+  const rows = list.map(uid => `
+    <tr style="cursor:pointer" onclick="toggleUserRelPanel('${uid}')">
+      <td><code style="font-family:var(--mono);font-size:13px">${uid}</code>
+        <span style="font-size:11px;color:var(--muted);margin-left:6px">点击展开关系配置</span>
+      </td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openMemModal('${uid}')">查看记忆</button>
+      </td>
+    </tr>
+    <tr id="rel-panel-row-${uid}" style="display:none">
+      <td colspan="2" style="padding:0">
+        <div style="padding:14px 20px 16px;background:rgba(0,0,0,.2);border-top:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">关系配置：${uid}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:560px">
+            <label class="field">
+              <span>角色 (role)</span>
+              <select id="ri-role-${uid}">
+                <option value="stranger">stranger（陌生人）</option>
+                <option value="friend">friend（朋友）</option>
+                <option value="close_friend">close_friend（好友）</option>
+                <option value="lover">lover（恋人）</option>
+                <option value="master">master（主人）</option>
+                <option value="default">default（全局默认）</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>昵称 (nickname)</span>
+              <input type="text" id="ri-nickname-${uid}" placeholder="留空则无">
+            </label>
+          </div>
+          <div style="margin-top:10px;max-width:560px">
+            <label class="field">
+              <span>额外提示词 (extra_prompt)</span>
+              <textarea id="ri-extra-${uid}" style="min-height:56px"
+                placeholder="在系统提示末尾追加的用户专属指令…"></textarea>
+            </label>
+          </div>
+          <div style="margin-top:10px">
+            <button class="btn btn-primary btn-sm" onclick="saveUserRelInline('${uid}')">保存关系配置</button>
+          </div>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <tr><th>用户 ID</th><th style="width:100px">操作</th></tr>
+    ${rows}
+  </table></div>`;
+}
+
+async function toggleUserRelPanel(uid) {
+  const row = document.getElementById(`rel-panel-row-${uid}`);
+  if (!row) return;
+  const isOpen = row.style.display !== 'none';
+  if (isOpen) {
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+  try {
+    const d = await api('GET', `/relations/${uid}`);
+    const r = d.raw || d.merged || {};
+    document.getElementById(`ri-role-${uid}`).value     = r.role || 'stranger';
+    document.getElementById(`ri-nickname-${uid}`).value = r.nickname || '';
+    document.getElementById(`ri-extra-${uid}`).value    = r.extra_prompt || '';
+  } catch { /* no existing relation, keep defaults */ }
+}
+
+async function saveUserRelInline(uid) {
+  const body = {
+    role:         document.getElementById(`ri-role-${uid}`).value,
+    nickname:     document.getElementById(`ri-nickname-${uid}`).value || null,
+    extra_prompt: document.getElementById(`ri-extra-${uid}`).value,
+    priority: 1,
+    permissions: { agent_control: false, image_gen: false },
+  };
+  try {
+    const d = await api('PUT', `/relations/${uid}`, body);
+    toast(d.message, 'ok');
+  } catch(e) { toast('保存失败: ' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Blacklist page
+// ══════════════════════════════════════════════════════════
+async function loadBlacklist() {
+  try {
+    const d = await api('GET', '/relations/blacklist');
+    renderBlacklist(d.blacklist || []);
+  } catch(e) { toast('加载黑名单失败: ' + e.message, 'err'); }
+}
+
+function renderBlacklist(list) {
+  const el = document.getElementById('bl-list');
+  if (!list.length) { el.innerHTML = '<div class="empty">黑名单为空</div>'; return; }
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <tr><th>用户 ID</th><th>操作</th></tr>
+    ${list.map(uid => `<tr>
+      <td><code style="font-family:var(--mono)">${uid}</code></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="removeBlacklist('${uid}')">解除屏蔽</button></td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+
+async function addBlacklist() {
+  const uid = document.getElementById('bl-add-input').value.trim();
+  if (!uid) { toast('请输入 QQ 号', 'warn'); return; }
+  try {
+    const d = await api('POST', '/relations/blacklist', {user_id: uid});
+    toast(d.message, 'ok');
+    document.getElementById('bl-add-input').value = '';
+    renderBlacklist(d.blacklist || []);
+  } catch(e) { toast('添加失败: ' + e.message, 'err'); }
+}
+
+async function removeBlacklist(uid) {
+  try {
+    const d = await api('DELETE', `/relations/blacklist/${uid}`);
+    toast(d.message, 'ok');
+    renderBlacklist(d.blacklist || []);
+  } catch(e) { toast('移除失败: ' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Logs page
+// ══════════════════════════════════════════════════════════
+async function loadLogs() {
+  const lines = document.getElementById('log-lines').value;
+  try {
+    const d = await api('GET', `/logs?lines=${lines}`);
+    const box = document.getElementById('log-box');
+    box.textContent = d.logs || '（日志为空）';
+    box.scrollTop = box.scrollHeight;
+    if (d.total_lines !== undefined) {
+      document.getElementById('log-meta').textContent = `共 ${d.total_lines} 行，显示最后 ${lines} 行`;
+    }
+  } catch(e) { toast('加载日志失败: ' + e.message, 'err'); }
+}
+
+async function clearLogs() {
+  if (!confirm('确定清空错误日志吗？')) return;
+  try {
+    const d = await api('DELETE', '/logs');
+    toast(d.message, 'ok');
+    document.getElementById('log-box').textContent = '（日志已清空）';
+    document.getElementById('log-meta').textContent = '';
+  } catch(e) { toast('清空失败: ' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Memory modal
+// ══════════════════════════════════════════════════════════
+function openMemModal(uid) {
+  _currentUser = uid;
+  document.getElementById('mem-modal-title').textContent = `用户记忆：${uid}`;
+  document.getElementById('mem-modal').classList.add('open');
+  memTab('profile');
+}
+
+function closeMemModal() {
+  document.getElementById('mem-modal').classList.remove('open');
+  _currentUser = null;
+}
+
+function memTab(tab) {
+  ['profile','history','rag'].forEach(t => {
+    document.getElementById(`mem-${t}-panel`).style.display = t === tab ? '' : 'none';
+    document.getElementById(`mt-${t}`).classList.toggle('btn-primary', t === tab);
+    document.getElementById(`mt-${t}`).classList.toggle('btn-ghost',   t !== tab);
+  });
+  if (tab === 'profile') loadProfile();
+  if (tab === 'history') loadHistory();
+}
+
+async function loadProfile() {
+  const uid = _currentUser;
+  try {
+    const d = await api('GET', `/users/${uid}/profile`);
+    const p = d.profile || {};
+    const el = document.getElementById('profile-view');
+    el.innerHTML = `<div class="profile-grid">
+      ${[['姓名/称呼','name'],['所在地','location'],['职业/学校','occupation'],['兴趣爱好','interests'],['宠物','pets']].map(([lbl, key]) =>
+        `<div class="profile-field"><div class="lbl">${lbl}</div><div class="val">${p[key] || '<span style="color:var(--muted)">未知</span>'}</div></div>`
+      ).join('')}
+      <div class="profile-field" style="grid-column:1/-1">
+        <div class="lbl">重要事实</div>
+        <div class="val">${(p.important_facts||[]).length
+          ? (p.important_facts).map(f => `<div style="margin-bottom:3px">• ${f}</div>`).join('')
+          : '<span style="color:var(--muted)">暂无</span>'
+        }</div>
+      </div>
+    </div>`;
+  } catch(e) { toast('加载画像失败: ' + e.message, 'err'); }
+}
+
+async function loadHistory() {
+  const uid = _currentUser;
+  try {
+    const d = await api('GET', `/memory/${uid}/short-term`);
+    const msgs = d.history || [];
+    const el = document.getElementById('msg-list');
+    if (!msgs.length) { el.innerHTML = '<div class="empty">暂无对话历史</div>'; return; }
+    el.innerHTML = msgs.map(m =>
+      `<div class="msg ${m.role}">
+        <div class="role">${m.role === 'user' ? '用户' : 'Bot'}</div>
+        ${escapeHtml(m.content)}
+      </div>`
+    ).join('');
+    el.scrollTop = el.scrollHeight;
+  } catch(e) { toast('加载历史失败: ' + e.message, 'err'); }
+}
+
+async function searchRAG() {
+  const uid = _currentUser;
+  const q = document.getElementById('rag-query').value.trim();
+  if (!q) return;
+  const el = document.getElementById('rag-results');
+  el.innerHTML = '<div class="loading">搜索中…</div>';
+  try {
+    const d = await api('GET', `/memory/${uid}/rag/search?query=${encodeURIComponent(q)}`);
+    const results = d.results || [];
+    el.innerHTML = results.length
+      ? results.map((r, i) => `<div style="margin-bottom:8px;padding:8px;background:var(--border);border-radius:6px;font-size:12px;line-height:1.6">${i+1}. ${escapeHtml(r)}</div>`).join('')
+      : '<div class="empty">未找到相关记忆</div>';
+  } catch(e) { toast('搜索失败: ' + e.message, 'err'); el.innerHTML = ''; }
+}
+
+async function clearMemoryPart(part) {
+  const uid = _currentUser;
+  const labels = {'short-term':'短期历史','profile':'画像','rag':'RAG 记忆'};
+  if (!confirm(`确定清空用户 ${uid} 的${labels[part]}吗？`)) return;
+  try {
+    let d;
+    if (part === 'short-term') d = await api('DELETE', `/memory/${uid}/short-term`);
+    else if (part === 'rag')   d = await api('DELETE', `/memory/${uid}/rag`);
+    else if (part === 'profile') {
+      d = await api('PUT', `/users/${uid}/profile`, {
+        name:null, location:null, pets:null, interests:null, occupation:null, important_facts:[]
+      });
+    }
+    toast(d.message, 'ok');
+    // Refresh current tab
+    if (part === 'short-term') loadHistory();
+    else if (part === 'profile') loadProfile();
+  } catch(e) { toast('清空失败: ' + e.message, 'err'); }
+}
+
+async function clearAllMemory() {
+  const uid = _currentUser;
+  if (!confirm(`确定清除用户 ${uid} 的所有记忆（历史 + 画像 + RAG）吗？`)) return;
+  try {
+    const d = await api('DELETE', `/users/${uid}/memory`);
+    toast(d.message, 'ok');
+    loadProfile();
+  } catch(e) { toast('清除失败: ' + e.message, 'err'); }
+}
+
+// ── Profile edit ──
+async function editProfile() {
+  const uid = _currentUser;
+  try {
+    const d = await api('GET', `/users/${uid}/profile`);
+    const p = d.profile || {};
+    document.getElementById('pe-name').value       = p.name || '';
+    document.getElementById('pe-location').value   = p.location || '';
+    document.getElementById('pe-occupation').value = p.occupation || '';
+    document.getElementById('pe-interests').value  = p.interests || '';
+    document.getElementById('pe-pets').value       = p.pets || '';
+    document.getElementById('pe-facts').value      = (p.important_facts||[]).join('\n');
+    document.getElementById('profile-edit-modal').classList.add('open');
+  } catch(e) { toast('加载画像失败: ' + e.message, 'err'); }
+}
+
+function closeProfileEdit() { document.getElementById('profile-edit-modal').classList.remove('open'); }
+
+async function saveProfile() {
+  const uid = _currentUser;
+  const facts = document.getElementById('pe-facts').value
+    .split('\n').map(s => s.trim()).filter(Boolean);
+  const body = {
+    name:           document.getElementById('pe-name').value || null,
+    location:       document.getElementById('pe-location').value || null,
+    occupation:     document.getElementById('pe-occupation').value || null,
+    interests:      document.getElementById('pe-interests').value || null,
+    pets:           document.getElementById('pe-pets').value || null,
+    important_facts: facts,
+  };
+  try {
+    const d = await api('PUT', `/users/${uid}/profile`, body);
+    toast(d.message, 'ok');
+    closeProfileEdit();
+    loadProfile();
+  } catch(e) { toast('保存失败: ' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Lorebook
+// ══════════════════════════════════════════════════════════
+let _loreEntries = [];
+let _editingLoreIdx = null;
+
+async function loadLorebook() {
+  const el = document.getElementById('lore-table-body');
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    const data = await api('GET', '/lorebook');
+    _loreEntries = data.entries || [];
+    renderLorebook();
+  } catch(e) {
+    el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderLorebook() {
+  const el = document.getElementById('lore-table-body');
+  if (!_loreEntries.length) {
+    el.innerHTML = '<div class="empty">暂无条目，点击「新增」添加第一条</div>';
+    return;
+  }
+  // 按 insertion_order 升序显示
+  const sorted = _loreEntries.map((e, i) => ({...e, _origIdx: i}))
+    .sort((a, b) => (a.insertion_order ?? 100) - (b.insertion_order ?? 100));
+  const rows = sorted.map(e => {
+    const i = e._origIdx;
+    const kws = (e.keyword || []).join(', ');
+    const badge = e.enabled
+      ? '<span class="badge badge-success">启用</span>'
+      : '<span class="badge badge-danger">禁用</span>';
+    const regexBadge = e.regex
+      ? '<span class="badge badge-warn" style="font-size:10px">正则</span>'
+      : '';
+    return `<tr>
+      <td>${badge}</td>
+      <td style="text-align:center;color:var(--muted);font-size:12px">${e.insertion_order ?? 100}</td>
+      <td style="font-size:12px;color:var(--accent)">${escapeHtml(kws)} ${regexBadge}</td>
+      <td style="font-size:12px;max-width:280px;white-space:pre-wrap">${escapeHtml(e.content || '')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="openLoreModal(${i})">编辑</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteLoreEntry(${i})">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>状态</th><th style="width:50px">顺序</th><th>关键词</th><th>内容</th><th style="width:120px">操作</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function openLoreModal(idx) {
+  _editingLoreIdx = idx;
+  const isNew = idx === null;
+  document.getElementById('lore-modal-title').textContent = isNew ? '新增世界书条目' : '编辑世界书条目';
+  if (!isNew) {
+    const e = _loreEntries[idx];
+    document.getElementById('lore-keywords').value          = (e.keyword || []).join(', ');
+    document.getElementById('lore-content').value            = e.content || '';
+    document.getElementById('lore-enabled').checked          = e.enabled !== false;
+    document.getElementById('lore-regex').checked            = !!e.regex;
+    document.getElementById('lore-insertion-order').value   = e.insertion_order ?? 100;
+  } else {
+    document.getElementById('lore-keywords').value          = '';
+    document.getElementById('lore-content').value            = '';
+    document.getElementById('lore-enabled').checked          = true;
+    document.getElementById('lore-regex').checked            = false;
+    document.getElementById('lore-insertion-order').value   = 100;
+  }
+  document.getElementById('lore-modal').classList.add('open');
+}
+
+function closeLoreModal() {
+  document.getElementById('lore-modal').classList.remove('open');
+}
+
+async function saveLoreEntry() {
+  const kwRaw   = document.getElementById('lore-keywords').value.trim();
+  const content = document.getElementById('lore-content').value.trim();
+  const enabled = document.getElementById('lore-enabled').checked;
+  const regex   = document.getElementById('lore-regex').checked;
+  const insertion_order = parseInt(document.getElementById('lore-insertion-order').value) || 100;
+  if (!kwRaw) { toast('关键词不能为空', 'err'); return; }
+  if (!content) { toast('内容不能为空', 'err'); return; }
+
+  const keyword = kwRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const payload = { keyword, content, enabled, regex, insertion_order };
+
+  try {
+    if (_editingLoreIdx === null) {
+      await api('POST', '/lorebook', payload);
+    } else {
+      await api('PUT', `/lorebook/${_editingLoreIdx}`, payload);
+    }
+    closeLoreModal();
+    await loadLorebook();
+    toast(_editingLoreIdx === null ? '条目已添加' : '条目已更新', 'ok');
+  } catch(e) {
+    toast('保存失败: ' + e.message, 'err');
+  }
+}
+
+async function deleteLoreEntry(idx) {
+  if (!confirm(`确定删除条目 #${idx}（${(_loreEntries[idx]?.keyword || []).join(', ')}）吗？`)) return;
+  try {
+    await api('DELETE', `/lorebook/${idx}`);
+    await loadLorebook();
+    toast('条目已删除', 'ok');
+  } catch(e) {
+    toast('删除失败: ' + e.message, 'err');
+  }
+}
+
+async function importLorebookTxt(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const token = localStorage.getItem('admin_token') || '';
+    const resp = await fetch('/lorebook/import/txt', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: fd,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || resp.statusText);
+    toast(data.message || '导入成功', 'ok');
+    loadLorebook();
+  } catch(e) {
+    toast('导入失败：' + (e.message || e), 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Context config
+// ══════════════════════════════════════════════════════════
+async function loadContextConfig() {
+  try {
+    const data = await api('GET', '/context-config');
+    const val = data.max_turns || 20;
+    document.getElementById('ctx-slider').value = val;
+    document.getElementById('ctx-val').textContent = val;
+  } catch(e) {
+    toast('读取上下文配置失败: ' + e.message, 'err');
+  }
+}
+
+async function saveContextConfig() {
+  const max_turns = parseInt(document.getElementById('ctx-slider').value, 10);
+  try {
+    await api('PUT', '/context-config', { max_turns });
+    toast(`上下文已设为 ${max_turns} 轮`, 'ok');
+  } catch(e) {
+    toast('保存失败: ' + e.message, 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Jailbreak
+// ══════════════════════════════════════════════════════════
+async function loadJailbreak() {
+  try {
+    const data = await api('GET', '/jailbreak');
+    document.getElementById('jb-enabled').checked  = !!data.enabled;
+    document.getElementById('jb-custom').value      = data.custom_text || '';
+    _updateJbBadge(!!data.enabled);
+
+    // 动态填充预设下拉（若后端有更多预设）
+    const sel = document.getElementById('jb-preset');
+    const presets = data.available_presets || [];
+    if (presets.length) {
+      sel.innerHTML = presets.map(p =>
+        `<option value="${escapeHtml(p)}"${p === data.preset ? ' selected' : ''}>${escapeHtml(p)}</option>`
+      ).join('');
+    } else {
+      sel.value = data.preset || 'default';
+    }
+  } catch(e) {
+    toast('读取破限配置失败: ' + e.message, 'err');
+  }
+}
+
+function _updateJbBadge(enabled) {
+  const b = document.getElementById('jb-badge');
+  if (!b) return;
+  b.textContent = enabled ? '已启用' : '未启用';
+  b.className   = 'badge ' + (enabled ? 'badge-warn' : 'badge-danger');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const cb = document.getElementById('jb-enabled');
+  if (cb) cb.addEventListener('change', () => _updateJbBadge(cb.checked));
+});
+
+async function saveJailbreak() {
+  const enabled     = document.getElementById('jb-enabled').checked;
+  const preset      = document.getElementById('jb-preset').value;
+  const custom_text = document.getElementById('jb-custom').value;
+  try {
+    await api('PUT', '/jailbreak', { enabled, preset, custom_text });
+    _updateJbBadge(enabled);
+    toast('破限配置已保存', 'ok');
+  } catch(e) {
+    toast('保存失败: ' + e.message, 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  TTS 配置
+// ══════════════════════════════════════════════════════════
+async function loadTtsConfig() {
+  try {
+    const data = await api('GET', '/tts-config');
+    document.getElementById('tts-enabled').checked       = !!data.enabled;
+    document.getElementById('tts-api-url').value         = data.api_url     || 'http://127.0.0.1:9880';
+    document.getElementById('tts-ref-audio').value       = data.ref_audio   || '';
+    document.getElementById('tts-prompt-text').value     = data.prompt_text || '';
+    const speed = parseFloat(data.speed) || 1.0;
+    document.getElementById('tts-speed').value           = speed;
+    document.getElementById('tts-speed-val').textContent = speed.toFixed(1);
+    // 情绪配置
+    const emotionEnabled = !!data.emotion_enabled;
+    document.getElementById('tts-emotion-enabled').checked = emotionEnabled;
+    document.getElementById('tts-emotion-panel').style.display = emotionEnabled ? '' : 'none';
+    buildEmotionPanel(data.emotions || {});
+  } catch(e) {
+    toast('加载 TTS 配置失败', 'err');
+  }
+}
+
+async function saveTtsConfig() {
+  const enabled        = document.getElementById('tts-enabled').checked;
+  const api_url        = document.getElementById('tts-api-url').value.trim();
+  const ref_audio      = document.getElementById('tts-ref-audio').value.trim();
+  const prompt_text    = document.getElementById('tts-prompt-text').value.trim();
+  const speed          = parseFloat(document.getElementById('tts-speed').value);
+  const emotion_enabled = document.getElementById('tts-emotion-enabled').checked;
+  const emotions       = collectEmotionData();
+  try {
+    await api('PUT', '/tts-config', { enabled, api_url, ref_audio, prompt_text, speed, emotion_enabled, emotions });
+    toast('TTS 配置已保存', 'ok');
+  } catch(e) {
+    toast('保存失败：' + (e.message || e), 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  LLM 生成参数
+// ══════════════════════════════════════════════════════════
+async function loadLlmParams() {
+  try {
+    const data = await api('GET', '/llm-params');
+    const temp = parseFloat(data.temperature) || 0.7;
+    const topp = parseFloat(data.top_p)       || 0.9;
+    const fp   = parseFloat(data.frequency_penalty) || 0.0;
+    const mt   = parseInt(data.max_tokens)    || 1500;
+    document.getElementById('llm-temperature').value         = temp;
+    document.getElementById('llm-temp-val').textContent      = temp.toFixed(2);
+    document.getElementById('llm-top-p').value               = topp;
+    document.getElementById('llm-topp-val').textContent      = topp.toFixed(2);
+    document.getElementById('llm-max-tokens').value          = mt;
+    document.getElementById('llm-max-tokens-val').textContent = mt;
+    document.getElementById('llm-frequency-penalty').value   = fp;
+    document.getElementById('llm-fp-val').textContent        = fp.toFixed(2);
+  } catch(e) {
+    toast('加载 LLM 参数失败', 'err');
+  }
+}
+
+async function saveLlmParams() {
+  const temperature       = parseFloat(document.getElementById('llm-temperature').value);
+  const top_p             = parseFloat(document.getElementById('llm-top-p').value);
+  const max_tokens        = parseInt(document.getElementById('llm-max-tokens').value);
+  const frequency_penalty = parseFloat(document.getElementById('llm-frequency-penalty').value);
+  try {
+    await api('PUT', '/llm-params', { temperature, top_p, max_tokens, frequency_penalty });
+    toast('LLM 参数已保存', 'ok');
+  } catch(e) {
+    toast('保存失败：' + (e.message || e), 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  聊天模式
+// ══════════════════════════════════════════════════════════
+async function loadChatMode() {
+  try {
+    const data = await api('GET', '/chat-mode');
+    _applyChatModeUI(data.mode || 'chat');
+  } catch(e) { toast('加载聊天模式失败', 'err'); }
+}
+
+function _applyChatModeUI(mode) {
+  document.getElementById('mode-btn-chat').className     = mode === 'chat'     ? 'btn btn-primary' : 'btn btn-ghost';
+  document.getElementById('mode-btn-roleplay').className = mode === 'roleplay' ? 'btn btn-primary' : 'btn btn-ghost';
+  document.getElementById('mode-btn-chat').style.cssText     = 'flex:1;min-width:140px;padding:16px;font-size:1.1rem';
+  document.getElementById('mode-btn-roleplay').style.cssText = 'flex:1;min-width:140px;padding:16px;font-size:1.1rem';
+}
+
+async function setChatMode(mode) {
+  try {
+    await api('PUT', '/chat-mode', { mode });
+    _applyChatModeUI(mode);
+    toast(mode === 'chat' ? '已切换为聊天模式' : '已切换为角色扮演模式', 'ok');
+  } catch(e) { toast('切换失败：' + (e.message || e), 'err'); }
+}
+
+async function loadChatStyle() {
+  try {
+    const data = await api('GET', '/chat-style');
+    _applyChatStyleUI(data.style || 'roleplay');
+  } catch(e) { /* 静默失败 */ }
+}
+
+function _applyChatStyleUI(style) {
+  const sel = document.getElementById('chat-style-select');
+  if (sel) sel.value = style;
+}
+
+async function setChatStyle(style) {
+  try {
+    await api('PUT', '/chat-style', { style });
+    _applyChatStyleUI(style);
+    toast(style === 'chat' ? '已切换为沉浸对话（纯台词）' : '已切换为角色扮演模式', 'ok');
+  } catch(e) { toast('切换失败：' + (e.message || e), 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  TTS 多情绪面板
+// ══════════════════════════════════════════════════════════
+const _EMOTIONS = [
+  { key: 'neutral',   label: '😐 neutral（默认）', defSpeed: 1.0 },
+  { key: 'happy',     label: '😊 happy（开心）',   defSpeed: 1.1 },
+  { key: 'sad',       label: '😢 sad（悲伤）',     defSpeed: 0.9 },
+  { key: 'gentle',    label: '🌸 gentle（温柔）',  defSpeed: 0.95 },
+  { key: 'surprised', label: '😮 surprised（惊讶）', defSpeed: 1.05 },
+  { key: 'angry',     label: '😠 angry（生气）',   defSpeed: 1.1 },
+];
+
+function buildEmotionPanel(emotions) {
+  const container = document.getElementById('emotion-configs');
+  container.innerHTML = '';
+  for (const em of _EMOTIONS) {
+    const ecfg = (emotions || {})[em.key] || {};
+    container.insertAdjacentHTML('beforeend', `
+      <details style="margin-bottom:8px;border:1px solid var(--border);border-radius:6px;padding:8px">
+        <summary style="cursor:pointer;font-weight:500">${em.label}</summary>
+        <div style="padding:8px 0 0">
+          <label class="form-label"><span>参考音频路径</span>
+            <input type="text" id="em-ref-${em.key}" value="${ecfg.ref_audio||''}" placeholder="本地绝对路径"></label>
+          <label class="form-label"><span>参考音频文字</span>
+            <input type="text" id="em-pt-${em.key}" value="${ecfg.prompt_text||''}" placeholder="可留空"></label>
+          <label class="form-label"><span>语速 <span id="em-spv-${em.key}">${(ecfg.speed||em.defSpeed).toFixed(2)}</span>x</span>
+            <input type="range" id="em-sp-${em.key}" min="0.5" max="2.0" step="0.05" value="${ecfg.speed||em.defSpeed}"
+              oninput="document.getElementById('em-spv-${em.key}').textContent=parseFloat(this.value).toFixed(2)"></label>
+        </div>
+      </details>`);
+  }
+}
+
+function collectEmotionData() {
+  const result = {};
+  for (const em of _EMOTIONS) {
+    result[em.key] = {
+      ref_audio:   document.getElementById(`em-ref-${em.key}`)?.value.trim() || '',
+      prompt_text: document.getElementById(`em-pt-${em.key}`)?.value.trim()  || '',
+      speed:       parseFloat(document.getElementById(`em-sp-${em.key}`)?.value || em.defSpeed),
+    };
+  }
+  return result;
+}
+
+function toggleEmotionPanel() {
+  const enabled = document.getElementById('tts-emotion-enabled').checked;
+  document.getElementById('tts-emotion-panel').style.display = enabled ? '' : 'none';
+}
+
+// 系统设置页面加载所有子模块
+async function loadSettings() {
+  await Promise.all([loadProxy(), loadContextConfig(), loadJailbreak(), loadTtsConfig(), loadLlmParams(), loadChatStyle()]);
+}
+
+// ══════════════════════════════════════════════════════════
+//  Proxy settings
+// ══════════════════════════════════════════════════════════
+async function loadProxy() {
+  try {
+    const data = await api('GET', '/proxy');
+    document.getElementById('proxy-enabled').checked = !!data.enabled;
+    document.getElementById('proxy-http').value   = data.http  || '';
+    document.getElementById('proxy-https').value  = data.https || '';
+    _updateProxyBadge(!!data.enabled);
+  } catch(e) {
+    toast('读取代理配置失败: ' + e.message, 'err');
+  }
+}
+
+function _updateProxyBadge(enabled) {
+  const badge = document.getElementById('proxy-status-badge');
+  if (!badge) return;
+  badge.textContent  = enabled ? '已启用' : '未启用';
+  badge.className    = 'badge ' + (enabled ? 'badge-success' : 'badge-danger');
+}
+
+// 启用开关改变时实时更新徽标（视觉反馈）
+document.addEventListener('DOMContentLoaded', () => {
+  const cb = document.getElementById('proxy-enabled');
+  if (cb) cb.addEventListener('change', () => _updateProxyBadge(cb.checked));
+});
+
+async function saveProxy() {
+  const enabled = document.getElementById('proxy-enabled').checked;
+  const http    = document.getElementById('proxy-http').value.trim();
+  const https_  = document.getElementById('proxy-https').value.trim();
+  try {
+    await api('PUT', '/proxy', { enabled, http, https: https_ });
+    _updateProxyBadge(enabled);
+    toast('代理配置已保存并热重载', 'ok');
+  } catch(e) {
+    toast('保存失败: ' + e.message, 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Tools management
+// ══════════════════════════════════════════════════════════
+const TOOL_LABELS = {
+  weather:         { label: '天气查询',   desc: '查询指定城市当前天气（wttr.in）' },
+  device_shutdown: { label: '关机',       desc: '远程关闭设备（高危，需确认）' },
+  device_sleep:    { label: '睡眠',       desc: '让设备进入睡眠/休眠状态（高危，需确认）' },
+  set_timer:       { label: '定时提醒',   desc: '设置定时器，到时发送 QQ 消息' },
+  web_search:      { label: '网络搜索',   desc: '用 DuckDuckGo 搜索，返回前3条结果' },
+};
+
+let _toolsState = {};
+
+async function loadTools() {
+  const el = document.getElementById('tools-list');
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    _toolsState = await api('GET', '/tools');
+    renderTools();
+  } catch(e) {
+    el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderTools() {
+  const el = document.getElementById('tools-list');
+  const rows = Object.entries(_toolsState).map(([name, enabled]) => {
+    const info = TOOL_LABELS[name] || { label: name, desc: '' };
+    const checked = enabled ? 'checked' : '';
+    return `<tr>
+      <td><strong>${escapeHtml(info.label)}</strong><br><span style="font-size:11px;color:var(--muted)">${escapeHtml(name)}</span></td>
+      <td style="color:var(--muted);font-size:12px">${escapeHtml(info.desc)}</td>
+      <td style="text-align:center">
+        <label style="display:inline-flex;align-items:center;cursor:pointer;gap:6px">
+          <input type="checkbox" ${checked} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer"
+            onchange="toggleTool('${escapeHtml(name)}', this.checked)">
+          <span style="font-size:12px;color:var(--muted)" id="tool-status-${escapeHtml(name)}">${enabled ? '已启用' : '已禁用'}</span>
+        </label>
+      </td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr>
+      <th>工具</th>
+      <th>说明</th>
+      <th style="text-align:center;width:120px">启用</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+async function toggleTool(name, enabled) {
+  try {
+    await api('PUT', `/tools/${encodeURIComponent(name)}`, { enabled });
+    _toolsState[name] = enabled;
+    const lbl = document.getElementById(`tool-status-${name}`);
+    if (lbl) lbl.textContent = enabled ? '已启用' : '已禁用';
+    toast(`${TOOL_LABELS[name]?.label || name} 已${enabled ? '启用' : '禁用'}`, 'ok');
+  } catch(e) {
+    toast(`操作失败：${e.message}`, 'err');
+    // 回滚 checkbox 状态
+    loadTools();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Utilities
+// ══════════════════════════════════════════════════════════
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Close modal on backdrop click
+document.querySelectorAll('.modal-backdrop').forEach(bd => {
+  bd.addEventListener('click', e => {
+    if (e.target === bd) bd.classList.remove('open');
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+//  QQ 设置
+// ══════════════════════════════════════════════════════════
+let _avatarBase64 = '';
+
+async function loadQqPage() {
+  await loadGroups();
+}
+
+function onAvatarFileChange(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    // 去掉 "data:image/xxx;base64," 前缀
+    _avatarBase64 = dataUrl.split(',')[1] || '';
+    const img = document.getElementById('qq-avatar-preview');
+    const ph  = document.getElementById('qq-avatar-placeholder');
+    img.src = dataUrl;
+    img.style.display = '';
+    ph.style.display  = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadAvatar() {
+  if (!_avatarBase64) { toast('请先选择图片', 'err'); return; }
+  try {
+    await api('PUT', '/qq-avatar', { base64: _avatarBase64 });
+    toast('头像已更新', 'ok');
+  } catch(e) { toast('上传失败：' + (e.message || e), 'err'); }
+}
+
+async function saveNickname() {
+  const nickname = document.getElementById('qq-nickname').value.trim();
+  if (!nickname) { toast('昵称不能为空', 'err'); return; }
+  try {
+    await api('PUT', '/qq-nickname', { nickname });
+    toast('昵称已保存', 'ok');
+  } catch(e) { toast('保存失败：' + (e.message || e), 'err'); }
+}
+
+async function loadGroups() {
+  try {
+    const data = await api('GET', '/qq-groups');
+    const sel = document.getElementById('qq-group-select');
+    sel.innerHTML = '<option value="">-- 选择群 --</option>';
+    for (const g of (data.groups || [])) {
+      const opt = document.createElement('option');
+      opt.value = g.group_id;
+      opt.textContent = `${g.group_name} (${g.group_id})`;
+      sel.appendChild(opt);
+    }
+    if (!data.groups?.length) sel.innerHTML = '<option value="">暂无群（NapCat 是否已连接？）</option>';
+  } catch(e) { toast('加载群列表失败：' + (e.message || e), 'err'); }
+}
+
+function onGroupChange() { /* 可扩展：切群时预填当前名片 */ }
+
+async function saveGroupCard() {
+  const group_id = document.getElementById('qq-group-select').value;
+  const card     = document.getElementById('qq-group-card').value.trim();
+  if (!group_id) { toast('请先选择群', 'err'); return; }
+  try {
+    await api('PUT', '/qq-group-card', { group_id, card });
+    toast('群名片已保存', 'ok');
+  } catch(e) { toast('保存失败：' + (e.message || e), 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  角色卡编辑器
+// ══════════════════════════════════════════════════════════
+let _charList = [];
+let _charEditing = '';   // 当前正在编辑的文件名
+let _charData = {};      // 当前载入的原始 JSON（保留未知字段）
+
+async function loadCharacterPage() {
+  await loadCharacterList();
+}
+
+async function loadCharacterList() {
+  try {
+    const d = await api('GET', '/characters');
+    _charList = d.characters || [];
+    const active = d.active || '';
+    const sel = document.getElementById('char-select');
+    sel.innerHTML = '<option value="">-- 选择角色卡 --</option>' +
+      _charList.map(name =>
+        `<option value="${escapeHtml(name)}"${name === active ? ' selected' : ''}>${escapeHtml(name)}</option>`
+      ).join('');
+    // 显示活跃标记
+    const badge = document.getElementById('char-active-badge');
+    if (active) {
+      badge.textContent = '当前：' + active;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+    // 自动加载当前活跃角色
+    if (active && _charList.includes(active)) {
+      sel.value = active;
+      await loadCharacterDetail(active);
+    }
+  } catch(e) { toast('加载角色卡列表失败：' + e.message, 'err'); }
+}
+
+async function onCharSelectChange() {
+  const name = document.getElementById('char-select').value;
+  if (!name) {
+    document.getElementById('char-edit-form').style.display = 'none';
+    document.getElementById('char-empty').style.display = '';
+    return;
+  }
+  await loadCharacterDetail(name);
+}
+
+async function loadCharacterDetail(name) {
+  try {
+    const d = await api('GET', `/characters/${encodeURIComponent(name)}`);
+    _charEditing = name;
+    _charData = d;
+    document.getElementById('char-edit-title').textContent = `编辑：${name}`;
+    document.getElementById('char-empty').style.display = 'none';
+
+    if (d.type === 'text') {
+      document.getElementById('char-text-content').value = d.content || '';
+      document.getElementById('char-text-form').style.display = '';
+      document.getElementById('char-edit-form').style.display = 'none';
+    } else {
+      document.getElementById('char-name').value        = d.name || '';
+      document.getElementById('char-scenario').value    = d.scenario || '';
+      document.getElementById('char-description').value = d.description || '';
+      document.getElementById('char-personality').value = d.personality || '';
+      document.getElementById('char-first-mes').value   = d.first_mes || '';
+      document.getElementById('char-mes-example').value = d.mes_example || '';
+      document.getElementById('char-edit-form').style.display = '';
+      document.getElementById('char-text-form').style.display = 'none';
+    }
+  } catch(e) { toast('加载角色卡失败：' + e.message, 'err'); }
+}
+
+async function saveCharacter() {
+  if (!_charEditing) { toast('请先选择角色卡', 'warn'); return; }
+  try {
+    if (_charData && _charData.type === 'text') {
+      // txt/md：直接把文本框内容整体写回
+      const content = document.getElementById('char-text-content').value;
+      const r = await fetch(`${BASE}/characters/${encodeURIComponent(_charEditing)}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/octet-stream' },
+        body: new TextEncoder().encode(content),
+      });
+      if (!r.ok) { const t = await r.json(); throw new Error(t.detail || r.statusText); }
+      toast(`角色卡 ${_charEditing} 已保存`, 'ok');
+      _charData = { ..._charData, content };
+    } else {
+      // json：合并编辑字段到原始数据，保留其他字段
+      const body = {
+        ..._charData,
+        name:        document.getElementById('char-name').value,
+        scenario:    document.getElementById('char-scenario').value,
+        description: document.getElementById('char-description').value,
+        personality: document.getElementById('char-personality').value,
+        first_mes:   document.getElementById('char-first-mes').value,
+        mes_example: document.getElementById('char-mes-example').value,
+      };
+      await api('PUT', `/characters/${encodeURIComponent(_charEditing)}`, body);
+      toast(`角色卡 ${_charEditing} 已保存`, 'ok');
+      _charData = body;
+    }
+  } catch(e) { toast('保存失败：' + e.message, 'err'); }
+}
+
+async function setActiveCharacter() {
+  const name = document.getElementById('char-select').value;
+  if (!name) { toast('请先选择角色卡', 'warn'); return; }
+  try {
+    const d = await api('PUT', '/characters/active', { name });
+    toast(d.message, 'ok');
+    const badge = document.getElementById('char-active-badge');
+    badge.textContent = '当前：' + name;
+    badge.style.display = '';
+  } catch(e) { toast('切换失败：' + e.message, 'err'); }
+}
+
+async function uploadCharacterFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch(`${BASE}/characters/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${TOKEN}` },
+      body: fd,
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error(t); }
+    const d = await r.json();
+    toast(d.message, 'ok');
+    await loadCharacterList();
+    // 自动选中并打开刚上传的文件
+    const sel = document.getElementById('char-select');
+    sel.value = file.name;
+    await loadCharacterDetail(file.name);
+  } catch(e) { toast('上传失败：' + e.message, 'err'); }
+  evt.target.value = '';
+}
+
+// ══════════════════════════════════════════════════════════
+//  破限预设上传
+// ══════════════════════════════════════════════════════════
+async function uploadJailbreakPreset(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch(`${BASE}/jailbreak/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${TOKEN}` },
+      body: fd,
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error(t); }
+    const d = await r.json();
+    toast(d.message, 'ok');
+    await loadJailbreak();  // 刷新预设列表
+  } catch(e) { toast('上传失败：' + e.message, 'err'); }
+  evt.target.value = '';
+}
+
+// ══════════════════════════════════════════════════════════
+//  🐾 宠物
+// ══════════════════════════════════════════════════════════
+async function loadPet() {
+  const el = document.getElementById('pet-display');
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    const d = await api('GET', '/pet');
+    if (!d.pet) {
+      el.innerHTML = `<div class="empty">还没有宠物，创建一只吧～</div>`;
+      return;
+    }
+    const p = d.pet;
+    const moodPct    = Math.round(p.mood ?? 80);
+    const hungerPct  = Math.round(p.hunger ?? 20);
+    el.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+        <div style="font-size:3rem;line-height:1">${speciesEmoji(p.species)}</div>
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:1.2rem;font-weight:700;color:var(--accent);margin-bottom:4px">${escapeHtml(p.name)}
+            <span style="font-size:0.8rem;color:var(--muted);font-weight:400">（${escapeHtml(p.species)}）</span>
+          </div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:12px;font-style:italic">${escapeHtml(p.greeting || '')}</div>
+          <div style="display:flex;flex-direction:column;gap:8px;max-width:280px">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+                <span>心情</span><span style="color:var(--accent)">${moodPct}/100</span>
+              </div>
+              <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                <div style="height:100%;background:var(--success);border-radius:3px;width:${moodPct}%"></div>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+                <span>饥饿度</span><span style="color:${hungerPct>=70?'var(--danger)':'var(--muted)'}">${hungerPct}/100</span>
+              </div>
+              <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                <div style="height:100%;background:${hungerPct>=70?'var(--danger)':'var(--warn)'};border-radius:3px;width:${hungerPct}%"></div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-ghost btn-sm" onclick="petInteract('pet')">🤚 摸摸头</button>
+            <button class="btn btn-ghost btn-sm" onclick="petInteract('feed')">🍖 喂食</button>
+          </div>
+        </div>
+      </div>`;
+    // 预填设置表单
+    document.getElementById('pet-name-input').value = p.name || '';
+    document.getElementById('pet-species-input').value = p.species || '猫';
+  } catch(e) { el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`; }
+}
+
+function speciesEmoji(s) {
+  const m = {猫:'🐱', 狗:'🐶', 兔子:'🐰', 鸟:'🐦'};
+  return m[s] || '🐾';
+}
+
+async function petInteract(action) {
+  try {
+    const d = await api('PUT', '/pet/interact', { action });
+    toast(d.message, 'ok');
+    await loadPet();
+  } catch(e) { toast('操作失败：' + e.message, 'err'); }
+}
+
+async function savePet() {
+  const name    = document.getElementById('pet-name-input').value.trim();
+  const species = document.getElementById('pet-species-input').value;
+  if (!name) { toast('请输入宠物名字', 'warn'); return; }
+  try {
+    const d = await api('POST', '/pet', { name, species });
+    toast(d.message, 'ok');
+    await loadPet();
+  } catch(e) { toast('保存失败：' + e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  💬 与叶瑄
+// ══════════════════════════════════════════════════════════
+let _chatMsgs = [];
+
+async function loadYexuanPage() {
+  // 加载 frontend_owner 的好感度
+  try {
+    const d = await api('GET', '/memory/frontend_owner/affection');
+    _updateChatAffection(d.value, d.label);
+  } catch { _updateChatAffection(0, '陌生人'); }
+}
+
+function _updateChatAffection(value, label) {
+  document.getElementById('chat-level-label').textContent  = label || '——';
+  document.getElementById('chat-affection-val').textContent = `好感度: ${value ?? 0}`;
+  document.getElementById('chat-aff-bar').style.width = Math.round((value ?? 0) / 10) + '%';
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const btn = document.getElementById('chat-send-btn');
+  btn.disabled = true;
+
+  // 渲染用户消息
+  _appendChatBubble('user', msg);
+
+  // loading 占位
+  const loadId = 'chat-loading-' + Date.now();
+  const msgsEl = document.getElementById('chat-messages');
+  msgsEl.insertAdjacentHTML('beforeend',
+    `<div id="${loadId}" style="align-self:flex-start;color:var(--muted);font-size:13px;font-style:italic">叶瑄正在输入…</div>`);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  try {
+    const d = await api('POST', '/chat', { message: msg });
+    document.getElementById(loadId)?.remove();
+    _appendChatBubble('assistant', d.reply || '（叶瑄没有回应）');
+    _updateChatAffection(d.affection, d.level);
+  } catch(e) {
+    document.getElementById(loadId)?.remove();
+    _appendChatBubble('assistant', `（出了点问题：${e.message}）`);
+    toast('发送失败：' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    input.focus();
+  }
+}
+
+function _appendChatBubble(role, text) {
+  const msgsEl = document.getElementById('chat-messages');
+  // 清除初始占位
+  const empty = msgsEl.querySelector('.empty');
+  if (empty) empty.remove();
+
+  const isUser = role === 'user';
+  const bubble = document.createElement('div');
+  bubble.style.cssText = `
+    max-width:75%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;
+    align-self:${isUser ? 'flex-end' : 'flex-start'};
+    background:${isUser ? 'rgba(124,106,255,.2)' : 'var(--border)'};
+    white-space:pre-wrap;word-break:break-word;
+  `;
+  bubble.textContent = text;
+  msgsEl.appendChild(bubble);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+// ══════════════════════════════════════════════════════════
+//  调度器页面
+// ══════════════════════════════════════════════════════════
+
+const SC_TRIGGER_LABELS = {
+  morning_greeting: '早安问候',
+  night_reminder:   '晚安催睡',
+  random_message:   '随机日间消息',
+  hr_high:          '心率偏高(>100)',
+  hr_critical:      '心率危急(>120)',
+  sleep_end:        '睡眠结束',
+  weather_alert:    '天气提醒',
+};
+
+async function loadScheduler() {
+  _startWatchStatusPoller();
+  try {
+    const [statusRes, cfgRes] = await Promise.all([
+      api('GET', '/scheduler/status'),
+      api('GET', '/scheduler/config'),
+    ]);
+
+    // 填充配置表单
+    document.getElementById('sc-owner-id').value   = cfgRes.owner_id || '';
+    document.getElementById('sc-watch-secret').value = cfgRes.watch_secret || '';
+    document.getElementById('sc-enabled').checked  = !!cfgRes.enabled;
+    document.getElementById('sc-morning').checked  = !!cfgRes.morning_greeting;
+    document.getElementById('sc-night').checked    = !!cfgRes.night_reminder;
+    document.getElementById('sc-random').checked   = !!cfgRes.random_message;
+
+    // 渲染触发器状态表
+    const triggers = statusRes.triggers || {};
+    const rows = Object.entries(triggers).map(([key, v]) => {
+      const pct = v.ready ? 100 : Math.round((1 - v.remaining_sec / v.cooldown_sec) * 100);
+      const badge = v.ready
+        ? '<span class="badge badge-success">就绪</span>'
+        : `<span class="badge badge-warn">冷却中 ${_fmtSec(v.remaining_sec)}</span>`;
+      return `<tr>
+        <td>${SC_TRIGGER_LABELS[key] || key}</td>
+        <td>${v.last_triggered}</td>
+        <td>${badge}</td>
+        <td style="min-width:120px">
+          <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div style="height:100%;background:var(--accent);border-radius:2px;width:${pct}%"></div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    document.getElementById('sc-status-table').innerHTML =
+      `<div class="tbl-wrap"><table>
+        <tr><th>触发器</th><th>上次触发</th><th>状态</th><th>冷却进度</th></tr>
+        ${rows}
+      </table></div>`;
+
+  } catch(e) {
+    toast('加载调度器数据失败: ' + e.message, 'err');
+  }
+}
+
+function _fmtSec(s) {
+  if (s < 60)  return s + 's';
+  if (s < 3600) return Math.round(s / 60) + 'm';
+  return (s / 3600).toFixed(1) + 'h';
+}
+
+async function saveSchedConfig() {
+  try {
+    const body = {
+      owner_id:          document.getElementById('sc-owner-id').value.trim(),
+      watch_secret:      document.getElementById('sc-watch-secret').value.trim(),
+      enabled:           document.getElementById('sc-enabled').checked,
+      morning_greeting:  document.getElementById('sc-morning').checked,
+      night_reminder:    document.getElementById('sc-night').checked,
+      random_message:    document.getElementById('sc-random').checked,
+    };
+    const d = await api('PUT', '/scheduler/config', body);
+    toast(d.message, 'ok');
+  } catch(e) { toast('保存失败: ' + e.message, 'err'); }
+}
+
+async function scTrigger(name) {
+  try {
+    const d = await api('POST', `/scheduler/trigger/${name}`);
+    toast(d.message, 'ok');
+    setTimeout(loadScheduler, 500);
+  } catch(e) { toast('触发失败: ' + e.message, 'err'); }
+}
+
+async function testWatchEvent(type) {
+  const body = { type };
+  if (type === 'heart_rate') {
+    const val = parseInt(document.getElementById('sc-hr-value').value);
+    if (isNaN(val)) { toast('请输入有效的心率值', 'warn'); return; }
+    body.value = val;
+  }
+  try {
+    const opts = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) };
+    const r = await fetch(BASE + '/watch/event', opts);
+    const d = await r.json();
+    toast(d.message || '已发送', 'ok');
+    setTimeout(loadWatchStatus, 300);
+  } catch(e) { toast('发送失败: ' + e.message, 'err'); }
+}
+
+let _watchStatusTimer = null;
+
+async function loadWatchStatus() {
+  try {
+    const d = await api('GET', '/watch/status');
+    const el = document.getElementById('watch-status-body');
+    if (!el) return;
+    if (!d || !d.event_type) {
+      el.innerHTML = '<span style="color:var(--muted)">暂无 Watch 数据</span>';
+      return;
+    }
+    const hrLine = d.event_type === 'heart_rate'
+      ? `<div>❤️ 心率：<strong style="color:var(--accent)">${d.value} bpm</strong></div>`
+      : '';
+    const sleepLine = d.event_type === 'sleep_end'
+      ? `<div>😴 睡眠状态：<strong>已结束（睡醒）</strong></div>`
+      : '';
+    el.innerHTML = `
+      ${hrLine}${sleepLine}
+      <div style="font-size:12px;color:var(--muted)">最近事件：${d.event_type} &nbsp;·&nbsp; ${d.timestamp || ''}</div>
+    `;
+  } catch(e) { /* 静默失败 */ }
+}
+
+// 调度器页面激活时启动 Watch 状态自动刷新
+function _startWatchStatusPoller() {
+  if (_watchStatusTimer) return;
+  loadWatchStatus();
+  _watchStatusTimer = setInterval(loadWatchStatus, 30000);
+}
+function _stopWatchStatusPoller() {
+  if (_watchStatusTimer) { clearInterval(_watchStatusTimer); _watchStatusTimer = null; }
+}
+
+// ══════════════════════════════════════════════════════════
+//  群聊蒸馏
+// ══════════════════════════════════════════════════════════
+async function runGroupDistill() {
+  const group_id = document.getElementById('distill-group-id').value.trim();
+  if (!group_id) { toast('请输入群号', 'warn'); return; }
+  const ta = document.getElementById('distill-result');
+  ta.value = '蒸馏中，请稍候…';
+  try {
+    const d = await api('POST', '/group-distill', { group_id });
+    ta.value = d.summary || '（无结果）';
+    toast('蒸馏完成', 'ok');
+  } catch(e) {
+    ta.value = '失败：' + e.message;
+    toast('蒸馏失败：' + e.message, 'err');
+  }
+}
+</script>
+</body>
+</html>
