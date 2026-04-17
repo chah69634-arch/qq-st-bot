@@ -1,0 +1,127 @@
+"""
+备忘录工具
+数据存储在 data/reminders/{user_id}.json
+每条格式：{id, content, remind_at, done}
+"""
+
+import json
+import logging
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from core.error_handler import log_error
+
+logger = logging.getLogger(__name__)
+
+REMINDERS_DIR = Path("data/reminders")
+
+# 支持的时间格式（按优先级顺序尝试）
+_TIME_FMTS = [
+    "%Y-%m-%d %H:%M",
+    "%Y/%m/%d %H:%M",
+    "%m-%d %H:%M",
+    "%m/%d %H:%M",
+    "%H:%M",
+]
+
+
+def _path(user_id: str) -> Path:
+    REMINDERS_DIR.mkdir(parents=True, exist_ok=True)
+    return REMINDERS_DIR / f"{user_id}.json"
+
+
+def _load(user_id: str) -> list:
+    p = _path(user_id)
+    try:
+        if p.exists():
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        log_error("reminder._load", e)
+    return []
+
+
+def _save(user_id: str, items: list):
+    try:
+        with open(_path(user_id), "w", encoding="utf-8") as f:
+            json.dump(items, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_error("reminder._save", e)
+
+
+def _parse_time(time_str: str) -> datetime | None:
+    """解析时间字符串，支持多种格式；仅有 HH:MM 时若已过则推到明天"""
+    now = datetime.now()
+    time_str = time_str.strip()
+    for fmt in _TIME_FMTS:
+        try:
+            dt = datetime.strptime(time_str, fmt)
+            if fmt == "%H:%M":
+                # 仅时分：补当天日期，若已过则推到明天
+                dt = dt.replace(year=now.year, month=now.month, day=now.day)
+                if dt <= now:
+                    dt += timedelta(days=1)
+            elif fmt in ("%m-%d %H:%M", "%m/%d %H:%M"):
+                # 无年份：补当年
+                dt = dt.replace(year=now.year)
+            return dt
+        except ValueError:
+            continue
+    return None
+
+
+def add_reminder(user_id: str, content: str, remind_at_str: str) -> str:
+    """
+    添加一条备忘录。
+    返回描述字符串（供 LLM 读取后转换成角色语气回复）。
+    """
+    dt = _parse_time(remind_at_str)
+    if dt is None:
+        return (
+            f"无法解析时间格式：{remind_at_str}，"
+            "请使用 HH:MM 或 MM-DD HH:MM 或 YYYY-MM-DD HH:MM"
+        )
+
+    items = _load(user_id)
+    item = {
+        "id": str(uuid.uuid4())[:8],
+        "content": content,
+        "remind_at": dt.strftime("%Y-%m-%d %H:%M"),
+        "done": False,
+    }
+    items.append(item)
+    _save(user_id, items)
+    logger.info(f"[reminder] 已为 {user_id} 添加备忘：{content} @ {item['remind_at']}")
+    return f"已记住：{content!r}，将在 {item['remind_at']} 提醒你"
+
+
+def get_reminders(user_id: str) -> list:
+    """返回未完成的备忘录列表"""
+    return [item for item in _load(user_id) if not item.get("done")]
+
+
+def mark_done(user_id: str, reminder_id: str):
+    """标记指定备忘录为已完成"""
+    items = _load(user_id)
+    for item in items:
+        if item.get("id") == reminder_id:
+            item["done"] = True
+            break
+    _save(user_id, items)
+
+
+def get_due_reminders(user_id: str) -> list:
+    """返回当前已到点但未完成的备忘录（remind_at <= 现在）"""
+    now = datetime.now()
+    due = []
+    for item in _load(user_id):
+        if item.get("done"):
+            continue
+        try:
+            remind_at = datetime.strptime(item["remind_at"], "%Y-%m-%d %H:%M")
+            if remind_at <= now:
+                due.append(item)
+        except Exception:
+            continue
+    return due

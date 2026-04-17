@@ -148,13 +148,20 @@ async def handle_message(message: dict):
     tool_result_text: str | None = None
     tool_mode = cfg.get("llm", {}).get("tool_call_mode", "function_calling")
 
+    from datetime import datetime
+    _now = datetime.now()
+    _time_str = _now.strftime("%Y年%m月%d日 %H:%M 星期") + ["一", "二", "三", "四", "五", "六", "日"][_now.weekday()]
+    from core.memory import user_profile as _up
+    _profile = _up.load(user_id)
+    _location = _profile.get("location", "杭州")
     tool_detection_messages = [
         {
             "role": "system",
             "content": (
-                f"你是{_pipeline.character.name}。判断用户的消息是否需要调用工具"
-                "（天气/关机/睡眠/定时/搜索）。"
-                "如果需要，调用对应工具；如果不需要，回复一个空字符串。"
+                f"你是{_pipeline.character.name}。当前时间：{_time_str}。用户所在城市：{_location}。"
+                "判断用户的消息是否需要调用工具（天气/备忘录/搜索）。"
+                "查询天气时使用用户所在城市，除非用户明确指定其他城市。"
+                "如果不需要工具，回复空字符串。"
             ),
         },
         {"role": "user", "content": content},

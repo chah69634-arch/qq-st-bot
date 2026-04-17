@@ -29,7 +29,13 @@
       "Bash(python3 -c \"from admin.routers.watch import router; print\\('ok'\\)\")",
       "Bash(python3 -c \"from core.scheduler import _pipeline_send; print\\('ok'\\)\")",
       "Bash(python3 -c \"from core.scheduler import set_pipeline; print\\('ok'\\)\")",
-      "Bash(python3 -c \"from admin.routers.settings_misc import router; print\\('ok'\\)\")"
+      "Bash(python3 -c \"from admin.routers.settings_misc import router; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from core.memory.user_profile import load; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from core.tools.reminder import add_reminder; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from core.pipeline import Pipeline; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from core.tool_dispatcher import get_tools_schema; print\\('ok'\\)\")",
+      "Bash(python3 main.py)",
+      "Bash(kill %1)"
     ],
     "additionalDirectories": [
       "D:\\ai\\qq-st-bot\\core\\memory"

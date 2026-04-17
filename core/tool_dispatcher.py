@@ -9,7 +9,6 @@
 设备控制和定时器逻辑较简单，直接写在此模块内。
 """
 
-import asyncio
 import logging
 import platform
 import subprocess
@@ -67,22 +66,19 @@ async def _device_sleep() -> str:
         return "睡眠命令执行失败"
 
 
-async def _set_timer(seconds: int, message: str, target_id: str, is_group: bool = False) -> str:
-    async def _fire():
-        await asyncio.sleep(seconds)
-        if _send_callback:
-            await _send_callback(target_id, message, is_group)
-        else:
-            logger.warning("[tool.set_timer] 未注册发送回调，定时消息无法发送")
-
-    asyncio.create_task(_fire())
-    minutes = seconds // 60
-    secs = seconds % 60
-    time_str = f"{minutes}分{secs}秒" if minutes > 0 else f"{secs}秒"
-    return f"定时器已设置，{time_str}后提醒你：{message}"
-
-
 # ─── 工具注册 ──────────────────────────────────────────────────────────────────
+
+async def _get_current_time() -> str:
+    from datetime import datetime
+    now = datetime.now()
+    week = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
+    return now.strftime(f"%Y年%m月%d日 %H:%M 星期{week}")
+
+
+async def _add_reminder_wrapper(user_id: str, content: str, remind_at: str) -> str:
+    from core.tools.reminder import add_reminder
+    return add_reminder(user_id, content, remind_at)
+
 
 def _weather_wrapper(city: str):
     from core.tools.weather import get_weather
@@ -94,14 +90,43 @@ def _web_search_wrapper(query: str):
     return search(query)
 
 
-async def _group_distill_wrapper(group_id: str):
-    from core.tools.group_distill import distill
-    return await distill(group_id)
+_TOOL_REGISTRY["get_time"] = {
+    "func": _get_current_time,
+    "description": "获取当前准确时间，当用户询问时间、日期时调用.不确定时间时优先调用此工具,禁止猜测。",
+    "dangerous": False,
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
 
+_TOOL_REGISTRY["add_reminder"] = {
+    "func": _add_reminder_wrapper,
+    "description": (
+    "添加一条备忘录，在指定时间提醒用户。"
+    "当用户说'提醒我X点做Y'、'X时间记得Y'、'帮我记一下'时使用。"
+    ),
+    "dangerous": False,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "要提醒的事项内容",
+            },
+            "remind_at": {
+                "type": "string",
+                "description": "提醒时间，格式：HH:MM 或 MM-DD HH:MM 或 YYYY-MM-DD HH:MM",
+            },
+        },
+        "required": ["content", "remind_at"],
+    },
+}
 
 _TOOL_REGISTRY["weather"] = {
     "func": _weather_wrapper,
-    "description": "查询指定城市的当前天气",
+    "description": "查询指定城市的当前天气。用户没有指定城市时，使用用户画像中的location字段，默认城市为杭州。",
     "dangerous": False,
     "parameters": {
         "type": "object",
@@ -139,20 +164,6 @@ _TOOL_REGISTRY["device_sleep"] = {
     },
 }
 
-_TOOL_REGISTRY["set_timer"] = {
-    "func": _set_timer,
-    "description": "设置一个定时器，在指定时间后发送提醒消息",
-    "dangerous": False,
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "seconds": {"type": "integer", "description": "多少秒后触发"},
-            "message": {"type": "string", "description": "提醒内容"},
-        },
-        "required": ["seconds", "message"],
-    },
-}
-
 _TOOL_REGISTRY["web_search"] = {
     "func": _web_search_wrapper,
     "description": "在网上查找信息，当你想确认某件事或帮用户找资料时使用",
@@ -163,22 +174,6 @@ _TOOL_REGISTRY["web_search"] = {
             "query": {"type": "string", "description": "搜索关键词或问题"},
         },
         "required": ["query"],
-    },
-}
-
-_TOOL_REGISTRY["group_distill"] = {
-    "func": _group_distill_wrapper,
-    "description": (
-        "分析群聊记录，总结群里最近的话题、活跃成员性格和有趣发言。"
-        "当用户说「蒸馏群友」「分析群聊」「总结群消息」时使用。"
-    ),
-    "dangerous": False,
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "group_id": {"type": "string", "description": "群号，从当前群上下文自动获取"},
-        },
-        "required": ["group_id"],
     },
 }
 
@@ -193,6 +188,8 @@ def _is_tool_enabled(tool_name: str) -> bool:
         group = "device_control"
     elif tool_name == "set_timer":
         group = "timer"
+    elif tool_name == "add_reminder":
+        group = "reminder"
     return cfg.get(group, {}).get("enabled", True)
 
 
@@ -253,8 +250,8 @@ async def execute(
     # 执行工具
     try:
         func = tool_info["func"]
-        if tool_name == "set_timer":
-            result = await func(target_id=target_id, is_group=is_group, **tool_args)
+        if tool_name == "add_reminder":
+            result = await func(user_id=user_id, **tool_args)
         else:
             result = await func(**tool_args)
         logger.info(f"[tool_dispatcher] 工具 {tool_name} 执行完毕，结果: {result}")

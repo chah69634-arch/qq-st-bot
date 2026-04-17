@@ -61,6 +61,8 @@ def build(
     author_note_extra: str = "",
     affection_info: str = "",
     pet_info: str = "",
+    current_time: str = "",
+    reminders: list = None,
 ) -> list[dict]:
     """
     组装完整的 prompt 消息列表
@@ -121,6 +123,15 @@ def build(
         messages.append({
             "role": "system",
             "content": "\n\n".join(char_desc_parts),
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 层 2.5：当前时间（让叶瑄知道现在几点、星期几）
+    # ─────────────────────────────────────────────────────────────────────────
+    if current_time:
+        messages.append({
+            "role": "system",
+            "content": f"【当前时间】{current_time}",
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -185,6 +196,18 @@ def build(
         messages.append({
             "role": "system",
             "content": "【关于这个用户】\n" + "，".join(profile_parts),
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 层 5.2：待办备忘录（让叶瑄随时知道用户记了什么）
+    # ─────────────────────────────────────────────────────────────────────────
+    if reminders:
+        reminder_lines = [
+            f"- {r['content']}（{r['remind_at']}）" for r in reminders
+        ]
+        messages.append({
+            "role": "system",
+            "content": "【待办备忘录】\n" + "\n".join(reminder_lines),
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -352,6 +375,8 @@ class PromptBuilder:
         author_note_extra: str = "",
         affection_info: str = "",
         pet_info: str = "",
+        current_time: str = "",
+        reminders: list = None,
     ) -> list:
         return build(
             character=character,
@@ -368,4 +393,6 @@ class PromptBuilder:
             author_note_extra=author_note_extra,
             affection_info=affection_info,
             pet_info=pet_info,
+            current_time=current_time,
+            reminders=reminders,
         )

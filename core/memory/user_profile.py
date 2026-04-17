@@ -50,11 +50,39 @@ def load(user_id: str) -> dict:
     return dict(_DEFAULT_PROFILE)
 
 
-def update(user_id: str, new_facts: dict):
+async def _compress_facts(facts: list) -> list:
+    """
+    调用 LLM 对 important_facts 列表做合并去重，
+    返回不超过 30 条的精简版本。失败时原样返回。
+    """
+    try:
+        from core import llm_client
+        import json as _json
+
+        prompt = (
+            "以下是用户的重要事实列表，请合并重复内容、删除无意义条目，"
+            "保留真正重要的信息，输出不超过30条的JSON数组，只输出数组不要其他内容：\n"
+            + _json.dumps(facts, ensure_ascii=False)
+        )
+        raw = await llm_client.chat([{"role": "user", "content": prompt}])
+        raw = raw.strip().strip("```json").strip("```").strip()
+        compressed = _json.loads(raw)
+        if isinstance(compressed, list):
+            logger.info(
+                f"[user_profile] important_facts 已合并压缩：{len(facts)} → {len(compressed)} 条"
+            )
+            return compressed
+    except Exception as e:
+        log_error("user_profile._compress_facts", e)
+    return facts
+
+
+async def update(user_id: str, new_facts: dict):
     """
     合并更新用户画像，不覆盖已有非空值
 
-    new_facts 中 important_facts 列表会去重追加
+    new_facts 中 important_facts 列表会去重追加；
+    追加后若总数超过 50 条，触发 LLM 压缩到 30 条以内。
     其他字段只在原值为 None 时更新
     """
     profile = load(user_id)
@@ -69,6 +97,14 @@ def update(user_id: str, new_facts: dict):
                         existing.append(item)
             elif value and value not in existing:
                 existing.append(value)
+
+            # 超过 50 条时触发 LLM 合并压缩
+            if len(existing) > 50:
+                logger.info(
+                    f"[user_profile] important_facts 已达 {len(existing)} 条，触发 LLM 压缩"
+                )
+                existing = await _compress_facts(existing)
+
             profile["important_facts"] = existing
         else:
             # 其他字段：只在原值为空时更新
@@ -121,7 +157,7 @@ async def extract_and_update(user_id: str, recent_messages: list[dict]):
         # 清理可能的 markdown 代码块
         raw = raw.strip().strip("```json").strip("```").strip()
         new_facts = _json.loads(raw)
-        update(user_id, new_facts)
+        await update(user_id, new_facts)
         logger.info(f"[user_profile] 用户 {user_id} 画像已更新")
     except Exception as e:
         log_error("user_profile.extract_and_update", e)
@@ -214,14 +250,38 @@ def get_affection_level(user_id: str) -> dict:
     return {"value": value, "label": "灵魂伴侣", "description": _AFFECTION_LEVELS[-1][3]}
 
 
+# ─── 生理期 ────────────────────────────────────────────────────────────────────
+
+def get_period_info(user_id: str) -> dict:
+    """读取生理期信息，返回包含 last_period_date 字段的字典"""
+    profile = load(user_id)
+    return {"last_period_date": profile.get("last_period_date")}
+
+
+def set_period_date(user_id: str, date_str: str):
+    """设置上次生理期日期（格式：YYYY-MM-DD）"""
+    path = _profile_path(user_id)
+    try:
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = dict(_DEFAULT_PROFILE)
+        data["last_period_date"] = date_str
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log_error("user_profile.set_period_date", e)
+
+
 class UserProfile:
     """用户画像类，封装模块级函数，供外部按类方式导入使用"""
 
     def load(self, user_id: str) -> dict:
         return load(user_id)
 
-    def update(self, user_id: str, new_facts: dict):
-        update(user_id, new_facts)
+    async def update(self, user_id: str, new_facts: dict):
+        await update(user_id, new_facts)
 
     async def extract_and_update(self, user_id: str, recent_messages: list[dict]):
         await extract_and_update(user_id, recent_messages)

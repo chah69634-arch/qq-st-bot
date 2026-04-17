@@ -57,7 +57,7 @@ tools:
   timer:
     enabled: true
   web_search:
-    enabled: true
+    enabled: false
 tts:
   enabled: false
   api_url: http://127.0.0.1:9880

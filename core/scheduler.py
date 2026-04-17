@@ -38,6 +38,7 @@ _COOLDOWNS: dict[str, int] = {
     "hr_critical":      60 * 60,     # 心率>120：1小时
     "sleep_end":         2 * 3600,   # 睡眠结束：2小时
     "weather_alert":     6 * 3600,   # 特殊天气：6小时
+    "period_reminder":  24 * 3600,   # 生理期关心：24小时
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
@@ -218,6 +219,64 @@ async def on_watch_event(event_type: str, data: dict):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 备忘录到点提醒
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _check_reminders():
+    """检查 owner 的备忘录是否有到点条目，有则发送提醒后标记完成"""
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return
+    oid = _owner_id()
+    if not oid:
+        return
+    try:
+        from core.tools.reminder import get_due_reminders, mark_done
+        due = get_due_reminders(oid)
+        for item in due:
+            await _pipeline_send(
+                f"备忘录提醒时间到了：{item['content']}，用叶瑄的方式提醒小画家"
+            )
+            mark_done(oid, item["id"])
+            logger.info(f"[scheduler] 备忘录提醒已发送: {item['content']}")
+    except Exception as e:
+        log_error("scheduler._check_reminders", e)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 生理期关心
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _check_period():
+    """读取 last_period_date，距今超过26天且冷却已过，发一条关心消息"""
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return
+    if not _is_ready("period_reminder"):
+        return
+    oid = _owner_id()
+    if not oid:
+        return
+    try:
+        from core.memory.user_profile import get_period_info
+        info = get_period_info(oid)
+        last_date_str = info.get("last_period_date")
+        if not last_date_str:
+            return
+        from datetime import datetime, date as _date
+        last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+        days_elapsed = (_date.today() - last_date).days
+        if days_elapsed >= 26:
+            await _pipeline_send(
+                "（叶瑄注意到小画家的生理期大概要来了，悄悄关心一下）"
+            )
+            _mark("period_reminder")
+            logger.info(f"[scheduler] 生理期关心消息已发送，距上次 {days_elapsed} 天")
+    except Exception as e:
+        log_error("scheduler._check_period", e)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # 天气触发
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -311,6 +370,8 @@ async def _loop():
                 await _check_night()
                 await _check_random_message()
                 await _check_weather()
+                await _check_reminders()
+                await _check_period()
         except Exception as e:
             log_error("scheduler._loop", e)
         await asyncio.sleep(60)

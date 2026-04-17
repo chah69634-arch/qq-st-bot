@@ -72,6 +72,9 @@ class Pipeline:
         event_search_result = await event_search_task
         profile             = await profile_future
 
+        from core.tools.reminder import get_reminders
+        reminders = get_reminders(user_id)
+
         logger.debug(
             f"[pipeline.fetch_context] uid={user_id} "
             f"history={len(history)} lore={len(lore_entries)}"
@@ -84,6 +87,7 @@ class Pipeline:
             "growth_content":      growth_content,
             "event_search_result": event_search_result,
             "lore_entries":        lore_entries,
+            "reminders":           reminders,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -104,6 +108,12 @@ class Pipeline:
         """
         from core import prompt_builder
         from core.config_loader import get_config
+        from datetime import datetime
+        _now = datetime.now()
+        _current_time = (
+            _now.strftime("%Y年%m月%d日 %H:%M 星期")
+            + ["一", "二", "三", "四", "五", "六", "日"][_now.weekday()]
+        )
 
         messages = prompt_builder.build(
             character=self.character,
@@ -118,6 +128,8 @@ class Pipeline:
             lore_entries=context["lore_entries"],
             tool_result=tool_result,
             author_note_extra=self.author_note_extra,
+            current_time=_current_time,
+            reminders=context.get("reminders", []),
         )
         self.author_note_extra = ""
         return messages
