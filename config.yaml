@@ -135,3 +135,7 @@ scheduler:
   - 窗外在下雨
   - 有点困，但还不想睡
   - 今天的光很好
+  daily_journal: true
+  period_reminder: true
+  diary_reminder: true
+  diary_inject: true

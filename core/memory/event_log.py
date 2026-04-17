@@ -120,37 +120,29 @@ def get_recent_days(user_id: str, days: int = 3) -> str:
 
 
 async def search(user_id: str, query: str, llm_client=None) -> str:
-    """
-    在最近3天的日志里关键词匹配与 query 相关的内容。
-    将 query 按空白分词，逐行扫描，返回最多3条命中行。
-    没有相关内容返回空字符串。
-
-    参数：
-        user_id    - 用户 QQ 号
-        query      - 当前用户消息（用来做关键词匹配）
-        llm_client - 保留参数，不再使用
-
-    返回：
-        命中的日志行（最多3条，分号连接），无匹配返回 ""
-    """
-    recent_text = get_recent_days(user_id, days=3)
+    recent_text = get_recent_days(user_id, days=7)
     if not recent_text:
         return ""
 
-    # 按空白分词，过滤长度 <= 1 的片段
-    keywords = [w.strip() for w in query.split() if len(w.strip()) > 1]
+    keywords = set()
+    q = query.strip()
+    for length in (2, 3, 4):
+        for i in range(len(q) - length + 1):
+            chunk = q[i:i+length]
+            if chunk.strip():
+                keywords.add(chunk)
+
     if not keywords:
         return ""
 
     matched: list[str] = []
     for line in recent_text.splitlines():
         stripped = line.strip()
-        # 跳过标题行、分隔线、空行
         if not stripped or stripped.startswith("#") or stripped == "---":
             continue
         if any(kw in stripped for kw in keywords):
             matched.append(stripped)
-            if len(matched) >= 3:
+            if len(matched) >= 5:
                 break
 
     return "；".join(matched) if matched else ""

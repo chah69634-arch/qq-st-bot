@@ -57,6 +57,7 @@ async def put_sched_config(body: dict, auth=Depends(verify_token)):
 
     bool_fields = [
         "enabled", "morning_greeting", "night_reminder", "random_message",
+        "daily_journal", "period_reminder", "diary_reminder", "diary_inject",
     ]
     for f in bool_fields:
         if f in body:

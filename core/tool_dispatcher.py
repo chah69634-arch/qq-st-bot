@@ -25,6 +25,14 @@ _TOOL_REGISTRY: dict[str, dict] = {}
 # 定时任务回调：由 main.py 注入，用于 set_timer 发送 QQ 消息
 _send_callback: Callable | None = None
 
+# 工具失败时的友好兜底文案
+_TOOL_FALLBACKS = {
+    "weather": "天气信息暂时获取不到",
+    "web_search": "网络暂时有些不稳定，没搜到",
+    "get_time": "时间获取出了点问题",
+    "add_reminder": "备忘录暂时写不进去，稍后再试",
+}
+
 
 def register_send_callback(callback: Callable):
     """注入发送消息的回调函数（由 main.py 在初始化时调用）"""
@@ -258,10 +266,12 @@ async def execute(
         return f"工具已执行：{tool_name}，结果：{result}", None
     except TypeError as e:
         log_error("tool_dispatcher.execute", e)
-        return get_tool_fail_response(), None
+        fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
+        return fallback, None
     except Exception as e:
         log_error("tool_dispatcher.execute", e)
-        return get_tool_fail_response(), None
+        fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
+        return fallback, None
 
 
 def _build_confirm_ask(tool_name: str, tool_args: dict) -> str:

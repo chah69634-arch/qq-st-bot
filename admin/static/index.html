@@ -837,6 +837,10 @@ textarea { resize: vertical; min-height: 72px; }
           <label class="checkbox-row"><input type="checkbox" id="sc-morning">早安问候（7-9点）</label>
           <label class="checkbox-row"><input type="checkbox" id="sc-night">晚安催睡（23点后）</label>
           <label class="checkbox-row"><input type="checkbox" id="sc-random">随机日间消息</label>
+          <label class="checkbox-row"><input type="checkbox" id="sc-journal">每日手账（23点后）</label>
+          <label class="checkbox-row"><input type="checkbox" id="sc-period">生理期关心</label>
+          <label class="checkbox-row"><input type="checkbox" id="sc-diary">日记缺失提醒</label>
+          <label class="checkbox-row"><input type="checkbox" id="sc-diary-inject">日记内容注入</label>
         </div>
         <button class="btn btn-primary" onclick="saveSchedConfig()">保存配置</button>
       </div>
@@ -857,6 +861,9 @@ textarea { resize: vertical; min-height: 72px; }
           <button class="btn btn-ghost btn-sm" onclick="scTrigger('morning_greeting')">🌅 发早安</button>
           <button class="btn btn-ghost btn-sm" onclick="scTrigger('night_reminder')">🌙 发晚安</button>
           <button class="btn btn-ghost btn-sm" onclick="scTrigger('random_message')">💬 随机日间消息</button>
+          <button class="btn btn-ghost btn-sm" onclick="scTrigger('daily_journal')">📓 手动手账</button>
+          <button class="btn btn-ghost btn-sm" onclick="scTrigger('period_reminder')">🌸 生理期关心</button>
+          <button class="btn btn-ghost btn-sm" onclick="scTrigger('diary_reminder')">📝 日记提醒</button>
         </div>
       </div>
 
@@ -2350,6 +2357,10 @@ const SC_TRIGGER_LABELS = {
   hr_critical:      '心率危急(>120)',
   sleep_end:        '睡眠结束',
   weather_alert:    '天气提醒',
+  period_reminder:  '生理期关心',
+  diary_reminder:   '日记缺失提醒',
+  diary_inject:     '日记内容注入',
+  daily_journal:    '每日手账',
 };
 
 async function loadScheduler() {
@@ -2367,6 +2378,10 @@ async function loadScheduler() {
     document.getElementById('sc-morning').checked  = !!cfgRes.morning_greeting;
     document.getElementById('sc-night').checked    = !!cfgRes.night_reminder;
     document.getElementById('sc-random').checked   = !!cfgRes.random_message;
+    document.getElementById('sc-journal').checked       = !!cfgRes.daily_journal;
+    document.getElementById('sc-period').checked        = !!cfgRes.period_reminder;
+    document.getElementById('sc-diary').checked         = !!cfgRes.diary_reminder;
+    document.getElementById('sc-diary-inject').checked  = !!cfgRes.diary_inject;
 
     // 渲染触发器状态表
     const triggers = statusRes.triggers || {};
@@ -2412,6 +2427,10 @@ async function saveSchedConfig() {
       morning_greeting:  document.getElementById('sc-morning').checked,
       night_reminder:    document.getElementById('sc-night').checked,
       random_message:    document.getElementById('sc-random').checked,
+      daily_journal:     document.getElementById('sc-journal').checked,
+      period_reminder:   document.getElementById('sc-period').checked,
+      diary_reminder:    document.getElementById('sc-diary').checked,
+      diary_inject:      document.getElementById('sc-diary-inject').checked,
     };
     const d = await api('PUT', '/scheduler/config', body);
     toast(d.message, 'ok');

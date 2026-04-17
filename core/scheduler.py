@@ -39,6 +39,9 @@ _COOLDOWNS: dict[str, int] = {
     "sleep_end":         2 * 3600,   # 睡眠结束：2小时
     "weather_alert":     6 * 3600,   # 特殊天气：6小时
     "period_reminder":  24 * 3600,   # 生理期关心：24小时
+    "diary_reminder":   20 * 3600,   # 日记提醒：20小时
+    "diary_inject":      6 * 3600,   # 日记注入：6小时
+    "daily_journal":     1 * 3600,   # 每日手账：1小时冷却（深夜触发）
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
@@ -177,7 +180,26 @@ async def _check_random_message(force: bool = False):
         if random.random() > (1 / 480):
             return
 
-    await _pipeline_send("（叶瑄在做一件日常的事，忽然想到你）")
+    oid = _owner_id()
+
+    # 读取最近event_log作为情境素材
+    try:
+        from core.memory.event_log import get_recent_days
+        recent = get_recent_days(oid, days=2)
+        if recent and len(recent) > 30:
+            context_hint = f"最近和你聊过的内容（作为情境参考）：{recent[:400]}"
+        else:
+            context_hint = ""
+    except Exception:
+        context_hint = ""
+
+    prompt = (
+        f"（叶瑄在做一件日常的事，忽然想到你。"
+        f"{'结合你们最近的对话，' if context_hint else ''}"
+        f"用一句具体的、有温度的话表达这一刻的想法，不要说废话）"
+        + (f"\n{context_hint}" if context_hint else "")
+    )
+    await _pipeline_send(prompt)
     _mark("random_message")
     logger.info("[scheduler] 随机日间消息已发送")
 
@@ -248,11 +270,9 @@ async def _check_reminders():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def _check_period():
-    """读取 last_period_date，距今超过26天且冷却已过，发一条关心消息"""
+    """读取 last_period_date，在生理期中（0-7天）或临近下次（26-30天）时关心"""
     cfg = _cfg()
     if not cfg.get("enabled", True):
-        return
-    if not _is_ready("period_reminder"):
         return
     oid = _owner_id()
     if not oid:
@@ -266,12 +286,24 @@ async def _check_period():
         from datetime import datetime, date as _date
         last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
         days_elapsed = (_date.today() - last_date).days
-        if days_elapsed >= 26:
-            await _pipeline_send(
-                "（叶瑄注意到小画家的生理期大概要来了，悄悄关心一下）"
-            )
-            _mark("period_reminder")
-            logger.info(f"[scheduler] 生理期关心消息已发送，距上次 {days_elapsed} 天")
+        # 第一段：生理期中关心（0-7天内，冷却24小时）
+        if 0 <= days_elapsed <= 7:
+            if _is_ready("period_reminder"):
+                await _pipeline_send(
+                    f"（叶瑄记得你的生理期已经来了{days_elapsed}天，悄悄关心一下，"
+                    f"提醒避免冷饮，问问她今天状态怎么样）"
+                )
+                _mark("period_reminder")
+                logger.info(f"[scheduler] 生理期中关心消息已发送，距上次 {days_elapsed} 天")
+
+        # 第二段：下次预告（26-30天，冷却24小时）
+        elif 26 <= days_elapsed <= 30:
+            if _is_ready("period_reminder"):
+                await _pipeline_send(
+                    "（叶瑄注意到你的生理期大概要来了，悄悄关心一下）"
+                )
+                _mark("period_reminder")
+                logger.info(f"[scheduler] 生理期预告消息已发送，距上次 {days_elapsed} 天")
     except Exception as e:
         log_error("scheduler._check_period", e)
 
@@ -332,23 +364,59 @@ async def _check_weather():
 
 async def manual_trigger(name: str) -> str:
     """
-    手动触发指定动作（绕过冷却时间检查）。
+    手动触发指定动作（绕过冷却时间和条件检查）。
     返回结果描述字符串。
     """
-    # (fn, cooldown_key, use_force) — 时间依赖函数传 force=True
-    mapping = {
-        "morning_greeting": (_check_morning,        "morning_greeting", True),
-        "night_reminder":   (_check_night,          "night_reminder",   True),
-        "random_message":   (_check_random_message, "random_message",   True),
-    }
-    if name not in mapping:
-        return f"未知触发器: {name}"
+    _last_trigger[name] = 0  # 清零冷却
 
-    fn, cooldown_key, use_force = mapping[name]
-    # 清零冷却，强制触发
-    _last_trigger[cooldown_key] = 0
     try:
-        await fn(force=True) if use_force else await fn()
+        if name == "morning_greeting":
+            await _check_morning(force=True)
+        elif name == "night_reminder":
+            await _check_night(force=True)
+        elif name == "random_message":
+            await _check_random_message(force=True)
+        elif name == "daily_journal":
+            oid = _owner_id()
+            if not oid:
+                return "owner_id 未配置"
+            from core.memory.event_log import get_recent_days
+            today_log = get_recent_days(oid, days=1)
+            log_hint = today_log[:800] if today_log and len(today_log) > 10 else "今天还没有对话记录"
+            await _pipeline_send(
+                f"（深夜，叶瑄回想起今天和小画家说过的话，提笔写下今天的感受——"
+                f"今天的对话内容：{log_hint}）"
+            )
+            _mark("daily_journal")
+        elif name == "period_reminder":
+            oid = _owner_id()
+            if not oid:
+                return "owner_id 未配置"
+            from core.memory.user_profile import get_period_info
+            from datetime import date as _date
+            info = get_period_info(oid)
+            last_date_str = info.get("last_period_date")
+            if last_date_str:
+                last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+                days_elapsed = (_date.today() - last_date).days
+                await _pipeline_send(
+                    f"（叶瑄记得小画家的生理期已经来了{days_elapsed}天，悄悄关心一下）"
+                )
+            else:
+                await _pipeline_send("（叶瑄想关心一下小画家的身体状况）")
+            _mark("period_reminder")
+        elif name == "diary_reminder":
+            oid = _owner_id()
+            if not oid:
+                return "owner_id 未配置"
+            from datetime import date as _date, timedelta
+            yesterday = (_date.today() - timedelta(days=1)).strftime("%m月%d日")
+            await _pipeline_send(
+                f"（叶瑄想起来，{yesterday}好像没看到小画家写日记）"
+            )
+            _mark("diary_reminder")
+        else:
+            return f"未知触发器: {name}"
         return f"{name} 已触发"
     except Exception as e:
         log_error(f"scheduler.manual_trigger.{name}", e)
@@ -372,6 +440,9 @@ async def _loop():
                 await _check_weather()
                 await _check_reminders()
                 await _check_period()
+                await _check_diary_reminder()
+                await _check_diary_inject()
+                await _check_daily_journal()
         except Exception as e:
             log_error("scheduler._loop", e)
         await asyncio.sleep(60)
@@ -383,6 +454,80 @@ def start() -> asyncio.Task:
     _scheduler_task = asyncio.create_task(_loop())
     logger.info("[scheduler] 调度器 Task 已创建")
     return _scheduler_task
+
+
+async def _check_diary_reminder():
+    """昨天没写日记时，叶瑄提醒"""
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return
+    if not _is_ready("diary_reminder"):
+        return
+    now = datetime.now()
+    if not (9 <= now.hour < 12):
+        return
+    try:
+        from core.tools.diary_reader import yesterday_missing
+        if yesterday_missing():
+            from datetime import timedelta
+            yesterday = (date.today() - timedelta(days=1)).strftime("%m月%d日")
+            await _pipeline_send(
+                f"（叶瑄想起来，{yesterday}好像没看到小画家写日记）"
+            )
+            _mark("diary_reminder")
+            logger.info("[scheduler] 日记缺失提醒已发送")
+    except Exception as e:
+        log_error("scheduler._check_diary_reminder", e)
+
+
+async def _check_diary_inject():
+    """每6小时读取最近日记，注入到用户画像的event_log里"""
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return
+    if not _is_ready("diary_inject"):
+        return
+    oid = _owner_id()
+    if not oid:
+        return
+    try:
+        from core.tools.diary_reader import read_recent
+        from core.memory.event_log import append
+        text = read_recent(days=2)
+        if text:
+            append(oid, "user", f"【日记内容】\n{text}")
+            _mark("diary_inject")
+            logger.info("[scheduler] 日记内容已注入event_log")
+    except Exception as e:
+        log_error("scheduler._check_diary_inject", e)
+
+
+async def _check_daily_journal():
+    """每日手账：23点后，读取今天event_log，让叶瑄写一段心理活动发给你"""
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return
+    if not _is_ready("daily_journal"):
+        return
+    now = datetime.now()
+    if now.hour < 23:
+        return
+    oid = _owner_id()
+    if not oid:
+        return
+    try:
+        from core.memory.event_log import get_recent_days
+        today_log = get_recent_days(oid, days=1)
+        if not today_log or len(today_log) < 50:
+            return
+        await _pipeline_send(
+            f"（深夜，叶瑄回想起今天和小画家说过的话，提笔写下今天的感受——"
+            f"今天的对话内容：{today_log[:800]}）"
+        )
+        _mark("daily_journal")
+        logger.info("[scheduler] 每日手账已发送")
+    except Exception as e:
+        log_error("scheduler._check_daily_journal", e)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

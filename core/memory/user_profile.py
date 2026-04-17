@@ -60,8 +60,11 @@ async def _compress_facts(facts: list) -> list:
         import json as _json
 
         prompt = (
-            "以下是用户的重要事实列表，请合并重复内容、删除无意义条目，"
-            "保留真正重要的信息，输出不超过30条的JSON数组，只输出数组不要其他内容：\n"
+            "以下是用户的重要事实列表，请整理精简。规则：\n"
+            "1. 语义相同或高度相似的条目只保留一条，措辞最准确的那条\n"
+            "2. 以下类型直接删除：测试AI行为的记录、单次临时状态、对话玩笑、已在name/location/pets/interests/occupation字段存储的信息\n"
+            "3. 输出不超过25条\n"
+            "只输出JSON数组，不要其他内容：\n"
             + _json.dumps(facts, ensure_ascii=False)
         )
         raw = await llm_client.chat([{"role": "user", "content": prompt}])
@@ -99,7 +102,7 @@ async def update(user_id: str, new_facts: dict):
                 existing.append(value)
 
             # 超过 50 条时触发 LLM 合并压缩
-            if len(existing) > 50:
+            if len(existing) > 30:
                 logger.info(
                     f"[user_profile] important_facts 已达 {len(existing)} 条，触发 LLM 压缩"
                 )
@@ -137,10 +140,10 @@ async def extract_and_update(user_id: str, recent_messages: list[dict]):
                 "你是一个信息提取助手。请从下面的对话中提取用户的个人信息。\n"
                 "只返回 JSON 对象，不要输出任何其他内容。\n"
                 "JSON 格式：\n"
-                '{"name": null或字符串, "location": null或字符串, '
-                '"pets": null或字符串, "interests": null或字符串, '
-                '"occupation": null或字符串, "important_facts": [字符串列表]}\n'
-                "没有提到的字段填 null，important_facts 放其他值得记住的事实。"
+                '{"name": null或字符串, "location": null或字符串, "pets": null或字符串, "interests": null或字符串, "occupation": null或字符串, "important_facts": [字符串列表]}\n'
+                "important_facts 只记录稳定的、有意义的个人事实，例如：性格特点、生活习惯、重要经历、身体状况。\n"
+                "绝对不要记录：用户测试AI功能的行为、单次询问某件事、临时状态、对话中的玩笑或表情包、已经在其他字段记录的信息。\n"
+                "没有提到的字段填 null。"
             ),
         },
         {
