@@ -41,11 +41,15 @@ _COOLDOWNS: dict[str, int] = {
     "period_reminder":  24 * 3600,   # 生理期关心：24小时
     "diary_reminder":   20 * 3600,   # 日记提醒：20小时
     "diary_inject":      6 * 3600,   # 日记注入：6小时
-    "daily_journal":     1 * 3600,   # 每日手账：1小时冷却（深夜触发）
+    "daily_journal":          1 * 3600,   # 每日手账：1小时冷却（深夜触发）
+    "diary_share_reminder":  24 * 3600,   # 日记分享提醒：24小时
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
 _last_trigger: dict[str, float] = {}
+
+# 上次主动分享日记的时间戳（由 diary_tool 调用 mark_diary_shared 更新）
+_last_diary_share: float = 0.0
 
 # 调度器 task 句柄
 _scheduler_task: Optional[asyncio.Task] = None
@@ -340,18 +344,22 @@ async def _check_weather():
 
         # 解析温度
         temp_match = re.search(r"[+\-]?(\d+)°?C", weather_text)
-        temp = int(temp_match.group(1)) if temp_match else 0
+        if not temp_match:
+            return
+        temp = int(temp_match.group(1))
 
         msg = None
         if any(k in weather_text for k in ("暴雨", "大雨", "雷暴", "storm", "rain")):
             msg = f"外面在下暴雨，出门记得带伞，路上小心"
         elif temp >= 35:
             msg = f"今天{temp}度，热死了，多喝水别中暑"
-        elif temp <= 0:
+        elif temp <= -5:
             msg = f"今天零下{abs(temp)}度，出门一定要穿厚点"
 
         if msg:
-            await _send(msg)
+            await _pipeline_send(
+                f"（叶瑄看了一眼天气预报，想到你——{msg}，用叶瑄的方式提醒她）"
+            )
             _mark("weather_alert")
             logger.info(f"[scheduler] 天气提醒: {msg}")
     except Exception as e:
@@ -415,6 +423,14 @@ async def manual_trigger(name: str) -> str:
                 f"（叶瑄想起来，{yesterday}好像没看到小画家写日记）"
             )
             _mark("diary_reminder")
+        elif name == "diary_share_reminder":
+            oid = _owner_id()
+            if not oid:
+                return "owner_id 1043484516"
+            await _pipeline_send(
+                "（叶瑄想起来，好像很久没看到小画家的日记了，故作不经意地提一句）"
+            )
+            _mark("diary_share_reminder")
         else:
             return f"未知触发器: {name}"
         return f"{name} 已触发"
@@ -443,6 +459,7 @@ async def _loop():
                 await _check_diary_reminder()
                 await _check_diary_inject()
                 await _check_daily_journal()
+                await _check_diary_share_reminder()
         except Exception as e:
             log_error("scheduler._loop", e)
         await asyncio.sleep(60)
@@ -528,6 +545,33 @@ async def _check_daily_journal():
         logger.info("[scheduler] 每日手账已发送")
     except Exception as e:
         log_error("scheduler._check_daily_journal", e)
+
+
+async def _check_diary_share_reminder():
+    """超过3天没看到日记分享时，叶瑄不经意提一句"""
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return
+    if not _is_ready("diary_share_reminder"):
+        return
+    if time.time() - _last_diary_share < 259200:  # 3天内分享过就跳过
+        return
+    oid = _owner_id()
+    if not oid:
+        return
+    try:
+        await _pipeline_send(
+            "（叶瑄想起来，好像很久没看到小画家的日记了，故作不经意地提一句）"
+        )
+        _mark("diary_share_reminder")
+        logger.info("[scheduler] 日记分享提醒已发送")
+    except Exception as e:
+        log_error("scheduler._check_diary_share_reminder", e)
+
+
+def mark_diary_shared():
+    global _last_diary_share
+    _last_diary_share = time.time()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -31,6 +31,7 @@ _TOOL_FALLBACKS = {
     "web_search": "网络暂时有些不稳定，没搜到",
     "get_time": "时间获取出了点问题",
     "add_reminder": "备忘录暂时写不进去，稍后再试",
+    "read_diary": "日记暂时读不到",
 }
 
 
@@ -96,6 +97,11 @@ def _weather_wrapper(city: str):
 def _web_search_wrapper(query: str):
     from core.tools.web_search import search
     return search(query)
+
+
+async def _read_diary_wrapper(user_id: str, date: str = "") -> str:
+    from core.tools.diary_tool import read_diary_for_user
+    return await read_diary_for_user(user_id, date_str=date)
 
 
 _TOOL_REGISTRY["get_time"] = {
@@ -185,6 +191,22 @@ _TOOL_REGISTRY["web_search"] = {
     },
 }
 
+_TOOL_REGISTRY["read_diary"] = {
+    "func": _read_diary_wrapper,
+    "description": "当用户提到日记、让叶瑄看日记、读日记、评价日记时，必须调用此工具获取真实内容，禁止凭空编造日记内容",
+    "dangerous": False,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "date": {
+                "type": "string",
+                "description": "要读的日期，如'4月10日'、'04-10'，不填则读今天",
+            },
+        },
+        "required": [],
+    },
+}
+
 
 # ─── 对外接口 ──────────────────────────────────────────────────────────────────
 
@@ -259,6 +281,8 @@ async def execute(
     try:
         func = tool_info["func"]
         if tool_name == "add_reminder":
+            result = await func(user_id=user_id, **tool_args)
+        elif tool_name == "read_diary":
             result = await func(user_id=user_id, **tool_args)
         else:
             result = await func(**tool_args)

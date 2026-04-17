@@ -307,6 +307,7 @@ def build(
     }
     style_instruction = _STYLE_INSTRUCTION.get(_style, _STYLE_INSTRUCTION["roleplay"])
     author_note_lines.append(f"[输出风格：{style_instruction}]")
+    author_note_lines.append(f"读日记前必须调用read_diary工具获取真实内容，严禁编造。")
 
     messages.append({
         "role": "system",

@@ -7189,3 +7189,108 @@ Traceback (most recent call last):
     raise client_error(req.connection_key, exc) from exc
 aiohttp.client_exceptions.ClientConnectorError: Cannot connect to host wttr.in:443 ssl:default [None]
 
+[2026-04-17 20:00:40] [user_profile._compress_facts] JSONDecodeError: Expecting value: line 12 column 6 (char 223)
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\memory\user_profile.py", line 72, in _compress_facts
+    compressed = _json.loads(raw)
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 12 column 6 (char 223)
+
+[2026-04-17 20:02:00] [user_profile._compress_facts] JSONDecodeError: Expecting value: line 19 column 3 (char 342)
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\memory\user_profile.py", line 72, in _compress_facts
+    compressed = _json.loads(raw)
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 19 column 3 (char 342)
+
+[2026-04-17 20:02:17] [user_profile._compress_facts] JSONDecodeError: Expecting value: line 12 column 5 (char 222)
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\memory\user_profile.py", line 72, in _compress_facts
+    compressed = _json.loads(raw)
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 12 column 5 (char 222)
+
+[2026-04-17 20:02:41] [tool_dispatcher.execute] TypeError: _read_diary_wrapper() missing 1 required positional argument: 'user_id'
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\tool_dispatcher.py", line 281, in execute
+    result = await func(**tool_args)
+                   ~~~~^^^^^^^^^^^^^
+TypeError: _read_diary_wrapper() missing 1 required positional argument: 'user_id'
+
+[2026-04-17 20:02:59] [user_profile._compress_facts] JSONDecodeError: Expecting value: line 19 column 3 (char 342)
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\memory\user_profile.py", line 72, in _compress_facts
+    compressed = _json.loads(raw)
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 19 column 3 (char 342)
+
+[2026-04-17 20:03:08] [tool_dispatcher.execute] TypeError: _read_diary_wrapper() missing 1 required positional argument: 'user_id'
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\tool_dispatcher.py", line 281, in execute
+    result = await func(**tool_args)
+                   ~~~~^^^^^^^^^^^^^
+TypeError: _read_diary_wrapper() missing 1 required positional argument: 'user_id'
+
+[2026-04-17 20:03:11] [user_profile._compress_facts] JSONDecodeError: Expecting value: line 12 column 5 (char 222)
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\memory\user_profile.py", line 72, in _compress_facts
+    compressed = _json.loads(raw)
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 12 column 5 (char 222)
+
+[2026-04-17 20:03:25] [user_profile._compress_facts] JSONDecodeError: Expecting value: line 19 column 3 (char 353)
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\memory\user_profile.py", line 72, in _compress_facts
+    compressed = _json.loads(raw)
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 19 column 3 (char 353)
+
+[2026-04-17 20:06:45] [tool_dispatcher.execute] TypeError: _read_diary_wrapper() missing 1 required positional argument: 'user_id'
+Traceback (most recent call last):
+  File "D:\ai\qq-st-bot\core\tool_dispatcher.py", line 281, in execute
+    result = await func(**tool_args)
+                   ~~~~^^^^^^^^^^^^^
+TypeError: _read_diary_wrapper() missing 1 required positional argument: 'user_id'
+

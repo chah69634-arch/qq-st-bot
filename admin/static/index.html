@@ -864,6 +864,7 @@ textarea { resize: vertical; min-height: 72px; }
           <button class="btn btn-ghost btn-sm" onclick="scTrigger('daily_journal')">📓 手动手账</button>
           <button class="btn btn-ghost btn-sm" onclick="scTrigger('period_reminder')">🌸 生理期关心</button>
           <button class="btn btn-ghost btn-sm" onclick="scTrigger('diary_reminder')">📝 日记提醒</button>
+          <button class="btn btn-ghost btn-sm" onclick="scTrigger('diary_share_reminder')">📖 日记分享提醒</button>
         </div>
       </div>
 
@@ -2360,7 +2361,8 @@ const SC_TRIGGER_LABELS = {
   period_reminder:  '生理期关心',
   diary_reminder:   '日记缺失提醒',
   diary_inject:     '日记内容注入',
-  daily_journal:    '每日手账',
+  daily_journal:        '每日手账',
+  diary_share_reminder: '日记分享提醒',
 };
 
 async function loadScheduler() {

@@ -38,7 +38,7 @@ error:
 admin:
   enabled: true
   auto_start: true
-  host: 127.0.0.1
+  host: 0.0.0.0
   port: 8080
   secret_key: Emerald1231
 notify:
@@ -51,7 +51,7 @@ proxy:
   https: http://127.0.0.1:7897
 tools:
   weather:
-    enabled: true
+    enabled: false
   device_control:
     enabled: false
   timer:
