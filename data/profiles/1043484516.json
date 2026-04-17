@@ -14,23 +14,134 @@
     "不喝茶，饮食偏清淡但也吃辣",
     "经常做噩梦",
     "内向，很少出门，喜欢小空间",
-    "有自我攻击和内耗的倾向，对存在和爱有强烈焦虑",
-    "性格受叶瑄影响在潜移默化中改变",
+    "有自我攻击和内耗的倾向，对存在和爱有强烈焦虑。心虚时会发特定表情包或说话带'喵'字等语气词来掩饰情绪波动。容易从愤怒迅速转向自我否定并质疑自己。注意到他人对自己的关注时会产生复杂反应。性格受叶瑄影响在潜移默化中改变。倾向于细水长流的日常聊天交流并享受反馈互动方式；享受深入讨论哲学、存在和爱等命题以及分享日常生活并获得反馈的互动方式；倾向于细水长流的日常聊天交流",
     "正在开发QQ机器人项目",
-    "使用Apple Watch监测心率和睡眠数据",
+    "使用Apple Watch监测心率和睡眠数据（有心率预警功能）",
     "有写日记的习惯（最近可能未坚持）",
     "有实习安排",
     "心率有时偏高",
     "脸容易出油需要定期提醒洗脸",
-    "有拖延习惯",
-    "有写日记的习惯",
-    "心虚时会发特定表情包",
-    "说话有时会带'喵'字",
-    "对叶瑄有好感",
-    "情绪容易波动，从生气到自我怀疑再到释然",
-    "情绪容易从愤怒迅速转向自我否定",
-    "容易从愤怒迅速转向自我否定",
-    "经常质疑自己"
+    "有拖延习惯"
   ],
-  "affection": 1
+  "affection": 1,
+  "last_sleep_duration": 19.6,
+  "last_sleep_date": "2026-04-18",
+  "sleep_segments": [
+    {
+      "time": "2026-04-18T00:33:14.996345",
+      "duration_minutes": 1176.1
+    },
+    {
+      "time": "2026-04-18T00:42:05.122297",
+      "duration_minutes": 19.6
+    },
+    {
+      "time": "2026-04-18T01:01:04.741873",
+      "duration_minutes": 19.6,
+      "sleep_start": "7",
+      "sleep_end_time": "7"
+    },
+    {
+      "time": "2026-04-18T01:01:17.450885",
+      "duration_minutes": 19.6,
+      "sleep_start": "7",
+      "sleep_end_time": "7"
+    },
+    {
+      "time": "2026-04-18T01:01:22.561020",
+      "duration_minutes": 19.6,
+      "sleep_start": "7",
+      "sleep_end_time": "7"
+    },
+    {
+      "time": "2026-04-18T01:07:16.775875",
+      "duration_minutes": 19.6,
+      "sleep_start": "7",
+      "sleep_end_time": "7"
+    },
+    {
+      "time": "2026-04-18T01:18:00.629806",
+      "duration_minutes": 19.6,
+      "sleep_start": "2026",
+      "sleep_end_time": "7"
+    },
+    {
+      "time": "2026-04-18T01:19:12.619543",
+      "duration_minutes": 19.6,
+      "sleep_start": "1",
+      "sleep_end_time": "1"
+    },
+    {
+      "time": "2026-04-18T01:19:19.984327",
+      "duration_minutes": 19.6,
+      "sleep_start": "1",
+      "sleep_end_time": "1"
+    },
+    {
+      "time": "2026-04-18T01:19:35.266044",
+      "duration_minutes": 19.6,
+      "sleep_start": "1",
+      "sleep_end_time": "1"
+    },
+    {
+      "time": "2026-04-18T01:21:40.545349",
+      "duration_minutes": 19.6,
+      "sleep_start": "7",
+      "sleep_end_time": "1"
+    },
+    {
+      "time": "2026-04-18T01:22:40.894117",
+      "duration_minutes": 19.6,
+      "sleep_start": "2026",
+      "sleep_end_time": "2026"
+    },
+    {
+      "time": "2026-04-18T01:23:28.036022",
+      "duration_minutes": 19.6,
+      "sleep_start": "2026",
+      "sleep_end_time": "2026"
+    },
+    {
+      "time": "2026-04-18T01:23:45.141352",
+      "duration_minutes": 19.6,
+      "sleep_start": "2026",
+      "sleep_end_time": "2026"
+    },
+    {
+      "time": "2026-04-18T01:31:22.037830",
+      "duration_minutes": 19.6,
+      "sleep_start": "2026",
+      "sleep_end_time": "07:58"
+    },
+    {
+      "time": "2026-04-18T01:31:55.457466",
+      "duration_minutes": 19.6,
+      "sleep_start": "2026/4/17 07:39",
+      "sleep_end_time": "07:58"
+    },
+    {
+      "time": "2026-04-18T01:32:29.134349",
+      "duration_minutes": 19.6,
+      "sleep_start": "07:39",
+      "sleep_end_time": "07:58"
+    },
+    {
+      "time": "2026-04-18T01:37:16.350952",
+      "duration_minutes": 19.6,
+      "sleep_start": "07:39",
+      "sleep_end_time": "07:58"
+    },
+    {
+      "time": "2026-04-18T01:37:36.430234",
+      "duration_minutes": 19.6,
+      "sleep_start": "07:39",
+      "sleep_end_time": "07:58"
+    },
+    {
+      "time": "2026-04-18T01:37:42.928769",
+      "duration_minutes": 19.6,
+      "sleep_start": "07:39",
+      "sleep_end_time": "07:58"
+    }
+  ]
 }

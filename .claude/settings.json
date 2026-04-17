@@ -45,7 +45,12 @@
       "Bash(python3 -c \"from admin.routers.scheduler import router; print\\('ok'\\)\")",
       "Bash(python3 -c \"from core.tools.diary_tool import read_diary_for_user; print\\('ok'\\)\")",
       "Bash(python3 -c \"from core.scheduler import mark_diary_shared; print\\('ok'\\)\")",
-      "Bash(python3 -c \"from core.scheduler import _check_weather; print\\('ok'\\)\")"
+      "Bash(python3 -c \"from core.scheduler import _check_weather; print\\('ok'\\)\")",
+      "Bash(python3 -c \"from admin.routers.watch import router; print\\('watch ok'\\)\")",
+      "Bash(python3 -c \"from core.scheduler import on_watch_event; print\\('scheduler ok'\\)\")",
+      "Bash(python3 -c \"from core.scheduler import mark_diary_shared; print\\('mark ok'\\)\")",
+      "Bash(python3 -c \"from core.scheduler import _check_diary_share_reminder; print\\('reminder ok'\\)\")",
+      "Bash(python3 -c \"from core.scheduler import _check_diary_share_reminder; print\\('ok'\\)\")"
     ],
     "additionalDirectories": [
       "D:\\ai\\qq-st-bot\\core\\memory"

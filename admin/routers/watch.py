@@ -60,7 +60,31 @@ async def receive_watch_event(
             data["value"] = int(val)
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail="value 必须为整数")
-    elif event_type not in ("sleep_end",):
+    elif event_type == "sleep_end":
+        duration = body.get("duration_seconds")
+        if duration:
+            try:
+                data["duration_minutes"] = round(float(duration) / 60, 1)
+            except Exception:
+                pass
+        data["sleep_start"] = str(body.get("sleep_start", ""))
+        data["sleep_end_time"] = str(body.get("sleep_end", ""))
+
+        oid = str(get_config().get("scheduler", {}).get("owner_id", ""))
+        if oid:
+            from core.memory.user_profile import load as _load, save as _save
+            profile = _load(oid)
+            profile.setdefault("sleep_segments", [])
+            profile["sleep_segments"].append({
+                "time": datetime.now().isoformat(),
+                "duration_minutes": data.get("duration_minutes", 0),
+                "sleep_start": data["sleep_start"],
+                "sleep_end_time": data["sleep_end_time"],
+            })
+            if len(profile["sleep_segments"]) > 20:
+                profile["sleep_segments"] = profile["sleep_segments"][-20:]
+            _save(oid, profile)
+    else:
         raise HTTPException(status_code=422, detail=f"不支持的事件类型: {event_type}")
 
     # 记录最近事件快照
@@ -70,6 +94,7 @@ async def receive_watch_event(
         "timestamp":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         **data,
     })
+    _last_watch_data["received_at"] = datetime.now().isoformat()
 
     from core import scheduler
     import asyncio

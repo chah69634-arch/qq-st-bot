@@ -42,14 +42,30 @@ _COOLDOWNS: dict[str, int] = {
     "diary_reminder":   20 * 3600,   # 日记提醒：20小时
     "diary_inject":      6 * 3600,   # 日记注入：6小时
     "daily_journal":          1 * 3600,   # 每日手账：1小时冷却（深夜触发）
-    "diary_share_reminder":  24 * 3600,   # 日记分享提醒：24小时
+    "diary_share_reminder":   8 * 3600,   # 日记分享提醒：8小时
+    "sleep_report":          20 * 3600,   # 睡眠报告：20小时
+    "activity_remind":       20 * 3600,   # 运动提醒：20小时
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
 _last_trigger: dict[str, float] = {}
 
 # 上次主动分享日记的时间戳（由 diary_tool 调用 mark_diary_shared 更新）
-_last_diary_share: float = 0.0
+def _get_last_diary_share() -> float:
+    try:
+        p = __import__("pathlib").Path("data/scheduler_state.json")
+        if p.exists():
+            import json
+            d = json.loads(p.read_text(encoding="utf-8"))
+            return float(d.get("last_diary_share", 0))
+    except Exception:
+        pass
+    return 0.0
+
+_last_diary_share: float = _get_last_diary_share()
+
+# 调度器启动时间戳（用于冷启动保护）
+_scheduler_start_time: float = time.time()
 
 # 调度器 task 句柄
 _scheduler_task: Optional[asyncio.Task] = None
@@ -239,8 +255,42 @@ async def on_watch_event(event_type: str, data: dict):
 
     elif event_type == "sleep_end":
         if _is_ready("sleep_end"):
-            await _pipeline_send("（叶瑄看到你的睡眠数据显示已经醒来）")
             _mark("sleep_end")
+            duration = data.get("duration_minutes", 0)
+            sleep_start_str = data.get("sleep_start", "")
+            await asyncio.sleep(900)
+            from core.memory.user_profile import load as _load
+            oid = _owner_id()
+            if oid:
+                profile = _load(oid)
+                segments = profile.get("sleep_segments", [])
+                if segments:
+                    from datetime import datetime as _dt
+                    last_seg_time = _dt.fromisoformat(segments[-1]["time"])
+                    if (_dt.now() - last_seg_time).seconds < 900:
+                        logger.info("[scheduler] 检测到用户重新入睡，取消早安触发")
+                        return
+
+            sleep_comment = ""
+            if sleep_start_str:
+                try:
+                    start_hour = int(sleep_start_str.split(":")[0])
+                    if 2 <= start_hour <= 6:
+                        sleep_comment = "凌晨才睡，睡得很晚，叶瑄有点心疼但也有点生气"
+                    elif start_hour >= 23 or start_hour == 0:
+                        sleep_comment = "睡得比较晚，叶瑄会提一句"
+                    elif start_hour <= 22:
+                        sleep_comment = "睡得还算早，叶瑄会夸一句"
+                except Exception:
+                    pass
+
+            hours = int(duration // 60)
+            minutes = int(duration % 60)
+            await _pipeline_send(
+                f"（叶瑄看到小画家睡眠数据显示已醒来，"
+                f"昨晚大约睡了{hours}小时{minutes}分钟，"
+                f"{sleep_comment}，用叶瑄的方式发早安）"
+            )
             logger.info("[scheduler] 睡眠结束触发")
 
 
@@ -552,8 +602,17 @@ async def _check_diary_share_reminder():
     cfg = _cfg()
     if not cfg.get("enabled", True):
         return
+    if time.time() - _scheduler_start_time < 300:
+        return
     if not _is_ready("diary_share_reminder"):
         return
+    now = datetime.now()
+    if now.hour < 22:
+        return
+    if _last_diary_share > 0:
+        from datetime import date as _date
+        if datetime.fromtimestamp(_last_diary_share).date() == _date.today():
+            return
     if time.time() - _last_diary_share < 259200:  # 3天内分享过就跳过
         return
     oid = _owner_id()
@@ -572,6 +631,16 @@ async def _check_diary_share_reminder():
 def mark_diary_shared():
     global _last_diary_share
     _last_diary_share = time.time()
+    try:
+        import json
+        p = __import__("pathlib").Path("data/scheduler_state.json")
+        existing = {}
+        if p.exists():
+            existing = json.loads(p.read_text(encoding="utf-8"))
+        existing["last_diary_share"] = _last_diary_share
+        p.write_text(json.dumps(existing), encoding="utf-8")
+    except Exception as e:
+        log_error("scheduler.mark_diary_shared", e)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
