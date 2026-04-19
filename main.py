@@ -140,6 +140,37 @@ async def handle_message(message: dict):
             await _reply_with_tool_result(tool_result, user_id, target_id, is_group)
         return
 
+    # ── 步骤2.5：处理图片和文件 ─────────────────────────────────────────────
+    image_urls = message.get("image_urls", [])
+    file_info = message.get("file_info")
+    media_context = ""
+
+    if file_info:
+        try:
+            from core.media_processor import process_file
+            file_text = await process_file(file_info)
+            if file_text:
+                fname = file_info.get("name", "文件")
+                media_context = f"（你发来了一个文件：{fname}，内容如下）\n{file_text[:3000]}"
+                logger.info(f"[handle_message] 文件已读取: {fname} {len(file_text)}字")
+        except Exception as e:
+            from core.error_handler import log_error
+            log_error("handle_message.file", e)
+
+    if image_urls and not media_context:
+        try:
+            from core.media_processor import process_image
+            img_desc = await process_image(image_urls[0], content)
+            if img_desc:
+                media_context = f"（你发来了一张图片，图片内容：{img_desc}）"
+                logger.info(f"[handle_message] 图片已识别: {img_desc[:50]}")
+        except Exception as e:
+            from core.error_handler import log_error
+            log_error("handle_message.image", e)
+
+    if media_context:
+        content = media_context + ("\n" + content if content else "")
+
     # ── 步骤3：工具调用探测 ──────────────────────────────────────────────────
     from core import llm_client
     from core.config_loader import get_config

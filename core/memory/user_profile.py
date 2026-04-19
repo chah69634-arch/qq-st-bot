@@ -6,6 +6,7 @@
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from core.config_loader import get_config
@@ -68,7 +69,15 @@ async def _compress_facts(facts: list) -> list:
             + _json.dumps(facts, ensure_ascii=False)
         )
         raw = await llm_client.chat([{"role": "user", "content": prompt}])
-        raw = raw.strip().strip("```json").strip("```").strip()
+        raw = raw.strip()
+        # 清理各种markdown代码块格式
+        raw = re.sub(r"```json\s*", "", raw)
+        raw = re.sub(r"```\s*", "", raw)
+        raw = raw.strip()
+        # 提取JSON数组
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
+        if match:
+            raw = match.group()
         compressed = _json.loads(raw)
         if isinstance(compressed, list):
             logger.info(

@@ -63,6 +63,7 @@ def build(
     pet_info: str = "",
     current_time: str = "",
     reminders: list = None,
+    diary_context: str = "",
 ) -> list[dict]:
     """
     组装完整的 prompt 消息列表
@@ -241,6 +242,14 @@ def build(
             "content": f"【相关往事】\n{event_search_result}",
         })
 
+# ──────────────────────────────────────────────────────────────────────────
+    # 层 6c：日记上下文（独立存储，不参与检索，单独注入）
+    # ──────────────────────────────────────────────────────────────────────────
+    if diary_context:
+        messages.append({
+            "role": "system",
+            "content": f"【用户的近期日记】\n{diary_context}",
+        })
     # ─────────────────────────────────────────────────────────────────────────
     # 层 7：对话示例（few-shot，来自角色卡的 mes_example 字段）
     # mes_example 格式："{{user}}: xxx\n{{char}}: xxx\n<START>..."
@@ -307,7 +316,12 @@ def build(
     }
     style_instruction = _STYLE_INSTRUCTION.get(_style, _STYLE_INSTRUCTION["roleplay"])
     author_note_lines.append(f"[输出风格：{style_instruction}]")
-    author_note_lines.append(f"读日记前必须调用read_diary工具获取真实内容，严禁编造。")
+    author_note_lines.append(
+    f"【强制工具规则】"
+    f"①用户提到日记、今天写了什么、最近记录时，必须立即调用read_diary工具，严禁凭记忆编造日记内容。"
+    f"②用户询问今天日期、现在时间、星期几时，必须调用get_time工具，不得自行猜测。"
+    f"③工具调用是强制行为，不是可选项。"
+)
 
     messages.append({
         "role": "system",
@@ -378,6 +392,7 @@ class PromptBuilder:
         pet_info: str = "",
         current_time: str = "",
         reminders: list = None,
+        diary_context: str = "",
     ) -> list:
         return build(
             character=character,
@@ -394,6 +409,7 @@ class PromptBuilder:
             author_note_extra=author_note_extra,
             affection_info=affection_info,
             pet_info=pet_info,
-            current_time=current_time,
+            ccurrent_time=current_time,
             reminders=reminders,
+            diary_context=diary_context,
         )

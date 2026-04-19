@@ -74,3 +74,50 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(verify_token)):
     from core import config_loader
     config_loader.reload_config()
     return {"message": "LLM 参数已更新", "llm": {k: llm_cfg[k] for k in ("temperature", "top_p", "max_tokens", "frequency_penalty") if k in llm_cfg}}
+
+
+class VisionParamsUpdate(BaseModel):
+    enabled:  Optional[bool]  = None
+    provider: Optional[str]   = None
+    api_key:  Optional[str]   = None
+    model:    Optional[str]   = None
+    base_url: Optional[str]   = None
+
+
+@router.get("/vision-params", summary="获取 Vision 配置")
+async def get_vision_params(auth=Depends(verify_token)):
+    cfg = get_config().get("vision", {})
+    return {
+        "enabled":  cfg.get("enabled",  False),
+        "provider": cfg.get("provider", ""),
+        "api_key":  cfg.get("api_key",  ""),
+        "model":    cfg.get("model",    ""),
+        "base_url": cfg.get("base_url", ""),
+    }
+
+
+@router.put("/vision-params", summary="修改 Vision 配置并热重载")
+async def update_vision_params(body: VisionParamsUpdate, auth=Depends(verify_token)):
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            full_cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+
+    vision_cfg = full_cfg.setdefault("vision", {})
+    if body.enabled  is not None: vision_cfg["enabled"]  = body.enabled
+    if body.provider is not None: vision_cfg["provider"] = body.provider
+    if body.api_key  is not None: vision_cfg["api_key"]  = body.api_key
+    if body.model    is not None: vision_cfg["model"]    = body.model
+    if body.base_url is not None: vision_cfg["base_url"] = body.base_url
+
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+
+    from core import config_loader, llm_client
+    config_loader.reload_config()
+    llm_client.reload_client()
+    return {"message": "Vision 配置已更新", "vision": vision_cfg}

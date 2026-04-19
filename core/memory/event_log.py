@@ -147,6 +147,39 @@ async def search(user_id: str, query: str, llm_client=None) -> str:
 
     return "；".join(matched) if matched else ""
 
+def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:
+    """
+    从最近N天日志里提取有内容密度的片段，供碎碎念使用。
+    优先选：包含具体事物/情感词的用户发言，跳过纯短句和系统行。
+    """
+    recent_text = get_recent_days(user_id, days=days)
+    if not recent_text:
+        return ""
+
+    _EMOTION_HINTS = {"好", "累", "难", "开心", "烦", "怕", "喜欢", "讨厌", "想", "忘", "哭", "笑", "气", "愁"}
+
+    candidates = []
+    for line in recent_text.splitlines():
+        stripped = line.strip()
+        # 跳过标题行、分隔线、空行、叶瑄的回复
+        if not stripped or stripped.startswith("#") or stripped == "---":
+            continue
+        if not stripped.startswith("**用户**"):
+            continue
+        content = stripped.replace("**用户**：", "").strip()
+        if len(content) < 6:
+            continue
+        # 打分：有情感词+1，长度>15+1
+        score = sum(1 for w in _EMOTION_HINTS if w in content)
+        if len(content) > 15:
+            score += 1
+        candidates.append((score, content))
+
+    # 按分数降序，取前max_lines条
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    selected = [c for _, c in candidates[:max_lines]]
+    return "；".join(selected) if selected else ""
+
 
 class EventLog:
     """

@@ -74,6 +74,8 @@ class Pipeline:
 
         from core.tools.reminder import get_reminders
         reminders = get_reminders(user_id)
+        from core.memory.diary_context import load as _load_diary
+        diary_context = _load_diary(user_id)
 
         logger.debug(
             f"[pipeline.fetch_context] uid={user_id} "
@@ -88,6 +90,7 @@ class Pipeline:
             "event_search_result": event_search_result,
             "lore_entries":        lore_entries,
             "reminders":           reminders,
+            "diary_context":       diary_context,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -130,6 +133,7 @@ class Pipeline:
             author_note_extra=self.author_note_extra,
             current_time=_current_time,
             reminders=context.get("reminders", []),
+            diary_context=context.get("diary_context", ""),
         )
         self.author_note_extra = ""
         return messages
@@ -179,6 +183,13 @@ class Pipeline:
             logger.debug(f"[pipeline.post_process] 短期记忆已更新: {user_id}")
         except Exception as e:
             log_error("pipeline.post_process.short_term", e)
+
+        # # 请勿打扰状态检测
+        # try:
+        #     from core.scheduler.triggers.dnd import detect_and_set
+        #     detect_and_set(user_id, content)
+        # except Exception as e:
+        #     log_error("pipeline.post_process.dnd", e)
 
         # 事件日志
         try:
@@ -233,6 +244,16 @@ class Pipeline:
                 asyncio.create_task(self._send_tts(reply, target_id, is_group))
         except Exception as e:
             log_error("pipeline.post_process.tts", e)
+
+        # 表情包（小概率触发）
+        try:
+            if target_id:
+                from core.output.sticker import maybe_send_sticker
+                asyncio.create_task(
+                    maybe_send_sticker(reply, target_id, is_group)
+                )
+        except Exception as e:
+            log_error("pipeline.post_process.sticker", e)
 
     async def _send_tts(self, text: str, target_id: str, is_group: bool):
         """异步 TTS 合成并通过 NapCat 发送语音消息，失败只记日志"""

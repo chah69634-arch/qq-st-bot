@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 # 多段消息之间的发送间隔（秒），模拟真人打字节奏
 _SEGMENT_DELAY = 0.5
+_MULTI_MSG_DELAY_MIN = 1.0
+_MULTI_MSG_DELAY_MAX = 3.0
 
 
 async def send(
@@ -29,6 +31,10 @@ async def send(
         is_group:  True=群聊，False=私聊
     """
     from core import qq_adapter
+
+    from core.config_loader import get_config
+    if get_config().get("chat", {}).get("multi_message", False):
+        segments = _split_by_newline(segments)
 
     if not segments:
         logger.info("[text_output] segments 为空，没有需要发送的内容")
@@ -58,4 +64,27 @@ async def send(
 
         # 多段消息之间稍作停顿，避免消息顺序错乱
         if i < len(segments) - 1:
-            await asyncio.sleep(_SEGMENT_DELAY)
+            import random
+            from core.config_loader import get_config
+            if get_config().get("chat", {}).get("multi_message", False):
+                await asyncio.sleep(random.uniform(_MULTI_MSG_DELAY_MIN, _MULTI_MSG_DELAY_MAX))
+            else:
+                await asyncio.sleep(_SEGMENT_DELAY)
+    
+def _split_by_newline(segments: list[str]) -> list[str]:
+    """
+    开启 multi_message 时，把每个 segment 按换行拆成多条。
+    空行跳过，拆出来的每条单独发送。
+    """
+    import random
+    result = []
+    for seg in segments:
+        lines = [l.strip() for l in seg.split("\n") if l.strip()]
+        if len(lines) <= 1:
+            result.append(seg)
+        else:
+            result.extend(lines)
+    return result
+            
+        
+        

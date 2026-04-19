@@ -722,7 +722,71 @@ textarea { resize: vertical; min-height: 72px; }
 
         </div>
       </div>
+          <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <h3>视觉模型配置（图片识别）</h3>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <span style="font-size:13px;color:var(--muted)">启用</span>
+          <input type="checkbox" id="vision-enabled" onchange="saveVisionParams()">
+        </label>
+      </div>
+      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+        <!-- provider选择 -->
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">Provider</div>
+          <select id="vision-provider" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)" onchange="onVisionProviderChange()">
+            <option value="gemini">Gemini（谷歌）</option>
+            <option value="openai">OpenAI</option>
+            <option value="glm">GLM（智谱）</option>
+            <option value="custom">自定义</option>
+          </select>
+        </div>
+
+        <!-- model -->
+        <div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">模型</div>
+          <select id="vision-model-select" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)" onchange="onVisionModelSelect()">
+          </select>
+        </div>
+
+        <!-- api_key -->
+        <div style="grid-column:1/-1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">API Key</div>
+          <input type="password" id="vision-api-key" placeholder="填入对应provider的API Key"
+            style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);box-sizing:border-box">
+        </div>
+
+        <!-- base_url（只读，根据provider自动填） -->
+        <div style="grid-column:1/-1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Base URL
+            <span style="font-size:11px;font-weight:400;color:var(--muted)">（自动填写，自定义时可修改）</span>
+          </div>
+          <input type="text" id="vision-base-url"
+            style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);box-sizing:border-box">
+        </div>
+
+        <!-- 使用说明 -->
+        <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)">
+          <b>Gemini</b>：免费，去 <a href="https://aistudio.google.com" target="_blank" style="color:var(--accent)">aistudio.google.com</a> 申请 API Key，推荐模型 gemini-2.0-flash<br>
+          <b>GLM</b>：免费，去 <a href="https://bigmodel.cn" target="_blank" style="color:var(--accent)">bigmodel.cn</a> 申请，推荐模型 glm-4v-flash<br>
+          <b>OpenAI</b>：付费，需要信用卡，推荐模型 gpt-4o-mini<br>
+          <b>自定义</b>：手动填写 Base URL 和模型名
+        </div>
+
+        <!-- 保存按钮 -->
+        <div style="grid-column:1/-1;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="saveVisionParams()">保存并生效</button>
+          <span id="vision-save-msg" style="font-size:12px;color:var(--accent)"></span>
+        </div>
+
+      </div>
     </div>
+
+    </div>
+
+    <!-- Vision 配置 -->
+
 
     <!-- ── 错误日志 ── -->
     <div class="page" id="page-logs">
@@ -841,6 +905,10 @@ textarea { resize: vertical; min-height: 72px; }
           <label class="checkbox-row"><input type="checkbox" id="sc-period">生理期关心</label>
           <label class="checkbox-row"><input type="checkbox" id="sc-diary">日记缺失提醒</label>
           <label class="checkbox-row"><input type="checkbox" id="sc-diary-inject">日记内容注入</label>
+          <label class="checkbox-row">
+          <input type="checkbox" id="sc-multi-msg">
+          <span>分条发送（按换行拆分，随机间隔）</span>
+        </label>
         </div>
         <button class="btn btn-primary" onclick="saveSchedConfig()">保存配置</button>
       </div>
@@ -887,9 +955,22 @@ textarea { resize: vertical; min-height: 72px; }
           <h3>Watch 状态</h3>
           <button class="btn btn-ghost btn-sm" onclick="loadWatchStatus()">刷新</button>
         </div>
-        <div id="watch-status-body" style="font-size:14px;line-height:2">
-          <div class="loading">加载中…</div>
-        </div>
+        <div id="watch-status-body">
+  <table style="width:100%;font-size:13px;border-collapse:collapse">
+    <tr>
+      <td style="padding:8px 0;color:var(--muted);width:120px">❤️ 心率</td>
+      <td id="ws-hr" style="font-weight:600;color:var(--accent)">暂无数据</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 0;color:var(--muted)">😴 睡眠</td>
+      <td id="ws-sleep" style="font-weight:600">暂无数据</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 0;color:var(--muted)">🕐 最近事件</td>
+      <td id="ws-last" style="color:var(--muted);font-size:12px">暂无数据</td>
+    </tr>
+  </table>
+</div>
       </div>
     </div>
 
@@ -1838,9 +1919,85 @@ function toggleEmotionPanel() {
   document.getElementById('tts-emotion-panel').style.display = enabled ? '' : 'none';
 }
 
+// ══════════════════════════════════════════════════════════
+//  Vision 配置
+// ══════════════════════════════════════════════════════════
+const VISION_PROVIDERS = {
+  gemini: {
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    models: ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+  },
+  openai: {
+    base_url: "https://api.openai.com/v1",
+    models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"]
+  },
+  glm: {
+    base_url: "https://open.bigmodel.cn/api/paas/v4/",
+    models: ["glm-4v-flash", "glm-4v", "glm-4v-plus"]
+  },
+  custom: {
+    base_url: "",
+    models: []
+  }
+};
+
+function onVisionProviderChange() {
+  const provider = document.getElementById('vision-provider').value;
+  const info = VISION_PROVIDERS[provider] || VISION_PROVIDERS.custom;
+  document.getElementById('vision-base-url').value = info.base_url;
+  document.getElementById('vision-base-url').readOnly = provider !== 'custom';
+  const sel = document.getElementById('vision-model-select');
+  sel.innerHTML = info.models.map(m => `<option value="${m}">${m}</option>`).join('');
+  if (provider === 'custom') {
+    sel.innerHTML += '<option value="">手动输入</option>';
+  }
+}
+
+function onVisionModelSelect() {}
+
+async function loadVisionParams() {
+  try {
+    const data = await api('GET', '/vision-params');
+    document.getElementById('vision-enabled').checked = data.enabled;
+    const provider = data.provider || 'gemini';
+    document.getElementById('vision-provider').value = provider;
+    onVisionProviderChange();
+    if (data.model) {
+      const sel = document.getElementById('vision-model-select');
+      const opt = [...sel.options].find(o => o.value === data.model);
+      if (opt) sel.value = data.model;
+    }
+    if (data.api_key) document.getElementById('vision-api-key').value = data.api_key;
+    if (data.base_url) document.getElementById('vision-base-url').value = data.base_url;
+  } catch(e) {
+    console.error('加载Vision配置失败', e);
+  }
+}
+
+async function saveVisionParams() {
+  const provider = document.getElementById('vision-provider').value;
+  const model = document.getElementById('vision-model-select').value;
+  const body = {
+    enabled:  document.getElementById('vision-enabled').checked,
+    provider: provider,
+    api_key:  document.getElementById('vision-api-key').value.trim(),
+    model:    model,
+    base_url: document.getElementById('vision-base-url').value.trim(),
+  };
+  try {
+    await api('PUT', '/vision-params', body);
+    const msg = document.getElementById('vision-save-msg');
+    msg.textContent = '已保存';
+    setTimeout(() => msg.textContent = '', 2000);
+  } catch(e) {
+    toast('保存失败', 'err');
+  }
+}
+
 // 系统设置页面加载所有子模块
 async function loadSettings() {
   await Promise.all([loadProxy(), loadContextConfig(), loadJailbreak(), loadTtsConfig(), loadLlmParams(), loadChatStyle()]);
+  loadVisionParams();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2368,9 +2525,10 @@ const SC_TRIGGER_LABELS = {
 async function loadScheduler() {
   _startWatchStatusPoller();
   try {
-    const [statusRes, cfgRes] = await Promise.all([
+    const [statusRes, cfgRes, multiMsgRes] = await Promise.all([
       api('GET', '/scheduler/status'),
       api('GET', '/scheduler/config'),
+      api('GET', '/chat-multi-message'),
     ]);
 
     // 填充配置表单
@@ -2384,6 +2542,7 @@ async function loadScheduler() {
     document.getElementById('sc-period').checked        = !!cfgRes.period_reminder;
     document.getElementById('sc-diary').checked         = !!cfgRes.diary_reminder;
     document.getElementById('sc-diary-inject').checked  = !!cfgRes.diary_inject;
+    document.getElementById('sc-multi-msg').checked = !!multiMsgRes.multi_message;
 
     // 渲染触发器状态表
     const triggers = statusRes.triggers || {};
@@ -2435,6 +2594,9 @@ async function saveSchedConfig() {
       diary_inject:      document.getElementById('sc-diary-inject').checked,
     };
     const d = await api('PUT', '/scheduler/config', body);
+    await api('PUT', '/chat-multi-message', {
+      enabled: document.getElementById('sc-multi-msg').checked
+    });
     toast(d.message, 'ok');
   } catch(e) { toast('保存失败: ' + e.message, 'err'); }
 }
@@ -2468,22 +2630,30 @@ let _watchStatusTimer = null;
 async function loadWatchStatus() {
   try {
     const d = await api('GET', '/watch/status');
-    const el = document.getElementById('watch-status-body');
-    if (!el) return;
+    const hr    = document.getElementById('ws-hr');
+    const sleep = document.getElementById('ws-sleep');
+    const last  = document.getElementById('ws-last');
+    if (!hr) return;
+
     if (!d || !d.event_type) {
-      el.innerHTML = '<span style="color:var(--muted)">暂无 Watch 数据</span>';
+      // 保持暂无数据，不清空
       return;
     }
-    const hrLine = d.event_type === 'heart_rate'
-      ? `<div>❤️ 心率：<strong style="color:var(--accent)">${d.value} bpm</strong></div>`
-      : '';
-    const sleepLine = d.event_type === 'sleep_end'
-      ? `<div>😴 睡眠状态：<strong>已结束（睡醒）</strong></div>`
-      : '';
-    el.innerHTML = `
-      ${hrLine}${sleepLine}
-      <div style="font-size:12px;color:var(--muted)">最近事件：${d.event_type} &nbsp;·&nbsp; ${d.timestamp || ''}</div>
-    `;
+
+    if (d.event_type === 'heart_rate') {
+      hr.textContent = d.value ? `${d.value} bpm` : '暂无数据';
+      hr.style.color = d.value > 120 ? 'var(--danger)' : d.value > 100 ? 'var(--warn)' : 'var(--accent)';
+    }
+
+    if (d.event_type === 'sleep_end') {
+      const start = d.sleep_start || '—';
+      const end   = d.sleep_end_time || '—';
+      const dur   = d.duration_minutes ? `${Math.floor(d.duration_minutes/60)}h${Math.round(d.duration_minutes%60)}m` : '—';
+      sleep.textContent = `已醒 · 入睡 ${start} → 起床 ${end} · 共 ${dur}`;
+      sleep.style.color = 'var(--success)';
+    }
+
+    last.textContent = `${d.event_type} · ${d.timestamp || ''}`;
   } catch(e) { /* 静默失败 */ }
 }
 

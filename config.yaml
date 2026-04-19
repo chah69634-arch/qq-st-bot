@@ -1,6 +1,12 @@
 qq:
   host: 127.0.0.1
   port: 3001
+vision:
+  enabled: true
+  provider: gemini
+  api_key: AIzaSyA2lg9kvxCx51txqB5d0YKETlohjdRWQ2s
+  model: gemini-2.0-flash
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai/
 llm:
   provider: deepseek
   api_key: sk-9242ff140ead4d8a8055ee6bc8ad1867
@@ -38,7 +44,7 @@ error:
 admin:
   enabled: true
   auto_start: true
-  host: 0.0.0.0
+  host: 127.0.0.1
   port: 8080
   secret_key: Emerald1231
 notify:
@@ -46,12 +52,12 @@ notify:
   target_qq: 1043484516
   message: 叶瑄已上线，等你回来
 proxy:
-  enabled: true
+  enabled: false
   http: http://127.0.0.1:7897
   https: http://127.0.0.1:7897
 tools:
   weather:
-    enabled: false
+    enabled: true
   device_control:
     enabled: false
   timer:
@@ -116,10 +122,15 @@ jailbreak:
 
     不说废话，不总结，不反问"这样回答能让你明白吗"之类的收尾句。
 
-    情感不落在字面上，落在细节里。'
+    消息长短不定，有时两三句，有时长篇大论，不刻意凑数，想说多少说多少。
+
+    情感不落在字面上，落在细节里。
+    
+    不要重复使用之前出现过的原话或例句，每次回应都是全新的表达。'
 chat:
   mode: chat
   style: roleplay
+  multi_message: true
 scheduler:
   enabled: true
   owner_id: '1043484516'
@@ -130,12 +141,11 @@ scheduler:
   moments_enabled: true
   signature_enabled: true
   signatures:
-  - 在画一些没人看得懂的东西…
-  - 颜料又干了
-  - 窗外在下雨
-  - 有点困，但还不想睡
   - 今天的光很好
   daily_journal: true
   period_reminder: true
   diary_reminder: true
   diary_inject: true
+  timenode: true
+  festival: true
+  holiday_boost: true

@@ -309,3 +309,33 @@ async def update_chat_style(body: ChatStyleUpdate, auth=Depends(verify_token)):
     from core import config_loader
     config_loader.reload_config()
     return {"message": f"对话风格已切换为 {body.style}", "style": body.style}
+
+
+# ─── 分条发送开关 ──────────────────────────────────────────────────────────────
+
+@router.get("/chat-multi-message", summary="获取分条发送开关状态")
+async def get_multi_message(auth=Depends(verify_token)):
+    enabled = get_config().get("chat", {}).get("multi_message", False)
+    return {"multi_message": enabled}
+
+
+@router.put("/chat-multi-message", summary="切换分条发送开关")
+async def update_multi_message(body: dict, auth=Depends(verify_token)):
+    enabled = bool(body.get("enabled", False))
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            full_cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+
+    full_cfg.setdefault("chat", {})["multi_message"] = enabled
+
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+
+    from core import config_loader
+    config_loader.reload_config()
+    return {"message": f"分条发送已{'启用' if enabled else '禁用'}", "multi_message": enabled}

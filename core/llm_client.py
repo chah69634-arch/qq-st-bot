@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 # 全局客户端实例（延迟初始化）
 _client: AsyncOpenAI | None = None
+_vision_client: AsyncOpenAI | None = None
 
 
 def _get_proxy_url() -> str | None:
@@ -46,13 +47,32 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
+def _get_vision_client() -> AsyncOpenAI | None:
+    """获取视觉模型客户端，未配置时返回None"""
+    global _vision_client
+    cfg = get_config().get("vision", {})
+    if not cfg.get("enabled", False):
+        return None
+    if _vision_client is None:
+        proxy_url = _get_proxy_url()
+        http_client = httpx.AsyncClient(proxy=proxy_url) if proxy_url else None
+        _vision_client = AsyncOpenAI(
+            api_key=cfg["api_key"],
+            base_url=cfg["base_url"],
+            http_client=http_client,
+        )
+        logger.info(f"[llm_client] Vision客户端已初始化: {cfg.get('model')}")
+    return _vision_client
+
+
 def reload_client():
     """
     重置 OpenAI 客户端（代理/API Key 配置变更后调用）
     下次调用 _get_client() 时会重新按最新配置创建
     """
-    global _client
+    global _client, _vision_client
     _client = None
+    _vision_client = None
     logger.info("[llm_client] 客户端已重置，下次请求时按最新配置重建")
 
 
@@ -60,6 +80,7 @@ async def chat(
     messages: list[dict],
     tools: list[dict] | None = None,
     max_tokens_override: int | None = None,
+    use_vision: bool = False,
 ) -> str:
     """
     调用 LLM 生成回复
@@ -67,11 +88,28 @@ async def chat(
     参数:
         messages: OpenAI 格式的消息列表 [{role, content}, ...]
         tools:    工具定义列表（function_calling 模式时使用）
+        use_vision: 使用视觉模型处理图片
 
     返回:
         模型生成的文本字符串
         function_calling 模式下如果模型调用了工具，返回序列化后的工具调用 JSON
     """
+    # vision模式用视觉客户端和模型
+    if use_vision:
+        vision_client = _get_vision_client()
+        if vision_client:
+            vision_cfg = get_config().get("vision", {})
+            try:
+                response = await vision_client.chat.completions.create(
+                    model=vision_cfg["model"],
+                    messages=messages,
+                    max_tokens=1000,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                log_error("llm_client.chat.vision", e)
+                return ""
+
     cfg = get_config()["llm"]
     client = _get_client()
     model = cfg["model"]
@@ -242,6 +280,9 @@ class LLMClient:
 
     async def chat(self, messages: list, tools: list | None = None) -> str:
         return await chat(messages, tools)
+
+    async def chat_vision(self, messages: list) -> str:
+        return await chat(messages, use_vision=True)
 
     async def detect_emotion(self, text: str) -> str:
         return await detect_emotion(text)

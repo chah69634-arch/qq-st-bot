@@ -147,6 +147,38 @@ async def send_record(target_id: str, file: str, is_group: bool = False):
         logger.error(f"[qq_adapter] 语音消息发送失败: {type(e).__name__}: {e}")
 
 
+async def send_image(target_id: str, file_path: str, is_group: bool = False):
+    """
+    发送本地图片（OneBot 11 image 消息段）
+    file_path: 本地绝对路径
+    """
+    if _ws is None or _ws.closed:
+        logger.error("[qq_adapter] WebSocket 未连接，无法发送图片")
+        return
+
+    file_uri = "file:///" + str(Path(file_path).resolve()).replace("\\", "/")
+    message_seg = [{"type": "image", "data": {"file": file_uri}}]
+
+    if is_group:
+        action = "send_group_msg"
+        params = {"group_id": int(target_id), "message": message_seg}
+    else:
+        action = "send_private_msg"
+        params = {"user_id": int(target_id), "message": message_seg}
+
+    payload = {
+        "action": action,
+        "params": params,
+        "echo": f"image_{int(time.time() * 1000)}",
+    }
+
+    try:
+        await _ws.send_str(json.dumps(payload, ensure_ascii=False))
+        logger.info(f"[qq_adapter] 图片消息帧已发出 -> {action} target={target_id}: {file_path}")
+    except Exception as e:
+        log_error("qq_adapter.send_image", e)
+
+
 def _parse_event(raw: dict) -> dict | None:
     """
     解析 OneBot 11 事件，统一格式化为内部消息结构
@@ -174,6 +206,10 @@ def _parse_event(raw: dict) -> dict | None:
 
     # 处理消息数组格式（CQ码/消息段）
     content = _extract_text_content(raw_message, message_array)
+
+    # 提取图片和文件信息
+    image_urls = _extract_images(message_array)
+    file_info = _extract_file(message_array)
 
     # 群聊：只响应 at 机器人的消息
     if message_type == "group":
@@ -203,6 +239,8 @@ def _parse_event(raw: dict) -> dict | None:
         "content": content,
         "sender_name": sender_name,
         "timestamp": raw.get("time", int(time.time())),
+        "image_urls": image_urls,
+        "file_info": file_info,
     }
 
 
@@ -222,6 +260,32 @@ def _extract_text_content(raw_message: str, message_array: list) -> str:
         if isinstance(seg, dict) and seg.get("type") == "text":
             texts.append(seg.get("data", {}).get("text", ""))
     return "".join(texts)
+
+
+def _extract_images(message_array: list) -> list:
+    """从消息段中提取所有图片URL"""
+    urls = []
+    for seg in message_array:
+        if isinstance(seg, dict) and seg.get("type") == "image":
+            data = seg.get("data", {})
+            url = data.get("url") or data.get("file", "")
+            if url:
+                urls.append(url)
+    return urls
+
+
+def _extract_file(message_array: list):
+    """从消息段中提取文件信息"""
+    for seg in message_array:
+        if isinstance(seg, dict) and seg.get("type") == "file":
+            data = seg.get("data", {})
+            return {
+                "name": data.get("file", ""),
+                "url": data.get("url", ""),
+                "file_id": data.get("file_id", ""),
+                "size": data.get("file_size", 0),
+            }
+    return None
 
 
 async def connect_and_listen():
