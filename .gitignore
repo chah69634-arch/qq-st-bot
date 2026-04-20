@@ -3,6 +3,7 @@ logs/
 characters/叶瑄.txt
 config.yaml
 .claude/
-assets/stickers/
+assets/stickers/*
+!assets/stickers/.gitkeep
 __pycache__/
 *.pyc
