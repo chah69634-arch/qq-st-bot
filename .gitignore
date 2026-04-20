@@ -2,3 +2,7 @@ data/
 logs/
 characters/叶瑄.txt
 config.yaml
+.claude/
+assets/stickers/
+__pycache__/
+*.pyc
