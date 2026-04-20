@@ -99,7 +99,7 @@ async def _flush_sleep_buffer():
         try:
             start_hour = int(sleep_start_str.split(":")[0])
             if 2 <= start_hour <= 6:
-                sleep_comment = "凌晨才睡，睡得很晚，叶瑄有点心疼但也有点生气"
+                sleep_comment = "凌晨才睡，睡得很晚，有点心疼但也有点生气"
             elif start_hour >= 23 or start_hour == 0:
                 sleep_comment = "睡得比较晚"
             else:
@@ -110,13 +110,15 @@ async def _flush_sleep_buffer():
     hours = int(duration // 60)
     minutes = int(duration % 60)
     now_hour = datetime.now().hour
+    from core.config_loader import get_config as _gcfg
+    _cname = _gcfg().get("character", {}).get("name", "她")
     if now_hour < 12:
         await _pipeline_send(
-            f"（叶瑄看到你醒了，昨晚睡了{hours}小时{minutes}分钟，{sleep_comment}）"
+            f"（{_cname}看到你醒了，昨晚睡了{hours}小时{minutes}分钟，{sleep_comment}）"
         )
     else:
         await _pipeline_send(
-            f"（叶瑄看到你醒了，睡了{hours}小时{minutes}分钟，{sleep_comment}）"
+            f"（{_cname}看到你醒了，睡了{hours}小时{minutes}分钟，{sleep_comment}）"
         )
 
 

@@ -31,41 +31,34 @@ def _pick_sticker(emotion: str) -> str | None:
     return str(random.choice(files).resolve())
 
 
-async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False):
+async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False, emotion: str = ""):
     """
-    根据回复内容判断情绪，小概率发一张表情包。
+    根据情绪小概率发一张表情包。
     在post_process里调用，失败静默。
     """
     try:
+        # neutral或无情绪直接跳过
+        if not emotion or emotion == "neutral":
+            return
         if random.random() > _TRIGGER_PROB:
             return
+        # 把detect_emotion的标签映射到表情包文件夹
+        _EMOTION_MAP = {
+            "happy": "开心",
+            "sad": "委屈",
+            "gentle": "心疼",
+            "surprised": "害羞",
+            "angry": "无奈",
+        }
+        folder_emotion = _EMOTION_MAP.get(emotion, "沉默")
 
-        from core import llm_client
-        judge_prompt = [
-            {
-                "role": "system",
-                "content": (
-                    "判断下面这句话的情绪，只从以下六个标签中选一个输出，不要输出任何其他内容：\n"
-                    "无奈、心疼、开心、委屈、害羞、沉默"
-                ),
-            },
-            {
-                "role": "user",
-                "content": reply[:200],
-            },
-        ]
-
-        emotion = (await llm_client.chat(judge_prompt)).strip()
-        if emotion not in _EMOTION_LABELS:
-            return
-
-        path = _pick_sticker(emotion)
+        path = _pick_sticker(folder_emotion)
         if not path:
             return
 
         from core.qq_adapter import send_image
         await send_image(target_id, path, is_group)
-        logger.info(f"[sticker] 发送表情包: {emotion} -> {path}")
+        logger.info(f"[sticker] 发送表情包: {folder_emotion} -> {path}")
 
     except Exception as e:
         log_error("sticker.maybe_send_sticker", e)

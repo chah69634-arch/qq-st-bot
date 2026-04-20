@@ -23,8 +23,6 @@ import asyncio
 import base64
 import logging
 
-import aiohttp
-
 from core.config_loader import get_config
 from core.error_handler import log_error
 
@@ -65,50 +63,38 @@ async def synthesize(text: str, emotion: str = "neutral") -> bytes | None:
         logger.warning("[voice_adapter] tts.ref_audio 未配置，跳过语音合成")
         return None
 
-    payload = {
-        "text":           text,
-        "text_lang":      "zh",
-        "ref_audio_path": ref_audio,
-        "prompt_lang":    "zh",
-        "prompt_text":    prompt_txt,
-        "top_k":          5,
-        "top_p":          1.0,
-        "temperature":    1.0,
-        "speed_factor":   speed,
-    }
-
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{api_url}/tts",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                if resp.status == 200:
-                    audio_bytes = await resp.read()
-                    if not audio_bytes:
-                        logger.warning("[voice_adapter] GPT-SoVITS 返回了空音频")
-                        return None
-                    logger.info(
-                        f"[voice_adapter] 合成成功，{len(audio_bytes)} bytes，"
-                        f"文本预览: {text[:30]!r}"
-                    )
-                    return audio_bytes
-                else:
-                    body = await resp.text()
-                    logger.warning(
-                        f"[voice_adapter] GPT-SoVITS 返回 HTTP {resp.status}: {body[:200]}"
-                    )
-                    return None
-
-    except aiohttp.ClientConnectorError:
-        logger.warning(
-            f"[voice_adapter] 无法连接 GPT-SoVITS {api_url}，"
-            "请确认整合包 API 服务已启动（一键启动 → API 服务）"
-        )
-        return None
-    except asyncio.TimeoutError:
-        logger.warning(f"[voice_adapter] GPT-SoVITS 合成超时（>15s），text={text[:30]!r}")
+        from gradio_client import Client, handle_file
+        def _sync_call():
+            import os
+            os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
+            os.environ["NO_PROXY"] = "localhost,127.0.0.1,::1"
+            client = Client(api_url)
+            result = client.predict(
+                ref_wav_path=handle_file(ref_audio),
+                prompt_text=prompt_txt,
+                prompt_language="中文",
+                text=text,
+                text_language="中文",
+                how_to_cut="凑四句一切",
+                top_k=15,
+                top_p=1.0,
+                temperature=1.0,
+                ref_free=False,
+                speed=speed,
+                if_freeze=False,
+                inp_refs=None,
+                sample_steps=8,
+                if_sr=False,
+                pause_second=0.3,
+                api_name="/get_tts_wav"
+            )
+            with open(result, "rb") as f:
+                return f.read()
+        audio_bytes = await asyncio.get_event_loop().run_in_executor(None, _sync_call)
+        if audio_bytes:
+            logger.info(f"[voice_adapter] 合成成功，{len(audio_bytes)} bytes")
+            return audio_bytes
         return None
     except Exception as e:
         log_error("voice_adapter.synthesize", e)
@@ -125,9 +111,28 @@ async def send_voice(target_id: str, audio_bytes: bytes, is_group: bool = False)
         is_group    — True=群聊，False=私聊
     """
     from core import qq_adapter
-
-    b64 = base64.b64encode(audio_bytes).decode("ascii")
-    await qq_adapter.send_record(target_id, f"base64://{b64}", is_group)
+    import subprocess, tempfile, os
+    wav_path = amr_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio_bytes)
+            wav_path = f.name
+        amr_path = wav_path.replace(".wav", ".amr")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", wav_path, "-ar", "8000", "-ab", "12.2k", "-ac", "1", amr_path],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+        )
+        await qq_adapter.send_record(target_id, f"file:///{amr_path}", is_group)
+    except Exception:
+        b64 = base64.b64encode(audio_bytes).decode("ascii")
+        await qq_adapter.send_record(target_id, f"base64://{b64}", is_group)
+    finally:
+        if wav_path:
+            try: os.unlink(wav_path)
+            except: pass
+        if amr_path:
+            try: os.unlink(amr_path)
+            except: pass
 
 
 # ── 类封装 ─────────────────────────────────────────────────────────────────────

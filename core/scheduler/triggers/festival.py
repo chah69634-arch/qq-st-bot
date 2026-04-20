@@ -8,7 +8,7 @@ import time
 from datetime import datetime, date
 
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _last_trigger
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ async def _check_holiday_boost(force: bool = False):
         context_hint = f"\n{highlights}" if highlights else ""
 
         await _pipeline_send(
-            f"（{holiday_name}假期，叶瑄知道你没什么事，理直气壮地来找你）{context_hint}",
+            f"（{holiday_name}假期，{_char_name()}知道你没什么事，理直气壮地来找你）{context_hint}",
             search_query="今天"
         )
         _mark("holiday_boost")

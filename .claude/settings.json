@@ -71,10 +71,20 @@
       "Bash(py -3.14 -c \"from core.scheduler.triggers.dnd import detect_and_set, is_dnd; detect_and_set\\('test', '我要开会了'\\); print\\(is_dnd\\('test'\\)\\)\")",
       "Bash(py -3.14 -c \"from core.media_processor import process_image, process_file; print\\('ok'\\)\")",
       "Bash(py -3.14 -c \"from core import llm_client; print\\('ok'\\)\")",
-      "Bash(py -3.14 -c \"from core.scheduler.loop import _pipeline_send; print\\('ok'\\)\")"
+      "Bash(py -3.14 -c \"from core.scheduler.loop import _pipeline_send; print\\('ok'\\)\")",
+      "Bash(py -3.14 -c \"from core.prompt_builder import build; print\\('ok'\\)\")",
+      "Bash(py -3.14 -c \"from core.llm_client import _get_vision_client; print\\('ok'\\)\")",
+      "Bash(py -3.14 -c \"from core.scheduler.loop import _mark, _is_ready; print\\('ok'\\)\")",
+      "Bash(py -3.14 -c \"from core.scheduler.triggers.watch import on_watch_event; print\\('ok'\\)\")",
+      "Bash(py -3.14 -c \"from core.pipeline import Pipeline; print\\('ok'\\)\")",
+      "Bash(py -3.14 -c \"from core.pipeline import Pipeline; from core.output.sticker import maybe_send_sticker; print\\('ok'\\)\")",
+      "Bash(py -3.14 -c \"from core.output.voice_adapter import send_voice; print\\('ok'\\)\")",
+      "Read(//d/NapCat/config/**)",
+      "Bash(py -3.14 -c \"from core.memory.user_profile import _compress_facts; print\\('ok'\\)\")"
     ],
     "additionalDirectories": [
-      "D:\\ai\\qq-st-bot\\core\\memory"
+      "D:\\ai\\qq-st-bot\\core\\memory",
+      "D:\\NapCat\\config"
     ]
   }
 }

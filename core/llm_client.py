@@ -35,7 +35,7 @@ def _get_client() -> AsyncOpenAI:
     if _client is None:
         cfg = get_config()["llm"]
         proxy_url = _get_proxy_url()
-        http_client = httpx.AsyncClient(proxy=proxy_url) if proxy_url else None
+        http_client = httpx.AsyncClient(proxy=proxy_url) if proxy_url else httpx.AsyncClient(trust_env=False)
         _client = AsyncOpenAI(
             api_key=cfg["api_key"],
             base_url=cfg["base_url"],
@@ -55,7 +55,7 @@ def _get_vision_client() -> AsyncOpenAI | None:
         return None
     if _vision_client is None:
         proxy_url = _get_proxy_url()
-        http_client = httpx.AsyncClient(proxy=proxy_url) if proxy_url else None
+        http_client = httpx.AsyncClient(proxy=proxy_url) if proxy_url else httpx.AsyncClient(trust_env=False)
         _vision_client = AsyncOpenAI(
             api_key=cfg["api_key"],
             base_url=cfg["base_url"],

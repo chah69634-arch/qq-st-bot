@@ -237,37 +237,50 @@ class Pipeline:
         except Exception as e:
             log_error("pipeline.post_process.consistency", e)
 
-        # TTS 语音合成并发送（tts.enabled=true 时触发，失败不影响已发出的文字消息）
-        try:
-            from core.config_loader import get_config as _cfg
-            if target_id and _cfg().get("tts", {}).get("enabled", False):
-                asyncio.create_task(self._send_tts(reply, target_id, is_group))
-        except Exception as e:
-            log_error("pipeline.post_process.tts", e)
-
-        # 表情包（小概率触发）
+        # 统一情绪检测，单次随机决定走语音还是表情包（互斥）
         try:
             if target_id:
-                from core.output.sticker import maybe_send_sticker
-                asyncio.create_task(
-                    maybe_send_sticker(reply, target_id, is_group)
-                )
+                from core import llm_client
+                _emotion = await llm_client.detect_emotion(reply)
+                from core.config_loader import get_config as _cfg
+                import random
+                _tts_enabled = _cfg().get("tts", {}).get("enabled", False)
+                _tts_prob = _cfg().get("tts", {}).get("probability", 0.3)
+                _sticker_prob = 0.06
+                if _emotion != "neutral":
+                    _roll = random.random()
+                    if _tts_enabled and _roll < _tts_prob:
+                        asyncio.create_task(self._send_tts(reply, target_id, is_group, emotion=_emotion))
+                    elif _roll < _tts_prob + _sticker_prob:
+                        from core.output.sticker import maybe_send_sticker
+                        asyncio.create_task(
+                            maybe_send_sticker(reply, target_id, is_group, emotion=_emotion)
+                        )
         except Exception as e:
-            log_error("pipeline.post_process.sticker", e)
+            log_error("pipeline.post_process.emotion", e)
 
-    async def _send_tts(self, text: str, target_id: str, is_group: bool):
+    async def _send_tts(self, text: str, target_id: str, is_group: bool, emotion: str = "neutral"):
         """异步 TTS 合成并通过 NapCat 发送语音消息，失败只记日志"""
         from core.output.voice_adapter import synthesize, send_voice
-        from core.config_loader import get_config
         from core.error_handler import log_error
+        import re
+        # 清洗文本：去掉括号内的动作/环境描写，只保留说出口的话
+        clean = re.sub(r'（[^）]*）', '', text)  # 中文括号
+        clean = re.sub(r'\([^)]*\)', '', clean)   # 英文括号
+        clean = clean.strip()
+        if not clean:
+            logger.debug("[pipeline.tts] 清洗后文本为空，跳过语音")
+            return
+        # 按标点切分，随机抽一句，优先抽10-30字的句子
+        import random
+        _sentences = re.split(r'[。！？…\n]', clean)
+        _sentences = [s.strip() for s in _sentences if 5 <= len(s.strip()) <= 40]
+        if _sentences:
+            clean = random.choice(_sentences)
+        else:
+            clean = clean[:40]
         try:
-            emotion = "neutral"
-            if get_config().get("tts", {}).get("emotion_enabled", False):
-                from core import llm_client
-                emotion = await llm_client.detect_emotion(text)
-                logger.debug(f"[pipeline.tts] 检测到情绪: {emotion}")
-
-            audio_bytes = await synthesize(text, emotion)
+            audio_bytes = await synthesize(clean, emotion)
             if audio_bytes:
                 await send_voice(target_id, audio_bytes, is_group)
                 logger.info(f"[pipeline.tts] 语音已发送 -> {target_id} (emotion={emotion})")

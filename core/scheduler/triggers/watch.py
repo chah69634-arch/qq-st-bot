@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name
 
 logger = logging.getLogger(__name__)
 
@@ -33,20 +33,20 @@ async def on_watch_event(event_type: str, data: dict):
         in_night = now_hour >= 22 or now_hour < 6
         if in_night:
             if hr > 120 and _is_ready("hr_critical"):
-                await _pipeline_send(f"（深夜，叶瑄看到你的心率{hr}）")
+                await _pipeline_send(f"（深夜，{_char_name()}看到你的心率{hr}）")
                 _mark("hr_critical")
                 logger.info(f"[scheduler] 深夜心率危急触发 hr={hr}")
             elif hr > 100 and _is_ready("hr_high"):
-                await _pipeline_send(f"（深夜，叶瑄注意到你的心率{hr}）")
+                await _pipeline_send(f"（深夜，{_char_name()}注意到你的心率{hr}）")
                 _mark("hr_high")
                 logger.info(f"[scheduler] 深夜心率偏高触发 hr={hr}")
         else:
             if hr > 120 and _is_ready("hr_critical"):
-                await _pipeline_send(f"（叶瑄看到你的心率{hr}，皱了皱眉）")
+                await _pipeline_send(f"（{_char_name()}看到你的心率{hr}，皱了皱眉）")
                 _mark("hr_critical")
                 logger.info(f"[scheduler] 心率危急触发 hr={hr}")
             elif hr > 100 and _is_ready("hr_high"):
-                await _pipeline_send(f"（叶瑄看到你的心率有点高，{hr}）")
+                await _pipeline_send(f"（{_char_name()}看到你的心率有点高，{hr}）")
                 _mark("hr_high")
                 logger.info(f"[scheduler] 心率偏高触发 hr={hr}")
 
@@ -55,6 +55,18 @@ async def on_watch_event(event_type: str, data: dict):
             _mark("sleep_end")
             duration = data.get("duration_minutes", 0)
             sleep_start_str = data.get("sleep_start", "")
+            sleep_end_str = data.get("sleep_end_time", "")
+            # 去重：和上一条完全一样就跳过写入
+            from core.memory.user_profile import load as _load_check
+            oid = _owner_id()
+            if oid:
+                _segs = _load_check(oid).get("sleep_segments", [])
+                if _segs:
+                    _last = _segs[-1]
+                    if (_last.get("sleep_start") == sleep_start_str and
+                            _last.get("sleep_end_time") == sleep_end_str):
+                        logger.info("[scheduler] 重复睡眠数据，跳过写入")
+                        return
             await asyncio.sleep(900)
             from core.memory.user_profile import load as _load
             oid = _owner_id()
@@ -72,18 +84,31 @@ async def on_watch_event(event_type: str, data: dict):
             if sleep_start_str:
                 try:
                     start_hour = int(sleep_start_str.split(":")[0])
-                    if 2 <= start_hour <= 6:
-                        sleep_comment = "凌晨才睡，睡得很晚，叶瑄有点心疼但也有点生气"
+                    enough = duration >= 360  # 6小时以上算够
+                    too_much = duration >= 600  # 10小时以上算过多
+                    if too_much:
+                        sleep_comment = f"睡了很久，{_char_name()}有点担心是不是太累了或者身体不舒服"
+                    elif 2 <= start_hour <= 6:
+                        if enough:
+                            sleep_comment = f"凌晨才睡，但好在睡够了，{_char_name()}心疼但松了口气"
+                        else:
+                            sleep_comment = f"凌晨才睡还没睡够，{_char_name()}又心疼又生气"
                     elif start_hour >= 23 or start_hour == 0:
-                        sleep_comment = "睡得比较晚，叶瑄会提一句"
-                    elif start_hour <= 22:
-                        sleep_comment = "睡得还算早，叶瑄会夸一句"
+                        if enough:
+                            sleep_comment = f"睡得有点晚，但睡够了，{_char_name()}会提一句"
+                        else:
+                            sleep_comment = f"睡得晚又没睡够，{_char_name()}会念叨一下"
+                    else:
+                        if enough:
+                            sleep_comment = f"睡得早也睡够了，{_char_name()}会夸一句"
+                        else:
+                            sleep_comment = f"睡得还行但没睡够，{_char_name()}会关心一下"
                 except Exception:
                     pass
 
             hours = int(duration // 60)
             minutes = int(duration % 60)
             await _pipeline_send(
-                f"（叶瑄看到你醒了，昨晚睡了{hours}小时{minutes}分钟，{sleep_comment}）"
+                f"（{_char_name()}看到你醒了，昨晚睡了{hours}小时{minutes}分钟，{sleep_comment}）"
             )
             logger.info("[scheduler] 睡眠结束触发")

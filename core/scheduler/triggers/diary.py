@@ -4,7 +4,7 @@ from datetime import datetime, date
 
 from core.error_handler import log_error
 from core.scheduler.loop import (
-    _is_ready, _mark, _owner_id, _pipeline_send, _cfg,
+    _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name,
     _last_diary_share, _scheduler_start_time,
 )
 
@@ -27,7 +27,7 @@ async def _check_diary_reminder():
             from datetime import timedelta
             yesterday = (date.today() - timedelta(days=1)).strftime("%m月%d日")
             await _pipeline_send(
-                f"（叶瑄翻到了{yesterday}的日期）",
+                f"（{_char_name()}翻到了{yesterday}的日期）",
                 search_query="日记"
             )
             _mark("diary_reminder")
@@ -81,7 +81,7 @@ async def _check_diary_share_reminder():
         return
     try:
         await _pipeline_send(
-            "（叶瑄发现自己好几天没看到你写的东西了）",
+            f"（{_char_name()}发现自己好几天没看到你写的东西了）",
             search_query="日记"
         )
         _mark("diary_share_reminder")

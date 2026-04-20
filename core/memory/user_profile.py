@@ -68,7 +68,7 @@ async def _compress_facts(facts: list) -> list:
             "只输出JSON数组，不要其他内容：\n"
             + _json.dumps(facts, ensure_ascii=False)
         )
-        raw = await llm_client.chat([{"role": "user", "content": prompt}])
+        raw = await llm_client.chat([{"role": "user", "content": prompt}], max_tokens_override=2000)
         raw = raw.strip()
         # 清理各种markdown代码块格式
         raw = re.sub(r"```json\s*", "", raw)
@@ -78,6 +78,12 @@ async def _compress_facts(facts: list) -> list:
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         if match:
             raw = match.group()
+        else:
+            # 尝试补全截断的JSON数组
+            if raw.startswith("[") and not raw.endswith("]"):
+                last_quote = raw.rfind('"')
+                if last_quote > 0:
+                    raw = raw[:last_quote+1] + "]"
         compressed = _json.loads(raw)
         if isinstance(compressed, list):
             logger.info(

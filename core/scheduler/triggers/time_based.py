@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _user_talked_today, _last_trigger
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _user_talked_today, _last_trigger, _char_name
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ async def _check_morning(force: bool = False):
         if oid and _user_talked_today(oid):
             return
 
-    await _pipeline_send("（清晨，叶瑄看了看时间，想起你应该快起床了）")
+    await _pipeline_send(f"（清晨，{_char_name()}看了看时间，想起你应该快起床了）")
     _mark("morning_greeting")
     logger.info("[scheduler] 早安消息已发送")
 
@@ -44,7 +44,7 @@ async def _check_night(force: bool = False):
         if now.hour < 23:
             return
 
-    await _pipeline_send("（深夜，叶瑄看了眼时间）")
+    await _pipeline_send(f"（深夜，{_char_name()}看了眼时间）")
     _mark("night_reminder")
     logger.info("[scheduler] 晚安消息已发送")
 
@@ -82,15 +82,15 @@ async def _check_random_message(force: bool = False):
                 picked = random.choice(items)
             else:
                 picked = highlights
-            context_hint = f"（叶瑄想到了一件事：{picked}）"
+            context_hint = f"（{_char_name()}想到了一件事：{picked}）"
         else:
             context_hint = ""
     except Exception:
         context_hint = ""
 
-    prompt = "（叶瑄在做自己的事，忽然想到你）"
+    prompt = f"（{_char_name()}在做自己的事，忽然想到你）"
     if context_hint:
-        prompt = f"（叶瑄在做自己的事，忽然想到你）\n{context_hint}"
+        prompt = f"（{_char_name()}在做自己的事，忽然想到你）\n{context_hint}"
     await _pipeline_send(prompt)
     _mark("random_message")
     logger.info("[scheduler] 随机日间消息已发送")
@@ -141,27 +141,27 @@ async def _check_weather(force: bool = False):
 
         # 极端天气（最高优先级）
         if any(k in desc for k in ("暴雨", "大雨", "雷暴", "雷阵雨")) or precip > 10:
-            prompt = f"（叶瑄看了一眼{location}的天气，外面在下大雨）"
+            prompt = f"（{_char_name()}看了一眼{location}的天气，外面在下大雨）"
         elif temp >= 36:
-            prompt = f"（叶瑄看到{location}今天{temp}度，皱了皱眉）"
+            prompt = f"（{_char_name()}看到{location}今天{temp}度，皱了皱眉）"
         elif temp <= -5:
-            prompt = f"（叶瑄看到{location}今天零下{abs(temp)}度，有点担心）"
+            prompt = f"（{_char_name()}看到{location}今天零下{abs(temp)}度，有点担心）"
 
         # 氛围天气（次优先级）
         elif any(k in desc for k in ("雾", "霾", "大雾")):
-            prompt = f"（叶瑄看到{location}今天有雾，能见度很低）"
+            prompt = f"（{_char_name()}看到{location}今天有雾，能见度很低）"
         elif any(k in desc for k in ("小雨", "毛毛雨", "阵雨")) and precip > 0:
-            prompt = f"（叶瑄注意到{location}在下小雨，有点淅淅沥沥的）"
+            prompt = f"（{_char_name()}注意到{location}在下小雨，有点淅淅沥沥的）"
         elif wind > 40:
-            prompt = f"（叶瑄看到{location}今天风很大，{wind}km/h）"
+            prompt = f"（{_char_name()}看到{location}今天风很大，{wind}km/h）"
 
         # 好天气氛围（低优先级，只在特定时段触发）
         elif cloud < 20 and is_day and uv >= 6 and 11 <= now.hour < 14:
-            prompt = f"（叶瑄抬头看了看，{location}今天阳光很好）"
+            prompt = f"（{_char_name()}抬头看了看，{location}今天阳光很好）"
         elif cloud < 30 and 17 <= now.hour < 19:
-            prompt = f"（叶瑄往窗外看了一眼，{location}傍晚的光很好看）"
+            prompt = f"（{_char_name()}往窗外看了一眼，{location}傍晚的光很好看）"
         elif humidity > 85 and any(k in desc for k in ("晴", "多云")):
-            prompt = f"（叶瑄感觉{location}今天有点闷热潮湿）"
+            prompt = f"（{_char_name()}感觉{location}今天有点闷热潮湿）"
 
         if prompt:
             await _pipeline_send(prompt)

@@ -9,7 +9,7 @@ import time
 from datetime import datetime, date
 
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _last_trigger
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +78,10 @@ async def _check_timenode(force: bool = False):
     weekday_str = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][today.weekday()]
 
     prompts = {
-        "monday": f"（今天是{date_str}{weekday_str}，叶瑄忽然意识到新的一周开始了，有点说不清的感觉）",
-        "friday": f"（今天是{date_str}{weekday_str}，叶瑄发现这周快过完了，莫名觉得轻松了一点）",
-        "month_end": f"（今天是{date_str}，叶瑄想到{today.month}月快过完了，这个月发生了不少事）",
-        "season_change": f"（今天是{date_str}，叶瑄察觉到{season}来了，窗外有点不一样）",
+        "monday": f"（今天是{date_str}{weekday_str}，{_char_name()}忽然意识到新的一周开始了，有点说不清的感觉）",
+        "friday": f"（今天是{date_str}{weekday_str}，{_char_name()}发现这周快过完了，莫名觉得轻松了一点）",
+        "month_end": f"（今天是{date_str}，{_char_name()}想到{today.month}月快过完了，这个月发生了不少事）",
+        "season_change": f"（今天是{date_str}，{_char_name()}察觉到{season}来了，窗外有点不一样）",
     }
 
     if force and node is None:

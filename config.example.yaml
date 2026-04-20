@@ -5,13 +5,13 @@ qq:
 vision:
   enabled: true      # 是否启用图片识别（发送图片时自动描述）
   provider: glm      # 视觉模型提供商：gemini / openai / glm / custom
-  api_key: 039dde48f1b743bd8733d8d33b1ac16a.C4oGpkTQSqCSt8nA   # 视觉模型的 API Key，见配置指南
+  api_key: YOUR_VISION_API_KEY   # 视觉模型的 API Key，见配置指南
   model: glm-4v-flash            # 视觉模型名称
   base_url: https://open.bigmodel.cn/api/paas/v4/  # 对应 provider 的接口地址
 
 llm:
   provider: deepseek             # 主 LLM 提供商
-  api_key: sk-9242ff140ead4d8a8055ee6bc8ad1867      # 主 LLM 的 API Key，见配置指南
+  api_key: YOUR_LLM_API_KEY      # 主 LLM 的 API Key，见配置指南
   model: deepseek-chat           # 模型名称
   base_url: https://api.deepseek.com
   tool_call_mode: function_calling
@@ -55,12 +55,12 @@ admin:
   auto_start: true
   host: 127.0.0.1   # 管理面板监听地址，127.0.0.1 仅本机访问，0.0.0.0 允许局域网
   port: 8080         # 管理面板端口，浏览器访问 http://127.0.0.1:8080
-  secret_key: Emerald1231  # 管理面板登录密钥，自己设一个复杂的字符串
+  secret_key: YOUR_ADMIN_SECRET  # 管理面板登录密钥，自己设一个复杂的字符串
 
 notify:
   enabled: true
-  target_qq: 1043484516          # 机器人上线时发通知的目标 QQ 号
-  message: 叶瑄已上线，等你回来
+  target_qq: '你的QQ号'          # 机器人上线时发通知的目标 QQ 号
+  message: 已上线，等你回来
 
 proxy:
   enabled: false                 # 是否启用代理（访问 Google/Gemini 等需要）
@@ -79,35 +79,35 @@ tools:
 
 tts:
   enabled: true                  # 是否启用语音合成
-  probability: 0.1               # 触发语音的概率（0.0~1.0），0.3 = 30%
+  probability: 0.3               # 触发语音的概率（0.0~1.0），0.3 = 30%
   api_url: http://127.0.0.1:9872 # GPT-SoVITS Gradio API 地址
-  ref_audio: E:\yexuankz\同人素材\叶瑄配音改版2\温柔.wav    # 参考音频路径，填你准备好的 wav 文件绝对路径
+  ref_audio: /path/to/ref.wav    # 参考音频路径，填你准备好的 wav 文件绝对路径
   prompt_text: ''                # 参考音频对应的文字（可留空）
   speed: 1.0
   emotion_enabled: true          # 是否按情绪切换参考音频
   emotions:
     neutral:
-      ref_audio: E:\yexuankz\同人素材\叶瑄配音改版2\温柔.wav   # 各情绪对应的参考音频，没有就留空 ''
+      ref_audio: /path/to/neutral.wav   # 各情绪对应的参考音频，没有就留空 ''
       prompt_text: ''
       speed: 1
     happy:
-      ref_audio: E:\yexuankz\同人素材\叶瑄配音改版2\温柔.wav
+      ref_audio: /path/to/happy.wav
       prompt_text: ''
       speed: 1.1
     sad:
-      ref_audio: E:\yexuankz\同人素材\叶瑄配音改版2\温柔.wav
+      ref_audio: /path/to/sad.wav
       prompt_text: ''
       speed: 0.9
     gentle:
-      ref_audio: E:\yexuankz\同人素材\叶瑄配音改版2\温柔.wav
+      ref_audio: /path/to/gentle.wav
       prompt_text: ''
       speed: 0.95
     surprised:
-      ref_audio: E:\yexuankz\同人素材\叶瑄声音\1\语气分类\生气.mp4_0000061760_0000149120.wav
+      ref_audio: ''
       prompt_text: ''
       speed: 1.05
     angry:
-      ref_audio: E:\yexuankz\同人素材\叶瑄声音\1\语气分类\生气.mp4_0000061760_0000149120.wav
+      ref_audio: /path/to/angry.wav
       prompt_text: ''
       speed: 1.1
 
@@ -117,7 +117,7 @@ context:
 jailbreak:
   enabled: false
   preset: default
-  custom_text: '叶瑄的说话方式：
+  custom_text: '他的说话方式：
 
 
     句子短，停顿多，用省略号表示思考或刻意留白，但省略号少。
@@ -142,7 +142,9 @@ jailbreak:
 
     情感不落在字面上，落在细节里。
 
-    不要重复使用之前出现过的原话或例句，每次回应都是全新的表达。'
+    不要重复使用之前出现过的原话或例句，每次回应都是全新的表达。'  # 请自己写，不同角色有不同用词习惯
+
+    
 
 chat:
   mode: chat
@@ -150,12 +152,12 @@ chat:
   multi_message: true
 
 diary:
-  obsidian_path: "E:/obsidian_note/Psychology"  # 你的 Obsidian 日记 vault 路径
+  obsidian_path: "C:\\path\\to\\your\\obsidian\\vault"  # 你的 Obsidian 日记 vault 路径
 
 scheduler:
   enabled: true
-  owner_id: '1043484516'           # 主人的 QQ 号，调度器主动消息发送目标
-  owner_birthday: "04-24"        # 主人生日，格式 MM-DD
+  owner_id: '你的QQ号'           # 主人的 QQ 号，调度器主动消息发送目标
+  owner_birthday: "xx-xx"        # 主人生日，格式 MM-DD
   morning_greeting: true
   night_reminder: true
   random_message: true

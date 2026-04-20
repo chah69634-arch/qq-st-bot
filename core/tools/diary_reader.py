@@ -1,17 +1,21 @@
 """
 日记读取模块
-读取 E:\\obsidian_note\\Psychology 下的日记和心理感悟
+读取 config.yaml diary.obsidian_path 下的日记和心理感悟
 """
 from pathlib import Path
 from datetime import date, timedelta
 from core.error_handler import log_error
 
-DIARY_ROOT = Path(r"E:\obsidian_note\Psychology")
+
+def _diary_root() -> Path:
+    from core.config_loader import get_config
+    p = get_config().get("diary", {}).get("obsidian_path", "")
+    return Path(p) if p else Path("data/diary_fallback")
 
 def read_diary(target_date: date) -> str:
     """读取指定日期的日记，返回文本，不存在返回空字符串"""
     filename = f"{target_date.strftime('%Y-%m-%d')}.md"
-    for path in DIARY_ROOT.rglob(filename):
+    for path in _diary_root().rglob(filename):
         try:
             return path.read_text(encoding="utf-8").strip()
         except Exception as e:

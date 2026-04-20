@@ -51,6 +51,21 @@ _COOLDOWNS: dict[str, int] = {
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
 _last_trigger: dict[str, float] = {}
 
+def _load_scheduler_state():
+    """启动时从文件读回冷却状态"""
+    try:
+        import json
+        p = __import__("pathlib").Path("data/scheduler_state.json")
+        if p.exists():
+            d = json.loads(p.read_text(encoding="utf-8"))
+            triggers = d.get("triggers", {})
+            _last_trigger.update({k: float(v) for k, v in triggers.items()})
+            logger.info(f"[scheduler] 冷却状态已恢复，{len(triggers)} 个触发器")
+    except Exception as e:
+        logger.warning(f"[scheduler] 冷却状态读取失败: {e}")
+
+_load_scheduler_state()
+
 
 # 上次主动分享日记的时间戳（由 diary_tool 调用 mark_diary_shared 更新）
 def _get_last_diary_share() -> float:
@@ -90,12 +105,27 @@ def _is_ready(name: str) -> bool:
 
 
 def _mark(name: str):
-    """记录触发时间"""
+    """记录触发时间，同时持久化"""
     _last_trigger[name] = time.time()
+    try:
+        import json
+        p = __import__("pathlib").Path("data/scheduler_state.json")
+        existing = {}
+        if p.exists():
+            existing = json.loads(p.read_text(encoding="utf-8"))
+        existing["triggers"] = _last_trigger
+        p.write_text(json.dumps(existing), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"[scheduler] 冷却状态写入失败: {e}")
 
 
 def _owner_id() -> str:
     return str(_cfg().get("owner_id", "")).strip()
+
+
+def _char_name() -> str:
+    from core.config_loader import get_config
+    return get_config().get("character", {}).get("name", "她")
 
 
 async def _send(content: str):
@@ -127,7 +157,7 @@ async def _pipeline_send(prompt: str, search_query: str = ""):
         if _is_birthday_period():
             prompt = prompt + "\n（今天是风谕的生日，4月24日）"
         _states = ["在思考", "在翻阅她的日记", "在想她说过的话", "在看窗外", "在灵体出游看星空遗迹", "在家里"]
-        prompt = prompt + f"\n（叶瑄此刻{random.choice(_states)}）"
+        prompt = prompt + f"\n（{_char_name()}此刻{random.choice(_states)}）"
         context = await _pipeline.fetch_context(oid, search_query or prompt)
         messages = _pipeline.build_prompt(oid, prompt, context)
         reply    = await _pipeline.run_llm(messages)
@@ -179,7 +209,7 @@ async def _check_reminders():
         due = get_due_reminders(oid)
         for item in due:
             await _pipeline_send(
-                f"备忘录提醒时间到了：{item['content']}，用叶瑄的方式提醒小画家"
+                f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒小画家"
             )
             mark_done(oid, item["id"])
             logger.info(f"[scheduler] 备忘录提醒已发送: {item['content']}")
@@ -238,7 +268,7 @@ async def manual_trigger(name: str) -> str:
             today_log = get_recent_days(oid, days=1)
             log_hint = today_log[:800] if today_log and len(today_log) > 10 else "今天还没有对话记录"
             await _pipeline_send(
-                f"（深夜，叶瑄回想起今天和你说过的话，提笔写下今天的感受——"
+                f"（深夜，{_char_name()}回想起今天和你说过的话，提笔写下今天的感受——"
                 f"今天的对话内容：{log_hint}）"
             )
             _mark("daily_journal")
@@ -254,10 +284,10 @@ async def manual_trigger(name: str) -> str:
                 last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
                 days_elapsed = (_date.today() - last_date).days
                 await _pipeline_send(
-                    f"（叶瑄记得你的生理期已经来了{days_elapsed}天，悄悄关心一下）"
+                    f"（{_char_name()}记得你的生理期已经来了{days_elapsed}天，悄悄关心一下）"
                 )
             else:
-                await _pipeline_send("（叶瑄想关心一下你的身体状况）")
+                await _pipeline_send(f"（{_char_name()}想关心一下你的身体状况）")
             _mark("period_reminder")
         elif name == "diary_reminder":
             oid = _owner_id()
@@ -266,7 +296,7 @@ async def manual_trigger(name: str) -> str:
             from datetime import date as _date, timedelta
             yesterday = (_date.today() - timedelta(days=1)).strftime("%m月%d日")
             await _pipeline_send(
-                f"（叶瑄想起来，{yesterday}好像没看到你写日记）"
+                f"（{_char_name()}想起来，{yesterday}好像没看到你写日记）"
             )
             _mark("diary_reminder")
         elif name == "diary_share_reminder":
@@ -274,7 +304,7 @@ async def manual_trigger(name: str) -> str:
             if not oid:
                 return "owner_id 1043484516"
             await _pipeline_send(
-                "（叶瑄想起来，好像很久没看到你的日记了，故作不经意地提一句）"
+                f"（{_char_name()}想起来，好像很久没看到你的日记了，故作不经意地提一句）"
             )
             _mark("diary_share_reminder")
         elif name == "topic_followup":

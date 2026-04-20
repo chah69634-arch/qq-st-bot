@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _last_trigger
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ async def _check_topic_followup(force: bool = False):
         from core.config_loader import get_config
         from core import llm_client
 
-        growth = load_growth("叶瑄", oid)
+        growth = load_growth(_char_name(), oid)
         if not growth or len(growth) < 20:
             return
 
@@ -55,7 +55,7 @@ async def _check_topic_followup(force: bool = False):
                 "role": "user",
                 "content": (
                     f"今天是{today}。\n"
-                    f"以下是叶瑄对用户的认知记录：\n{growth}\n\n"
+                    f"以下是{_char_name()}对用户的认知记录：\n{growth}\n\n"
                     f"请判断：其中有没有用户随口提到、但至今超过3天没有下文的事情？\n"
                     f"比如在做的某件事、想做的某件事、某段关系的进展、某个计划等。\n"
                     f"如果有，提取最值得问起的那一件，用一句话简述（10字以内）。\n"
@@ -83,7 +83,7 @@ async def _check_topic_followup(force: bool = False):
             return
 
         await _pipeline_send(
-            f"（叶瑄忽然想起来，你之前提到过「{topic}」，不知道后来怎样了）"
+            f"（{_char_name()}忽然想起来，你之前提到过「{topic}」，不知道后来怎样了）"
         )
         _mark("topic_followup")
         logger.info(f"[scheduler] topic_followup 已触发: {topic}")

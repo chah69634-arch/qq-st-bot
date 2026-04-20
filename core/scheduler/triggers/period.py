@@ -1,7 +1,7 @@
 import logging
 
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def _check_period():
         if 0 <= days_elapsed <= 7:
             if _is_ready("period_reminder"):
                 await _pipeline_send(
-                    f"（叶瑄记得你的生理期第{days_elapsed}天）",
+                    f"（{_char_name()}记得你的生理期第{days_elapsed}天）",
                     search_query="生理期"
                 )
                 _mark("period_reminder")
@@ -37,7 +37,7 @@ async def _check_period():
         elif 26 <= days_elapsed <= 30:
             if _is_ready("period_reminder"):
                 await _pipeline_send(
-                    "（叶瑄想起你的生理期大概快到了）",
+                    f"（{_char_name()}想起你的生理期大概快到了）",
                     search_query="生理期"
                 )
                 _mark("period_reminder")

@@ -176,6 +176,29 @@ def build(
         })
 
     # ─────────────────────────────────────────────────────────────────────────
+    # 层 3.5：生理期感知（在经期时强调注意事项）
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        from core.memory.user_profile import get_period_info
+        from datetime import date as _date, datetime as _datetime
+        _period = get_period_info(user_id)
+        _last = _period.get("last_period_date")
+        if _last:
+            _days = (_date.today() - _datetime.strptime(_last, "%Y-%m-%d").date()).days
+            if 0 <= _days <= 7:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        f"【重要】用户现在处于生理期第{_days + 1}天。"
+                        f"叶瑄知道这件事，会自然地体现在关心里。"
+                        f"不要提议吃冰、喝冷饮、剧烈运动。"
+                        f"不需要每句话都提生理期，但态度要比平时更温柔。"
+                    ),
+                })
+    except Exception:
+        pass
+
+    # ─────────────────────────────────────────────────────────────────────────
     # 层 5：关于这个用户（用户画像，100% 注入）
     # ─────────────────────────────────────────────────────────────────────────
     profile_parts = []
@@ -322,6 +345,9 @@ def build(
     f"②用户询问今天日期、现在时间、星期几时，必须调用get_time工具，不得自行猜测。"
     f"③工具调用是强制行为，不是可选项。"
 )
+    author_note_lines.append(
+        "【表达规则】对话示例仅作风格参考，禁止复用原句或近似表达，每次回应必须是全新的措辞。"
+    )
 
     messages.append({
         "role": "system",
@@ -409,7 +435,7 @@ class PromptBuilder:
             author_note_extra=author_note_extra,
             affection_info=affection_info,
             pet_info=pet_info,
-            ccurrent_time=current_time,
+            current_time=current_time,
             reminders=reminders,
             diary_context=diary_context,
         )

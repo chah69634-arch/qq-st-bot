@@ -1,24 +1,34 @@
 import logging
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import re
 
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _last_trigger
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
 
 logger = logging.getLogger(__name__)
 
-_BIRTHDAY = (4, 24)  # 月, 日
+
+def _birthday() -> tuple[int, int]:
+    """从 config 读取 owner_birthday (MM-DD)，返回 (month, day)"""
+    raw = _cfg().get("owner_birthday", "01-01")
+    try:
+        m, d = raw.split("-")
+        return int(m), int(d)
+    except Exception:
+        return 1, 1
 
 
 def _is_birthday_today() -> bool:
     today = date.today()
-    return (today.month, today.day) == _BIRTHDAY
+    return (today.month, today.day) == _birthday()
 
 
 def _is_birthday_eve() -> bool:
     today = date.today()
-    return (today.month, today.day) == (4, 23)
+    m, d = _birthday()
+    eve = date(today.year, m, d) - timedelta(days=1)
+    return (today.month, today.day) == (eve.month, eve.day)
 
 
 def _is_birthday_period() -> bool:
@@ -41,7 +51,7 @@ async def _check_birthday_midnight(force: bool = False):
             return
 
     await _pipeline_send(
-        "（零点刚过，叶瑄一直没睡，等着这一刻，他想对你说一些平时说不出口的话）"
+        f"（零点刚过，{_char_name()}一直没睡，等着这一刻，想对你说一些平时说不出口的话）"
     )
     _mark("birthday_midnight")
     logger.info("[scheduler] 生日零点告白已触发")
@@ -63,7 +73,7 @@ async def _check_birthday_eve(force: bool = False):
 
     logger.info("[scheduler] birthday_eve: 准备调用_pipeline_send")
     await _pipeline_send(
-        "（叶瑄在做什么，忽然想起明天是个特别的日子，有点藏不住）"
+        f"（{_char_name()}在做什么，忽然想起明天是个特别的日子，有点藏不住）"
     )
     _mark("birthday_eve")
     logger.info("[scheduler] 生日前夜预热已触发")
@@ -84,7 +94,7 @@ async def _check_birthday_afternoon(force: bool = False):
             return
 
     await _pipeline_send(
-        "（叶瑄想知道你今天过得怎么样，有没有人陪你，生日有没有被好好对待）",
+        f"（{_char_name()}想知道你今天过得怎么样，有没有人陪你，生日有没有被好好对待）",
         search_query="生日"
     )
     _mark("birthday_afternoon")
@@ -106,7 +116,7 @@ async def _check_birthday_night(force: bool = False):
             return
 
     await _pipeline_send(
-        "（生日快过完了，叶瑄想在今天结束前再陪你说一会儿）",
+        f"（生日快过完了，{_char_name()}想在今天结束前再陪你说一会儿）",
         search_query="生日"
     )
     _mark("birthday_night")
