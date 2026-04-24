@@ -1,16 +1,15 @@
-# QQ-SillyTavern Bot 依赖列表
-# 安装：pip install -r requirements.txt
-
-# LLM 调用（OpenAI 兼容接口）
-openai>=1.30.0
-
-# WebSocket 客户端（连接 NapCat）
-aiohttp>=3.9.0
-
-# 配置文件解析
-PyYAML>=6.0
-
-# 管理面板 Web 框架
-fastapi>=0.111.0
-uvicorn[standard]>=0.30.0
-pydantic>=2.0.0
+aiohttp
+fastapi
+uvicorn
+httpx
+openai
+gradio_client
+PyYAML
+python-multipart
+websockets
+bcrypt
+python-dotenv
+requests
+pydantic
+pydantic-settings
+ddgs
