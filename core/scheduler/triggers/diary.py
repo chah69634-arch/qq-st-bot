@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _check_diary_reminder():
-    """昨天没写日记时，叶瑄提醒"""
+    """昨天没写日记时，角色提醒"""
     cfg = _cfg()
     if not cfg.get("enabled", True):
         return

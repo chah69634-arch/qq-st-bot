@@ -63,7 +63,7 @@ async def update_user_profile(user_id: str, body: dict[str, Any], auth=Depends(v
 
 @router.delete("/{user_id}/memory", summary="清除用户所有记忆")
 async def delete_user_memory(user_id: str, auth=Depends(verify_token)):
-    """清除用户的短期历史、画像和长期 RAG 记忆"""
+    """清除用户的短期历史、画像和长期 RAG 记忆（冻结）"""
     from core.memory import short_term, user_profile, long_term_rag
 
     short_term.clear(user_id)

@@ -1,7 +1,7 @@
 """
 短期记忆模块
 保留最近 N 轮对话（N = config.memory.short_term_rounds）
-持久化到 data/history/{user_id}.json
+持久化到 data/history/{user_id}.json（别认错了，history才是短期记忆读取，event_log不是)
 """
 
 import json

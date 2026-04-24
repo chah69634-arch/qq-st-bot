@@ -156,7 +156,7 @@ async def extract_and_update(user_id: str, recent_messages: list[dict]):
                 "只返回 JSON 对象，不要输出任何其他内容。\n"
                 "JSON 格式：\n"
                 '{"name": null或字符串, "location": null或字符串, "pets": null或字符串, "interests": null或字符串, "occupation": null或字符串, "important_facts": [字符串列表]}\n'
-                "important_facts 只记录稳定的、有意义的个人事实，例如：性格特点、生活习惯、重要经历、身体状况。\n"
+                "important_facts 只记录稳定的、有意义的个人事实，例如：性格特点、生活习惯、重要经历、身体状况（包括精神状态）。\n"
                 "绝对不要记录：用户测试AI功能的行为、单次询问某件事、临时状态、对话中的玩笑或表情包、已经在其他字段记录的信息。\n"
                 "没有提到的字段填 null。"
             ),
@@ -201,7 +201,7 @@ def clear(user_id: str):
     _save(user_id, dict(_DEFAULT_PROFILE))
 
 
-# ─── 好感度系统 ────────────────────────────────────────────────────────────────
+# ─── 好感度系统（已冻结） ────────────────────────────────────────────────────────────────
 
 _AFFECTION_LEVELS = [
     (0,   99,   "陌生人",   "叶瑄对她还不太了解"),

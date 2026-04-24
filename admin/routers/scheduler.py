@@ -76,23 +76,6 @@ async def put_sched_config(body: dict, auth=Depends(verify_token)):
     return {"message": "调度器配置已保存", "config": cfg}
 
 
-# ── 签名增删 ─────────────────────────────────────────────────────────────────
-
-@router.post("/scheduler/signatures", summary="添加一条签名")
-async def add_signature(body: dict, auth=Depends(verify_token)):
-    text = str(body.get("text", "")).strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="text 不能为空")
-    cfg = dict(_sched_cfg())
-    sigs = list(cfg.get("signatures", []))
-    if text in sigs:
-        return {"message": "签名已存在", "signatures": sigs}
-    sigs.append(text)
-    cfg["signatures"] = sigs
-    _save_sched_cfg(cfg)
-    return {"message": "已添加", "signatures": sigs}
-
-
 @router.delete("/scheduler/signatures", summary="删除一条签名")
 async def delete_signature(body: dict, auth=Depends(verify_token)):
     text = str(body.get("text", "")).strip()

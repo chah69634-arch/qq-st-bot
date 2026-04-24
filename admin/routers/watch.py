@@ -11,12 +11,25 @@ Watch 事件接收路由
 无需鉴权，由 secret 参数代替（防止公网扫描误触发）。
 """
 
-from datetime import datetime
+from datetime import datetime, datetime as _dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from admin.auth import verify_token
 from core.config_loader import get_config
+from core.memory.user_profile import load as _load_profile, save as _save_profile
+
+
+def _append_heart_rate_event(user_id: str, value: int, triggered: bool):
+    profile = _load_profile(user_id)
+    events = profile.get("heart_rate_events", [])
+    events.append({
+        "time": _dt.now().strftime("%Y-%m-%d %H:%M"),
+        "value": value,
+        "triggered": triggered,
+    })
+    profile["heart_rate_events"] = events[-20:]
+    _save_profile(user_id, profile)
 
 router = APIRouter()
 
@@ -94,31 +107,70 @@ async def _flush_sleep_buffer():
 
     sleep_start_str = merged.get("sleep_start", "")
     duration = merged.get("duration_minutes", 0)
+    from core.config_loader import get_config as _gcfg
     sleep_comment = ""
     if sleep_start_str:
         try:
             start_hour = int(sleep_start_str.split(":")[0])
-            if 2 <= start_hour <= 6:
-                sleep_comment = "凌晨才睡，睡得很晚，有点心疼但也有点生气"
-            elif start_hour >= 23 or start_hour == 0:
-                sleep_comment = "睡得比较晚"
+            enough   = duration >= 360
+            too_much = duration >= 600
+
+            def _slot(h):
+                if 2 <= h <= 6:       return "late_night"
+                if h >= 23 or h == 0: return "night"
+                return "normal"
+
+            slot = _slot(start_hour)
+            _cname = _gcfg().get("character", {}).get("name", "叶瑄")
+
+            if too_much:
+                extra = "而且凌晨才睡，" if slot == "late_night" else ""
+                sleep_comment = f"睡了很久，{extra}{_cname}担心是不是太累了或者身体不舒服"
             else:
-                sleep_comment = "睡得还算早"
+                _table = {
+                    ("late_night", True):  f"凌晨才睡，但好在睡够了，{_cname}心疼但松了口气",
+                    ("late_night", False): f"凌晨才睡还没睡够，{_cname}又心疼又生气",
+                    ("night",      True):  f"睡得有点晚，但睡够了，{_cname}会提一句",
+                    ("night",      False): f"睡得晚又没睡够，{_cname}会念叨一下",
+                    ("normal",     True):  f"睡得早也睡够了，{_cname}会夸一句",
+                    ("normal",     False): f"睡得还行但没睡够，{_cname}会关心一下",
+                }
+                sleep_comment = _table[(slot, enough)]
         except Exception:
             pass
+
+    # 趋势分析（最近5条sleep_segments）
+    trend_comment = ""
+    try:
+        from core.memory import user_profile as _up
+        profile = _up.load(oid)
+        segments = profile.get("sleep_segments", [])[-5:]
+        if len(segments) >= 3:
+            durations = [s.get("duration_minutes", 0) for s in segments]
+            starts = [int(s.get("sleep_start", "0:0").split(":")[0]) for s in segments]
+            
+            avg_recent = sum(durations[-3:]) / 3
+            avg_prev = sum(durations[:-3]) / max(len(durations[:-3]), 1)
+            late_nights = sum(1 for h in starts[-3:] if h >= 1 and h <= 6)
+            
+            if late_nights >= 3:
+                trend_comment = "，而且最近连续好几天都凌晨才睡"
+            elif avg_recent < avg_prev - 60:
+                trend_comment = "，最近睡眠时间在缩短"
+    except Exception:
+        pass
 
     hours = int(duration // 60)
     minutes = int(duration % 60)
     now_hour = datetime.now().hour
-    from core.config_loader import get_config as _gcfg
     _cname = _gcfg().get("character", {}).get("name", "她")
     if now_hour < 12:
         await _pipeline_send(
-            f"（{_cname}看到你醒了，昨晚睡了{hours}小时{minutes}分钟，{sleep_comment}）"
+            f"（{_cname}看到你醒了，昨晚睡了{hours}小时{minutes}分钟，{sleep_comment}{trend_comment}）"
         )
     else:
         await _pipeline_send(
-            f"（{_cname}看到你醒了，睡了{hours}小时{minutes}分钟，{sleep_comment}）"
+            f"（{_cname}看到你醒了，睡了{hours}小时{minutes}分钟，{sleep_comment}{trend_comment}）"
         )
 
 
@@ -204,6 +256,11 @@ async def receive_watch_event(
         **data,
     })
     _last_watch_data["received_at"] = datetime.now().isoformat()
+
+    # 写入 user_profile（心率事件）
+    oid = str(get_config().get("scheduler", {}).get("owner_id", ""))
+    if oid and event_type == "heart_rate":
+        _append_heart_rate_event(oid, data["value"], triggered=False)
 
     import asyncio
     from core import scheduler

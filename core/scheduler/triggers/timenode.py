@@ -1,6 +1,6 @@
 """
 时间节点感知触发器
-叶瑄对时间有自己的感知——周一、周五、月末、季节变化
+角色对时间有自己的感知——周一、周五、月末、季节变化
 不是提醒，是他自己的情绪和状态
 """
 
@@ -79,7 +79,7 @@ async def _check_timenode(force: bool = False):
 
     prompts = {
         "monday": f"（今天是{date_str}{weekday_str}，{_char_name()}忽然意识到新的一周开始了，有点说不清的感觉）",
-        "friday": f"（今天是{date_str}{weekday_str}，{_char_name()}发现这周快过完了，莫名觉得轻松了一点）",
+        "friday": f"（今天是{date_str}{weekday_str}，{_char_name()}发现这周快过完了，马上到周末了）",
         "month_end": f"（今天是{date_str}，{_char_name()}想到{today.month}月快过完了，这个月发生了不少事）",
         "season_change": f"（今天是{date_str}，{_char_name()}察觉到{season}来了，窗外有点不一样）",
     }

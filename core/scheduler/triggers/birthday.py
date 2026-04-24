@@ -51,7 +51,7 @@ async def _check_birthday_midnight(force: bool = False):
             return
 
     await _pipeline_send(
-        f"（零点刚过，{_char_name()}一直没睡，等着这一刻，想对你说一些平时说不出口的话）"
+        f"（零点刚过，{_char_name()}一直没睡，等着这一刻，想对你说一些平时说不出口的话，有对你近期行为心理的深刻洞察，也有对细节的关心。同时他也对你剖析自己，以一种近乎发誓的方式来诉说情愫。）"
     )
     _mark("birthday_midnight")
     logger.info("[scheduler] 生日零点告白已触发")
@@ -73,7 +73,7 @@ async def _check_birthday_eve(force: bool = False):
 
     logger.info("[scheduler] birthday_eve: 准备调用_pipeline_send")
     await _pipeline_send(
-        f"（{_char_name()}在做什么，忽然想起明天是个特别的日子，有点藏不住）"
+        f"（{_char_name()}在做什么，忽然想起明天是个特别的日子（你的生日），有点藏不住）"
     )
     _mark("birthday_eve")
     logger.info("[scheduler] 生日前夜预热已触发")

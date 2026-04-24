@@ -174,3 +174,41 @@ async def delete_lore_entry(index: int, auth=Depends(verify_token)):
     _write_lorebook(data)
     _reload_lore_engine()
     return {"message": f"条目 {index} 已删除", "removed_keywords": removed.get("keyword", [])}
+
+
+@router.get("/lorebook/export/json", summary="导出世界书为JSON")
+async def export_lorebook_json(auth=Depends(verify_token)):
+    """导出完整lorebook.yaml为JSON格式"""
+    data = _read_lorebook()
+    from fastapi.responses import JSONResponse
+    import json
+    content = json.dumps({"entries": data.get("entries", [])}, ensure_ascii=False, indent=2)
+    from fastapi.responses import Response
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=lorebook.json"}
+    )
+
+
+@router.post("/lorebook/import/json", summary="从JSON文件导入世界书条目")
+async def import_lorebook_json(file: UploadFile = File(...), auth=Depends(verify_token)):
+    """读取上传的.json文件，合并到现有lorebook.yaml"""
+    if not (file.filename or "").lower().endswith(".json"):
+        raise HTTPException(status_code=422, detail="只接受 .json 文件")
+    raw = await file.read()
+    try:
+        import json
+        incoming = json.loads(raw.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=422, detail="JSON解析失败")
+    
+    new_entries = incoming.get("entries", [])
+    if not new_entries:
+        raise HTTPException(status_code=422, detail="未找到entries字段")
+    
+    data = _read_lorebook()
+    data["entries"].extend(new_entries)
+    _write_lorebook(data)
+    _reload_lore_engine()
+    return {"message": f"已导入 {len(new_entries)} 条条目", "added": len(new_entries)}

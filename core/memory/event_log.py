@@ -2,7 +2,7 @@
 不可变事件日志系统
 ─────────────────────────────────────────────────────
 每次对话结束后，把"用户说了什么、叶瑄回了什么"追加到
-按天分割的 Markdown 日志文件里，永不修改已写内容。
+按天分割的 Markdown 日志文件里，永不修改已有内容。
 
 存储结构：
   data/event_log/{user_id}/2026-04-15.md   ← AI 读取（按天）
@@ -11,7 +11,8 @@
 日志格式（每次对话块）：
   ## 14:23
   **用户**：我今天很累
-  **叶瑄**：（走过来把外套搭在你肩上）先坐着
+  **角色**：（走过来把外套搭在你肩上）先坐着
+  > emotion:gentle intensity:1
   ---
 """
 
@@ -25,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 # 日志根目录
 _LOG_ROOT = Path("data/event_log")
+
+_HIGH_INTENSITY_WORDS = {"心疼", "难过", "哭", "气死", "开心", "喜欢", "想你", "爱你"}
+_MED_INTENSITY_WORDS  = {"想", "记得", "担心", "等你", "在意"}
 
 
 def _day_file(user_id: str, date: datetime) -> Path:
@@ -42,42 +46,86 @@ def _ensure_dir(user_id: str):
     (_LOG_ROOT / user_id).mkdir(parents=True, exist_ok=True)
 
 
-def append(user_id: str, role: str, content: str):
+def _calc_intensity(content: str, emotion: str) -> int:
+    if any(w in content for w in _HIGH_INTENSITY_WORDS):
+        intensity = 2
+    elif any(w in content for w in _MED_INTENSITY_WORDS):
+        intensity = 1
+    else:
+        intensity = 0
+    if emotion != "neutral" and intensity == 0:
+        intensity = 1
+    return intensity
+
+
+def _parse_intensity(block_lines: list) -> int:
+    """从块行列表里读取 > emotion: 行的 intensity 值，没有则返回 0"""
+    for line in reversed(block_lines):
+        stripped = line.strip()
+        if stripped.startswith("> emotion:"):
+            for part in stripped.split():
+                if part.startswith("intensity:"):
+                    try:
+                        return int(part.split(":")[1])
+                    except (ValueError, IndexError):
+                        pass
+    return 0
+
+
+def _split_blocks(text: str) -> list:
+    """把日志文本按 ## HH:MM 时间块切分，返回 list[list[str]]"""
+    blocks: list = []
+    current: list = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if current:
+                blocks.append(current)
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def append(user_id: str, role: str, content: str, emotion: str = "neutral", intensity: int = 0):
     """
     追加一条对话记录到当天日志和 full_log.md。
     永不修改已有内容，只追加。
 
     参数：
-        user_id  - 用户 QQ 号
-        role     - "user" 或 "assistant"
-        content  - 消息内容
+        user_id   - 用户 QQ 号
+        role      - "user" 或 "assistant"
+        content   - 消息内容
+        emotion   - 情绪标签（仅 assistant 有效）
+        intensity - 情绪强度覆盖（0-2），传入时不再自动计算
     """
-    # 把 role 映射成中文显示名
-    role_label = "用户" if role == "user" else "叶瑄"
+    from core.config_loader import get_config
+    char_name = get_config().get("character", {}).get("name", "叶瑄")
+    role_label = "用户" if role == "user" else char_name
 
     now = datetime.now()
     time_str = now.strftime("%H:%M")
 
-    # 一条"块"开头用时间戳，后续同一轮追加行
-    # 格式：**用户**：xxx  或  **叶瑄**：xxx
     line = f"**{role_label}**：{content}\n"
-
-    # 如果是 user 说话，在前面加时间戳小标题 + 空行
     header = f"\n## {time_str}\n" if role == "user" else ""
-    # assistant 说完加分隔线
-    footer = "---\n" if role == "assistant" else ""
+
+    if role == "assistant":
+        _intensity = _calc_intensity(content, emotion)
+        emotion_line = f"> emotion:{emotion} intensity:{_intensity}\n"
+        footer = emotion_line + "---\n"
+    else:
+        footer = ""
 
     chunk = header + line + footer
 
     try:
         _ensure_dir(user_id)
 
-        # 写入当天日期文件
         day_path = _day_file(user_id, now)
         with open(day_path, "a", encoding="utf-8") as f:
             f.write(chunk)
 
-        # 同时写入 full_log.md（供用户导出，AI 不读取）
         full_path = _full_log_file(user_id)
         with open(full_path, "a", encoding="utf-8") as f:
             f.write(chunk)
@@ -109,22 +157,20 @@ def get_recent_days(user_id: str, days: int = 3) -> str:
             if path.exists():
                 text = path.read_text(encoding="utf-8").strip()
                 if text:
-                    # 加日期头，方便 LLM 理解时间顺序
                     parts.append(f"# {target_day.strftime('%Y-%m-%d')}\n{text}")
         except Exception as e:
             log_error("event_log.get_recent_days", e)
 
-    # 按时间正序（最早在前）返回
     parts.reverse()
     return "\n\n".join(parts)
 
 
 async def search(user_id: str, query: str, llm_client=None) -> str:
-    recent_text = get_recent_days(user_id, days=7)
+    recent_text = get_recent_days(user_id, days=30)
     if not recent_text:
         return ""
 
-    keywords = set()
+    keywords: set = set()
     q = query.strip()
     for length in (2, 3, 4):
         for i in range(len(q) - length + 1):
@@ -135,22 +181,44 @@ async def search(user_id: str, query: str, llm_client=None) -> str:
     if not keywords:
         return ""
 
-    matched: list[str] = []
-    for line in recent_text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped == "---":
-            continue
-        if any(kw in stripped for kw in keywords):
-            matched.append(stripped)
-            if len(matched) >= 5:
-                break
+    today = datetime.now().date()
+    matched: list = []
 
-    return "；".join(matched) if matched else ""
+    # 按日期section切分
+    current_date = today
+    for section in recent_text.split("\n# "):
+        if not section.strip():
+            continue
+        lines = section.splitlines()
+        # 解析日期标题
+        header = lines[0].strip().lstrip("# ").strip()
+        try:
+            current_date = datetime.strptime(header, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+        days_ago = (today - current_date).days
+        decay = 1 / (days_ago + 1)
+
+        for block in _split_blocks("\n".join(lines[1:])):
+            intensity = _parse_intensity(block)
+            score = intensity + decay
+            for line in block:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or stripped == "---" or stripped.startswith("> emotion:"):
+                    continue
+                if any(kw in stripped for kw in keywords):
+                    matched.append((score, stripped))
+
+    matched.sort(key=lambda x: x[0], reverse=True)
+    selected = [line for _, line in matched[:8]]
+    return "；".join(selected) if selected else ""
+
 
 def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:
     """
     从最近N天日志里提取有内容密度的片段，供碎碎念使用。
     优先选：包含具体事物/情感词的用户发言，跳过纯短句和系统行。
+    角色回复 intensity >= 2 的块额外加分。
     """
     recent_text = get_recent_days(user_id, days=days)
     if not recent_text:
@@ -159,23 +227,24 @@ def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:
     _EMOTION_HINTS = {"好", "累", "难", "开心", "烦", "怕", "喜欢", "讨厌", "想", "忘", "哭", "笑", "气", "愁"}
 
     candidates = []
-    for line in recent_text.splitlines():
-        stripped = line.strip()
-        # 跳过标题行、分隔线、空行、叶瑄的回复
-        if not stripped or stripped.startswith("#") or stripped == "---":
-            continue
-        if not stripped.startswith("**用户**"):
-            continue
-        content = stripped.replace("**用户**：", "").strip()
-        if len(content) < 6:
-            continue
-        # 打分：有情感词+1，长度>15+1
-        score = sum(1 for w in _EMOTION_HINTS if w in content)
-        if len(content) > 15:
-            score += 1
-        candidates.append((score, content))
+    for block in _split_blocks(recent_text):
+        intensity = _parse_intensity(block)
+        for line in block:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or stripped == "---" or stripped.startswith("> emotion:"):
+                continue
+            if not stripped.startswith("**用户**"):
+                continue
+            content = stripped.replace("**用户**：", "").strip()
+            if len(content) < 6:
+                continue
+            score = sum(1 for w in _EMOTION_HINTS if w in content)
+            if len(content) > 15:
+                score += 1
+            if intensity >= 2:
+                score += 2
+            candidates.append((score, content))
 
-    # 按分数降序，取前max_lines条
     candidates.sort(key=lambda x: x[0], reverse=True)
     selected = [c for _, c in candidates[:max_lines]]
     return "；".join(selected) if selected else ""
@@ -187,8 +256,8 @@ class EventLog:
     所有方法都代理到模块级函数。
     """
 
-    def append(self, user_id: str, role: str, content: str):
-        append(user_id, role, content)
+    def append(self, user_id: str, role: str, content: str, emotion: str = "neutral", intensity: int = 0):
+        append(user_id, role, content, emotion=emotion, intensity=intensity)
 
     def get_recent_days(self, user_id: str, days: int = 3) -> str:
         return get_recent_days(user_id, days)

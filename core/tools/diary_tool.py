@@ -41,6 +41,6 @@ async def read_diary_for_user(user_id: str, date_str: str = "") -> str:
         except Exception:
             pass
         date_label = target.strftime("%m月%d日")
-        return f"小画家{date_label}的日记内容：\n{text}"
+        return f"她{date_label}的日记内容：\n{text}"
     date_label = target.strftime("%m月%d日")
     return f"{date_label}还没有日记"

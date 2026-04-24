@@ -191,11 +191,10 @@ class Pipeline:
         # except Exception as e:
         #     log_error("pipeline.post_process.dnd", e)
 
-        # 事件日志
+        # 事件日志（user 行先写，assistant 行在 emotion 检测后写）
         try:
             event_log.append(user_id, "user", content)
-            event_log.append(user_id, "assistant", reply)
-            logger.debug(f"[pipeline.post_process] 事件日志已追加: {user_id}")
+            logger.debug(f"[pipeline.post_process] 事件日志用户行已追加: {user_id}")
         except Exception as e:
             log_error("pipeline.post_process.event_log", e)
 
@@ -237,11 +236,12 @@ class Pipeline:
         except Exception as e:
             log_error("pipeline.post_process.consistency", e)
 
-        # 统一情绪检测，单次随机决定走语音还是表情包（互斥）
+        # 统一情绪检测，写 assistant 事件日志，单次随机决定走语音还是表情包（互斥）
         try:
+            from core import llm_client
+            _emotion = await llm_client.detect_emotion(reply)
+            event_log.append(user_id, "assistant", reply, emotion=_emotion)
             if target_id:
-                from core import llm_client
-                _emotion = await llm_client.detect_emotion(reply)
                 from core.config_loader import get_config as _cfg
                 import random
                 _tts_enabled = _cfg().get("tts", {}).get("enabled", False)

@@ -403,16 +403,59 @@ textarea { resize: vertical; min-height: 72px; }
         <div class="card-header">
           <h3>条目列表</h3>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="loadLorebook()">刷新</button>
-            <label style="position:relative">
-              <input type="file" id="lore-import-file" accept=".txt" style="display:none"
-                     onchange="importLorebookTxt(event)">
-              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('lore-import-file').click()">📥 导入txt</button>
-            </label>
-            <button class="btn btn-primary btn-sm" onclick="openLoreModal(null)">＋ 新增</button>
-          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadLorebook()">刷新</button>
+          <label style="position:relative">
+            <input type="file" id="lore-import-file" accept=".txt" style="display:none"
+                  onchange="importLorebookTxt(event)">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('lore-import-file').click()">📥 导入txt</button>
+          </label>
+          <button class="btn btn-ghost btn-sm" onclick="exportLorebook()">📤 导出JSON</button>
+          <input type="file" id="lore-json-input" accept=".json" style="display:none" onchange="importLorebookJson(this.files[0])">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('lore-json-input').click()">📥 导入JSON</button>
+          <button class="btn btn-primary btn-sm" onclick="openLoreModal(null)">＋ 新增</button>
+        </div>
         </div>
         <div id="lore-table-body"><div class="loading">加载中…</div></div>
+      </div>
+      <!-- 破限条目 -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header">
+          <h3>破限预设条目</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="loadJbEntries()">刷新</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportJbEntries()">📤 导出JSON</button>
+            <input type="file" id="jb-json-input" accept=".json" style="display:none" onchange="importJbEntriesJson(this.files[0])">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jb-json-input').click()">📥 导入JSON</button>
+            <input type="file" id="jb-txt-input" accept=".txt" style="display:none" onchange="importJbEntriesTxt(this.files[0])">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jb-txt-input').click()">📥 导入txt</button>
+            <button class="btn btn-primary btn-sm" onclick="openJbModal(null)">＋ 新增</button>
+          </div>
+        </div>
+        <div id="jb-table-body"><div class="loading">加载中…</div></div>
+      </div>
+
+      <!-- 破限编辑弹窗 -->
+      <div id="jb-modal" class="modal" style="display:none">
+        <div class="modal-box">
+          <h3 id="jb-modal-title">新增破限条目</h3>
+          <label>标题</label>
+          <input id="jb-title" class="input" placeholder="条目标题">
+          <label style="margin-top:8px">层级</label>
+          <select id="jb-layer" class="input">
+            <option value="0">层0（身份设定）</option>
+            <option value="2">层2（背景补充）</option>
+            <option value="11">层11（表达规则，权重最高）</option>
+          </select>
+          <label style="margin-top:8px">内容</label>
+          <textarea id="jb-content" class="input" rows="6" placeholder="注入的prompt内容"></textarea>
+          <label style="margin-top:8px">
+            <input type="checkbox" id="jb-enabled" checked> 启用此条目
+          </label>
+          <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+            <button class="btn btn-ghost" onclick="closeJbModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveJbEntry()">保存</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -432,6 +475,7 @@ textarea { resize: vertical; min-height: 72px; }
               <button class="btn btn-ghost btn-sm" onclick="document.getElementById('char-upload-file').click()">
                 ⬆ 上传角色卡
               </button>
+             <button class="btn btn-ghost btn-sm" onclick="exportCharacter()">📤 导出</button>
             </label>
           </div>
         </div>
@@ -440,6 +484,9 @@ textarea { resize: vertical; min-height: 72px; }
             <option value="">-- 加载中 --</option>
           </select>
           <button class="btn btn-primary btn-sm" onclick="setActiveCharacter()">设为当前</button>
+          
+          <button class="btn btn-ghost btn-sm" onclick="renameCharacter()">✏️ 重命名</button> 
+           
           <span id="char-active-badge" class="badge badge-accent" style="display:none"></span>
         </div>
         <p style="font-size:12px;color:var(--muted);margin-top:8px">支持 .json / .txt / .md</p>
@@ -555,44 +602,7 @@ textarea { resize: vertical; min-height: 72px; }
         </div>
       </div>
 
-      <!-- 破限预设 -->
-      <div class="card">
-        <div class="card-header">
-          <h3>破限预设</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadJailbreak()">刷新</button>
-        </div>
-        <div style="max-width:480px">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-            <label class="checkbox-row" style="gap:8px;font-size:14px">
-              <input type="checkbox" id="jb-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-              <span>启用破限</span>
-            </label>
-            <span id="jb-badge" class="badge badge-danger">未启用</span>
-          </div>
-          <label class="field" style="margin-bottom:12px">
-            <span>预设方案</span>
-            <select id="jb-preset" style="max-width:200px">
-              <option value="default">default（默认/空）</option>
-              <option value="dan">dan（通用 DAN）</option>
-              <option value="creative">creative（创意模式）</option>
-            </select>
-          </label>
-          <label class="field" style="margin-bottom:12px">
-            <span>自定义文本（非空时优先于预设）</span>
-            <textarea id="jb-custom" placeholder="直接输入自定义破限提示词…" style="min-height:80px"></textarea>
-          </label>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-            <button class="btn btn-primary btn-sm" onclick="saveJailbreak()">保存并生效</button>
-            <label style="position:relative">
-              <input type="file" id="jb-upload-file" accept=".txt" style="display:none"
-                     onchange="uploadJailbreakPreset(event)">
-              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jb-upload-file').click()">
-                ⬆ 上传预设 .txt
-              </button>
-            </label>
-          </div>
-        </div>
-      </div>
+    
 
       <!-- TTS 语音 -->
       <div class="card">
@@ -1149,7 +1159,7 @@ function goto(page) {
     logs:      loadLogs,
     tools:     loadTools,
     character: loadCharacterPage,
-    lorebook:  loadLorebook,
+    lorebook: () => { loadLorebook(); loadJbEntries(); },
     settings:  loadSettings,
     pet:       loadPet,
     yexuan:    loadYexuanPage,
@@ -1562,7 +1572,6 @@ function renderLorebook() {
     el.innerHTML = '<div class="empty">暂无条目，点击「新增」添加第一条</div>';
     return;
   }
-  // 按 insertion_order 升序显示
   const sorted = _loreEntries.map((e, i) => ({...e, _origIdx: i}))
     .sort((a, b) => (a.insertion_order ?? 100) - (b.insertion_order ?? 100));
   const rows = sorted.map(e => {
@@ -1574,11 +1583,19 @@ function renderLorebook() {
     const regexBadge = e.regex
       ? '<span class="badge badge-warn" style="font-size:10px">正则</span>'
       : '';
+    const contentId = `lore-content-${i}`;
+    const shortContent = (e.content || '').length > 60
+      ? escapeHtml((e.content || '').slice(0, 60)) + '…'
+      : escapeHtml(e.content || '');
+    const fullContent = escapeHtml(e.content || '');
     return `<tr>
       <td>${badge}</td>
       <td style="text-align:center;color:var(--muted);font-size:12px">${e.insertion_order ?? 100}</td>
       <td style="font-size:12px;color:var(--accent)">${escapeHtml(kws)} ${regexBadge}</td>
-      <td style="font-size:12px;max-width:280px;white-space:pre-wrap">${escapeHtml(e.content || '')}</td>
+      <td style="font-size:12px;max-width:280px">
+        <span id="${contentId}-short" style="white-space:pre-wrap;cursor:pointer" onclick="toggleLoreContent(${i})" title="点击展开">${shortContent}</span>
+        <span id="${contentId}-full" style="white-space:pre-wrap;display:none">${fullContent}<br><a href="#" style="font-size:11px;color:var(--muted)" onclick="toggleLoreContent(${i});return false;">收起</a></span>
+      </td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="openLoreModal(${i})">编辑</button>
         <button class="btn btn-danger btn-sm" onclick="deleteLoreEntry(${i})">删除</button>
@@ -1589,6 +1606,48 @@ function renderLorebook() {
     <thead><tr><th>状态</th><th style="width:50px">顺序</th><th>关键词</th><th>内容</th><th style="width:120px">操作</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+}
+
+function toggleLoreContent(i) {
+  const short = document.getElementById(`lore-content-${i}-short`);
+  const full = document.getElementById(`lore-content-${i}-full`);
+  if (!short || !full) return;
+  const isExpanded = full.style.display !== 'none';
+  short.style.display = isExpanded ? '' : 'none';
+  full.style.display = isExpanded ? 'none' : '';
+}
+
+async function exportLorebook() {
+  try {
+    const resp = await fetch('/lorebook/export/json', {
+      headers: { 'Authorization': `Bearer ${localStorage}` }
+    });
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lorebook.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    toast('导出失败：' + e.message, 'err');
+  }
+}
+
+async function importLorebookJson(file) {
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const resp = await fetch('/lorebook/import/json', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` },
+      body: form,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(JSON.stringify(data.detail));
+    toast(data.message, 'ok');
+    loadLorebook();
+  } catch(e) { toast('导入失败：' + e.message, 'err'); }
 }
 
 function openLoreModal(idx) {
@@ -1660,7 +1719,7 @@ async function importLorebookTxt(event) {
   const fd = new FormData();
   fd.append('file', file);
   try {
-    const token = localStorage.getItem('admin_token') || '';
+    const token = localStorage.getItem('qq_admin_key') || '';
     const resp = await fetch('/lorebook/import/txt', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token },
@@ -1674,6 +1733,170 @@ async function importLorebookTxt(event) {
     toast('导入失败：' + (e.message || e), 'err');
   }
 }
+// ══════════════════════════════════════════════════════════
+//  破限条目
+// ══════════════════════════════════════════════════════════
+let _jbEntries = [];
+let _editingJbId = null;
+
+async function loadJbEntries() {
+  const el = document.getElementById('jb-table-body');
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    const data = await api('GET', '/jailbreak-entries');
+    _jbEntries = data.entries || [];
+    renderJbEntries();
+  } catch(e) {
+    el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderJbEntries() {
+  const el = document.getElementById('jb-table-body');
+  if (!_jbEntries.length) {
+    el.innerHTML = '<div class="empty">暂无条目，点击「新增」添加第一条</div>';
+    return;
+  }
+  const rows = _jbEntries.map(e => {
+    const badge = e.enabled
+      ? '<span class="badge badge-success">启用</span>'
+      : '<span class="badge badge-danger">禁用</span>';
+    const layerLabel = {0:'层0',2:'层2',11:'层11'}[e.layer] || `层${e.layer}`;
+    const contentId = `jb-content-${e.id}`;
+    const short = (e.content||'').length > 60
+      ? escapeHtml((e.content||'').slice(0,60)) + '…'
+      : escapeHtml(e.content||'');
+    return `<tr>
+      <td>${badge}</td>
+      <td style="font-size:12px;color:var(--accent)">${escapeHtml(e.title||'')}</td>
+      <td style="font-size:11px;color:var(--muted);text-align:center">${layerLabel}</td>
+      <td style="font-size:12px;max-width:280px">
+        <span id="${contentId}-short" style="white-space:pre-wrap;cursor:pointer" onclick="toggleJbContent('${e.id}')" title="点击展开">${short}</span>
+        <span id="${contentId}-full" style="white-space:pre-wrap;display:none">${escapeHtml(e.content||'')}<br><a href="#" style="font-size:11px;color:var(--muted)" onclick="toggleJbContent('${e.id}');return false;">收起</a></span>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="openJbModal('${e.id}')">编辑</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteJbEntry('${e.id}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<div class="tbl-wrap"><table>
+    <thead><tr><th>状态</th><th>标题</th><th style="width:60px">层级</th><th>内容</th><th style="width:120px">操作</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function toggleJbContent(id) {
+  const short = document.getElementById(`jb-content-${id}-short`);
+  const full = document.getElementById(`jb-content-${id}-full`);
+  if (!short || !full) return;
+  const expanded = full.style.display !== 'none';
+  short.style.display = expanded ? '' : 'none';
+  full.style.display = expanded ? 'none' : '';
+}
+
+function openJbModal(id) {
+  _editingJbId = id;
+  document.getElementById('jb-modal-title').textContent = id ? '编辑破限条目' : '新增破限条目';
+  if (id) {
+    const e = _jbEntries.find(x => x.id === id);
+    if (!e) return;
+    document.getElementById('jb-title').value = e.title || '';
+    document.getElementById('jb-content').value = e.content || '';
+    document.getElementById('jb-layer').value = String(e.layer ?? 0);
+    document.getElementById('jb-enabled').checked = e.enabled !== false;
+  } else {
+    document.getElementById('jb-title').value = '';
+    document.getElementById('jb-content').value = '';
+    document.getElementById('jb-layer').value = '0';
+    document.getElementById('jb-enabled').checked = true;
+  }
+  document.getElementById('jb-modal').style.display = 'flex';
+}
+
+function closeJbModal() {
+  document.getElementById('jb-modal').style.display = 'none';
+  _editingJbId = null;
+}
+
+async function saveJbEntry() {
+  const body = {
+    title:   document.getElementById('jb-title').value.trim(),
+    content: document.getElementById('jb-content').value.trim(),
+    layer:   parseInt(document.getElementById('jb-layer').value),
+    enabled: document.getElementById('jb-enabled').checked,
+  };
+  if (!body.title || !body.content) { toast('标题和内容不能为空', 'err'); return; }
+  try {
+    if (_editingJbId) {
+      await api('PUT', `/jailbreak-entries/${_editingJbId}`, body);
+    } else {
+      await api('POST', '/jailbreak-entries', body);
+    }
+    toast('已保存', 'ok');
+    closeJbModal();
+    loadJbEntries();
+  } catch(e) {
+    toast('保存失败：' + e.message, 'err');
+  }
+}
+
+async function deleteJbEntry(id) {
+  if (!confirm('确认删除？')) return;
+  try {
+    await api('DELETE', `/jailbreak-entries/${id}`);
+    toast('已删除', 'ok');
+    loadJbEntries();
+  } catch(e) {
+    toast('删除失败：' + e.message, 'err');
+  }
+}
+
+async function exportJbEntries() {
+  try {
+    const resp = await fetch('/jailbreak-entries/export/json', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` }
+    });
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'jailbreak_entries.json'; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { toast('导出失败：' + e.message, 'err'); }
+}
+
+async function importJbEntriesJson(file) {
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const resp = await fetch('/jailbreak-entries/import/json', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` },
+      body: form,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(JSON.stringify(data.detail));
+    toast(data.message, 'ok');
+    loadJbEntries();
+  } catch(e) { toast('导入失败：' + e.message, 'err'); }
+}
+
+async function importJbEntriesTxt(file) {
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const resp = await fetch('/jailbreak-entries/import/txt', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` },
+      body: form,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(JSON.stringify(data.detail));
+    toast(data.message, 'ok');
+    loadJbEntries();
+  } catch(e) { toast('导入失败：' + e.message, 'err'); }
+}
+
 
 // ══════════════════════════════════════════════════════════
 //  Context config
@@ -1702,27 +1925,6 @@ async function saveContextConfig() {
 // ══════════════════════════════════════════════════════════
 //  Jailbreak
 // ══════════════════════════════════════════════════════════
-async function loadJailbreak() {
-  try {
-    const data = await api('GET', '/jailbreak');
-    document.getElementById('jb-enabled').checked  = !!data.enabled;
-    document.getElementById('jb-custom').value      = data.custom_text || '';
-    _updateJbBadge(!!data.enabled);
-
-    // 动态填充预设下拉（若后端有更多预设）
-    const sel = document.getElementById('jb-preset');
-    const presets = data.available_presets || [];
-    if (presets.length) {
-      sel.innerHTML = presets.map(p =>
-        `<option value="${escapeHtml(p)}"${p === data.preset ? ' selected' : ''}>${escapeHtml(p)}</option>`
-      ).join('');
-    } else {
-      sel.value = data.preset || 'default';
-    }
-  } catch(e) {
-    toast('读取破限配置失败: ' + e.message, 'err');
-  }
-}
 
 function _updateJbBadge(enabled) {
   const b = document.getElementById('jb-badge');
@@ -1736,18 +1938,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cb) cb.addEventListener('change', () => _updateJbBadge(cb.checked));
 });
 
-async function saveJailbreak() {
-  const enabled     = document.getElementById('jb-enabled').checked;
-  const preset      = document.getElementById('jb-preset').value;
-  const custom_text = document.getElementById('jb-custom').value;
-  try {
-    await api('PUT', '/jailbreak', { enabled, preset, custom_text });
-    _updateJbBadge(enabled);
-    toast('破限配置已保存', 'ok');
-  } catch(e) {
-    toast('保存失败: ' + e.message, 'err');
-  }
-}
 
 // ══════════════════════════════════════════════════════════
 //  TTS 配置
@@ -2332,27 +2522,34 @@ async function uploadCharacterFile(evt) {
   evt.target.value = '';
 }
 
-// ══════════════════════════════════════════════════════════
-//  破限预设上传
-// ══════════════════════════════════════════════════════════
-async function uploadJailbreakPreset(evt) {
-  const file = evt.target.files[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append('file', file);
+
+async function exportCharacter() {
+  if (!_charEditing) { toast('请先选择角色卡', 'warn'); return; }
   try {
-    const r = await fetch(`${BASE}/jailbreak/upload`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${TOKEN}` },
-      body: fd,
+    const resp = await fetch(`/characters/${encodeURIComponent(_charEditing)}/export`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` }
     });
-    if (!r.ok) { const t = await r.text(); throw new Error(t); }
-    const d = await r.json();
-    toast(d.message, 'ok');
-    await loadJailbreak();  // 刷新预设列表
-  } catch(e) { toast('上传失败：' + e.message, 'err'); }
-  evt.target.value = '';
+    if (!resp.ok) throw new Error(await resp.text());
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = _charEditing; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { toast('导出失败：' + e.message, 'err'); }
 }
+
+async function renameCharacter() {
+  if (!_charEditing) { toast('请先选择角色卡', 'warn'); return; }
+  const new_name = prompt(`重命名「${_charEditing}」为：`, _charEditing);
+  if (!new_name || new_name === _charEditing) return;
+  try {
+    const d = await api('POST', `/characters/${encodeURIComponent(_charEditing)}/rename`, { new_name });
+    toast(d.message, 'ok');
+    _charEditing = new_name;
+    await loadCharacterList();
+  } catch(e) { toast('重命名失败：' + e.message, 'err'); }
+}
+
 
 // ══════════════════════════════════════════════════════════
 //  🐾 宠物
@@ -2432,7 +2629,7 @@ async function savePet() {
 }
 
 // ══════════════════════════════════════════════════════════
-//  💬 与叶瑄
+//  💬 与他
 // ══════════════════════════════════════════════════════════
 let _chatMsgs = [];
 

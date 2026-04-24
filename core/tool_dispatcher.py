@@ -32,6 +32,7 @@ _TOOL_FALLBACKS = {
     "get_time": "时间获取出了点问题",
     "add_reminder": "备忘录暂时写不进去，稍后再试",
     "read_diary": "日记暂时读不到",
+    "read_watch": "身体数据暂时读取不到",
 }
 
 
@@ -102,6 +103,16 @@ def _web_search_wrapper(query: str):
 async def _read_diary_wrapper(user_id: str, date: str = "") -> str:
     from core.tools.diary_tool import read_diary_for_user
     return await read_diary_for_user(user_id, date_str=date)
+
+
+async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
+    from core.tools.watch_tool import read_watch_for_user
+    return read_watch_for_user(user_id, query)
+
+
+async def _search_diary_wrapper(user_id: str, query: str = "") -> str:
+    from core.tools.diary_search import search_diary_for_user
+    return await search_diary_for_user(user_id, query)
 
 
 _TOOL_REGISTRY["get_time"] = {
@@ -207,6 +218,38 @@ _TOOL_REGISTRY["read_diary"] = {
     },
 }
 
+_TOOL_REGISTRY["read_watch"] = {
+    "func": _read_watch_wrapper,
+    "description": "当用户或叶瑄想了解用户的睡眠、心率、运动等身体数据时调用。可以查最近记录或历史趋势。",
+    "dangerous": False,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "查询类型：睡眠/心率/运动/最近，不填返回综合摘要",
+            },
+        },
+        "required": [],
+    },
+}
+
+_TOOL_REGISTRY["search_diary"] = {
+    "func": _search_diary_wrapper,
+    "description": "按主题或关键词检索用户最近30天的日记内容。当叶瑄想回忆用户写过的某个话题、情绪、事件时主动调用，不需要用户明确要求。",
+    "dangerous": False,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "搜索关键词，如'失眠'、'焦虑'、'考试'，不填返回最近日记片段",
+            },
+        },
+        "required": [],
+    },
+}
+
 
 # ─── 对外接口 ──────────────────────────────────────────────────────────────────
 
@@ -282,7 +325,7 @@ async def execute(
         func = tool_info["func"]
         if tool_name == "add_reminder":
             result = await func(user_id=user_id, **tool_args)
-        elif tool_name == "read_diary":
+        elif tool_name in ("read_diary", "read_watch"):
             result = await func(user_id=user_id, **tool_args)
         else:
             result = await func(**tool_args)

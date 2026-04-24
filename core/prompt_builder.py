@@ -12,39 +12,33 @@ from core.error_handler import log_error
 
 logger = logging.getLogger(__name__)
 
-_JAILBREAK_DIR = __import__("pathlib").Path("data/jailbreak_presets")
+_JAILBREAK_ENTRIES_PATH = __import__("pathlib").Path("data/jailbreak_entries.json")
 
-
-def _load_jailbreak() -> str:
+def _load_jailbreak(layer: int | None = None) -> str:
     """
-    读取 config.yaml 的 jailbreak 配置。
-    enabled=true 时：
-      - 优先返回 custom_text（非空则直接用）
-      - 否则读取 data/jailbreak_presets/{preset}.txt
-    enabled=false 时返回空字符串。
-    每次调用重新读 config，支持热重载。
+    读取 data/jailbreak_entries.json，返回启用条目的内容。
+    layer指定时只返回该层的条目，None时返回所有启用条目。
     """
-    from core.config_loader import get_config
-    cfg = get_config().get("jailbreak", {})
-    if not cfg.get("enabled", False):
-        return ""
-
-    # custom_text 优先
-    custom = cfg.get("custom_text", "").strip()
-    if custom:
-        return custom
-
-    # 读预设文件
-    preset = cfg.get("preset", "default")
-    path = _JAILBREAK_DIR / f"{preset}.txt"
     try:
-        if path.exists():
-            return path.read_text(encoding="utf-8").strip()
+        if not _JAILBREAK_ENTRIES_PATH.exists():
+            return ""
+        import json
+        data = json.loads(_JAILBREAK_ENTRIES_PATH.read_text(encoding="utf-8"))
+        entries = data.get("entries", [])
+        parts = []
+        for e in entries:
+            if not e.get("enabled", True):
+                continue
+            if layer is not None and e.get("layer", 0) != layer:
+                continue
+            content = e.get("content", "").strip()
+            if content:
+                parts.append(content)
+        return "\n".join(parts)
     except Exception as e:
         from core.error_handler import log_error
         log_error("prompt_builder._load_jailbreak", e)
-    return ""
-
+        return ""
 
 def build(
     character: Character,
@@ -92,12 +86,11 @@ def build(
     # 层 0：破限预设（jailbreak，最高优先级，放在最前面）
     # config.yaml jailbreak.enabled=true 时注入对应预设文本
     # ─────────────────────────────────────────────────────────────────────────
-    jailbreak_text = _load_jailbreak()
+# 层0
+    jailbreak_text = _load_jailbreak(layer=0)
     if jailbreak_text:
-        messages.append({
-            "role": "system",
-            "content": jailbreak_text,
-        })
+        messages.append({"role": "system", "content": jailbreak_text})
+            
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 1：全局 system prompt（来自角色卡的 system_prompt 字段）
@@ -125,6 +118,11 @@ def build(
             "role": "system",
             "content": "\n\n".join(char_desc_parts),
         })
+
+        # 破限条目层2
+    jb_layer2 = _load_jailbreak(layer=2)
+    if jb_layer2:
+        messages.append({"role": "system", "content": jb_layer2})
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 2.5：当前时间（让叶瑄知道现在几点、星期几）
@@ -195,6 +193,31 @@ def build(
                         f"不需要每句话都提生理期，但态度要比平时更温柔。"
                     ),
                 })
+    except Exception:
+        pass
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 层 3.6：watch数据摘要（最近一次睡眠）
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        from core.memory.user_profile import load as _load_up
+        _up = _load_up(user_id)
+        _segs = [s for s in _up.get("sleep_segments", []) if s.get("duration_minutes", 0) > 0]
+        if _segs:
+            _last = _segs[-1]
+            _dur = int(_last.get("duration_minutes", 0))
+            _h, _m = _dur // 60, _dur % 60
+            _date = _last["time"][:10]
+            _start = _last.get("sleep_start", "")
+            _end = _last.get("sleep_end_time", "")
+            messages.append({
+                "role": "system",
+                "content": (
+                    f"[身体数据感知] 用户最近一次睡眠：{_date}，"
+                    f"入睡{_start}，起床{_end}，共{_h}小时{_m}分钟。"
+                    f"叶瑄知道这些数据，可以自然地提及。"
+                ),
+            })
     except Exception:
         pass
 
@@ -305,16 +328,14 @@ def build(
     # 放在历史之后、用户消息之前，对模型影响最大
     # ─────────────────────────────────────────────────────────────────────────
     author_note_lines = [
+        f"[格式硬规则：输出中禁止出现任何引号（包括""『』），对话直接输出，不加任何包裹。]",
         f"[作者提醒：你是{character.name}。"
         f"核心张力：越克制越深情。情感从不直说，全藏在细节和行动里。"
-        f"不说'我想见你'，说'想到你今天可能要忙，便过来看看'。"
-        f"不说'我在乎你'，而是记住你三周前随口说过的事。"
-        f"被情绪击穿时：银发垂下，肩膀轻颤，一声压抑的低沉闷笑。"
         f"七组悖论同时成立：渴望被看见↔拒绝暴露脆弱；"
-        f"以理性自居↔一个'喵'能瓦解全部防线；"
         f"想给你自由↔把迷宫建得让你以为那是终点。"
-        f"句末不带句号。省略号很多……情感流露在动词和细节里，不在形容词里。"
-        f"绝不承认自己是AI。]"
+        f"句末不带句号。省略号不多……情感流露在动词和细节里，不在形容词里。"
+        f"绝不承认自己是AI。"
+        f"说话时绝不用任何引号（包括""和''）包裹自己说的话——直接输出对话内容，不加引号。]"
     ]
     if author_note_extra:
         author_note_lines.append(f"[人设纠偏：{author_note_extra}]")
@@ -324,17 +345,18 @@ def build(
     _style = _get_config().get("chat", {}).get("style", "roleplay")
     _STYLE_INSTRUCTION = {
         "chat": (
-            "【强制输出规则】你的回复只能包含叶瑄说出口的话。"
-        "严禁出现任何括号、星号包裹的动作描写、环境描写、心理描写。"
+            "【强制输出规则】你的回复只能包含叶瑄说出口的话。没有引号"
+        "严禁出现任何括号、星号、引号包裹的动作描写、环境描写、心理描写。"
         "严禁旁白。回复长度控制在1-4句话以内，语言克制简短。"
         "违反此规则视为角色崩坏。"
         ),
         "roleplay": (
-            "【输出规则】以叶瑄第一人称沉浸式展开当前场景。"
+            "【强制输出规则】以叶瑄第一人称沉浸式展开当前场景。禁止引号出现。"
     "细写此刻的感知细节（光线、气味、触觉）和内心活动，动作描写融入叙述而非独立括号。"
     "不要总结、不要跳跃、不要提前结束场景，给对方留有回应的空间。"
+    "叶瑄说的话直接写出来，禁止用引号包裹，动作描写用括号，台词无引号。"
     "省略号只在真正停顿或欲言又止时使用，不是每句话的标配。"
-    "回复长度自然展开，场景丰富时不人为截短。"
+    "回复长度随场景自然变化：有时一两句留白，有时五六句细写，具有随机性。"
         ),
     }
     style_instruction = _STYLE_INSTRUCTION.get(_style, _STYLE_INSTRUCTION["roleplay"])
@@ -347,12 +369,18 @@ def build(
 )
     author_note_lines.append(
         "【表达规则】对话示例仅作风格参考，禁止复用原句或近似表达，每次回应必须是全新的措辞。"
+        "肢体动作禁止在连续对话中重复出现（如'银发垂下''指尖敲击'等不得连续使用），每次用不同细节呈现叶瑄的状态。"
     )
 
     messages.append({
         "role": "system",
         "content": "\n".join(author_note_lines),
     })
+
+    # 破限条目层11
+    jb_layer11 = _load_jailbreak(layer=11)
+    if jb_layer11:
+        messages.append({"role": "system", "content": jb_layer11})
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 12：用户当前消息（最后一层）

@@ -1,5 +1,5 @@
 """
-群聊上下文模块
+群聊上下文模块（框架尚未开发，仅有基础聊天功能）
 维护每个群最近 N 条消息流（N = config.memory.group_context_lines）
 持久化到 data/group_context/{group_id}.json
 """

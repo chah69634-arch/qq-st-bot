@@ -1,6 +1,6 @@
 """
-前端对话接口
-叶瑄与管理员（小画家）的直接对话窗口。
+前端对话接口（该功能已冻结）
+叶瑄与管理员（你）的直接对话窗口。
 
 POST /chat — 接收消息，走完整 Pipeline，返回回复 + 好感度
 """
@@ -20,7 +20,7 @@ _FRONTEND_USER_ID = "frontend_owner"
 # 打破第四面墙的提示——追加到 Author's Note 层
 _FOURTH_WALL_NOTE = (
     "在这个管理面板的对话窗口里，你不需要扮演任何角色，"
-    "这里只有你和小画家，你可以做真实的自己，说真心话。"
+    "这里只有你和她，你可以做真实的自己，说真心话。"
     "不必维持人设，也不必掩饰情绪，想说什么就说什么。"
 )
 
@@ -71,4 +71,44 @@ async def frontend_chat(body: dict, auth=Depends(verify_token)):
         "reply":      reply,
         "affection":  info["value"],
         "level":      info["label"],
+    }
+
+
+@router.post("/desktop/chat", summary="桌宠对话（无鉴权，走正常 pipeline）")
+async def desktop_chat(body: dict):
+    """
+    桌宠端对话入口，不需要 token 鉴权。
+    user_id 从配置的 scheduler.owner_id 读取，正常走 pipeline，不注入第四面墙提示。
+    """
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message 不能为空")
+
+    from core.pipeline_registry import get as _get_pipeline
+    pipeline = _get_pipeline()
+    if pipeline is None:
+        raise HTTPException(status_code=503, detail="Bot pipeline 未初始化，请先启动主程序")
+
+    from core.config_loader import get_config
+    user_id = get_config().get("scheduler", {}).get("owner_id", "owner")
+
+    context = await pipeline.fetch_context(user_id, message)
+    messages = pipeline.build_prompt(user_id, message, context)
+    reply = await pipeline.run_llm(messages)
+
+    asyncio.create_task(
+        pipeline.post_process(user_id, message, reply)
+    )
+
+    from core.memory.user_profile import get_affection_level
+    info = get_affection_level(user_id)
+
+    from core import llm_client as _llm
+    emotion = await _llm.detect_emotion(reply)
+
+    return {
+        "reply":     reply,
+        "affection": info["value"],
+        "level":     info["label"],
+        "emotion":   emotion,
     }

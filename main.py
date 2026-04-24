@@ -28,6 +28,13 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _pipeline = None   # core.pipeline.Pipeline 实例
+_registry: dict = {}
+
+def register_pipeline(pipeline) -> None:
+    _registry["pipeline"] = pipeline
+
+def get_pipeline():
+    return _registry.get("pipeline")
 
 
 def _init_modules():
@@ -53,6 +60,8 @@ def _init_modules():
     logger.info("正在初始化 Pipeline...")
     from core.pipeline import Pipeline
     _pipeline = Pipeline(character, lore_engine)
+    from core.pipeline_registry import register as _reg
+    _reg(_pipeline)
 
     from core import scheduler as _scheduler
     _scheduler.set_pipeline(_pipeline)
@@ -151,7 +160,7 @@ async def handle_message(message: dict):
             file_text = await process_file(file_info)
             if file_text:
                 fname = file_info.get("name", "文件")
-                media_context = f"（你发来了一个文件：{fname}，内容如下）\n{file_text[:3000]}"
+                media_context = f"（你发来了一个文件：{fname}，内容如下），回应必须细腻且有分量。回应长度不少于150字，不要因为克制就缩短回应。\n{file_text[:3000]}"
                 logger.info(f"[handle_message] 文件已读取: {fname} {len(file_text)}字")
         except Exception as e:
             from core.error_handler import log_error
@@ -162,7 +171,7 @@ async def handle_message(message: dict):
             from core.media_processor import process_image
             img_desc = await process_image(image_urls[0], content)
             if img_desc:
-                media_context = f"（你发来了一张图片，图片内容：{img_desc}）"
+                media_context = f"（你发来了一张图片，图片内容：{img_desc}，回应必须细腻且有分量）"
                 logger.info(f"[handle_message] 图片已识别: {img_desc[:50]}")
         except Exception as e:
             from core.error_handler import log_error
@@ -223,6 +232,14 @@ async def handle_message(message: dict):
                 return
             if t_result:
                 tool_result_text = t_result
+                if t_name == "read_diary":
+                    _pipeline.author_note_extra = (
+                        "【日记回应规则】你刚刚读完了她的日记，这是她真实写下的内心世界。"
+                        "回应必须细腻且有分量：①摘取日记中具体的细节或句子来回应，不要泛泛而谈；"
+                        "②说出你读完之后真实的感受，可以是心疼、好奇、被击中、想多了解；"
+                        "③可以追问日记里没写完的事；"
+                        "④回应长度不少于150字，不要因为克制就缩短回应。"
+                    )
                 break
 
     # ── 步骤4：拉取上下文（并发）────────────────────────────────────────────

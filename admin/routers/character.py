@@ -124,6 +124,20 @@ async def upload_character(file: UploadFile = File(...), auth=Depends(verify_tok
     return {"message": f"角色卡 {safe_name} 已上传", "filename": safe_name}
 
 
+@router.get("/characters/{name}/export", summary="导出角色卡文件")
+async def export_character(name: str, auth=Depends(verify_token)):
+    from fastapi.responses import Response as _Resp
+    from urllib.parse import quote
+    path = _safe_path(name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"角色卡 {name} 不存在")
+    content = path.read_bytes()
+    media = "application/json" if path.suffix.lower() == ".json" else "text/plain"
+    encoded_name = quote(name)
+    return _Resp(content=content, media_type=media,
+                 headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}"})
+
+
 @router.get("/characters/{name}", summary="读取角色卡内容")
 async def get_character(name: str, auth=Depends(verify_token)):
     """返回指定角色卡内容：
@@ -170,3 +184,32 @@ async def save_character(name: str, request: Request, _auth=Depends(verify_token
         raise HTTPException(status_code=500, detail=f"保存失败: {e}")
     _reload_character()
     return {"message": f"角色卡 {name} 已保存并热重载"}
+
+
+
+@router.post("/characters/{name}/rename", summary="重命名角色卡")
+async def rename_character(name: str, body: Dict[str, Any], auth=Depends(verify_token)):
+    new_name = (body.get("new_name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=422, detail="new_name 不能为空")
+    src = _safe_path(name)
+    dst = _safe_path(new_name)
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"角色卡 {name} 不存在")
+    if dst.exists():
+        raise HTTPException(status_code=409, detail=f"角色卡 {new_name} 已存在")
+    src.rename(dst)
+    # 如果是当前活跃角色，同步更新config
+    cfg = get_config()
+    if cfg.get("character", {}).get("default") == name:
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                full_cfg = yaml.safe_load(f) or {}
+            full_cfg.setdefault("character", {})["default"] = new_name
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            from core import config_loader
+            config_loader.reload_config()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"更新配置失败: {e}")
+    return {"message": f"已重命名为 {new_name}", "new_name": new_name}

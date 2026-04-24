@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from admin.routers import jailbreak_entries
 
 from core.config_loader import get_config
 
@@ -32,7 +33,7 @@ from admin.routers import (
     users, memory, relations,
     system, lorebook,
     settings_proxy, settings_llm, settings_misc,
-    qq_profile, character, chat,
+    character, chat,
     scheduler, watch,
 )
 
@@ -44,11 +45,11 @@ app.include_router(lorebook.router,       prefix="",           tags=["世界书"
 app.include_router(settings_proxy.router, prefix="",           tags=["设置-代理"])
 app.include_router(settings_llm.router,   prefix="",           tags=["设置-LLM"])
 app.include_router(settings_misc.router,  prefix="",           tags=["设置-杂项"])
-app.include_router(qq_profile.router,     prefix="",           tags=["QQ资料"])
 app.include_router(character.router,      prefix="",           tags=["角色卡"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
 app.include_router(scheduler.router,      prefix="",           tags=["调度器"])
 app.include_router(watch.router,          prefix="",           tags=["Watch"])
+app.include_router(jailbreak_entries.router, prefix="",        tags=["破限条目"])
 
 # 挂载静态资源
 if _STATIC_DIR.exists():

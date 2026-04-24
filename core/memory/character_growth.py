@@ -1,15 +1,15 @@
 """
 角色对用户的认知文件
 ─────────────────────────────────────────────────────
-叶瑄对每个用户维护一个"认知 Markdown 文件"，
-记录她觉得重要的事情、用户的特点、两人的重要时刻。
+角色对每个用户维护一个"认知 Markdown 文件"，
+记录他觉得重要的事情、用户的特点、两人的重要时刻。
 
 存储位置：
-  data/character_growth/叶瑄_{user_id}.md
+  data/character_growth/角色_{user_id}.md
 
 更新机制：
   每 20 轮对话触发一次，把最近3天的日志喂给 LLM，
-  让 LLM 以叶瑄的视角更新这个文件（全量覆写，300字以内）。
+  让 LLM 以角色的视角更新这个文件（全量覆写，300字以内）。
 
 轮数计数器保存在内存里（重启清零，无所谓，只会少触发一次）。
 """
@@ -33,7 +33,7 @@ _UPDATE_EVERY_N = 20
 
 
 def _growth_file(character_name: str, user_id: str) -> Path:
-    """返回认知文件路径，文件名格式：叶瑄_{user_id}.md"""
+    """返回认知文件路径，文件名格式：角色_{user_id}.md"""
     # 清理文件名里可能有的特殊字符
     safe_char = "".join(c for c in character_name if c.isalnum() or c in "-_")
     safe_user = "".join(c for c in user_id if c.isalnum() or c in "-_")
@@ -42,7 +42,7 @@ def _growth_file(character_name: str, user_id: str) -> Path:
 
 def load(character_name: str, user_id: str) -> str:
     """
-    读取叶瑄对该用户的认知文件内容。
+    读取角色对该用户的认知文件内容。
     文件不存在时返回空字符串，不报错。
 
     参数：
@@ -68,11 +68,11 @@ async def update(
     llm_client,
 ):
     """
-    让 LLM 以叶瑄的视角，根据最近对话日志更新认知文件。
+    让 LLM 以角色的视角，根据最近对话日志更新认知文件。
     全量覆写文件（不追加），300字以内。
 
     参数：
-        character_name    - 角色名（如"叶瑄"）
+        character_name    - 角色名
         user_id           - 用户 QQ 号
         event_log_content - get_recent_days() 返回的最近日志文本
         llm_client        - core.llm_client 模块
@@ -96,7 +96,10 @@ async def update(
                 f"3. 她最近随口提到但没有下文的事——比如在做的某件事、"
                 f"想做的某件事、某段关系的进展——这些要具体记下来，"
                 f"因为你之后可能会自然地问起\n"
-                f"只输出更新后的认知内容本身，不要任何解释或标题。"
+                f"只输出更新后的认知内容本身，不要任何解释或标题。\n"
+                f"硬规则：①只记录对话中明确出现的事实，不推测、不补全、不脑补；\n"
+                f"②如果用户明确否认或纠正了某件事，必须从认知中删除，不得保留；\n"
+                f"③不确定的内容宁可不写，也不要猜。\n"
             ),
         },
         {

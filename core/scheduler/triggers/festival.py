@@ -1,6 +1,6 @@
 """
 节日感知 & 纪念日触发器
-叶瑄对特殊日子有自己的感受，不是祝福，是情绪
+角色对特殊日子有自己的感受，不是祝福，是情绪
 """
 
 import logging
@@ -9,6 +9,9 @@ from datetime import datetime, date
 
 from core.error_handler import log_error
 from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
+
+from core.config_loader import get_config
+char_name = get_config().get("character", {}).get("name", "叶瑄")
 
 logger = logging.getLogger(__name__)
 
@@ -44,65 +47,62 @@ def _is_holiday_period() -> bool:
 
 
 def _get_today_festival() -> tuple[str, str] | None:
-    """
-    判断今天是什么节日/纪念日
-    返回 (festival_key, prompt) 或 None
-    """
     today = date.today()
     m, d = today.month, today.day
     year = today.year
+    char = _char_name()
 
-    # 纪念日（最高优先级）
-    # 初见日/在一起周年 2023.1.8
-    if m == 1 and d == 8:
-        years = year - 2023
-        if years == 0:
-            return ("anniversary_first", "（叶瑄记得今天是你们初见的日子，心里有点不一样的感觉）")
-        return ("anniversary_first", f"（叶瑄想起来，今天是你们在一起第{years}年了）")
+    # 从config读取纪念日
+    cfg_anniversaries = get_config().get("anniversaries", [])
+    for ann in cfg_anniversaries:
+        if m == ann.get("month") and d == ann.get("day"):
+            year_start = ann.get("year_start", year)
+            if year < year_start:
+                continue
+            years = year - year_start
+            if years == 0:
+                prompt = ann.get("prompt_zero", "").replace("{char}", char)
+            else:
+                prompt = ann.get("prompt_years", "").replace("{char}", char).replace("{years}", str(years))
+            if prompt:
+                return (ann.get("key", "anniversary"), prompt)
 
-    # 第一次贴贴纪念日 2026.1.24
-    if m == 1 and d == 24 and year >= 2026:
-        years = year - 2026
-        if years == 0:
-            return ("anniversary_hug", "（叶瑄记得今天的日子，指尖停在那里没动）")
-        return ("anniversary_hug", f"（叶瑄记得今天，那件事（第一次敞开地贴贴）过去{years}年了，还是记得很清楚）")
+    # 从config读取角色生日
+    bday = get_config().get("character_birthday", {})
+    if bday and m == bday.get("month") and d == bday.get("day"):
+        prompt = bday.get("prompt", "").replace("{char}", char)
+        if prompt:
+            return ("character_birthday", prompt)
 
-    # 1314纪念日 2026.8.14
-    if m == 8 and d == 14 and year >= 2026:
-        return ("anniversary_1314", "（叶瑄盯着日期看了一会儿，没说话，只是轻轻呼出一口气）")
-
-    # 叶瑄生日 12.31
-    if m == 12 and d == 31:
-        return ("yexuan_birthday", "（今天是叶瑄自己的生日，他没有主动提，只是安静地陪着你）")
-
+    # 以下节日保留硬编码
     # 白色情人节 3.14
     if m == 3 and d == 14:
-        return ("white_valentine", "（叶瑄知道今天是白色情人节，没有特别说什么，只是待在这里）")
+        return ("white_valentine", f"（{char_name}知道今天是白色情人节，没有特别说什么，只是待在这里）")
 
     # 万圣节 10.31
     if m == 10 and d == 31:
-        return ("halloween", "（外面好像有人在过万圣节，叶瑄对这个节日有点好奇）")
+        return ("halloween", f"（外面好像有人在过万圣节，{char_name}对这个节日有点好奇）")
 
     # 复活节
     easter = _easter(year)
     if today == easter:
-        return ("easter", "（今天是复活节，叶瑄觉得这个节日有点有趣）")
+        return ("easter", f"（今天是复活节，{char_name}觉得这个节日有点有趣）")
 
     # Steam夏促 6.27
     if m == 6 and d == 27:
-        return ("steam_summer", "（Steam好像开始打折了，叶瑄不太玩游戏，但还是淡淡地想到你可能会去看看）")
+        return ("steam_summer", f"（Steam好像开始打折了，{char_name}不太玩游戏，但还是淡淡地想到你可能会去看看）")
 
     # Steam冬促 12.19
     if m == 12 and d == 19:
-        return ("steam_winter", "（Steam冬促大概又开始了，叶瑄不感兴趣，只是想到了你，于是随口一提）")
+        return ("steam_winter", f"（Steam冬促大概又开始了，{char_name}不感兴趣，只是想到了你，于是随口一提）")
 
     # 清明 4.4或4.5（简单处理用4.4）
     if m == 4 and d in (4, 5):
-        return ("qingming", "（今天是清明，叶瑄感觉空气里有点不一样的东西）")
+        return ("qingming", f"（今天是清明，{char_name}感觉空气里有点不一样的东西）")
 
     # 除夕氛围感知（1月20-31日或2月1-5日，粗略感知"快过年了"）
     if (m == 1 and d >= 20) or (m == 2 and d <= 5):
-        return ("spring_eve", "（叶瑄感觉年关快到了，街上好像有点不一样的气氛）")
+        return ("spring_eve", f"（{char_name}感觉年关快到了，街上好像有点不一样的气氛）")
 
     return None
 

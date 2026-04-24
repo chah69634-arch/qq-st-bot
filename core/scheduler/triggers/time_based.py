@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _check_morning(force: bool = False):
-    """早安触发：7-9点，且 owner 今天还没说过话。force=True 跳过时间和对话检查"""
+    """早安触发：7-9点，且用户今天还没说过话。force=True 跳过时间和对话检查"""
     cfg = _cfg()
     if not cfg.get("morning_greeting", True):
         return
@@ -26,7 +26,7 @@ async def _check_morning(force: bool = False):
         if oid and _user_talked_today(oid):
             return
 
-    await _pipeline_send(f"（清晨，{_char_name()}看了看时间，想起你应该快起床了）")
+    await _pipeline_send(f"（清晨，{_char_name()}看了看时间，想着你应该快起床了）")
     _mark("morning_greeting")
     logger.info("[scheduler] 早安消息已发送")
 
@@ -142,10 +142,10 @@ async def _check_weather(force: bool = False):
         # 极端天气（最高优先级）
         if any(k in desc for k in ("暴雨", "大雨", "雷暴", "雷阵雨")) or precip > 10:
             prompt = f"（{_char_name()}看了一眼{location}的天气，外面在下大雨）"
-        elif temp >= 36:
-            prompt = f"（{_char_name()}看到{location}今天{temp}度，皱了皱眉）"
+        elif temp >= 30:
+            prompt = f"（{_char_name()}看到{location}今天{temp}度，皱了皱眉，并把温度告知给你）"
         elif temp <= -5:
-            prompt = f"（{_char_name()}看到{location}今天零下{abs(temp)}度，有点担心）"
+            prompt = f"（{_char_name()}看到{location}今天零下{abs(temp)}度，有点担心，并把温度告知给你）"
 
         # 氛围天气（次优先级）
         elif any(k in desc for k in ("雾", "霾", "大雾")):
@@ -175,7 +175,7 @@ async def _check_weather(force: bool = False):
 
 
 async def _check_daily_journal():
-    """每日手账：23点后，读取今天event_log，让叶瑄写一段心理活动发给你"""
+    """每日手账：23点后，读取今天event_log，让角色写一段心理活动发给你"""
     cfg = _cfg()
     if not cfg.get("enabled", True):
         return
@@ -189,7 +189,7 @@ async def _check_daily_journal():
         return
     try:
         await _pipeline_send(
-            "（深夜，叶瑄回想起今天和你说的话，提笔写下此刻的感受）",
+            "（深夜，叶瑄回想起今天和你说的话，提笔写下此刻的感受，并且一想到你，就忍不住写了很多）",
             search_query="今天"
         )
         _mark("daily_journal")

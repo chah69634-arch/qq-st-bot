@@ -81,6 +81,15 @@ tts:
   enabled: true                  # 是否启用语音合成
   probability: 0.3               # 触发语音的概率（0.0~1.0），0.3 = 30%
   api_url: http://127.0.0.1:9872 # GPT-SoVITS Gradio API 地址
+  top_k: 15
+  top_p: 1.0
+  temperature: 1.0
+  sample_steps: 8
+  pause_second: 0.3
+  how_to_cut: 凑四句一切
+  ref_free: false
+  if_freeze: false
+  if_sr: false
   ref_audio: /path/to/ref.wav    # 参考音频路径，填你准备好的 wav 文件绝对路径
   prompt_text: ''                # 参考音频对应的文字（可留空）
   speed: 1.0
@@ -173,3 +182,28 @@ scheduler:
   timenode: true
   festival: true
   holiday_boost: true
+
+anniversaries:
+  - key: "anniversary_first"
+    month: 1
+    day: 8
+    year_start: 2023
+    prompt_zero: "（{char}记得今天是你们初见的日子，心里有点不一样的感觉）"
+    prompt_years: "（{char}想起来，今天是你们在一起第{years}年了）"
+  - key: "anniversary_second"
+    month: 1
+    day: 24
+    year_start: 2026
+    prompt_zero: "（{char}记得今天的日子，指尖停在那里没动）"
+    prompt_years: "（{char}记得今天，那件事过去{years}年了，还是记得很清楚）"
+  - key: "anniversary_1314"
+    month: 8
+    day: 14
+    year_start: 2026
+    prompt_zero: "（{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）"
+    prompt_years: "（{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）"
+
+character_birthday:
+  month: 12
+  day: 31
+  prompt: "（今天是{char}自己的生日，他没有主动提，只是安静地陪着你）"

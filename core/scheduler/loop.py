@@ -155,8 +155,8 @@ async def _pipeline_send(prompt: str, search_query: str = ""):
 
         from core.scheduler.triggers.birthday import _is_birthday_period
         if _is_birthday_period():
-            prompt = prompt + "\n（今天是风谕的生日，4月24日）"
-        _states = ["在思考", "在翻阅她的日记", "在想她说过的话", "在看窗外", "在灵体出游看星空遗迹", "在家里"]
+            prompt = prompt + "\n（今天是她的生日，4月24日）"
+        _states = ["在思考", "在翻阅她的日记", "在想她说过的话", "在看窗外", "在灵体出游", "在家里"]
         prompt = prompt + f"\n（{_char_name()}此刻{random.choice(_states)}）"
         context = await _pipeline.fetch_context(oid, search_query or prompt)
         messages = _pipeline.build_prompt(oid, prompt, context)
@@ -209,7 +209,7 @@ async def _check_reminders():
         due = get_due_reminders(oid)
         for item in due:
             await _pipeline_send(
-                f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒小画家"
+                f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒她"
             )
             mark_done(oid, item["id"])
             logger.info(f"[scheduler] 备忘录提醒已发送: {item['content']}")
