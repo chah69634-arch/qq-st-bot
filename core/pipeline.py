@@ -68,6 +68,29 @@ class Pipeline:
         relation         = user_relation.get_relation(user_id)
         lore_entries     = self.lore_engine.match(content, history)
 
+        # 按当前话题筛选growth_content，减少无关注入
+        if growth_content and len(growth_content) > 200:
+            lines = growth_content.splitlines()
+            keywords = set(content[:20])
+            filtered = [l for l in lines if any(kw in l for kw in keywords)]
+            base = lines[:5]
+            extra = [l for l in filtered if l not in base]
+            growth_content = "\n".join(base + extra[:10])
+
+        # 情景记忆检索
+        from core.memory.episodic_memory import retrieve, format_for_prompt
+        episodic_memories = retrieve(
+            user_id=user_id,
+            topic=content,
+            emotion="",
+            top_k=3,
+        )
+        episodic_result = format_for_prompt(
+            episodic_memories,
+            char_name=self.character.name,
+            current_emotion="neutral",
+        )
+
         # 等待异步任务
         event_search_result = await event_search_task
         profile             = await profile_future
@@ -91,6 +114,7 @@ class Pipeline:
             "lore_entries":        lore_entries,
             "reminders":           reminders,
             "diary_context":       diary_context,
+            "episodic_result":     episodic_result,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -134,6 +158,7 @@ class Pipeline:
             current_time=_current_time,
             reminders=context.get("reminders", []),
             diary_context=context.get("diary_context", ""),
+            episodic_result=context.get("episodic_result", ""),
         )
         self.author_note_extra = ""
         return messages
@@ -258,6 +283,76 @@ class Pipeline:
                         )
         except Exception as e:
             log_error("pipeline.post_process.emotion", e)
+
+        # 情景记忆压缩（异步，不阻塞）
+        try:
+            asyncio.create_task(
+                self._compress_episode(user_id, content, reply)
+            )
+        except Exception as e:
+            log_error("pipeline.post_process.episodic", e)
+
+    async def _compress_episode(
+        self, user_id: str, user_content: str, reply: str
+    ) -> None:
+        """
+        对话结束后，用LLM把这轮对话压缩成一条情景记忆。
+        只在情绪强度非neutral时触发，避免平淡对话也写入。
+        """
+        import re
+        import json
+        import time
+        from core import llm_client
+        from core.memory.episodic_memory import write_episode
+        from core.error_handler import log_error
+        from core.config_loader import get_config
+
+        try:
+            char_name = get_config().get("character", {}).get("name", "叶瑄")
+
+            prompt = f"""请把下面这段对话压缩成{char_name}视角的一条情景记忆，用JSON格式回复，只输出JSON：
+{{
+  "summary": "用一句话描述发生了什么（{char_name}视角，15字以内）",
+  "yexuan_feeling": "他当时的感受（10字以内）",
+  "emotion_peak": "neutral/happy/sad/gentle/surprised/angry 中选一个",
+  "emotion_texture": "用一句话描述{char_name}那个瞬间真实的情绪质感，可以是复杂矛盾的，20字以内",
+  "emotion_arc": "这段对话里{char_name}的情绪是怎么流动的，10字以内，可留空",
+  "tags": ["3到5个关键词"],
+  "strength": 0到1之间的浮点数（情绪越强越高）
+}}
+
+用户说：{user_content}
+{char_name}回：{reply}"""
+
+            result = await llm_client.chat(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens_override=200,
+            )
+
+            result = re.sub(r"```json|```", "", result).strip()
+            data = json.loads(result)
+
+            # neutral且strength低就不写入，避免噪声
+            if data.get("emotion_peak") == "neutral" and data.get("strength", 0) < 0.4:
+                return
+
+            episode = {
+                "id": f"ep_{int(time.time())}",
+                "timestamp": time.time(),
+                "summary": data.get("summary", ""),
+                "yexuan_feeling": data.get("yexuan_feeling", ""),
+                "emotion_peak": data.get("emotion_peak", "neutral"),
+                "emotion_texture": data.get("emotion_texture", ""),
+                "emotion_arc": data.get("emotion_arc", ""),
+                "tags": data.get("tags", []),
+                "strength": data.get("strength", 0.5),
+                "retrieval_count": 0,
+                "last_retrieved": None,
+            }
+            write_episode(user_id, episode)
+
+        except Exception as e:
+            log_error("pipeline._compress_episode", e)
 
     async def _send_tts(self, text: str, target_id: str, is_group: bool, emotion: str = "neutral"):
         """异步 TTS 合成并通过 NapCat 发送语音消息，失败只记日志"""

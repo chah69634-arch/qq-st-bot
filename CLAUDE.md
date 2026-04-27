@@ -103,3 +103,6 @@ enabled: true
 ## 前端说明
 - 唯一前端文件：admin/static/index.html
 - 隐藏（不删除）：宠物页、与叶瑄页、群聊蒸馏
+
+## 角色说明
+- 用{_char_name()}指代角色叶瑄，且代词是"他"

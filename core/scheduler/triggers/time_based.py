@@ -196,3 +196,56 @@ async def _check_daily_journal():
         logger.info("[scheduler] 每日手账已发送")
     except Exception as e:
         log_error("scheduler._check_daily_journal", e)
+
+
+async def _check_episodic_decay():
+    """每日情景记忆衰减，23点后触发。"""
+    now = datetime.now()
+    if now.hour < 23:
+        return
+    if not _is_ready("episodic_decay"):
+        return
+    oid = _owner_id()
+    if not oid:
+        return
+    try:
+        from core.memory.episodic_memory import decay_all
+        decay_all(oid)
+        _mark("episodic_decay")
+        logger.info("[scheduler] 情景记忆衰减完成")
+    except Exception as e:
+        log_error("scheduler._check_episodic_decay", e)
+
+
+async def _check_spontaneous_recall():
+    """主动回忆：低频随机触发，叶瑄突然想起一段往事。"""
+    import random
+    if not _is_ready("spontaneous_recall"):
+        return
+    if random.random() > 0.10:
+        return
+    now = datetime.now()
+    if not (14 <= now.hour <= 22):
+        return
+    oid = _owner_id()
+    if not oid:
+        return
+    try:
+        from core.memory.episodic_memory import _load_memories
+        memories = _load_memories(oid)
+        if not memories:
+            return
+        candidates = [m for m in memories if m.get("strength", 0) > 0.5]
+        if not candidates:
+            return
+        chosen = random.choice(candidates)
+        summary = chosen.get("summary", "")
+        feeling = chosen.get("yexuan_feeling", "")
+        if not summary:
+            return
+        prompt = f"（{_char_name()}突然想起了一件事：{summary}，那时他{feeling}）"
+        await _pipeline_send(prompt)
+        _mark("spontaneous_recall")
+        logger.info(f"[scheduler] 主动回忆触发: {summary}")
+    except Exception as e:
+        log_error("scheduler._check_spontaneous_recall", e)

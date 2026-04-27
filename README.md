@@ -53,7 +53,7 @@ Python · FastAPI · NapCat (OneBot 11) · DeepSeek · GPT-SoVITS
 **安装**
 
 ```bash
-git clone https://github.com/your-username/qq-st-bot.git
+git clone https://github.com/chah69634-arch/qq-st-bot.git
 cd qq-st-bot
 pip install -r requirements.txt
 ```

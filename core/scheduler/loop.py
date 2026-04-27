@@ -46,6 +46,8 @@ _COOLDOWNS: dict[str, int] = {
     "timenode":            20 * 3600,
     "festival":            20 * 3600,
     "holiday_boost":        2 * 3600,
+    "episodic_decay":      20 * 3600,   # 情景记忆衰减：20小时
+    "spontaneous_recall":   4 * 3600,   # 主动回忆：4小时冷却
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
@@ -352,7 +354,8 @@ async def _loop():
             if cfg.get("enabled", True):
                 from core.scheduler.triggers.time_based import (
                     _check_morning, _check_night, _check_random_message,
-                    _check_weather, _check_daily_journal,
+                    _check_weather, _check_daily_journal, _check_episodic_decay,
+                    _check_spontaneous_recall,
                 )
                 from core.scheduler.triggers.diary import (
                     _check_diary_reminder, _check_diary_inject, _check_diary_share_reminder,
@@ -368,6 +371,8 @@ async def _loop():
                 await _check_diary_reminder()
                 await _check_diary_inject()
                 await _check_daily_journal()
+                await _check_episodic_decay()
+                await _check_spontaneous_recall()
                 await _check_diary_share_reminder()
                 from core.scheduler.triggers.memory import _check_topic_followup
                 await _check_topic_followup()

@@ -58,6 +58,7 @@ def build(
     current_time: str = "",
     reminders: list = None,
     diary_context: str = "",
+    episodic_result: str = "",
 ) -> list[dict]:
     """
     组装完整的 prompt 消息列表
@@ -270,7 +271,7 @@ def build(
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 6a：叶瑄对该用户的认知（来自 character_growth.md，100% 注入）
-    # 这是叶瑄自己的"印象笔记"，用她的视角写的，直接注入原文
+    # 这是叶瑄自己的"印象笔记"，用他的视角写的，直接注入原文
     # ─────────────────────────────────────────────────────────────────────────
     if growth_content:
         messages.append({
@@ -288,8 +289,15 @@ def build(
             "content": f"【相关往事】\n{event_search_result}",
         })
 
+    # 层 6c：情景记忆（叶瑄视角的情节片段）
+    if episodic_result:
+        messages.append({
+            "role": "system",
+            "content": f"【叶瑄记得的片段】\n{episodic_result}",
+        })
+
 # ──────────────────────────────────────────────────────────────────────────
-    # 层 6c：日记上下文（独立存储，不参与检索，单独注入）
+    # 层 6d：日记上下文（独立存储，不参与检索，单独注入）
     # ──────────────────────────────────────────────────────────────────────────
     if diary_context:
         messages.append({
@@ -447,6 +455,7 @@ class PromptBuilder:
         current_time: str = "",
         reminders: list = None,
         diary_context: str = "",
+        episodic_result: str = "",
     ) -> list:
         return build(
             character=character,
@@ -466,4 +475,5 @@ class PromptBuilder:
             current_time=current_time,
             reminders=reminders,
             diary_context=diary_context,
+            episodic_result=episodic_result,
         )
