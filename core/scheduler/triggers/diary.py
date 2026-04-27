@@ -59,7 +59,7 @@ async def _check_diary_inject():
 
 
 async def _check_diary_share_reminder():
-    """超过3天没看到日记分享时，叶瑄不经意提一句"""
+    """超过3天没看到日记分享时，角色超不经意提一句"""
     cfg = _cfg()
     if not cfg.get("enabled", True):
         return

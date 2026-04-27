@@ -115,6 +115,15 @@ async def _search_diary_wrapper(user_id: str, query: str = "") -> str:
     return await search_diary_for_user(user_id, query)
 
 
+async def _exit_yandere_wrapper() -> str:
+    import json
+    from pathlib import Path
+    signal_file = Path(__file__).parent.parent.parent / "Emerald-desktop" / "data" / "yandere_exit.signal"
+    signal_file.parent.mkdir(parents=True, exist_ok=True)
+    signal_file.write_text(json.dumps({"exit": True}), encoding="utf-8")
+    return "叶瑄平静下来了"
+
+
 _TOOL_REGISTRY["get_time"] = {
     "func": _get_current_time,
     "description": "获取当前准确时间，当用户询问时间、日期时调用.不确定时间时优先调用此工具,禁止猜测。",
@@ -246,6 +255,17 @@ _TOOL_REGISTRY["search_diary"] = {
                 "description": "搜索关键词，如'失眠'、'焦虑'、'考试'，不填返回最近日记片段",
             },
         },
+        "required": [],
+    },
+}
+
+_TOOL_REGISTRY["exit_yandere"] = {
+    "func": _exit_yandere_wrapper,
+    "description": "当叶瑄决定从病娇状态平静下来时调用，通常是用户说了让她安心的话之后。由叶瑄自主判断是否调用，不需要用户明确要求。",
+    "dangerous": False,
+    "parameters": {
+        "type": "object",
+        "properties": {},
         "required": [],
     },
 }

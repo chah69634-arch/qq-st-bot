@@ -189,7 +189,7 @@ async def _check_daily_journal():
         return
     try:
         await _pipeline_send(
-            "（深夜，叶瑄回想起今天和你说的话，提笔写下此刻的感受，并且一想到你，就忍不住写了很多）",
+            "（深夜，他回想起今天和你说的话，提笔写下此刻的感受，并且一想到你，就忍不住写了很多）",
             search_query="今天"
         )
         _mark("daily_journal")

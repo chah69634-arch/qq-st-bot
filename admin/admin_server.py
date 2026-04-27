@@ -34,7 +34,7 @@ from admin.routers import (
     system, lorebook,
     settings_proxy, settings_llm, settings_misc,
     character, chat,
-    scheduler, watch,
+    scheduler, watch, agent,
 )
 
 app.include_router(users.router,          prefix="/users",     tags=["用户"])
@@ -50,6 +50,7 @@ app.include_router(chat.router,           prefix="",           tags=["对话"])
 app.include_router(scheduler.router,      prefix="",           tags=["调度器"])
 app.include_router(watch.router,          prefix="",           tags=["Watch"])
 app.include_router(jailbreak_entries.router, prefix="",        tags=["破限条目"])
+app.include_router(agent.router,            prefix="",           tags=["Agent"])
 
 # 挂载静态资源
 if _STATIC_DIR.exists():

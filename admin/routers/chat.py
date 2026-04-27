@@ -112,3 +112,38 @@ async def desktop_chat(body: dict):
         "level":     info["label"],
         "emotion":   emotion,
     }
+
+@router.post("/desktop/trigger", summary="桌宠触发QQ回复（无鉴权）")
+async def desktop_trigger(body: dict):
+    """
+    QQ在前台时，桌宠消息走这个接口。
+    走完整pipeline后通过NapCat发送到QQ，不返回气泡内容。
+    """
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message 不能为空")
+
+    from core.pipeline_registry import get as _get_pipeline
+    pipeline = _get_pipeline()
+    if pipeline is None:
+        raise HTTPException(status_code=503, detail="Bot pipeline 未初始化")
+
+    from core.config_loader import get_config
+    user_id = str(get_config().get("scheduler", {}).get("owner_id", ""))
+    if not user_id:
+        raise HTTPException(status_code=503, detail="owner_id 未配置")
+
+    context = await pipeline.fetch_context(user_id, message)
+    messages = pipeline.build_prompt(user_id, message, context)
+    reply = await pipeline.run_llm(messages)
+
+    if reply:
+        from core.output import text_output
+        from core import response_processor
+        segments = response_processor.process(reply, pipeline.character.name)
+        await text_output.send(user_id, segments, is_group=False)
+        asyncio.create_task(
+            pipeline.post_process(user_id, message, reply)
+        )
+
+    return {"status": "sent"}
