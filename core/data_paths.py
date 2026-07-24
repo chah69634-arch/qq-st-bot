@@ -183,6 +183,13 @@ class DataPaths:
     def agent_actions(self) -> Path:
         return self._p("runtime", "agent_actions.json")
 
+    def phone_control_tasks(self) -> Path:
+        """data/runtime/phone_control_tasks.json — 手机自动化任务 session 状态
+
+        (task_id -> {step, created_at, status})，供 /phone_control/step 做步数上限/超时判定。
+        """
+        return self._p("runtime", "phone_control_tasks.json")
+
     # ── 日志 / 状态 ────────────────────────────────────────────────────────────
     def error_log(self) -> Path:
         return self._p("logs", "error.log")

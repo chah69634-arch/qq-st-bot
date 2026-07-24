@@ -163,6 +163,9 @@ REGISTRY: dict[str, PathMeta] = {
     # ── runtime: global safe/danger mode flag ─────────────────────────────────
     "meta_mode":              PathMeta("runtime",   "shared",          "global",        "ignore"),
 
+    # ── runtime: phone_control 任务状态（单文件，按 task_id 存所有活跃/终态任务）──
+    "phone_control_tasks":    PathMeta("runtime",   "shared",          "global",        "ignore"),
+
     # ── runtime: prompt 层级消融开关（CC 任务 23 · B，fail-open 重建）─────────
     "prompt_layer_ablation":  PathMeta("runtime",   "shared",          "global",        "ignore"),
 

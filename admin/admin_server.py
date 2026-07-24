@@ -52,6 +52,7 @@ from admin.routers import (
     group, group_dream, relationship_facts,
     transcribe, provenance,
     auth_tokens, coplay, perception, spend, growth, observability,
+    phone_control,
 )
 
 # chess 路由依赖 python-chess（requirements-full.txt 的可选依赖，见 cc-tasks/92 §1），
@@ -94,6 +95,7 @@ app.include_router(dream_seed.router, prefix="/activity", tags=["梦境预构活
 app.include_router(diary.router,     prefix="/diary",     tags=["日记"])
 app.include_router(chat_log.router,  prefix="/chat-log",  tags=["聊天日志"])
 app.include_router(mobile.router,    prefix="",           tags=["手机端"])
+app.include_router(phone_control.router, prefix="",        tags=["手机自动化"])
 app.include_router(dream.router,     prefix="",           tags=["梦境"])
 app.include_router(hidden_state_debug.router, prefix="", tags=["观测"])
 app.include_router(observe.router,            prefix="", tags=["观测"])

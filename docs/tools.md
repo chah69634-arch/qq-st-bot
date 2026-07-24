@@ -224,7 +224,7 @@ fs_access:
   UTF-8 优先，失败尝试 GBK。超 `max_read_chars` 截断并注明字数，v1 不做分页偏移。
 - **探针不覆盖 fs 类**：`get_probe_prompt()` 只拼 info/desktop 两类，`fs` 类工具只经
   tool loop（Path C）暴露，理由同 MCP——多步浏览本来就是 loop 行为。
-- **不受安全/危险模式闸约束**：`_MODE_RESTRICTED_CATEGORIES` 只含 `desktop`/`system`，
+- **不受安全/危险模式闸约束**：`_MODE_RESTRICTED_CATEGORIES` 含 `desktop`/`system`/`phone_control`，
   `fs` 类不在其中——门控完全交给自身的 `enabled`/`allow_roots`/`deny_names`，不需要额外
   切到危险模式。
 - **action_trace 自动生效**：`trace_args: ["path"]`（路径本身已在 allowlist 内，不敏感，
@@ -380,6 +380,22 @@ Path C 多步调用复用同一次探测结果。
 | `device_shutdown` | 关机 | `dangerous=True`，需用户确认，默认关闭 |
 | `device_sleep` | 睡眠 | `dangerous=True`，需用户确认，默认关闭 |
 | `exit_yandere` | 他从病娇状态平静 | 旧客户端兼容：向 `Emerald-desktop` 写信号文件；PresenceKit-desktop 当前不消费该信号，未配置旧客户端时无可见效果 |
+
+### phone_control 类（不走探针，只经 tool loop）
+
+| 工具名 | 用途 | 备注 |
+|---|---|---|
+| `phone_control_start` | 发起一次手机自动化任务（导航外卖/购物到支付确认页、操作无开放 API 的第三方 App） | `dangerous=True`，需用户确认 + danger-mode 门禁；只负责把任务派给手机（写 `mobile_queue` + `behavior_id=phone_control_task`），真正的截屏/点击循环在设备本地跑，见 `docs/protocols/phone-control-protocol.md`（Emerald-mobile 仓库）。**绝不自动完成支付/提交订单/确认收货**——遇到密码/支付/银行类页面，后端 `core/phone_control/sensitive_filter.py` 和设备本地各自独立拦截，命中任一方即停。默认不在 `tool_loop.categories` 里，需要显式在角色 `presence_ext.tool_categories` 或全局配置里加上才会暴露给 LLM。 |
+
+新增子系统：`core/phone_control/`（`sensitive_filter.py` 敏感页面拦截、`vision_client.py` 视觉模型调用、`task_state.py` 步数/超时状态）+ 三个端点（`admin/routers/phone_control.py`）：
+
+| 端点 | scope | 用途 |
+|---|---|---|
+| `POST /phone_control/step` | `chat` | 设备侧循环每步调用，上报观察换回下一步动作 |
+| `GET /phone_control/status` | `chat` | 只读诊断：`tool_enabled`（活跃角色 `tool_categories` 是否含 `phone_control`）+ `vision_configured`（视觉模型 base_url/model 是否都已填）+ `char_id`，供手机端能力页展示 |
+| `POST /phone_control/debug/start` | `chat` | 调试用：跳过 LLM 判断和 chat 内二次确认，直接调 `tool_dispatcher._phone_control_start_wrapper()` 发起任务；**仍然过danger-mode 门禁**（复用 `tool_dispatcher._current_mode()`），不因为是调试端点就放宽 |
+
+视觉模型走 `config.yaml` 的 `vision`（或专用 `phone_control_vision` 覆盖）段，与 `core/perception/vlm_client.py` 共用同一种 OpenAI-compatible 调用方式。当前已配置：`vision` 段用 GLM-4V（免费档，通用视觉观察够用），`phone_control_vision` 单独覆盖 `model: glm-4.6v`（智谱 2026-12 发布，原生带 function call/grounding，读取点击坐标更准，价格反而比上一代 glm-4.5v 低一半），`api_key`/`base_url` 继承自 `vision` 段不用重复填。叶瑄角色卡 `presence_ext.tool_categories` 已加入 `phone_control`（连带保留了原有的 `mcp`，否则会静默丢失 `cedar_toy` 工具访问）。
 
 ### fs 类（不走探针，只经 tool loop）
 
