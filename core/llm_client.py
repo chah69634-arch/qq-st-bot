@@ -338,6 +338,27 @@ class ChatTurn:
     assistant_message: dict     # 原样 API assistant 消息（含 tool_calls），供回填 messages
 
 
+# 全角竖线"｜"——DeepSeek 等模型的工具调用内部 special token（如
+# <｜tool▁calls▁begin｜>）用这个字符包裹分隔符，正常对话文本几乎不会用到。
+_LEAKED_TOOL_TOKEN_CHAR = "｜"
+_LEAKED_TOOL_TOKEN_MIN_COUNT = 2
+
+
+def _looks_like_leaked_tool_call_markup(text: str) -> bool:
+    """探测 content 里是否混进了模型自己的工具调用内部 special token，没被网关
+    正确解析进结构化 tool_calls 字段、原样漏进了普通文本（Brief 122 排查
+    cedar_toy 时发现的新故障：`finish_reason` 没标 tool_calls，`content` 里却是一段
+    以 `<｜...｜>` 形式包裹的内部 token）。
+
+    刻意不针对某一个具体模型/版本的具体 token 名字做匹配——不同模型内部命名
+    不同（这次是 deepseek-v4-pro，以后可能是别的、名字也可能变），只认这类
+    token 的共同特征：用全角竖线"｜"包裹分隔符。这个字符在正常中文/英文对话
+    文本里几乎不会出现，出现两次以上就宁可判过、丢弃这段 content，也不放过
+    一次泄漏——展示给用户比误判更糟。
+    """
+    return bool(text) and text.count(_LEAKED_TOOL_TOKEN_CHAR) >= _LEAKED_TOOL_TOKEN_MIN_COUNT
+
+
 async def chat_turn(
     messages: list[dict],
     tools: list[dict],
@@ -410,8 +431,24 @@ async def chat_turn(
                 "arguments": json.loads(tc.function.arguments),
             })
 
+    content = thinking.strip_think_tags(message.content) or ""
+    if not tool_calls and _looks_like_leaked_tool_call_markup(content):
+        # 网关这一步没能把模型自己的工具调用内部 token 解析成结构化 tool_calls，
+        # 原始 token 直接漏进了 content——不能把这个当成真的自然语言回复展示给
+        # 用户。丢弃并按空内容处理，复用 run_agentic_loop 里已有的"空回复→不带
+        # tools 强制重新生成"兜底（该分支已覆盖"网关偶发返回既无 content 也无
+        # tool_calls"的情况，这次泄漏是同一类问题的另一种表现，不需要在
+        # pipeline.py 里另开分支）。
+        logger.warning(
+            "[llm_client.chat_turn] content 疑似混进模型工具调用内部 token（网关"
+            "未解析成 tool_calls），丢弃并按空内容处理: %r",
+            content[:200],
+        )
+        content = ""
+        assistant_message.pop("content", None)
+
     return ChatTurn(
-        content=thinking.strip_think_tags(message.content) or "",
+        content=content,
         tool_calls=tool_calls,
         assistant_message=assistant_message,
     )
