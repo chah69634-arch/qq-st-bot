@@ -414,3 +414,78 @@ class TestOwnerTaskLifecycle:
         await caller_task
 
         assert "srv1" not in mc._servers
+
+
+# ── Brief 122：MCP 业务错误原话回填,而不是套通用兜底文案 ────────────────────
+#
+# 排查 cedartoy「command 参数必填」时发现：execute() 之前把任何异常统一转成
+# "工具暂时不可用"，把服务器已经讲清楚"缺了什么"的具体错误吞掉了，模型没法
+# 据此自我纠正重试。现在 _format_result() 因 result.isError 抛出的
+# RuntimeError("MCP 工具返回错误: ...") 会被原话回填；其他 RuntimeError（连接/
+# 重连失败）继续走通用兜底，不把基础设施细节暴露给模型。
+
+class _NoConfirmSession:
+    status = "idle"
+
+
+class TestMcpServerErrorPassthrough:
+    def _register_fake_tool(self, monkeypatch, *, raises: Exception):
+        async def _func(**kwargs):
+            raise raises
+
+        monkeypatch.setitem(td._TOOL_REGISTRY, "mcp__cedar_toy__play", {
+            "func": _func,
+            "description": "测试用",
+            "dangerous": False,
+            "category": "mcp",
+            "parameters": {"type": "object", "properties": {}},
+        })
+
+    async def test_server_business_error_passed_through_verbatim(self, monkeypatch, sandbox):
+        self._register_fake_tool(
+            monkeypatch,
+            raises=RuntimeError("MCP 工具返回错误: 【cedartoy】command 参数必填"),
+        )
+
+        result, confirm = await td.execute(
+            "mcp__cedar_toy__play", {"game": "fishing", "action": "cast"},
+            "owner", "owner", False, _NoConfirmSession(),
+            origin="assistant_loop", char_id="yexuan",
+        )
+
+        assert confirm is None
+        assert result == "工具调用未成功：【cedartoy】command 参数必填"
+
+    async def test_infra_error_falls_back_to_generic_fallback(self, monkeypatch, sandbox):
+        self._register_fake_tool(
+            monkeypatch,
+            raises=RuntimeError("MCP 工具调用失败且重连未恢复: 连接超时"),
+        )
+
+        result, confirm = await td.execute(
+            "mcp__cedar_toy__play", {"game": "fishing", "action": "cast"},
+            "owner", "owner", False, _NoConfirmSession(),
+            origin="assistant_loop", char_id="yexuan",
+        )
+
+        assert confirm is None
+        # 基础设施故障没有可操作的具体原因，不应把内部异常文本暴露给模型。
+        assert result == "工具暂时不可用"
+
+
+class TestMcpServerReportedErrorHelper:
+    def test_matches_format_result_prefix(self):
+        e = RuntimeError("MCP 工具返回错误: 【cedartoy】command 参数必填")
+        assert td._mcp_server_reported_error(e) == "【cedartoy】command 参数必填"
+
+    def test_non_runtime_error_returns_none(self):
+        e = ValueError("MCP 工具返回错误: 不算数")
+        assert td._mcp_server_reported_error(e) is None
+
+    def test_unrelated_runtime_error_returns_none(self):
+        e = RuntimeError("MCP server 'cedar_toy' 未连接")
+        assert td._mcp_server_reported_error(e) is None
+
+    def test_empty_text_after_prefix_returns_none(self):
+        e = RuntimeError("MCP 工具返回错误: ")
+        assert td._mcp_server_reported_error(e) is None

@@ -199,7 +199,7 @@ from pathlib import Path as _Path
 
 # ─── 全局模式闸 ─────────────────────────────────────────────────────────────────
 
-_MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system"})
+_MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "phone_control"})
 _DANGER_MODE_TTL_SECONDS: int = 7200  # 2 小时后自动回 safe
 
 
@@ -227,7 +227,10 @@ def _current_mode() -> str:
 def _mode_gate(tool_name: str) -> str | None:
     """返回拒绝文案（模式闸命中），或 None（放行）。"""
     spec = _TOOL_REGISTRY.get(tool_name, {})
-    if spec.get("category") in _MODE_RESTRICTED_CATEGORIES and _current_mode() != "danger":
+    category = spec.get("category")
+    if category in _MODE_RESTRICTED_CATEGORIES and _current_mode() != "danger":
+        if category == "phone_control":
+            return "现在是安全模式，我不能操作你的手机。要先在设置里开启危险模式哦。"
         return "现在是安全模式，我不能操作你的电脑。要先在设置里开启危险模式哦。"
     return None
 
@@ -351,6 +354,34 @@ async def _exit_yandere_wrapper() -> str:
     signal_file.parent.mkdir(parents=True, exist_ok=True)
     signal_file.write_text(json.dumps({"exit": True}), encoding="utf-8")
     return f"{get_active_char_name()}平静下来了"
+
+
+async def _phone_control_start_wrapper(task: str = "", *, user_id: str, char_id: str) -> str:
+    """发起一次手机自动化任务：只负责把任务派给手机（写 mobile_queue + behavior），
+
+    真正的截屏/点击循环在设备本地跑，见 admin/routers/phone_control.py 和
+    docs/protocols/phone-control-protocol.md（Emerald-mobile 仓库）。dangerous=True，
+    调用前已经过一轮 chat 内确认；danger-mode 门禁在 _mode_gate() 里做，这里不用重复判断。
+    """
+    task = (task or "").strip()
+    if not task:
+        return "没听清楚要在手机上做什么，没法开始。"
+
+    from channels import registry
+    mobile_ch = registry.get("mobile")
+    if mobile_ch is None:
+        return "手机通道当前不可用，没法操作手机。"
+
+    from uuid import uuid4
+    from core.phone_control import task_state
+
+    task_id = uuid4().hex
+    task_state.start_task(task_id, user_id, task)
+    behavior = {"behavior_id": "phone_control_task", "task_id": task_id, "task": task}
+    await mobile_ch.send_with_behavior(
+        f"我去帮你操作一下手机：{task}", user_id, behavior, char_id=char_id,
+    )
+    return f"已经把任务派给手机了：{task}。手机上确认之后就会开始，过程随时能取消，遇到密码/支付页会自动停下来。"
 
 
 async def _toy_vibrate_wrapper(
@@ -767,6 +798,31 @@ _TOOL_REGISTRY["exit_yandere"] = {
         "properties": {},
         "required": [],
     },
+}
+
+_TOOL_REGISTRY["phone_control_start"] = {
+    "func": _phone_control_start_wrapper,
+    "description": (
+        "在用户手机上发起一次多步自动化操作任务，比如帮忙导航外卖/购物 App 到支付确认页、"
+        "或操作某个没有开放 API 的第三方 App（比如玩具官方 App）。仅在用户明确要求时调用。"
+        "只负责导航和填写，遇到密码、支付、验证码、银行等敏感页面会自动停下来交还给用户，"
+        "绝不会自动完成支付、提交订单或确认收货——这是硬性边界，不是可以商量的建议。"
+    ),
+    "dangerous": True,
+    "category": "phone_control",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "task": {
+                "type": "string",
+                "description": "要在手机上完成的具体任务，例如「打开美团把购物车里的奶茶下单到支付确认页」。",
+            },
+        },
+        "required": ["task"],
+    },
+    "examples": ["帮我在美团上点杯奶茶", "帮我操作一下那个玩具App", "帮我把购物车结算到支付页就行"],
+    "keywords": ["帮我点", "帮我操作手机", "自动下单", "帮我买", "帮我点外卖"],
+    "trace_args": ["task"],
 }
 
 _TOOL_REGISTRY["water_garden"] = {
@@ -1240,6 +1296,25 @@ def _log_execute_failure_context(tool_name: str, tool_args: dict, origin: str) -
     )
 
 
+_MCP_SERVER_ERROR_PREFIX = "MCP 工具返回错误: "
+
+
+def _mcp_server_reported_error(e: Exception) -> str | None:
+    """从异常里抠出 MCP 服务器自己给出的具体错误文案（Brief 122）。
+
+    只认 core/mcp_client.py::_format_result() 在 result.isError 时抛出的
+    ``RuntimeError(f"MCP 工具返回错误: {text}")`` 这一种——这是服务器业务逻辑主动
+    说清楚"缺了什么/为什么拒绝"（如"command 参数必填"），模型看到原话大概率能在
+    下一步自己纠正重试。_call_tool() 里连接失败/超时/重连未恢复包出来的其他
+    RuntimeError（"MCP 工具调用失败: ..."/"MCP server 未连接" 等）是我们这边的
+    基础设施问题，不代表服务器业务层给出了可操作的具体原因，继续走通用兜底文案，
+    不把内部异常细节暴露给模型。
+    """
+    if isinstance(e, RuntimeError) and str(e).startswith(_MCP_SERVER_ERROR_PREFIX):
+        return str(e)[len(_MCP_SERVER_ERROR_PREFIX):].strip() or None
+    return None
+
+
 async def execute(
     tool_name: str,
     tool_args: dict,
@@ -1372,7 +1447,10 @@ async def execute(
             "get_profile", "get_episodic",
         ):
             result = await func(user_id=user_id, **tool_args)
-        elif tool_name in ("revise_memory", "forget_episodic", "clear_midterm", "revise_user_profile"):
+        elif tool_name in (
+            "revise_memory", "forget_episodic", "clear_midterm", "revise_user_profile",
+            "phone_control_start",
+        ):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name == "web_search":
             result = await func(uid=user_id, char_id=char_id, **tool_args)
@@ -1418,6 +1496,14 @@ async def execute(
     except Exception as e:
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)
+        server_reason = _mcp_server_reported_error(e)
+        if server_reason:
+            # Brief 122：服务器业务层明确说了缺什么/为什么拒绝（如"command 参数
+            # 必填"），把原话给模型而不是套通用兜底——模型大概率能在下一步自己
+            # 带上缺的参数重试，尤其是在 120 号的工具循环里。
+            result_text = f"工具调用未成功：{server_reason}"
+            _trace("failed", result_text)
+            return result_text, None
         fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
         _trace("failed", fallback)
         return fallback, None
@@ -1427,6 +1513,7 @@ def _build_confirm_ask(tool_name: str, tool_args: dict) -> str:
     descriptions = {
         "device_shutdown": f"关机（{tool_args.get('delay_seconds', 60)}秒后）",
         "device_sleep": "让设备进入睡眠",
+        "phone_control_start": f"在你手机上自动操作：{tool_args.get('task', '')}",
     }
     action = descriptions.get(tool_name, tool_name)
     return f"你确定要{action}吗？回复\"确认\"来执行，回复其他内容取消。"

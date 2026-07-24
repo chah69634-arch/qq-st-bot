@@ -555,6 +555,33 @@ async def test_nudge_hint_teaches_tail_brace_convention(monkeypatch):
     assert "{false" in nudge["content"]
 
 
+# ── 12c. nudge_hint 必须明确"调用工具不等于把调用过程念出来"（Brief 122）────
+#
+# 用户说"去调用工具玩一下"这类话时，模型容易把"调用工具"当成可以叙述的动作
+# （roleplay 风格本来就鼓励把动作写进（）），从而把工具名/参数/调用语法当台词
+# 或动作描写输出，而不是走真正的结构化 tool_calls。必须显式划清。
+
+@pytest.mark.asyncio
+async def test_nudge_hint_forbids_narrating_tool_call_as_dialogue(monkeypatch):
+    from core.llm_client import ChatTurn
+
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="ok", tool_calls=[], assistant_message={"role": "assistant", "content": "ok"}),
+    ])
+    _script_execute(monkeypatch, [])
+
+    pipeline = _make_pipeline()
+    await pipeline.run_agentic_loop(
+        [{"role": "user", "content": "去调用工具玩一下"}], uid="u1", char_id="yexuan", session_state=object(),
+    )
+
+    nudge = next(m for m in chat_turn_calls[0]["messages"] if m.get("_layer") == "11.5_tool_nudge")
+    assert "系统内部静默完成" in nudge["content"]
+    assert "不是说给对方听" in nudge["content"]
+
+
 # ── 13. Brief 120·工具循环二次调用兜底（尾部花括号方案）────────────────────
 #
 # 覆盖 cc-tasks/120-工具循环二次调用兜底-尾部花括号方案.md §4 的验收要求：
