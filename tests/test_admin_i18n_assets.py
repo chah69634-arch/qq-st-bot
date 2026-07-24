@@ -2,6 +2,7 @@ from pathlib import Path
 from html.parser import HTMLParser
 import re
 
+from admin_static_assets import read_admin_client_source
 
 ROOT = Path(__file__).parents[1]
 INDEX = ROOT / "admin" / "static" / "index.html"
@@ -69,7 +70,7 @@ class _VisibleChineseParser(HTMLParser):
 
 
 def test_i18n_runtime_is_wired_with_persistent_chinese_default():
-    index = INDEX.read_text(encoding="utf-8")
+    index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
 
     assert '<script src="/static/i18n.js"></script>' in index
@@ -91,7 +92,7 @@ def test_i18n_javascript_is_served_with_an_executable_mime_type():
 
 
 def test_all_navigation_links_use_semantic_i18n_keys():
-    index = INDEX.read_text(encoding="utf-8")
+    index = read_admin_client_source()
     nav = re.search(r"<nav>(.*?)</nav>", index, re.S)
     assert nav is not None
 
@@ -104,7 +105,7 @@ def test_all_navigation_links_use_semantic_i18n_keys():
 
 
 def test_status_page_and_feature_flags_use_semantic_i18n_keys():
-    index = INDEX.read_text(encoding="utf-8")
+    index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
     status = re.search(
         r'<div class="page active" id="page-status">(.*?)'
@@ -154,7 +155,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
 
 
 def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():
-    index = INDEX.read_text(encoding="utf-8")
+    index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
     page = re.search(
         r'<div class="page" id="page-observe-group-arbiter">(.*?)'
@@ -184,7 +185,7 @@ def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():
 
 
 def test_setup_page_and_common_empty_state_are_localized():
-    index = INDEX.read_text(encoding="utf-8")
+    index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
     page = re.search(
         r'<div class="page" id="page-setup">(.*?)'
@@ -249,7 +250,7 @@ def test_every_static_visible_chinese_string_is_localized_or_authored_content():
 
 
 def test_legacy_bridge_localizes_dynamic_dom_and_protects_raw_content():
-    index = INDEX.read_text(encoding="utf-8")
+    index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
 
     assert "function translateUiText(value, allowFragments=false)" in runtime

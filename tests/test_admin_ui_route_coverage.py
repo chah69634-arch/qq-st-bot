@@ -18,6 +18,8 @@
 import re
 from pathlib import Path
 
+from admin_static_assets import read_admin_client_source
+
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_FILE = ROOT / "admin/admin_server.py"
 ROUTERS_DIR = ROOT / "admin/routers"
@@ -162,7 +164,7 @@ def test_no_admin_ui_whitelist_entries_are_stale():
 
 def test_write_routes_are_referenced_in_admin_ui_or_whitelisted():
     """admin/routers/*.py 里的每个写接口，要么被 index.html 引用，要么在白名单里写明理由。"""
-    index_source = INDEX_FILE.read_text(encoding="utf-8")
+    index_source = read_admin_client_source()
     unexplained = []
     for method, full_path, module, lineno in _iter_routes():
         key = (method, full_path)

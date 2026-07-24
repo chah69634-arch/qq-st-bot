@@ -1,0 +1,1219 @@
+async function loadObserveMood() {
+  const moodEl   = document.getElementById('obs-mood-raw');
+  const gardenEl = document.getElementById('obs-garden-raw');
+  moodEl.textContent = gardenEl.textContent = '加载中…';
+  try {
+    const d = await api('GET', '/mood/state');
+    moodEl.textContent = JSON.stringify(d, null, 2);
+  } catch(e) {
+    moodEl.textContent = '加载失败：' + e.message;
+  }
+  try {
+    const d = await api('GET', '/garden/state');
+    gardenEl.textContent = JSON.stringify(d, null, 2);
+  } catch(e) {
+    gardenEl.textContent = '加载失败：' + e.message;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：梦境状态
+// ══════════════════════════════════════════════════════════
+async function loadObserveDream() {
+  const rawEl   = document.getElementById('obs-dream-raw');
+  const statsEl = document.getElementById('obs-dream-stats');
+  const statusEl = document.getElementById('obs-dream-status');
+  rawEl.textContent = statsEl.textContent = '加载中…';
+  try {
+    const d = await api('GET', '/dream/state');
+    statusEl.textContent = '状态：' + (d.status || '—');
+    rawEl.textContent = JSON.stringify(d, null, 2);
+  } catch(e) {
+    rawEl.textContent = '加载失败：' + e.message;
+  }
+  try {
+    const s = await api('GET', '/dream/stats');
+    statsEl.textContent = JSON.stringify(s, null, 2);
+  } catch(e) {
+    statsEl.textContent = '加载失败：' + e.message;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：记忆探查（短期记忆）
+// ══════════════════════════════════════════════════════════
+async function loadObserveMemory() {
+  const uid = (document.getElementById('obs-mem-uid').value || '').trim();
+  const el  = document.getElementById('obs-memory-raw');
+  if (!uid) { el.textContent = '请输入 uid（用户 QQ 号）'; return; }
+  el.textContent = '加载中…';
+  try {
+    const d = await api('GET', `/memory/${encodeURIComponent(uid)}/short-term`);
+    el.textContent = JSON.stringify(d, null, 2);
+  } catch(e) {
+    el.textContent = '加载失败：' + e.message;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：隐性状态
+// ══════════════════════════════════════════════════════════
+async function loadObserveHidden() {
+  const el = document.getElementById('obs-hidden-raw');
+  el.textContent = '加载中…';
+  try {
+    const d = await api('GET', '/debug/user-hidden-state');
+    el.textContent = JSON.stringify(d, null, 2);
+  } catch(e) {
+    el.textContent = '加载失败：' + e.message;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：聊天日志
+// ══════════════════════════════════════════════════════════
+async function loadObserveChatlogDates() {
+  const sel = document.getElementById('obs-chatlog-date');
+  sel.innerHTML = '<option value="">— 加载中… —</option>';
+  try {
+    const d = await api('GET', '/chat-log/dates');
+    const dates = d.dates || d || [];
+    sel.innerHTML = '<option value="">— 选择日期 —</option>' +
+      dates.map(dt => `<option value="${escapeHtml(dt)}">${escapeHtml(dt)}</option>`).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">加载失败</option>';
+    toast('聊天日志日期加载失败：' + e.message, 'err');
+  }
+}
+
+async function loadObserveChatlogDay() {
+  const date = document.getElementById('obs-chatlog-date').value;
+  const el   = document.getElementById('obs-chatlog-body');
+  if (!date) { el.textContent = '请选择日期'; return; }
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    const d = await api('GET', `/chat-log/${encodeURIComponent(date)}`);
+    const items = d.messages || d.entries || d || [];
+    if (!items.length) { el.innerHTML = '<div class="empty">该日期暂无记录</div>'; return; }
+    el.innerHTML = items.map(m => {
+      const role = escapeHtml(m.role || m.speaker || '');
+      const content = escapeHtml(m.content || m.text || '');
+      const ts = m.timestamp ? `<span style="font-size:11px;color:var(--muted)">[${escapeHtml(m.timestamp)}]</span> ` : '';
+      const roleColor = role === 'assistant' ? 'var(--accent)' : 'var(--text)';
+      return `<div class="i18n-raw" style="margin-bottom:6px;padding:6px 10px;border-radius:4px;background:var(--bg-secondary)">
+        ${ts}<span style="font-weight:600;color:${roleColor}">${role}</span>: ${content}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：运行时内部态
+// ══════════════════════════════════════════════════════════
+async function loadObserveRuntime() {
+  const ids = ['queue','dlq','pending','locks','channels','mood'];
+  ids.forEach(id => {
+    const el = document.getElementById('obs-rt-' + id);
+    if (el) el.textContent = '加载中…';
+  });
+  try {
+    const d = await api('GET', '/observe/runtime');
+    const set = (id, val) => {
+      const el = document.getElementById('obs-rt-' + id);
+      if (el) el.textContent = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+    };
+    // slow_queue
+    const q = d.slow_queue || {};
+    set('queue', q.error ? `读取失败: ${q.error}` :
+      `积压任务: ${q.queue_size ?? '?'}\nworker 存活: ${q.worker_alive ?? '?'}\n当前任务: ${q.current_task_type ?? '(空闲)'}`);
+    // DLQ
+    const dlq = d.dead_letter_queue || {};
+    if (dlq.error) {
+      set('dlq', `读取失败: ${dlq.error}`);
+    } else {
+      const recent = (dlq.recent || []).map(f =>
+        `  ${f.task_type}  ${f.failed_at ? f.failed_at.slice(0,19).replace('T',' ') : ''}`
+      ).join('\n');
+      set('dlq', `文件总数: ${dlq.count ?? '?'}\n最近:\n${recent || '  (空)'}`);
+    }
+    // pending_perception
+    const pp = d.pending_perception || {};
+    set('pending', pp.error ? `读取失败: ${pp.error}` :
+      `未提交感知: ${pp.count ?? '?'}\n最旧: ${pp.oldest ? pp.oldest.slice(0,19).replace('T',' ') : '(无)'}`);
+    // locks
+    const lk = d.locks || {};
+    set('locks', lk.error ? `读取失败: ${lk.error}` :
+      `uid_lock 持有: ${JSON.stringify(lk.uid_locks_held ?? [])}\nglobal_lock 持有: ${JSON.stringify(lk.global_locks_held ?? [])}\nconv_lock 持有: ${JSON.stringify(lk.conversation_locks_held ?? [])}`);
+    // channels
+    const ch = d.channels || {};
+    set('channels', ch.error ? `读取失败: ${ch.error}` :
+      `活跃通道: ${JSON.stringify(ch.active ?? [])}`);
+    // mood
+    const md = d.mood || {};
+    set('mood', md.error ? `读取失败: ${md.error}` :
+      `${md.mood_text || '(无)'}\n${md.mood_raw ? JSON.stringify(md.mood_raw, null, 2) : ''}`);
+  } catch(e) {
+    ids.forEach(id => {
+      const el = document.getElementById('obs-rt-' + id);
+      if (el) el.textContent = '加载失败：' + e.message;
+    });
+  }
+}
+
+// ── 检视器当前快照（导出 MD 用）──
+let _obsPromptCurrent      = null;
+let _obsDreamPromptCurrent = null;
+let _obsProbeCurrent       = null;
+
+// ══════════════════════════════════════════════════════════
+//  五类只读观测面板（由桌面客户端迁入）
+// ══════════════════════════════════════════════════════════
+async function initObserveCharacters(selectId, afterLoad) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  try {
+    const d = await api('GET', '/characters');
+    const characters = d.characters || d.items || [];
+    const activeId = d.active_id || d.active || '';
+    sel.innerHTML = characters.map(c => `<option value="${escapeHtml(c.id || '')}"${c.id === activeId ? ' selected' : ''}>${escapeHtml(c.label || c.id || '')}</option>`).join('');
+    if (afterLoad) await afterLoad();
+  } catch(e) {
+    if (afterLoad) await afterLoad();
+  }
+}
+
+function observeTime(value) {
+  if (!value) return '—';
+  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+
+function observeEmpty(label) {
+  return `<div class="empty">${escapeHtml(label || t('common.no_data', '暂无数据'))}</div>`;
+}
+function observeBar(value, max) {
+  const ratio = max > 0 ? Math.max(0, Math.min(1, Number(value || 0) / max)) : 0;
+  return `<div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:5px"><div style="width:${ratio*100}%;height:100%;background:var(--accent);border-radius:4px"></div></div>`;
+}
+
+async function loadObserveGrowth() {
+  const el = document.getElementById('obs-growth-content');
+  const charId = document.getElementById('obs-growth-char')?.value || '';
+  if (!el || !charId) { if(el) el.innerHTML = observeEmpty('暂无角色'); return; }
+  el.innerHTML = observeEmpty('加载中…');
+  try {
+    const root = await api('GET', `/growth/interests?char_id=${encodeURIComponent(charId)}`);
+    const interests = root.interests || [];
+    if (!interests.length) { el.innerHTML = observeEmpty('尚未启用成长记录'); return; }
+    const practice = await api('GET', '/growth/practice-log');
+    const practiceCount = (practice.entries || []).filter(x => !x.char_id || x.char_id === charId).length;
+    const bundles = await Promise.all(interests.map(async interest => {
+      const id = String(interest.id || interest.interest_id || interest.name || '');
+      if (!id) return {interest, id, works:[], notes:[]};
+      const qs = `?char_id=${encodeURIComponent(charId)}`;
+      const [works, notes] = await Promise.all([
+        api('GET', `/growth/works/${encodeURIComponent(id)}${qs}`),
+        api('GET', `/growth/notes/${encodeURIComponent(id)}${qs}`),
+      ]);
+      return {interest, id, works:works.entries || [], notes:notes.entries || []};
+    }));
+    el.className = '';
+    el.innerHTML = bundles.map(({interest,id,works,notes}) => {
+      const scores = (interest.recent_scores || works.map(x => x.score)).map(Number).filter(Number.isFinite);
+      const latest = scores.length ? scores[scores.length-1] : 0;
+      const first = scores.length ? scores[0] : latest;
+      const trend = latest > first + .01 ? '↗' : latest < first - .01 ? '↘' : '→';
+      const level = Math.max(0, Math.min(5, Math.round(Number(interest.level || 0))));
+      return `<div style="padding:14px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between"><strong>${escapeHtml(interest.name || id)}</strong><span>${trend}</span></div>
+        <div style="color:var(--accent);letter-spacing:1px">${'★'.repeat(level)}${'☆'.repeat(5-level)}</div>${observeBar(latest,10)}
+        <h4 style="margin:14px 0 5px">作品时间轴</h4>${works.length ? works.slice().reverse().map(w => { const f=String(w.file||w.filename||''); return `<div style="padding:5px 0"><button class="btn btn-ghost btn-sm" onclick="loadObserveGrowthWork(this)" data-char="${escapeHtml(charId)}" data-interest="${escapeHtml(id)}" data-file="${escapeHtml(f)}">${escapeHtml(observeTime(w.date || w.ts))} · ${escapeHtml(w.title || f || '练习作品')}${w.score != null ? ` · ${escapeHtml(String(w.score))} 分` : ''}</button><pre class="obs-growth-work" style="display:none;white-space:pre-wrap"></pre></div>`; }).join('') : observeEmpty()}
+        <h4 style="margin:14px 0 5px">技巧笔记</h4>${notes.length ? notes.map(n => `<div style="padding:4px 0">${escapeHtml(n.text || n.note || n.content || JSON.stringify(n))}${n.hits != null ? ` <span class="badge">命中 ${escapeHtml(String(n.hits))}</span>` : ''}</div>`).join('') : observeEmpty()}
+      </div>`;
+    }).join('') + `<div style="padding-top:12px;color:var(--muted)">练习日志：${practiceCount}</div>`;
+  } catch(e) { el.innerHTML = observeEmpty('加载失败：' + e.message); }
+}
+
+async function loadObserveGrowthWork(button) {
+  const pre = button.parentElement.querySelector('.obs-growth-work');
+  if (pre.style.display !== 'none') { pre.style.display='none'; return; }
+  pre.style.display='block'; pre.textContent='加载中…';
+  try {
+    const d = await api('GET', `/growth/works/${encodeURIComponent(button.dataset.interest)}/${encodeURIComponent(button.dataset.file)}?char_id=${encodeURIComponent(button.dataset.char)}`);
+    pre.textContent = d.content || '（空文件）';
+  } catch(e) { pre.textContent='加载失败：'+e.message; }
+}
+
+async function loadObserveVisual() {
+  const el=document.getElementById('obs-visual-content'); if(!el)return;
+  const input=document.getElementById('obs-visual-date');
+  if (!input.value) input.value = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  el.innerHTML=observeEmpty('加载中…');
+  try {
+    const d=await api('GET',`/perception/visual-trace?date=${encodeURIComponent(input.value)}`), rows=d.entries||[];
+    if(!rows.length){el.innerHTML=observeEmpty('当日暂无视觉观测');return;}
+    const heat=Array(24).fill(0), drops={};
+    rows.forEach(r=>{if(r.dropped)drops[r.dropped]=(drops[r.dropped]||0)+1;else if(r.ts)heat[new Date(r.ts*1000).getHours()]++;});
+    const max=Math.max(...heat,1), captions=rows.filter(r=>r.caption).slice(-5).reverse();
+    el.className=''; el.innerHTML=`<h4>24 小时时段热力</h4><div style="display:grid;grid-template-columns:repeat(12,1fr);gap:5px">${heat.map((n,h)=>`<div title="${h}:00 · ${n}" style="padding:8px 2px;text-align:center;border-radius:4px;background:color-mix(in srgb,var(--accent) ${Math.round(n/max*80+8)}%,transparent)">${h}</div>`).join('')}</div><h4 style="margin-top:18px">丢弃原因</h4>${Object.keys(drops).length?Object.entries(drops).map(([k,v])=>`<span class="badge" style="margin-right:6px">${escapeHtml(k)}: ${v}</span>`).join(''):observeEmpty()}<h4 style="margin-top:18px">最近观察描述</h4>${captions.length?captions.map(r=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.caption)}</div>`).join(''):observeEmpty()}`;
+  }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
+}
+
+async function loadObserveSpend(){
+  const el=document.getElementById('obs-spend-content'); if(!el)return; el.innerHTML='<div class="card empty">加载中…</div>';
+  try{
+    const [budget,ledger,mandates]=await Promise.all([api('GET','/spend/budget'),api('GET','/spend/ledger'),api('GET','/spend/mandates')]);
+    const mandateRows=mandates.entries||[], ledgerRows=ledger.entries||[];
+    el.innerHTML=`<div class="card"><h3>额度用量</h3><div>今日：${budget.daily_used||0} / ${budget.daily_cap||'—'}</div>${observeBar(budget.daily_used,budget.daily_cap)}<div style="margin-top:12px">本月：${budget.monthly_used||0} / ${budget.monthly_cap||'—'}</div>${observeBar(budget.monthly_used,budget.monthly_cap)}</div><div class="card"><h3>支出意向单</h3>${mandateRows.length?mandateRows.slice().reverse().map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(r.payee||r.action||r.mandate_id||'—')}</strong> <span class="badge">${escapeHtml(r.status||'—')}</span><div>${escapeHtml(String(r.amount||r.max_price||0))} ${escapeHtml(r.currency||'')}</div></div>`).join(''):observeEmpty()}<div style="margin-top:10px;color:var(--muted)">安全门未落地前保持只读，不提供确认或拒绝操作。</div></div><div class="card"><h3>台账流水</h3>${ledgerRows.length?ledgerRows.slice().reverse().map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.payee||r.action||'—')} · ${escapeHtml(String(r.amount||0))} ${escapeHtml(r.currency||'')} <span class="badge">${escapeHtml(r.status||'—')}</span></div>`).join(''):observeEmpty()}</div>`;
+  }catch(e){el.innerHTML=`<div class="card">${observeEmpty('加载失败：'+e.message)}</div>`;}
+}
+
+let _observeGroupSummaries = {};
+
+function _observeGroupCharacterLabel(groupId, charId) {
+  const roster = _observeGroupSummaries[groupId]?.roster || [];
+  const member = roster.find(item => item.char_id === charId);
+  return member?.label || charId || '—';
+}
+
+function _isStagePromptForGroup(snapshot, groupId) {
+  const origin = snapshot?.origin || {};
+  return origin.origin === 'stage' && origin.group_id === groupId;
+}
+
+async function _loadRecentPromptSnapshots(uid, limit=10) {
+  if (!uid) return [];
+  const first = await api('GET', `/observe/prompt-layers/${encodeURIComponent(uid)}?n=0`);
+  if (!first.snapshot) return [];
+  const count = Math.min(limit, Number(first.total_snapshots || 1));
+  const rest = await Promise.all(
+    Array.from({length: Math.max(0, count - 1)}, (_, i) =>
+      api('GET', `/observe/prompt-layers/${encodeURIComponent(uid)}?n=${i + 1}`)
+    )
+  );
+  return [first, ...rest].map(item => item.snapshot).filter(Boolean);
+}
+
+async function _loadRecentDreamPromptSnapshots(uid, limit=5) {
+  if (!uid) return [];
+  const first = await api('GET', `/observe/dream-prompt/${encodeURIComponent(uid)}?n=0`);
+  if (!first.snapshot) return [];
+  const count = Math.min(limit, Number(first.total_snapshots || 1));
+  const rest = await Promise.all(
+    Array.from({length: Math.max(0, count - 1)}, (_, i) =>
+      api('GET', `/observe/dream-prompt/${encodeURIComponent(uid)}?n=${i + 1}`)
+    )
+  );
+  return [first, ...rest].map(item => item.snapshot).filter(Boolean);
+}
+
+function _renderGroupDreamPromptSnapshot(groupId, snapshot) {
+  const origin = snapshot.origin || {};
+  const speaker = _observeGroupCharacterLabel(groupId, origin.char_id);
+  const sceneTags = (snapshot.scene_tags || []).map(tag => `<code style="font-size:10px;background:#1d3a6e;color:#93c5fd;padding:1px 4px;border-radius:3px;margin-right:3px">${escapeHtml(tag)}</code>`).join('') || '—';
+  const infoLine = `<div style="font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;padding:2px 0 8px">
+    <span>${escapeHtml(t('group.dream_prompt_world', '世界'))}：${escapeHtml(snapshot.world_id || '?')}</span>
+    <span>${escapeHtml(t('group.dream_prompt_lucid', '模式'))}：${escapeHtml(snapshot.lucid_mode || '?')}</span>
+    <span>token：${Number(snapshot.total_tokens || 0).toLocaleString()}</span>
+    <span>scene_tags：${sceneTags}</span>
+  </div>`;
+  const layerHtml = (snapshot.layers || []).length ? snapshot.layers.map(layer => {
+    const injected = !!layer.injected;
+    const state = injected
+      ? `<span class="badge">${escapeHtml(t('group.prompt_kept', '保留'))}</span>`
+      : `<span class="badge badge-danger">${escapeHtml(t('group.dream_prompt_not_injected', '未注入'))}</span>`;
+    const content = injected
+      ? (layer.content || t('group.prompt_empty_layer', '（空层）'))
+      : t('group.dream_prompt_layer_skipped', '本层未注入（禁用/无内容）');
+    return `<details style="margin:6px 0;padding:7px 9px;background:var(--bg-secondary);border-radius:6px">
+      <summary style="cursor:pointer">${escapeHtml(layer.label || '?')} · ${Number(layer.chars || 0).toLocaleString()} ${escapeHtml(t('group.prompt_chars', '字'))} ${state}</summary>
+      <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;margin:8px 0 0">${escapeHtml(content)}</pre>
+    </details>`;
+  }).join('') : observeEmpty(t('group.prompt_no_layers', '本轮没有可展示的层'));
+  const userMsgHtml = snapshot.user_message ? `<div style="margin-top:8px;padding:7px 9px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid var(--success)">
+    <div style="font-size:11px;color:var(--muted)">${escapeHtml(t('group.dream_prompt_instruction', '发言指令'))}</div>
+    <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;margin:4px 0 0">${escapeHtml(snapshot.user_message)}</pre>
+  </div>` : '';
+  const replyHtml = snapshot.llm_output != null ? `<div style="margin-top:8px;padding:7px 9px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid var(--accent)">
+    <div style="font-size:11px;color:var(--muted)">${escapeHtml(t('group.dream_prompt_reply', '角色回复'))}</div>
+    <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;margin:4px 0 0">${escapeHtml(snapshot.llm_output)}</pre>
+  </div>` : '';
+  return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
+    <summary style="cursor:pointer"><strong>${escapeHtml(speaker)}</strong> · dream_id: ${escapeHtml(snapshot.dream_id || '—')} · ${escapeHtml(observeTime(snapshot.captured_at))}</summary>
+    <div style="padding:8px 0 0 18px">${infoLine}${layerHtml}${userMsgHtml}${replyHtml}</div>
+  </details>`;
+}
+
+function _renderPrivateExchangePair(groupId, relation, log) {
+  const charA = relation.char_a;
+  const charB = relation.char_b;
+  const labelA = _observeGroupCharacterLabel(groupId, charA);
+  const labelB = _observeGroupCharacterLabel(groupId, charB);
+  const entries = log.entries || [];
+  const latest = entries.length ? observeTime(entries[entries.length - 1].ts) : '—';
+  const body = entries.length
+    ? entries.map(entry => `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted);font-size:11px">${escapeHtml(observeTime(entry.ts))}</span>
+        <strong style="margin-left:8px">${escapeHtml(_observeGroupCharacterLabel(groupId, entry.speaker_id))}</strong>
+        <div class="i18n-raw" style="margin-top:3px;white-space:pre-wrap;word-break:break-word">${escapeHtml(entry.content || '')}</div>
+      </div>`).join('')
+    : observeEmpty(t('group.private_none', '这两位还没私下聊过'));
+  return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
+    <summary style="cursor:pointer"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong> · ${escapeHtml(t('group.private_last', '最近往来 {time}', {time: latest}))}</summary>
+    <div style="padding:8px 0 0 18px">${body}</div>
+  </details>`;
+}
+
+function _renderPromptLayersHtml(snapshot) {
+  const present = new Set((snapshot.layers || []).map(layer => layer.layer));
+  const layers = [
+    ...(snapshot.layers || []),
+    ...(snapshot.removed_layers || [])
+      .filter(layer => !present.has(layer))
+      .map(layer => ({layer, chars: 0, content: '', pruned: true})),
+  ];
+  return layers.length ? layers.map(layer => {
+    const pruned = !!layer.pruned;
+    const state = pruned
+      ? `<span class="badge badge-danger">${escapeHtml(t('group.prompt_pruned', '被裁'))}</span>`
+      : `<span class="badge">${escapeHtml(t('group.prompt_kept', '保留'))}</span>`;
+    const content = pruned && !layer.content
+      ? t('group.prompt_content_pruned', '内容已在捕获前裁掉')
+      : (layer.content || t('group.prompt_empty_layer', '（空层）'));
+    return `<details style="margin:6px 0;padding:7px 9px;background:var(--bg-secondary);border-radius:6px">
+      <summary style="cursor:pointer">${escapeHtml(layer.layer || '?')} · ${Number(layer.chars || 0).toLocaleString()} ${escapeHtml(t('group.prompt_chars', '字'))} ${state}</summary>
+      <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;margin:8px 0 0">${escapeHtml(content)}</pre>
+    </details>`;
+  }).join('') : observeEmpty(t('group.prompt_no_layers', '本轮没有可展示的层'));
+}
+
+function _renderGroupPromptSnapshot(groupId, snapshot) {
+  const origin = snapshot.origin || {};
+  const speaker = _observeGroupCharacterLabel(groupId, origin.speaker);
+  return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
+    <summary style="cursor:pointer"><strong>${escapeHtml(speaker)}</strong> · ${escapeHtml(origin.round_id || '—')} · ${escapeHtml(observeTime(snapshot.captured_at))}</summary>
+    <div style="padding:8px 0 0 18px">${_renderPromptLayersHtml(snapshot)}</div>
+  </details>`;
+}
+
+function _isPrivatePromptForGroup(snapshot, groupId) {
+  const origin = snapshot?.origin || {};
+  if (origin.origin !== 'private_exchange') return false;
+  const roster = new Set((_observeGroupSummaries[groupId]?.roster || []).map(item => item.char_id));
+  const pair = origin.pair || [];
+  return pair.length === 2 && pair.every(charId => roster.has(charId));
+}
+
+function _renderPrivatePromptSnapshot(groupId, snapshot) {
+  const origin = snapshot.origin || {};
+  const pairLabel = (origin.pair || []).map(charId => _observeGroupCharacterLabel(groupId, charId)).join(' ↔ ');
+  const speaker = _observeGroupCharacterLabel(groupId, origin.speaker);
+  return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
+    <summary style="cursor:pointer"><strong>${escapeHtml(pairLabel)}</strong> · ${escapeHtml(t('group.private_prompt_speaker', '发言：{name}', {name: speaker}))} · ${escapeHtml(observeTime(snapshot.captured_at))}</summary>
+    <div style="padding:8px 0 0 18px">${_renderPromptLayersHtml(snapshot)}</div>
+  </details>`;
+}
+
+async function initObserveGroupArbiter(){
+  const sel=document.getElementById('obs-arbiter-group');
+  try{const groups=await api('GET','/group/list');_observeGroupSummaries=Object.fromEntries((groups||[]).map(g=>[g.group_id,g]));sel.innerHTML=(groups||[]).map(g=>`<option value="${escapeHtml(g.group_id)}">${escapeHtml(g.title||g.group_id)}</option>`).join('');await loadObserveGroupArbiter();}catch(e){document.getElementById('obs-arbiter-content').innerHTML=observeEmpty(t('group.load_failed','加载失败：{error}',{error:e.message}));}
+}
+
+async function loadObserveGroupArbiter(){
+  const el=document.getElementById('obs-arbiter-content'), id=document.getElementById('obs-arbiter-group')?.value||''; if(!el)return;
+  if(!id){el.innerHTML=observeEmpty(t('group.no_groups','暂无群聊，创建群聊后可查看仲裁轨迹'));return;} el.innerHTML=observeEmpty(t('common.loading','加载中…'));
+  try{
+    const flagRequest = _featureFlags.private_exchange
+      ? Promise.resolve(_featureFlags)
+      : api('GET','/settings/feature-flags').then(data => (_featureFlags = data.flags || {}));
+    const [trace,relations,scheduler,flags]=await Promise.all([
+      api('GET',`/group/${encodeURIComponent(id)}/arbiter-trace`),
+      api('GET',`/group/${encodeURIComponent(id)}/relations`),
+      api('GET','/scheduler/config'),
+      flagRequest,
+    ]), rows=Array.isArray(trace)?trace:(trace.entries||[]), rels=relations.relations||[];
+    const privateLogs = await Promise.all(rels.map(async relation => {
+      const query = `char_a=${encodeURIComponent(relation.char_a)}&char_b=${encodeURIComponent(relation.char_b)}&limit=50`;
+      try { return await api('GET', `/relations/private-log?${query}`); }
+      catch (error) { return {entries: [], error: error.message}; }
+    }));
+    const snapshots = await _loadRecentPromptSnapshots(String(scheduler.owner_id || '').trim(), 10);
+    const groupSnapshots = snapshots.filter(snapshot => _isStagePromptForGroup(snapshot, id));
+    const privatePromptSnapshots = snapshots.filter(snapshot => _isPrivatePromptForGroup(snapshot, id));
+    const dreamSnapshots = await _loadRecentDreamPromptSnapshots(String(scheduler.owner_id || '').trim(), 5);
+    const groupDreamSnapshots = dreamSnapshots.filter(snapshot => _isStagePromptForGroup(snapshot, id));
+    const privateEnabled = !!flags.private_exchange?.enabled;
+    const privateBadge = `<span class="badge ${privateEnabled?'badge-success':'badge-danger'}" style="margin-left:7px">private_exchange: ${escapeHtml(privateEnabled?t('common.enabled','已启用'):t('common.disabled','未启用'))}</span>`;
+    const privateHtml = rels.length
+      ? rels.map((relation,index) => privateLogs[index]?.error
+          ? observeEmpty(t('group.private_pair_failed','{pair} 加载失败：{error}',{pair:`${relation.char_a} ↔ ${relation.char_b}`,error:privateLogs[index].error}))
+          : _renderPrivateExchangePair(id, relation, privateLogs[index])).join('')
+      : observeEmpty(t('group.private_no_relations','当前群还没有可观测的角色关系 pair'));
+    const promptHtml = groupSnapshots.length
+      ? groupSnapshots.map(snapshot => _renderGroupPromptSnapshot(id, snapshot)).join('')
+      : observeEmpty(t('group.prompt_none','最近 10 轮没有当前群的 Prompt 快照；群聊跑一轮后刷新'));
+    const privatePromptHtml = privatePromptSnapshots.length
+      ? privatePromptSnapshots.map(snapshot => _renderPrivatePromptSnapshot(id, snapshot)).join('')
+      : observeEmpty(t('group.private_prompt_none','最近 10 轮没有当前群角色间的私下往来 Prompt 快照；触发一次私下往来后刷新'));
+    const dreamPromptHtml = groupDreamSnapshots.length
+      ? groupDreamSnapshots.map(snapshot => _renderGroupDreamPromptSnapshot(id, snapshot)).join('')
+      : observeEmpty(t('group.dream_prompt_none','最近 5 轮没有当前群的梦境 Prompt 快照；群聊梦境跑一轮后刷新'));
+    const echoCutBadge = `<span class="badge">${escapeHtml(t('group.echo_cut','回声截断'))}</span>`;
+    const silentRoundBadge = `<span class="badge">${escapeHtml(t('group.silent_round','静默轮次'))}</span>`;
+    el.className='';el.innerHTML=`<h4>${escapeHtml(t('group.trace','仲裁轨迹'))}</h4>${rows.length?rows.slice().reverse().map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · ${escapeHtml(t('group.phase','阶段'))} ${escapeHtml(r.phase||'—')} ${r.echo_cut?echoCutBadge:''} ${r.silent_round?silentRoundBadge:''}</div>${(r.candidates||[]).map(c=>`<div style="margin-top:6px">${escapeHtml(_observeGroupCharacterLabel(id,c.char_id))} · ${Number(c.total||0).toFixed(2)}${observeBar(Number(c.total||0),1.5)}</div>`).join('')}</div>`).join(''):observeEmpty(t('group.no_trace','暂无仲裁轨迹'))}<h4 style="margin-top:18px">${escapeHtml(t('group.impressions','角色双向印象'))}</h4>${rels.length?rels.map(r=>{const labelA=_observeGroupCharacterLabel(id,r.char_a),labelB=_observeGroupCharacterLabel(id,r.char_b);return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong><div>${escapeHtml(labelA)} → ${escapeHtml(labelB)}：${escapeHtml(r.a_of_b?.summary||'—')} (${Number(r.a_of_b?.valence||0).toFixed(2)})</div><div>${escapeHtml(labelB)} → ${escapeHtml(labelA)}：${escapeHtml(r.b_of_a?.summary||'—')} (${Number(r.b_of_a?.valence||0).toFixed(2)})</div></div>`;}).join(''):observeEmpty(t('group.no_impressions','暂无角色双向印象'))}<h4 style="margin-top:18px">${escapeHtml(t('group.private','角色私下往来'))} ${privateBadge}</h4>${privateHtml}<h4 style="margin-top:18px">${escapeHtml(t('group.private_prompt','私下往来 Prompt 检视'))} <span style="font-size:12px;font-weight:400;color:var(--muted)">${escapeHtml(t('group.private_prompt_subtitle','最近 10 轮，仅显示当前群成员间的 pair'))}</span></h4>${privatePromptHtml}<h4 style="margin-top:18px">${escapeHtml(t('group.prompt','群聊 Prompt 检视'))} <span style="font-size:12px;font-weight:400;color:var(--muted)">${escapeHtml(t('group.prompt_subtitle','最近 10 轮，仅显示当前群'))}</span></h4>${promptHtml}<h4 style="margin-top:18px">${escapeHtml(t('group.dream_prompt','群聊梦境 Prompt 检视'))} <span style="font-size:12px;font-weight:400;color:var(--muted)">${escapeHtml(t('group.dream_prompt_subtitle','最近 5 轮，仅显示当前群 · 与现实 Prompt 相互独立'))}</span></h4>${dreamPromptHtml}`;
+  }catch(e){el.innerHTML=observeEmpty(t('group.load_failed','加载失败：{error}',{error:e.message}));}
+}
+
+async function loadObserveMemorySummary(){
+  const el=document.getElementById('obs-memory-summary-content'),uid=document.getElementById('obs-memory-summary-uid').value.trim(),charId=document.getElementById('obs-memory-summary-char')?.value||'';if(!uid){el.innerHTML=observeEmpty('请输入用户 UID');return;}el.innerHTML=observeEmpty('加载中…');
+  try{const cq=charId?`?char_id=${encodeURIComponent(charId)}`:'',[digest,recall]=await Promise.all([api('GET',`/memory/digest/${encodeURIComponent(uid)}${cq}`),api('GET',`/debug/recall?uid=${encodeURIComponent(uid)}${charId?`&char_id=${encodeURIComponent(charId)}`:''}`)]),rows=recall.records||[];
+    el.className='';el.innerHTML=`<h4>${escapeHtml(t('dynamic.memory_summary.archive','时期摘要归档'))}</h4>${digest.content?`<pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${escapeHtml(digest.content)}</pre>`:observeEmpty()}<h4 style="margin-top:18px">${escapeHtml(t('dynamic.memory_summary.recall_trace','召回轨迹'))}</h4>${rows.length?rows.slice().reverse().map(r=>{const counts=Object.entries(r).filter(([k,v])=>k.endsWith('_hits')&&Array.isArray(v)).map(([k,v])=>`<span class="badge" style="margin-right:5px">${escapeHtml(k)}: ${v.length}</span>`).join('');return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><div class="i18n-raw">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.query||r.message_excerpt||r.mood||'—')}</div><div style="margin-top:5px">${counts}</div>${r.time_range||r.parsed_time_range?`<div style="color:var(--muted);margin-top:4px">${escapeHtml(t('dynamic.memory_summary.time_range','时间过滤范围：{range}',{range:JSON.stringify(r.time_range||r.parsed_time_range)}))}</div>`:''}</div>`;}).join(''):observeEmpty()}`;
+  }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：Prompt 层检视器
+// ══════════════════════════════════════════════════════════
+async function loadObservePromptUidList() {
+  const listEl = document.getElementById('obs-prompt-uid-list');
+  try {
+    const d = await api('GET', '/observe/prompt-layers');
+    const uids = d.uids || [];
+    if (!uids.length) {
+      listEl.textContent = '暂无快照（发送一条消息后刷新）';
+    } else {
+      listEl.innerHTML = '有快照的 uid：' + uids.map(u =>
+        `<a href="#" style="margin-left:8px;color:var(--accent)" onclick="document.getElementById('obs-prompt-uid').value='${escapeHtml(u)}';loadObservePrompt();return false">${escapeHtml(u)}</a>`
+      ).join('');
+    }
+  } catch(e) {
+    listEl.textContent = '加载失败：' + e.message;
+  }
+}
+
+async function loadObservePrompt() {
+  const uid = (document.getElementById('obs-prompt-uid').value || '').trim();
+  const n   = parseInt(document.getElementById('obs-prompt-n').value || '0', 10);
+  const summaryCard  = document.getElementById('obs-prompt-summary-card');
+  const summaryEl    = document.getElementById('obs-prompt-summary');
+  const layersListEl = document.getElementById('obs-prompt-layers-list');
+  if (!uid) { layersListEl.innerHTML = '<div style="color:var(--muted)">请输入 uid 后点击「查看」</div>'; return; }
+  layersListEl.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  summaryCard.style.display = 'none';
+  try {
+    const d = await api('GET', `/observe/prompt-layers/${encodeURIComponent(uid)}?n=${n}`);
+    if (!d.snapshot) {
+      layersListEl.innerHTML = `<div style="color:var(--muted)">uid ${escapeHtml(uid)} 暂无快照，发一条消息后刷新。</div>`;
+      return;
+    }
+    const snap = d.snapshot;
+    _obsPromptCurrent = { snap, uid };
+    const SOFT = snap.soft_warn_threshold || 15000;
+    const HARD = snap.hard_trigger_threshold || 20000;
+    const est  = snap.token_estimate || 0;
+
+    // ── 总览卡 ──
+    summaryCard.style.display = '';
+    const origin = snap.origin || {};
+    const isProactive = origin.origin === 'proactive';
+    const isDesktop   = origin.origin === 'desktop';
+    const isStage     = origin.origin === 'stage';
+    const isPrivate   = origin.origin === 'private_exchange';
+    const originBadge = isProactive
+      ? `<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:600">主动 · ${escapeHtml(origin.trigger_name||'')}</span>`
+      : isDesktop
+        ? `<span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:10px;margin-left:8px">桌宠</span>`
+        : isStage
+          ? `<span style="font-size:11px;background:#3b2257;color:#c4b5fd;padding:2px 8px;border-radius:10px;margin-left:8px">群聊 · ${escapeHtml(origin.speaker||'')}</span>`
+          : isPrivate
+            ? `<span style="font-size:11px;background:#422006;color:#fcd34d;padding:2px 8px;border-radius:10px;margin-left:8px">私下往来 · ${escapeHtml(origin.speaker||'')}</span>`
+            : `<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:2px 8px;border-radius:10px;margin-left:8px">用户</span>`;
+    document.getElementById('obs-prompt-ts').innerHTML =
+      `${snap.captured_at ? snap.captured_at.slice(0,19).replace('T',' ') : ''}${originBadge} · 第 ${d.n+1}/${d.total_snapshots} 轮`;
+    const statusColor = est > HARD ? '#ef4444' : est > SOFT ? '#f59e0b' : 'var(--accent)';
+    let summaryHtml =
+      `<div>字符估算：<strong style="color:${statusColor}">${est.toLocaleString()}</strong>` +
+      ` &nbsp;软警戒 ${SOFT.toLocaleString()} &nbsp;触发裁剪 ${HARD.toLocaleString()}</div>` +
+      `<div style="margin-top:4px">激活 tags：${(snap.active_tags||[]).map(t=>`<code style="font-size:11px;background:var(--bg-secondary);padding:1px 4px;border-radius:3px">${escapeHtml(t)}</code>`).join(' ') || '(无)'}</div>` +
+      (snap.removed_layers && snap.removed_layers.length
+        ? `<div style="margin-top:4px;color:#ef4444">被裁层：${snap.removed_layers.map(l=>`<code style="font-size:11px">${escapeHtml(l)}</code>`).join(' ')}</div>`
+        : '<div style="margin-top:4px;color:var(--muted)">无裁剪</div>') +
+      (snap.ablated_layers && snap.ablated_layers.length
+        ? `<div style="margin-top:4px;color:#a78bfa">已消融层：${snap.ablated_layers.map(l=>`<code style="font-size:11px">${escapeHtml(l)}</code>`).join(' ')}</div>`
+        : '');
+    if (isProactive) {
+      const sq = (origin.search_query||'').trim();
+      const sp = (origin.seed_prompt||'').trim();
+      summaryHtml += `<div style="margin-top:10px;padding:10px;background:#0f2410;border-radius:6px;border:1px solid #166534">
+        <div style="font-size:12px;font-weight:600;color:#86efac;margin-bottom:6px">主动触发详情</div>
+        <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">触发器：</span><code style="background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(origin.trigger_name||'')}</code></div>
+        <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">召回锚点 (search_query)：</span><span style="color:#fde68a">${sq ? escapeHtml(sq.slice(0,200)) : '<em style="color:var(--muted)">（与 seed_prompt 相同）</em>'}</span></div>
+        <div style="font-size:12px"><span style="color:var(--muted)">种子 prompt：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:120px;overflow:auto">${escapeHtml(sp.slice(0,600))}${sp.length>600?'\n…':''}
+</pre></div>
+      </div>`;
+    }
+    summaryEl.innerHTML = summaryHtml;
+
+    // token 进度条
+    const pct = Math.min(100, est / HARD * 100);
+    document.getElementById('obs-prompt-bar').style.width = pct + '%';
+    document.getElementById('obs-prompt-bar-soft').style.left = Math.min(100, SOFT/HARD*100) + '%';
+    document.getElementById('obs-prompt-bar-hard').style.left = '100%';
+
+    // ── 层级列表 ──
+    const layers = snap.layers || [];
+    const totalChars = layers.reduce((s,l) => s + (l.chars||0), 0) || 1;
+
+    function _provBadge(prov) {
+      if (!prov) return '<span style="font-size:10px;background:#374151;color:#9ca3af;padding:1px 5px;border-radius:8px;margin-left:5px">常驻</span>';
+      const mode = prov.mode || 'always';
+      if (mode === 'always')  return '<span style="font-size:10px;background:#374151;color:#9ca3af;padding:1px 5px;border-radius:8px;margin-left:5px">常驻</span>';
+      if (mode === 'tagged')  return '<span style="font-size:10px;background:#1d3a6e;color:#93c5fd;padding:1px 5px;border-radius:8px;margin-left:5px">标签召回</span>';
+      if (mode === 'scored')  return '<span style="font-size:10px;background:#3b2257;color:#c4b5fd;padding:1px 5px;border-radius:8px;margin-left:5px">打分召回</span>';
+      return '';
+    }
+    function _provDetail(prov) {
+      if (!prov || prov.mode === 'always') return '';
+      if (prov.mode === 'tagged') {
+        const matched = (prov.matched_tags || []).join(', ') || '(无命中)';
+        const checked = (prov.triggers_checked || []).join(', ') || '';
+        return `<div style="margin-top:6px;font-size:11px;color:#93c5fd">
+          <span style="color:var(--muted)">命中 tags：</span>${escapeHtml(matched)}<br>
+          <span style="color:var(--muted)">检查集：</span><span style="color:var(--muted)">${escapeHtml(checked)}</span>
+        </div>`;
+      }
+      if (prov.mode === 'scored') {
+        const q = prov.rag_query || '';
+        let extra = '';
+        if (prov.source) {
+          extra += `<br><span style="color:var(--muted)">来源：</span>${escapeHtml(prov.source)}`;
+        }
+        const hits = prov.hits || [];
+        if (hits.length) {
+          const hitLines = hits.map(h => {
+            const url = Array.isArray(h) ? h[0] : (h.url || '');
+            const dist = Array.isArray(h) ? h[1] : (h.dist ?? h.distance);
+            return `&nbsp;&nbsp;• ${escapeHtml(String(url))} (dist=${dist})`;
+          }).join('<br>');
+          extra += `<br><span style="color:var(--muted)">命中：</span><br>${hitLines}`;
+        }
+        return `<div style="margin-top:6px;font-size:11px;color:#c4b5fd">
+          <span style="color:var(--muted)">RAG 查询：</span>${escapeHtml(q.slice(0,120))}${q.length>120?'…':''}${extra}
+        </div>`;
+      }
+      return '';
+    }
+
+    layersListEl.innerHTML = layers.map(lyr => {
+      const prunedBadge = lyr.pruned
+        ? '<span style="font-size:11px;background:#ef4444;color:#fff;padding:1px 6px;border-radius:10px;margin-left:6px">被裁</span>'
+        : '';
+      const pct2 = ((lyr.chars||0)/totalChars*100).toFixed(1);
+      const barColor = lyr.pruned ? '#ef4444' : 'var(--accent)';
+      const contentId = `obs-prompt-content-${lyr.position}`;
+      const prov = lyr.provenance;
+      return `
+        <div class="card" style="margin-bottom:8px;opacity:${lyr.pruned?'0.5':'1'}">
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer" onclick="togglePromptLayer('${contentId}')">
+            <span style="font-size:11px;color:var(--muted);width:24px;text-align:right">${lyr.position}</span>
+            <span style="font-weight:600;font-size:13px;flex:1">${escapeHtml(lyr.layer||'?')}${prunedBadge}${_provBadge(prov)}</span>
+            <span style="font-size:12px;color:var(--muted)">${(lyr.chars||0).toLocaleString()} 字 / ~${Math.round(lyr.est_tokens||0)} tok</span>
+            <span style="font-size:12px;color:var(--muted);width:42px;text-align:right">${pct2}%</span>
+            <span style="font-size:11px">▶</span>
+          </div>
+          <div style="padding:0 14px 2px">
+            <div style="height:4px;background:var(--bg-secondary);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${pct2}%;background:${barColor}"></div>
+            </div>
+          </div>
+          <div id="${contentId}" style="display:none;padding:0 14px 12px;margin-top:8px">
+            ${_provDetail(prov)}
+            <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:10px;border-radius:4px;max-height:300px;overflow:auto;color:var(--text);margin-top:6px">${escapeHtml((lyr.content||'').slice(0,3000))}${(lyr.content||'').length>3000?'\n… (截断)':''}</pre>
+          </div>
+        </div>`;
+    }).join('');
+
+    // ── LLM 实际输出 ──
+    if (snap.llm_output != null) {
+      layersListEl.innerHTML += `
+        <div class="card" style="margin-top:16px;border:1px solid var(--accent2)">
+          <div style="padding:10px 14px;font-weight:600;font-size:13px;border-bottom:1px solid var(--border)">
+            LLM 实际输出 <span style="font-size:11px;color:var(--muted);font-weight:400">（本轮生成原文，含 guard 清洗前）</span>
+          </div>
+          <div style="padding:10px 14px">
+            <pre style="font-size:12px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:10px;border-radius:4px;max-height:400px;overflow:auto;color:var(--text)">${escapeHtml((snap.llm_output||'').slice(0,5000))}${(snap.llm_output||'').length>5000?'\n… (截断)':''}</pre>
+          </div>
+        </div>`;
+    }
+
+  } catch(e) {
+    layersListEl.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+    summaryCard.style.display = 'none';
+  }
+}
+
+function togglePromptLayer(contentId) {
+  const el = document.getElementById(contentId);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：层级消融开关（CC 任务 23 · B7）
+// ══════════════════════════════════════════════════════════
+let _promptAblationKnownLayers = [];
+
+async function loadPromptAblation() {
+  const el = document.getElementById('obs-ablation-list');
+  el.textContent = '加载中…';
+  try {
+    const d = await api('GET', '/prompt-ablation');
+    _promptAblationKnownLayers = d.known_layers || [];
+    const alwaysOn = new Set(d.always_on || []);
+    const disabled = new Set(d.disabled_layers || []);
+    const rows = _promptAblationKnownLayers.map(({layer, desc}) => {
+      const isAlwaysOn = alwaysOn.has(layer);
+      const isOff = disabled.has(layer);
+      const warnHtml = layer === '9_history'
+        ? '<span style="color:#ef4444;font-size:11px;margin-left:6px">关闭短期历史将严重改变行为</span>'
+        : '';
+      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;${isAlwaysOn?'opacity:0.5':''}">
+        <input type="checkbox" class="obs-ablation-toggle" data-layer="${escapeHtml(layer)}"
+          ${isOff && !isAlwaysOn ? 'checked' : ''} ${isAlwaysOn ? 'disabled' : ''}>
+        <code style="font-size:11px;background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(layer)}</code>
+        <span style="font-size:12px;color:var(--muted)">${escapeHtml(desc||'')}</span>
+        ${isAlwaysOn ? '<span style="font-size:11px;color:var(--muted)">（不可消融）</span>' : ''}
+        ${warnHtml}
+      </label>`;
+    }).join('');
+    const perceptionOff = !!d.perception_block_disabled;
+    const perceptionRow = `<label style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);margin-top:6px">
+      <input type="checkbox" id="obs-ablation-perception" ${perceptionOff ? 'checked' : ''}>
+      <code style="font-size:11px;background:var(--bg-secondary);padding:1px 5px;border-radius:3px">perception_block</code>
+      <span style="font-size:12px;color:var(--muted)">感知槽位（嵌在 1_system_prompt 内，独立子开关）</span>
+    </label>`;
+    el.innerHTML = rows + perceptionRow;
+  } catch(e) {
+    el.textContent = '加载失败：' + e.message;
+  }
+}
+
+async function savePromptAblation() {
+  const checks = document.querySelectorAll('.obs-ablation-toggle:checked');
+  const disabled_layers = Array.from(checks).map(c => c.dataset.layer);
+  const perception_block_disabled = document.getElementById('obs-ablation-perception').checked;
+  try {
+    await api('PUT', '/prompt-ablation', { disabled_layers, perception_block_disabled });
+    toast('已生效，下一轮对话起作用', 'ok');
+    loadPromptAblation();
+  } catch(e) {
+    toast('保存失败：' + e.message, 'err');
+  }
+}
+
+async function loadOutputSegmentEnforce() {
+  try {
+    const d = await api('GET', '/output-segment-enforce');
+    document.getElementById('obs-segment-enforce-enabled').checked = !!d.enabled;
+    document.getElementById('obs-segment-enforce-min-len').value = String(d.min_len || 40);
+  } catch(e) {
+    toast('读取生成后段落兜底失败：' + e.message, 'err');
+  }
+}
+
+async function saveOutputSegmentEnforce() {
+  const enabled = document.getElementById('obs-segment-enforce-enabled').checked;
+  const min_len = parseInt(document.getElementById('obs-segment-enforce-min-len').value || '40', 10);
+  try {
+    await api('PUT', '/output-segment-enforce', { enabled, min_len });
+    toast('生成后段落兜底已更新，下一轮对话起作用', 'ok');
+    loadOutputSegmentEnforce();
+  } catch(e) {
+    toast('保存失败：' + e.message, 'err');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  观测页：召回溯源（recall_trace，CC 任务 23 · A3）
+// ══════════════════════════════════════════════════════════
+async function loadObserveRecallTrace() {
+  const uid = (document.getElementById('obs-prompt-uid').value || '').trim();
+  const date = document.getElementById('obs-recall-date').value || '';
+  const n = parseInt(document.getElementById('obs-recall-n').value || '5', 10);
+  const el = document.getElementById('obs-recall-list');
+  if (!uid) { el.innerHTML = '<div style="color:var(--muted)">请先在上方输入 uid</div>'; return; }
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const qs = new URLSearchParams({ n: String(n) });
+    if (date) qs.set('date', date);
+    const d = await api('GET', `/observe/recall/${encodeURIComponent(uid)}?${qs.toString()}`);
+    const records = d.records || [];
+    if (!records.length) {
+      el.innerHTML = `<div style="color:var(--muted)">${escapeHtml(d.date||'')} 暂无召回溯源记录</div>`;
+      return;
+    }
+    el.innerHTML = records.slice().reverse().map((r, idx) => {
+      const contentId = `obs-recall-content-${idx}`;
+      const fmtHits = (hits) => (hits || []).map(h => Array.isArray(h) ? `${h[0]} (${h[1]})` : JSON.stringify(h)).join(', ') || '(无)';
+      const mood = r.mood || {};
+      return `<div class="card" style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer" onclick="togglePromptLayer('${contentId}')">
+          <span style="font-size:12px;color:var(--muted)">${escapeHtml((r.ts||'').replace('T',' '))}</span>
+          <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.query||'')}</span>
+          <span style="font-size:11px">▶</span>
+        </div>
+        <div id="${contentId}" style="display:none;padding:0 12px 12px;font-size:12px;line-height:1.8">
+          <div><span style="color:var(--muted)">episodic_hits：</span>${fmtHits(r.episodic_hits)}</div>
+          <div><span style="color:var(--muted)">episodic_fallback（${r.episodic_fallback_used?'已用':'未用'}）：</span>${fmtHits(r.episodic_fallback_hits)}</div>
+          <div><span style="color:var(--muted)">event_log_hits：</span>${fmtHits(r.event_log_hits)}</div>
+          <div><span style="color:var(--muted)">lore_hits：</span>${escapeHtml(JSON.stringify(r.lore_hits||[]))}</div>
+          <div><span style="color:var(--muted)">semantic_hits（X2 向量通道）：</span>${fmtHits(r.semantic_hits)}</div>
+          <div><span style="color:var(--muted)">web_recall_hits（X3）：</span>${fmtHits(r.web_recall_hits)}</div>
+          <div><span style="color:var(--muted)">mood：</span>${escapeHtml(mood.current||'')} (${mood.intensity ?? ''})</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function exportSnapshotMd(kind) {
+  function fmtTs() {
+    const n = new Date(), p = v => String(v).padStart(2,'0');
+    return `${n.getFullYear()}${p(n.getMonth()+1)}${p(n.getDate())}-${p(n.getHours())}${p(n.getMinutes())}`;
+  }
+  function triggerDownload(filename, content) {
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+  function safeSlug(s) { return (s||'').replace(/[^a-zA-Z0-9_\-]/g,'_'); }
+  function blockquote(text) {
+    return (text||'').split('\n').map(l => '> ' + l).join('\n');
+  }
+
+  if (kind === 'prompt') {
+    if (!_obsPromptCurrent) { alert('请先加载一条快照'); return; }
+    const { snap, uid } = _obsPromptCurrent;
+    const origin = snap.origin || {};
+    const originTag = origin.origin === 'proactive'
+      ? `proactive-${origin.trigger_name||'unknown'}`
+      : (origin.origin || 'user');
+    const filename = `prompt_${safeSlug(uid)}_${safeSlug(originTag)}_${fmtTs()}.md`;
+
+    const SOFT = snap.soft_warn_threshold || 15000;
+    const HARD = snap.hard_trigger_threshold || 20000;
+    const est  = snap.token_estimate || 0;
+    const layers = snap.layers || [];
+    const totalChars = layers.reduce((s,l) => s + (l.chars||0), 0) || 1;
+
+    let md = `# Prompt 快照 — ${originTag}\n`;
+    md += `- uid: ${uid}\n`;
+    md += `- 捕获时间: ${snap.captured_at || ''}\n`;
+    md += `- 来源: ${origin.origin || ''}`;
+    if (origin.origin === 'proactive') md += ` · trigger=${origin.trigger_name||''}`;
+    md += '\n';
+    if ((origin.seed_prompt||'').trim()) md += `- 种子 prompt: ${origin.seed_prompt}\n`;
+    if ((origin.search_query||'').trim()) md += `- 召回锚 search_query: ${origin.search_query}\n`;
+    md += `- token 估算: ${est}（软警戒 ${SOFT} / 触发裁剪 ${HARD} / 目标 18000）\n`;
+    md += `- 激活 tags: ${(snap.active_tags||[]).join(', ') || '(无)'}\n`;
+    md += `- 被裁层: ${(snap.removed_layers||[]).join(', ') || '(无)'}\n`;
+    md += '\n## 层级（按 position）\n\n';
+
+    for (const lyr of layers) {
+      const pct = ((lyr.chars||0)/totalChars*100).toFixed(1);
+      const prov = lyr.provenance;
+      const mode = prov ? (prov.mode || 'always') : 'always';
+      const status = lyr.pruned ? '被裁' : '已注入';
+      md += `### [${lyr.position}] ${lyr.layer || '?'}  · ${mode}  · ${lyr.chars||0}字/${Math.round(lyr.est_tokens||0)}tok (${pct}%)\n`;
+      md += `- 状态: ${status}\n`;
+      if (prov && mode !== 'always') {
+        let provStr = `mode=${mode}`;
+        if (prov.matched_tags && prov.matched_tags.length) provStr += ` 命中tag=${prov.matched_tags.join(',')}`;
+        if (prov.rag_query) provStr += ` rag_query=${prov.rag_query}`;
+        md += `- provenance: ${provStr}\n`;
+      }
+      md += '\n';
+      if (lyr.content) md += blockquote(lyr.content) + '\n';
+      md += '\n';
+    }
+
+    if (snap.user_message) md += `## 用户消息\n${snap.user_message}\n\n`;
+    if (snap.llm_output != null) md += `## LLM 实际输出\n${snap.llm_output}\n`;
+
+    triggerDownload(filename, md);
+
+  } else if (kind === 'dream') {
+    if (!_obsDreamPromptCurrent) { alert('请先加载一条快照'); return; }
+    const { snap: s, uid } = _obsDreamPromptCurrent;
+    const filename = `dream_${safeSlug(uid)}_${safeSlug(s.world_id||'unknown')}_${fmtTs()}.md`;
+
+    const layers = s.layers || [];
+    const totalTok = layers.reduce((a,l) => a + (l.tokens||0), 0) || 1;
+
+    let md = `# 梦境 Prompt 快照 — ${s.dream_id || '?'}\n`;
+    md += `- uid: ${uid}\n`;
+    md += `- 捕获时间: ${s.captured_at || ''}\n`;
+    md += `- dream_id: ${s.dream_id || ''}\n`;
+    md += `- 世界: ${s.world_id || ''}\n`;
+    md += `- 模式: ${s.lucid_mode || ''} / dream_mode: ${s.dream_mode || ''}\n`;
+    md += `- scene_tags: ${(s.scene_tags || []).join(', ') || '(无)'}\n`;
+    md += `- 历史轮数: ${s.history_turns || 0}\n`;
+    md += `- token 合计: ${s.total_tokens || 0}\n`;
+    md += '\n## 层级\n\n';
+
+    for (const lyr of layers) {
+      const pct = lyr.injected ? ((lyr.tokens||0)/totalTok*100).toFixed(1) : '0.0';
+      const flags = (lyr.flags||[]).join(' ');
+      const status = lyr.injected ? '已注入' : '未注入';
+      md += `### ${lyr.label || '?'}  · ${lyr.chars||0}字/${lyr.tokens||0}tok (${pct}%)\n`;
+      md += `- 状态: ${status}${flags ? ' ' + flags : ''}\n`;
+      if (lyr.note) md += `- note: ${lyr.note}\n`;
+      md += '\n';
+      if (lyr.content && lyr.injected) md += blockquote(lyr.content) + '\n';
+      md += '\n';
+    }
+
+    if (s.user_message) md += `## 用户消息\n${s.user_message}\n\n`;
+    if (s.llm_output != null) md += `## 梦境 LLM 回复\n${s.llm_output}\n`;
+
+    triggerDownload(filename, md);
+
+  } else if (kind === 'probe') {
+    if (!_obsProbeCurrent) { alert('请先加载一条快照'); return; }
+    const { snap: s, uid } = _obsProbeCurrent;
+    const pathKind = s.is_fast_path ? 'fast' : 'llm';
+    const filename = `probe_${safeSlug(uid)}_${pathKind}_${fmtTs()}.md`;
+
+    let md = `# 探针快照 — ${uid}\n`;
+    md += `- 捕获时间: ${s.captured_at || ''}\n`;
+    md += `- 路径: ${s.is_fast_path ? 'Fast-Path（跳过探针 LLM）' : 'LLM 探针'}\n`;
+    md += `- 用户消息: ${s.user_message || ''}\n\n`;
+
+    if (s.is_fast_path) {
+      md += `## Fast-Path 决策\n`;
+      md += `- 命中工具: ${s.matched_tool || ''}\n`;
+      md += `- 命中关键词: ${s.matched_keyword || ''}\n`;
+      md += `- 风险: ${s.fast_path_risk ?? ''}\n`;
+    } else {
+      md += `## LLM 探针决策\n`;
+      md += `- 可用工具: ${(s.tools_available||[]).join(', ')}\n`;
+      const tcs = (s.tool_calls && s.tool_calls.length)
+        ? s.tool_calls.map(tc => `${tc.name||'?'}(${JSON.stringify(tc.arguments||{})})`).join(', ')
+        : '(无工具调用)';
+      md += `- 解析 tool_calls: ${tcs}\n\n`;
+
+      if (s.probe_system) md += `## 探针 System Prompt\n${s.probe_system}\n\n`;
+
+      const ctx = s.probe_context || [];
+      if (ctx.length) {
+        md += `## 注入上下文（${ctx.length} 条）\n\n`;
+        for (const m of ctx) md += `**[${m.role||'?'}]** ${m.content||''}\n\n`;
+      }
+
+      if (s.probe_response_raw) md += `## 探针原始返回\n${s.probe_response_raw}\n\n`;
+    }
+
+    const results = s.tool_results || [];
+    if (results.length) {
+      md += `## 工具执行结果\n\n`;
+      for (const r of results) {
+        md += `### ${r.name||'?'}${r.has_side_effect ? ' (副作用)' : ''}\n`;
+        md += `- 参数: ${JSON.stringify(r.arguments||{})}\n`;
+        md += `- 结果: ${r.result||'(无返回)'}\n\n`;
+      }
+    }
+
+    triggerDownload(filename, md);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  探针观测（observe-probe）
+// ══════════════════════════════════════════════════════════
+
+async function loadObserveProbeUidList() {
+  const listEl = document.getElementById('obs-probe-uid-list');
+  try {
+    const d = await api('GET', '/observe/probe');
+    const uids = d.uids || [];
+    if (!uids.length) {
+      listEl.textContent = '暂无快照（QQ 收到一条消息后刷新）';
+    } else {
+      listEl.innerHTML = '有快照的 uid：' + uids.map(u =>
+        `<a href="#" style="margin-left:8px;color:var(--accent)" onclick="document.getElementById('obs-probe-uid').value='${escapeHtml(u)}';loadObserveProbe();return false">${escapeHtml(u)}</a>`
+      ).join('');
+    }
+  } catch(e) {
+    listEl.textContent = '加载失败：' + e.message;
+  }
+}
+
+async function loadObserveProbe() {
+  const uid = (document.getElementById('obs-probe-uid').value || '').trim();
+  const n   = parseInt(document.getElementById('obs-probe-n').value || '0', 10);
+  const el  = document.getElementById('obs-probe-content');
+  if (!uid) { el.innerHTML = '<div style="color:var(--muted)">请输入 uid 后点击「查看」</div>'; return; }
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const d = await api('GET', `/observe/probe/${encodeURIComponent(uid)}?n=${n}`);
+    if (!d.snapshot) {
+      el.innerHTML = `<div style="color:var(--muted)">uid ${escapeHtml(uid)} 暂无快照，聊天后刷新。</div>`;
+      return;
+    }
+    const s = d.snapshot;
+    _obsProbeCurrent = { snap: s, uid };
+    const ts = s.captured_at ? s.captured_at.slice(0,19).replace('T',' ') : '';
+    const _chColor = s.channel === 'qq' ? '#2563eb' : s.channel === 'desktop' ? '#059669' : '#6b7280';
+    const _chBadge = s.channel ? `<span style="font-size:10px;background:${_chColor};color:#fff;padding:1px 6px;border-radius:8px;margin-left:8px;vertical-align:middle">${escapeHtml(s.channel)}</span>` : '';
+
+    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:12px">${ts} · 第 ${d.n+1}/${d.total_snapshots} 轮${_chBadge}</div>`;
+
+    // ── 决策卡 ──
+    if (s.is_fast_path) {
+      html += `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--warn)">
+        <div style="padding:10px 14px">
+          <div style="font-weight:600;margin-bottom:6px">Fast-Path（跳过探针 LLM）</div>
+          <div style="font-size:13px">
+            命中工具：<code style="background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(s.matched_tool||'')}</code>
+            &nbsp; 关键词：<code style="background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(s.matched_keyword||'')}</code>
+            &nbsp; 风险：<code style="background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(String(s.fast_path_risk??''))}</code>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px">用户消息：${escapeHtml((s.user_message||'').slice(0,200))}</div>
+        </div>
+      </div>`;
+    } else {
+      // LLM probe 路径
+      const toolCallsStr = (s.tool_calls && s.tool_calls.length)
+        ? s.tool_calls.map(tc => `${escapeHtml(tc.name||'?')}(${escapeHtml(JSON.stringify(tc.arguments||{}))})`).join(', ')
+        : '(无工具调用)';
+      html += `<div class="card" style="margin-bottom:12px">
+        <div style="padding:10px 14px;font-weight:600;border-bottom:1px solid var(--border)">LLM 探针决策</div>
+        <div style="padding:10px 14px;font-size:13px">
+          <div><span style="color:var(--muted)">解析出的 tool_calls：</span> <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px">${toolCallsStr}</code></div>
+          <div style="margin-top:6px"><span style="color:var(--muted)">可用工具：</span> ${(s.tools_available||[]).map(t=>`<code style="font-size:11px;background:var(--bg-secondary);padding:1px 4px;border-radius:3px;margin-right:4px">${escapeHtml(t)}</code>`).join('')}</div>
+          <div style="margin-top:6px"><span style="color:var(--muted)">用户消息：</span>${escapeHtml((s.user_message||'').slice(0,300))}</div>
+        </div>
+      </div>`;
+
+      // 探针 prompt 展开
+      html += `<div class="card" style="margin-bottom:12px">
+        <div style="padding:8px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border)" onclick="togglePromptLayer('obs-probe-sys')">
+          <span style="font-size:13px;font-weight:600">探针 System Prompt</span><span>▶</span>
+        </div>
+        <div id="obs-probe-sys" style="display:none;padding:10px 14px">
+          <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:8px;border-radius:4px;max-height:250px;overflow:auto;color:var(--text)">${escapeHtml((s.probe_system||'').slice(0,3000))}</pre>
+        </div>
+      </div>`;
+
+      // 上下文
+      const ctx = s.probe_context || [];
+      if (ctx.length) {
+        html += `<div class="card" style="margin-bottom:12px">
+          <div style="padding:8px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border)" onclick="togglePromptLayer('obs-probe-ctx')">
+            <span style="font-size:13px;font-weight:600">注入的对话上下文（${ctx.length} 条）</span><span>▶</span>
+          </div>
+          <div id="obs-probe-ctx" style="display:none;padding:10px 14px">
+            ${ctx.map(m=>`<div style="margin-bottom:6px"><span style="font-size:11px;color:var(--muted)">[${escapeHtml(m.role||'')}]</span> <span style="font-size:12px">${escapeHtml((m.content||'').slice(0,300))}</span></div>`).join('')}
+          </div>
+        </div>`;
+      }
+
+      // 原始返回
+      if (s.probe_response_raw) {
+        html += `<div class="card" style="margin-bottom:12px">
+          <div style="padding:8px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border)" onclick="togglePromptLayer('obs-probe-raw')">
+            <span style="font-size:13px;font-weight:600">探针原始返回</span><span>▶</span>
+          </div>
+          <div id="obs-probe-raw" style="display:none;padding:10px 14px">
+            <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:8px;border-radius:4px;max-height:200px;overflow:auto;color:var(--text)">${escapeHtml((s.probe_response_raw||'').slice(0,2000))}</pre>
+          </div>
+        </div>`;
+      }
+    }
+
+    // ── 工具执行结果 ──
+    const results = s.tool_results || [];
+    if (results.length) {
+      html += `<div class="card" style="margin-bottom:12px">
+        <div style="padding:10px 14px;font-weight:600;border-bottom:1px solid var(--border)">工具执行结果</div>
+        ${results.map(r => `
+          <div style="padding:8px 14px;border-bottom:1px solid var(--border)">
+            <div style="font-size:13px;font-weight:600">${escapeHtml(r.name||'?')}
+              ${r.has_side_effect ? '<span style="font-size:10px;background:#7c3aed;color:#fff;padding:1px 5px;border-radius:8px;margin-left:4px">副作用</span>' : ''}
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">参数：${escapeHtml(JSON.stringify(r.arguments||{}))}</div>
+            <div style="font-size:12px;margin-top:4px;background:var(--bg-secondary);padding:6px 8px;border-radius:4px">${escapeHtml((r.result||'(无返回)').slice(0,500))}</div>
+          </div>`
+        ).join('')}
+      </div>`;
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  梦境 Prompt 检视（observe-dream-prompt）
+// ══════════════════════════════════════════════════════════
+
+async function loadObserveDreamPromptUidList() {
+  const listEl = document.getElementById('obs-dream-prompt-uid-list');
+  try {
+    const d = await api('GET', '/observe/dream-prompt');
+    const uids = d.uids || [];
+    if (!uids.length) {
+      listEl.textContent = '暂无快照（进行一次梦境对话后刷新）';
+    } else {
+      listEl.innerHTML = '有快照的 uid：' + uids.map(u =>
+        `<a href="#" style="margin-left:8px;color:var(--accent)" onclick="document.getElementById('obs-dream-prompt-uid').value='${escapeHtml(u)}';loadObserveDreamPrompt();return false">${escapeHtml(u)}</a>`
+      ).join('');
+    }
+  } catch(e) {
+    listEl.textContent = '加载失败：' + e.message;
+  }
+}
+
+async function loadObserveDreamPrompt() {
+  const uid = (document.getElementById('obs-dream-prompt-uid').value || '').trim();
+  const n   = parseInt(document.getElementById('obs-dream-prompt-n').value || '0', 10);
+  const el  = document.getElementById('obs-dream-prompt-content');
+  if (!uid) { el.innerHTML = '<div style="color:var(--muted)">请输入 uid 后点击「查看」</div>'; return; }
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const d = await api('GET', `/observe/dream-prompt/${encodeURIComponent(uid)}?n=${n}`);
+    if (!d.snapshot) {
+      el.innerHTML = `<div style="color:var(--muted)">uid ${escapeHtml(uid)} 暂无梦境快照，进行一次梦境对话后刷新。</div>`;
+      return;
+    }
+    const s = d.snapshot;
+    _obsDreamPromptCurrent = { snap: s, uid };
+    const ts = s.captured_at ? s.captured_at.slice(0,19).replace('T',' ') : '';
+
+    // ── 总览 ──
+    const sceneTags = (s.scene_tags || []).map(t => `<code style="font-size:11px;background:#1d3a6e;color:#93c5fd;padding:1px 4px;border-radius:3px;margin-right:3px">${escapeHtml(t)}</code>`).join('') || '(无)';
+    let html = `
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${ts} · 第 ${d.n+1}/${d.total_snapshots} 轮 · dream_id: ${escapeHtml(s.dream_id||'?')}</div>
+      <div class="card" style="margin-bottom:12px">
+        <div style="padding:10px 14px;display:flex;gap:24px;font-size:13px;flex-wrap:wrap">
+          <span><span style="color:var(--muted)">世界：</span><strong>${escapeHtml(s.world_id||'?')}</strong></span>
+          <span><span style="color:var(--muted)">模式：</span><strong>${escapeHtml(s.lucid_mode||'?')}</strong></span>
+          <span><span style="color:var(--muted)">dream_mode：</span><strong>${escapeHtml(s.dream_mode||'?')}</strong></span>
+          <span><span style="color:var(--muted)">历史轮数：</span><strong>${s.history_turns||0}</strong></span>
+          <span><span style="color:var(--muted)">token 合计：</span><strong>${(s.total_tokens||0).toLocaleString()}</strong></span>
+        </div>
+        <div style="padding:4px 14px 10px;font-size:13px"><span style="color:var(--muted)">scene_tags：</span>${sceneTags}</div>
+      </div>`;
+
+    // ── 层列表 ──
+    const layers = s.layers || [];
+    const totalTok = layers.reduce((a,l)=>a+(l.tokens||0),0) || 1;
+    html += layers.map((lyr, i) => {
+      const injected = lyr.injected;
+      const flags = (lyr.flags||[]).join(' ');
+      const pct = injected ? ((lyr.tokens||0)/totalTok*100).toFixed(1) : '0.0';
+      const barColor = !injected ? '#374151' : (lyr.label||'').includes('D4.5') ? '#7c3aed' : 'var(--accent)';
+      const contentId = `obs-dp-layer-${i}`;
+      const flagBadge = flags ? `<span style="font-size:10px;background:#374151;color:#9ca3af;padding:1px 5px;border-radius:8px;margin-left:4px">${escapeHtml(flags)}</span>` : '';
+      const noteStr = lyr.note ? `<span style="font-size:11px;color:var(--muted);margin-left:6px">${escapeHtml(lyr.note)}</span>` : '';
+      return `
+        <div class="card" style="margin-bottom:6px;opacity:${injected?'1':'0.4'}">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer" onclick="togglePromptLayer('${contentId}')">
+            <span style="font-size:12px;font-weight:700;width:60px;color:var(--accent)">${escapeHtml(lyr.label||'?')}</span>
+            <span style="flex:1;font-size:12px">${injected ? '' : '<span style="color:var(--muted)">[未注入]</span> '}${flagBadge}${noteStr}</span>
+            <span style="font-size:11px;color:var(--muted)">${injected?(lyr.chars||0).toLocaleString()+' 字 / '+((lyr.tokens||0))+' tok':''}</span>
+            <span style="font-size:11px;color:var(--muted);width:36px;text-align:right">${injected?pct+'%':''}</span>
+            <span style="font-size:11px">${injected?'▶':''}</span>
+          </div>
+          ${injected ? `<div style="padding:0 14px 2px"><div style="height:3px;background:var(--bg-secondary);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor}"></div></div></div>` : ''}
+          <div id="${contentId}" style="display:none;padding:0 14px 10px;margin-top:4px">
+            ${lyr.content ? `<pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:10px;border-radius:4px;max-height:300px;overflow:auto;color:var(--text);margin-top:4px">${escapeHtml((lyr.content||'').slice(0,3000))}${(lyr.content||'').length>3000?'\n… (截断)':''}</pre>` : '<div style="font-size:11px;color:var(--muted);padding:4px 0">（本层无内容/禁用）</div>'}
+          </div>
+        </div>`;
+    }).join('');
+
+    // ── 用户消息 & LLM 输出 ──
+    if (s.user_message) {
+      html += `<div class="card" style="margin-top:12px;border-left:3px solid var(--success)">
+        <div style="padding:10px 14px"><span style="font-size:12px;color:var(--muted)">用户消息：</span>
+        <pre style="font-size:12px;white-space:pre-wrap;word-break:break-all;margin-top:4px;color:var(--text)">${escapeHtml(s.user_message.slice(0,500))}</pre></div>
+      </div>`;
+    }
+    if (s.llm_output != null) {
+      html += `<div class="card" style="margin-top:8px;border-left:3px solid var(--accent)">
+        <div style="padding:10px 14px"><span style="font-size:12px;color:var(--muted)">梦境 LLM 回复：</span>
+        <pre style="font-size:12px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:8px;border-radius:4px;max-height:400px;overflow:auto;margin-top:4px;color:var(--text)">${escapeHtml((s.llm_output||'').slice(0,5000))}${(s.llm_output||'').length>5000?'\n…(截断)':''}</pre></div>
+      </div>`;
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  触发器目录（observe-trigger-catalog）
+// ══════════════════════════════════════════════════════════
+
+async function loadTriggerCatalog() {
+  const el = document.getElementById('trigger-catalog-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const d = await api('GET', '/observe/trigger-catalog');
+    const proposers = d.proposers || [];
+    if (!proposers.length) {
+      el.innerHTML = '<div style="color:var(--muted)">无已注册 proposer。</div>';
+      return;
+    }
+    let html = '';
+    for (const p of proposers) {
+      const tnames = p.trigger_names || [];
+      const samples = p.samples || {};
+      const hasSample = tnames.some(t => samples[t] != null);
+      html += `<div class="card" style="margin-bottom:12px">
+        <div class="card-header" style="padding:10px 14px">
+          <h3 style="font-size:14px;margin:0">${escapeHtml(p.name)}</h3>
+          ${hasSample ? '<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:1px 6px;border-radius:8px;margin-left:8px">有样本</span>' : '<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:1px 6px;border-radius:8px;margin-left:8px">暂无样本</span>'}
+        </div>`;
+      for (const tname of tnames) {
+        const s = samples[tname];
+        const tsStr = s ? (s.captured_at||'').slice(0,19).replace('T',' ') : '';
+        const sq = s ? (s.search_query||'').trim() : '';
+        const sp = s ? (s.seed_prompt||'').trim() : '';
+        const out = s ? (s.llm_output||null) : null;
+        const tok = s ? (s.token_estimate||0) : 0;
+        const contentId = `tc-${escapeHtml(p.name)}-${escapeHtml(tname)}`.replace(/[^a-zA-Z0-9-]/g,'_');
+        html += `
+          <div style="padding:8px 14px;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="togglePromptLayer('${contentId}')">
+              <code style="font-size:12px;background:var(--bg-secondary);padding:2px 6px;border-radius:4px">${escapeHtml(tname)}</code>
+              ${s ? `<span style="font-size:11px;color:var(--muted)">${tsStr} · ${tok.toLocaleString()} 字</span>` : '<span style="font-size:11px;color:var(--muted)">暂无样本</span>'}
+              ${s ? '<span style="font-size:11px;color:var(--muted)">▶</span>' : ''}
+            </div>
+            ${s ? `<div id="${contentId}" style="display:none;margin-top:8px;padding-left:8px">
+              <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">召回锚点 (search_query)：</span><span style="color:#fde68a">${sq ? escapeHtml(sq.slice(0,200)) : '<em style="color:var(--muted)">（与 seed_prompt 相同）</em>'}</span></div>
+              <div style="font-size:12px;margin-bottom:6px"><span style="color:var(--muted)">种子 prompt：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:100px;overflow:auto">${escapeHtml(sp.slice(0,600))}${sp.length>600?'\n…':''}</pre></div>
+              ${out != null ? `<div style="font-size:12px"><span style="color:var(--muted)">LLM 回复：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:100px;overflow:auto;color:var(--text)">${escapeHtml((out||'').slice(0,600))}${(out||'').length>600?'\n…':''}</pre></div>` : ''}
+            </div>` : ''}
+          </div>`;
+      }
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  梦境设定页（dream-settings）
+// ══════════════════════════════════════════════════════════
