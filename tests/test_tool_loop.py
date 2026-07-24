@@ -624,7 +624,9 @@ async def test_tail_brace_relay_triggers_second_tool_call(monkeypatch):
     assert execute_calls[0]["tool_name"] == "web_search"
     assert execute_calls[1]["tool_name"] == "fish_cast"
     assert execute_calls[1]["tool_args"] == {"wait": 10}
-    assert execute_calls[1]["origin"] == "assistant_loop"
+    # relay 分支用独立 origin，和原生 tool_calls 分支区分开，方便日后从 action_trace/
+    # error.log 反推故障来自哪条路径（Brief 120 事后排查时吃过分不清的亏）。
+    assert execute_calls[1]["origin"] == "assistant_loop_relay"
 
     probe_calls = [c for c in relay_calls if c["call_category"] == "probe"]
     assert len(probe_calls) == 1

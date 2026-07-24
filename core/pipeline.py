@@ -1048,6 +1048,15 @@ class Pipeline:
                         relay_calls = await _resolve_relay_intent(intent_text)
                         if relay_calls:
                             used_tool = True
+                            # 可观测性：relay 分支和原生 tool_calls 分支最终都调用同一个
+                            # _execute()，仅凭 error.log 里的报错完全分不清故障来自哪条路径
+                            # （Brief 120 事后排查时吃过这个亏）。这里显式记一条 info，
+                            # 且下面 execute 用独立 origin=assistant_loop_relay。
+                            logger.info(
+                                "[pipeline.run_agentic_loop] tail-brace relay 触发: "
+                                "intent=%r resolved=%s",
+                                intent_text, [rc["name"] for rc in relay_calls],
+                            )
                             loop_msgs.append({
                                 "role": "assistant",
                                 "content": display_text,
@@ -1067,7 +1076,7 @@ class Pipeline:
                                 try:
                                     result, ask_confirm = await _execute(
                                         rc["name"], rc["arguments"], uid, uid, is_group,
-                                        session_state, origin="assistant_loop", char_id=char_id,
+                                        session_state, origin="assistant_loop_relay", char_id=char_id,
                                         bypass_read_log=_bypass_read_log,
                                     )
                                 except Exception as e:

@@ -1166,7 +1166,9 @@ def parse_tail_brace(text: str) -> tuple[str, str | None]:
     return display_text, (intent or None)
 
 
-_EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({"user_live", "assistant_intent", "assistant_loop"})
+_EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({
+    "user_live", "assistant_intent", "assistant_loop", "assistant_loop_relay",
+})
 _OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
     "toy_vibrate",
     "toy_stop",
@@ -1238,7 +1240,11 @@ async def execute(
 
     origin 必填，不在白名单则 fail-closed：返回 (None, None) + 记 warning。
     白名单：user_live（Path A 用户发起）/ assistant_intent（Path B 意图执行，附加门控）/
-    assistant_loop（Path C tool loop 自主多步调用，Brief 28）。
+    assistant_loop（Path C tool loop 自主多步调用，Brief 28）/ assistant_loop_relay（Path C
+    尾部花括号二次调用兜底，Brief 120——与 assistant_loop 区分开，是为了让 action_trace /
+    error.log 里能分清一次工具执行到底来自模型的原生结构化 tool_calls，还是来自
+    {true:...} 标记走的中转解析；此前两者共用同一个 origin，出故障时完全没法从落痕
+    或日志反推是哪条路径触发的）。
     漏传 → TypeError，杜绝静默绕过。
     char_id: 当前活跃角色桶 id，用于 persist=True 工具的已读指纹检查和 short_term 回写。
     bypass_read_log: 本轮用户消息命中显式重读短语时由调用方传 True（Brief 82 · 决策 7），
