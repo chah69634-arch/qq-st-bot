@@ -359,6 +359,12 @@ def _looks_like_leaked_tool_call_markup(text: str) -> bool:
     return bool(text) and text.count(_LEAKED_TOOL_TOKEN_CHAR) >= _LEAKED_TOOL_TOKEN_MIN_COUNT
 
 
+# chat_stream() 逐 chunk 到达，判不出"这一段已经安全"就不能立刻 yield；留这么多个
+# 字符在尾部缓冲区里滚动扫描，覆盖典型 special token 全长（真实样本 <｜tool▁calls▁
+# begin｜> 一类在 20～30 字符量级），避免 token 跨多个 chunk 到达时漏判。
+_LEAK_SCAN_WINDOW = 64
+
+
 async def chat_turn(
     messages: list[dict],
     tools: list[dict],
@@ -477,6 +483,14 @@ async def chat_stream(
       - 内联 <think>/<thinking>：首个非空 chunk 以其开头则进入缓冲态，直到读到闭合标签
         才开始对外 yield；缓冲超 60s 或流结束仍未闭合 → fail-open，剥掉已缓冲的开标签
         前缀后放行剩余部分。
+
+    Brief 122 补：chat_turn()（工具决策步）已经会挡掉模型自己泄漏的工具调用内部
+    special token（如 <｜tool▁calls▁begin｜>），但那次修复漏了这条纯文本的流式
+    出口——同一类泄漏一样可能出现在无 tools 的最终生成里，且是逐 chunk 到达，
+    不是一次性拿到完整 content，不能直接复用 chat_turn() 那个"整段判完再决定"
+    的判断方式。这里维护一个尾部滚动缓冲区（_LEAK_SCAN_WINDOW 个字符），只有
+    确认不含泄漏特征的部分才真正 yield 给调用方（进而推给前端）；一旦在缓冲区里
+    扫到泄漏特征，判定这条流已经脏了，本次剩余内容全部丢弃、不再展示。
     """
     _timeout = _CALL_TIMEOUTS.get(call_category, _DEFAULT_CALL_TIMEOUT)
 
@@ -509,6 +523,45 @@ async def chat_stream(
     buf = ""
     buf_deadline = 0.0
 
+    leak_buf = ""
+    leaked = False
+
+    def _leak_scan(text: str) -> str | None:
+        """滚动扫描泄漏特征，返回这一步真正可以安全 yield 的部分（可能是 None）。
+
+        命中泄漏时只丢弃从第一个可疑字符开始的部分——之前已经攒在缓冲区里的
+        干净文本（比如泄漏 token 前面正常的角色台词）仍然放行，不能因为后面
+        出现了泄漏就连前面已经确认干净的内容一起吞掉。
+        """
+        nonlocal leak_buf, leaked
+        if leaked:
+            return None
+        leak_buf += text
+        if _looks_like_leaked_tool_call_markup(leak_buf):
+            cut = leak_buf.find(_LEAKED_TOOL_TOKEN_CHAR)
+            safe_prefix = leak_buf[:cut] if cut > 0 else ""
+            logger.warning(
+                "[llm_client.chat_stream] 疑似模型工具调用内部 token 泄漏进流式"
+                "输出，丢弃本次剩余内容: %r",
+                leak_buf[:200],
+            )
+            leaked = True
+            leak_buf = ""
+            return safe_prefix or None
+        if len(leak_buf) > _LEAK_SCAN_WINDOW:
+            cut = len(leak_buf) - _LEAK_SCAN_WINDOW
+            safe, leak_buf = leak_buf[:cut], leak_buf[cut:]
+            return safe or None
+        return None
+
+    def _leak_flush() -> str | None:
+        """流正常结束时把尾部缓冲区里剩下的（已确认安全的）内容吐出。"""
+        nonlocal leak_buf
+        if leaked:
+            return None
+        out, leak_buf = leak_buf, ""
+        return out or None
+
     async for chunk in stream:
         if not chunk.choices:
             continue
@@ -532,25 +585,35 @@ async def chat_stream(
                 in_think_buffer = False
                 remainder = buf[m.end():]
                 buf = ""
-                if remainder:
-                    yield remainder
+                safe = _leak_scan(remainder) if remainder else None
+                if safe:
+                    yield safe
                 continue
             if time.monotonic() >= buf_deadline:
                 in_think_buffer = False
                 stripped = thinking.THINK_OPEN_RE.sub("", buf, count=1)
                 buf = ""
-                if stripped:
-                    yield stripped
+                safe = _leak_scan(stripped) if stripped else None
+                if safe:
+                    yield safe
                 continue
             continue
 
-        yield piece
+        safe = _leak_scan(piece)
+        if safe:
+            yield safe
 
     # 流结束但仍在缓冲态（未闭合）→ fail-open，把已缓冲内容剥掉开标签后放行。
     if in_think_buffer and buf:
         stripped = thinking.THINK_OPEN_RE.sub("", buf, count=1)
         if stripped:
-            yield stripped
+            safe = _leak_scan(stripped)
+            if safe:
+                yield safe
+
+    tail = _leak_flush()
+    if tail:
+        yield tail
 
 
 def parse_tool_call_response(response: str) -> list[dict] | None:
