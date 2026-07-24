@@ -1,6 +1,6 @@
 # 公开默认角色的中性 activity_pool 示例。
 # 与 characters/default.json 配套：README quickstart 用这套资产完成开箱体验。
-# 字段说明见 content/characters/yexuan/activity_pool.example.yaml。
+# 字段说明见 examples/activity_pool.example.yaml。
 
 activities:
   - id: reading

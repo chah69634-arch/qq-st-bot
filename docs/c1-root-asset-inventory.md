@@ -10,6 +10,18 @@
 > `core/data_paths.py` 的 `content/characters/{char_id}/` 硬编码路径）。唯一发现的缺口是本表
 > 漏记了 `content/characters/yexuan/*.example.yaml`（已跟踪但当时没写进表格），已在下方补上；
 > 没有发现需要清理或搬移的新增游离文件。
+>
+> 2026-07-25 补充：用户仍觉得根目录"示例/种子/兜底"三类文件混在一起噪音大，要求把**纯参考
+> 用途、运行时不读**的示例文件统一收进 `examples/`；运行时会被硬编码路径直接加载的兜底数据
+> （`characters/default.json`、`dream_postcards/templates/`、`content/characters/default/`）
+> 语义上不是"示例"，仍留在原处不搬，避免连带改 `core/data_paths.py`/`core/activity_manager.py`/
+> `core/dream/postcard.py` 的路径。实际搬动：`content/characters/yexuan/activity_pool.example.yaml`
+> → `examples/activity_pool.example.yaml`，`content/characters/yexuan/traits.example.yaml` →
+> `examples/traits.example.yaml`，`content/jailbreak_presets/示例.example.json` →
+> `examples/jailbreak_preset.example.json`；两个空目录（`content/characters/yexuan/`、
+> `content/jailbreak_presets/`）随之删除。已同步改 `content/characters/default/traits.yaml`、
+> `content/characters/default/activity_pool.yaml` 里指向旧路径的注释；`.gitignore` 里
+> `!content/characters/**/*.example.yaml`/`.json` 例外规则是通用规则，不必删。
 
 ## 决策与目标结构
 
@@ -36,9 +48,8 @@ userdata/                         # 用户可写/私有 authored 资产（Git ig
 | `admin/`、`channels/`、`core/`、`scripts/`、`tests/`、`tools/`、`firmware/` | 保留 | 源码、测试与构建入口。 |
 | `data/` | 保留 | 运行时 canonical 状态根；必须经 `get_paths()` 并在 test mode 偏移。不是可随意迁移的用户素材目录。 |
 | `defaults/` | 保留 | 8 个已跟踪 seed 文件；`DataPaths` 使用它们初始化空运行时状态。 |
-| `examples/` | 保留 | 已跟踪的公开角色卡示例/模板。 |
-| `content/characters/default/`、`content/jailbreak_presets/示例.example.json` | 保留 | 已跟踪的公开默认 authored 资产。 |
-| `content/characters/yexuan/{activity_pool,traits}.example.yaml` | 保留 | 已跟踪的公开中性示例（`.gitignore` `content/characters/*/*.yaml` 的 `!*.example.yaml` 例外），供其他角色卡作者参照结构；上次盘点漏记，Brief 116 §2 复查时补上。 |
+| `examples/` | 保留 | 已跟踪的公开角色卡/资产示例与模板，含 2026-07-25 从 `content/characters/yexuan/`、`content/jailbreak_presets/` 搬入的 `activity_pool.example.yaml`、`traits.example.yaml`、`jailbreak_preset.example.json`。 |
+| `content/characters/default/` | 保留 | 已跟踪的公开默认 authored 资产；运行时被 `core/activity_manager.py`/`core/data_paths.py` 硬编码路径直接加载，不是示例，不搬进 `examples/`。 |
 | `characters/default.json`、`characters/default_author_notes.json` | 保留 | 已跟踪的公开默认角色卡与作者注池。 |
 | `characters/dream_postcards/templates/` | 保留 | 已跟踪的 Dream 明信片模板；`core/dream/postcard.py` 直接读取。 |
 | `config.example.yaml`、`*.example.yaml`、`secrets.example.yaml`、`README*`、`ARCHITECTURE.md`、`AGENTS.md`、`DESIGN.md`、启动/安装脚本 | 保留 | 项目文档、模板和启动入口；即使某些本地文档当前未跟踪，也不是缓存。 |

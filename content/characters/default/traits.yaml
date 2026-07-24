@@ -1,6 +1,6 @@
 # 公开默认角色的中性 traits 示例。
 # 与 characters/default.json 配套：README quickstart 用这套资产完成开箱体验。
-# 复制本仓库自建角色时，参考 content/characters/yexuan/traits.example.yaml 的字段说明。
+# 复制本仓库自建角色时，参考 examples/traits.example.yaml 的字段说明。
 
 default_traits:
   - id: curious
