@@ -9,6 +9,7 @@
 设备控制和定时器逻辑较简单，直接写在此模块内。
 """
 
+import json
 import logging
 import platform
 import re
@@ -1220,6 +1221,25 @@ def tool_loop_active(uid: str) -> bool:
     return mc.tool_call_mode == "function_calling"
 
 
+def _log_execute_failure_context(tool_name: str, tool_args: dict, origin: str) -> None:
+    """execute() 失败时把完整调用现场记进 error.log（Brief 120 事后排查补的）。
+
+    故意不复用 action_trace.build_args_digest() 的白名单——那个白名单是为了不让
+    diary/memory 这类隐私内容经 action_trace 回流进模型自己的下轮 prompt（层 10.5），
+    error.log 只给人看、从不喂回模型，此前唯一记录的信息只有异常本身，连工具名/
+    参数/origin 都没有，出故障后完全没法反推真正发给 MCP 的是什么（Brief 120 排查
+    cedartoy「command 参数必填」时吃过这个亏）。这里记完整 tool_args。
+    """
+    try:
+        args_repr = json.dumps(tool_args, ensure_ascii=False, default=str)
+    except Exception:
+        args_repr = repr(tool_args)
+    logger.error(
+        "[tool_dispatcher.execute] 失败上下文: tool=%s origin=%s args=%s",
+        tool_name, origin, args_repr,
+    )
+
+
 async def execute(
     tool_name: str,
     tool_args: dict,
@@ -1391,11 +1411,13 @@ async def execute(
         return f"工具已执行：{tool_name}，结果：{result}", None
     except TypeError as e:
         log_error("tool_dispatcher.execute", e)
+        _log_execute_failure_context(tool_name, tool_args, origin)
         fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
         _trace("failed", fallback)
         return fallback, None
     except Exception as e:
         log_error("tool_dispatcher.execute", e)
+        _log_execute_failure_context(tool_name, tool_args, origin)
         fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
         _trace("failed", fallback)
         return fallback, None
