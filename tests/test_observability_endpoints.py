@@ -65,3 +65,96 @@ def test_debug_recall_alias_is_authenticated_and_empty_safe(sandbox, monkeypatch
     assert payload["uid"] == "u1"
     assert payload["char_id"] == "yexuan"
     assert payload["records"] == []
+
+
+# ── 资源完整性检查 / API 契约检查（2026-07-25，茶茶反馈 item 9/10）────────────
+
+def test_resource_completeness_requires_auth_and_returns_shape(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+    assert client.get("/observability/resource-completeness").status_code == 401
+
+    payload = client.get("/observability/resource-completeness", headers=_headers()).json()
+    assert "checks" in payload and "summary" in payload and "known_gaps" in payload
+    assert len(payload["checks"]) > 0
+    for c in payload["checks"]:
+        assert c["status"] in ("ok", "off", "missing_asset", "unknown")
+    assert len(payload["known_gaps"]) > 0
+    for g in payload["known_gaps"]:
+        assert g["id"] and g["label"] and g["source"]
+
+
+def test_resource_completeness_single_check_failure_is_isolated(sandbox, monkeypatch):
+    """单项检查抛异常时，只影响那一项（status=unknown），不得拖垮整体接口。"""
+    _active(sandbox)
+    client = _client(monkeypatch)
+
+    def _boom():
+        raise RuntimeError("模拟检查崩溃")
+
+    import core.resource_completeness as _rc
+    monkeypatch.setattr(_rc, "_CHECKS", [("boom", "崩溃项", _boom), *_rc._CHECKS[1:]])
+
+    response = client.get("/observability/resource-completeness", headers=_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    boom_check = next(c for c in payload["checks"] if c["id"] == "boom")
+    assert boom_check["status"] == "unknown"
+    assert len(payload["checks"]) == len(_rc._CHECKS)
+
+
+def test_api_contract_check_requires_auth_and_returns_shape(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+    assert client.get("/observability/api-contract-check").status_code == 401
+
+    payload = client.get("/observability/api-contract-check", headers=_headers()).json()
+    assert "frontend_available" in payload
+    assert "backend_producible" in payload
+    assert payload["status"] in ("ok", "drift_detected", "frontend_unavailable")
+
+
+def test_api_contract_check_gracefully_skips_when_frontend_repo_missing(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+
+    import core.api_contract_check as _acc
+    monkeypatch.setattr(_acc, "_find_frontend_repo", lambda: None)
+
+    payload = client.get("/observability/api-contract-check", headers=_headers()).json()
+    assert payload["frontend_available"] is False
+    assert payload["status"] == "frontend_unavailable"
+    # 前端不可用时不应报错崩溃，且后端侧扫描仍应产出（不因前端缺失而跳过自己的那一半）
+    assert "backend_producible" in payload
+
+
+def test_api_contract_check_detects_injected_drift(sandbox, monkeypatch, tmp_path):
+    """回归造假：伪造一个前端仓库，只认识部分 type，验证 broken 列表能抓出缺口。"""
+    _active(sandbox)
+    client = _client(monkeypatch)
+
+    fake_repo = tmp_path / "fake_frontend"
+    ws_dir = fake_repo / "src" / "shared" / "api"
+    ws_dir.mkdir(parents=True)
+    (ws_dir / "ws.ts").write_text(
+        "class WSClient {\n"
+        "  private async _dispatchAction(type, action) {\n"
+        "    switch (type) {\n"
+        "      case 'minimize_window':\n"
+        "        return;\n"
+        "      default:\n"
+        "        throw new Error('unsupported');\n"
+        "    }\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    import core.api_contract_check as _acc
+    monkeypatch.setattr(_acc, "_find_frontend_repo", lambda: fake_repo)
+
+    payload = client.get("/observability/api-contract-check", headers=_headers()).json()
+    assert payload["frontend_available"] is True
+    assert payload["status"] == "drift_detected"
+    assert "show_notify" in payload["broken"], "假前端只认 minimize_window，show_notify 应报漂移"
+    assert "media_play_pause" in payload["broken"]

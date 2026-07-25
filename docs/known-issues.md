@@ -19,6 +19,26 @@
 仍需真机做一次冒烟（危险模式窗口内触发一次 desktop 类动作 + toy_invite/dream_invite，确认
 均由 tool loop 正常执行）后再确认到期删除。
 
+**2026-07-25 追加发现并已修复**：排查 API 契约测试（见下方新增观测面板）时发现 Path B
+剩余 3 种意图（`send_notification`/`play_pause`/`play_song`）推送的 `type` 字符串与前端
+`ws.ts::_dispatchAction` 实际认识的 `show_notify`/`media_play_pause`/`play_netease`（+
+`song_id` 而非 `song_name`/`artist`）从不一致——这 3 种意图经 Path B 触发时从未真正生效
+过，只是一直被优先生效的 Path C 同名正确实现掩盖。已在 `core/pipeline.py` 对齐（
+`_INTENT_ACTION_TYPE_MAP` 做 type 翻译，`play_song` 改为委托 `_play_song_wrapper` 复用
+网易云搜索解析），回归测试见 `tests/test_intent_grounding.py`。结论不变：Path B 的用户可
+感能力 Path C 全部覆盖，且已验证正确，103 号删除单依旧无阻塞项——这次修复只是让 Path B
+在被删除前的观察期内也是"真的能用"的，而不是名义上支持、实际从未生效。
+
+**2026-07-25 新增工具**：管理面板「观测」区新增两块只读面板，供日常自查：
+- `GET /observability/resource-completeness`（`core/resource_completeness.py`）——扫描
+  各功能开关/素材配置状态，标出"关着"和"开了但缺素材"；附一份人工维护的"功能压根还没
+  做"清单（当前含移动端 TTS 投递、桌宠语音条 UI 解耦、Live2D/3D 绑定前端消费三项，来源
+  见 `cc-tasks/124`/`125`/`docs/tools.md`）。
+- `GET /observability/api-contract-check`（`core/api_contract_check.py`）——扫后端
+  `_push_desktop_action` 产出的 type 字符串 + Path B 意图翻译表，和前端 `ws.ts` 的
+  `_dispatchAction` switch 取差集，就是上面这次漂移的检测器。前端仓库不存在时优雅跳过
+  （约定与本仓同级目录，或设 `EMERALD_CLIENT_REPO` 环境变量）。
+
 ### ACT-1：阅读动向跨角色串桶
 
 **状态**：`observe`（前端已分桶，待复现观察）

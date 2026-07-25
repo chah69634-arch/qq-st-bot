@@ -1215,5 +1215,117 @@ async function loadTriggerCatalog() {
 }
 
 // ══════════════════════════════════════════════════════════
+//  资源完整性/功能状态检查（observe-resource-completeness，2026-07-25）
+// ══════════════════════════════════════════════════════════
+
+const _RC_STATUS_BADGE = {
+  ok:            { bg: '#1a3a1a', color: '#86efac', text: '正常' },
+  off:           { bg: '#2d2d2d', color: '#9ca3af', text: '开关关闭' },
+  missing_asset: { bg: '#3a2a1a', color: '#fbbf24', text: '缺素材' },
+  unknown:       { bg: '#3a1a1a', color: '#f87171', text: '检查异常' },
+};
+
+async function loadResourceCompleteness() {
+  const el = document.getElementById('resource-completeness-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const d = await api('GET', '/observability/resource-completeness');
+    const checks = d.checks || [];
+    const gaps = d.known_gaps || [];
+    const summary = d.summary || {};
+
+    let html = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">';
+    for (const [status, count] of Object.entries(summary)) {
+      const b = _RC_STATUS_BADGE[status] || { bg: '#2d2d2d', color: '#9ca3af', text: status };
+      html += `<span style="font-size:12px;background:${b.bg};color:${b.color};padding:3px 10px;border-radius:10px">${escapeHtml(b.text)} × ${count}</span>`;
+    }
+    html += '</div>';
+
+    html += '<div class="card"><table style="width:100%;border-collapse:collapse">';
+    html += `<thead><tr style="text-align:left;font-size:12px;color:var(--muted)">
+      <th style="padding:8px 12px">功能</th><th style="padding:8px 12px">状态</th><th style="padding:8px 12px">详情</th>
+    </tr></thead><tbody>`;
+    for (const c of checks) {
+      const b = _RC_STATUS_BADGE[c.status] || { bg: '#2d2d2d', color: '#9ca3af', text: c.status };
+      html += `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 12px;font-size:13px">${escapeHtml(c.label)}</td>
+        <td style="padding:8px 12px"><span style="font-size:11px;background:${b.bg};color:${b.color};padding:2px 8px;border-radius:8px">${escapeHtml(b.text)}</span></td>
+        <td style="padding:8px 12px;font-size:12px;color:var(--muted)">${escapeHtml(c.detail || '')}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div>';
+
+    if (gaps.length) {
+      html += '<h3 style="font-size:14px;margin:18px 0 8px">已知功能缺口（人工记录，随实现推进摘除）</h3>';
+      html += '<div class="card">';
+      for (const g of gaps) {
+        html += `<div style="padding:10px 14px;border-top:1px solid var(--border)">
+          <div style="font-size:13px"><b>${escapeHtml(g.label)}</b> <span style="font-size:11px;color:var(--muted)">来源: ${escapeHtml(g.source)}</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">${escapeHtml(g.detail)}</div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  API 契约检查（observe-api-contract，2026-07-25）
+// ══════════════════════════════════════════════════════════
+
+async function loadApiContractCheck() {
+  const el = document.getElementById('api-contract-check-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const d = await api('GET', '/observability/api-contract-check');
+
+    if (!d.frontend_available) {
+      el.innerHTML = `<div class="card" style="padding:14px">
+        <div style="font-size:13px;color:var(--muted)">${escapeHtml(d.detail || '前端仓库不可用，跳过对比')}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px">后端仍可产出 ${Object.keys(d.backend_producible || {}).length} 种 action type，见下方（无对比对象）。</div>
+      </div>`;
+      return;
+    }
+
+    const brokenSet = new Set(d.broken || []);
+    const statusBadge = d.status === 'ok'
+      ? '<span style="font-size:12px;background:#1a3a1a;color:#86efac;padding:3px 10px;border-radius:10px">契约一致</span>'
+      : `<span style="font-size:12px;background:#3a1a1a;color:#f87171;padding:3px 10px;border-radius:10px">发现漂移 × ${brokenSet.size}</span>`;
+
+    let html = `<div style="margin-bottom:10px">${statusBadge} <span style="font-size:11px;color:var(--muted);margin-left:8px">前端仓库: ${escapeHtml(d.frontend_repo_path || '')}</span></div>`;
+
+    html += '<div class="card"><table style="width:100%;border-collapse:collapse">';
+    html += `<thead><tr style="text-align:left;font-size:12px;color:var(--muted)">
+      <th style="padding:8px 12px">type</th><th style="padding:8px 12px">前端是否认识</th><th style="padding:8px 12px">产出来源</th>
+    </tr></thead><tbody>`;
+    for (const [type, sources] of Object.entries(d.backend_producible || {})) {
+      const isBroken = brokenSet.has(type);
+      html += `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:8px 12px;font-size:13px"><code>${escapeHtml(type)}</code></td>
+        <td style="padding:8px 12px">${isBroken
+          ? '<span style="font-size:11px;background:#3a1a1a;color:#f87171;padding:2px 8px;border-radius:8px">不认识（漂移）</span>'
+          : '<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:2px 8px;border-radius:8px">认识</span>'}</td>
+        <td style="padding:8px 12px;font-size:12px;color:var(--muted)">${(sources || []).map(escapeHtml).join('<br>')}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div>';
+
+    if ((d.frontend_only || []).length) {
+      html += `<div style="font-size:12px;color:var(--muted);margin-top:12px">前端认识但本模块未扫到后端产出（不代表有问题，可能走别的推送路径）: ${d.frontend_only.map(escapeHtml).join(', ')}</div>`;
+    }
+
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 //  梦境设定页（dream-settings）
 // ══════════════════════════════════════════════════════════

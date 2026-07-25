@@ -53,6 +53,8 @@ function goto(page) {
     'observe-trigger-catalog': () => loadTriggerCatalog(),
     'observe-vector':          () => loadVector(),
     'observe-provenance':      () => loadProvenance(),
+    'observe-resource-completeness': () => loadResourceCompleteness(),
+    'observe-api-contract':          () => loadApiContractCheck(),
   };
   if (page !== 'scheduler') _stopWatchStatusPoller();
   if (loaders[page]) loaders[page]();
