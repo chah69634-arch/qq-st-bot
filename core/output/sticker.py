@@ -85,21 +85,38 @@ async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False,
         if not path:
             from core.sandbox import get_paths
             folder = get_paths().stickers_dir() / folder_emotion
-            logger.info("[sticker] 目录无可用图片: %s", folder)
+            # 曾经是 INFO（日常日志噪音里几乎看不见）。这是"表情包为什么从不触发"
+            # 最常见的静默失败点（目录解析错/迁移中路径不一致/图片未放对文件夹），
+            # 升到 WARNING 便于直接从日志定位，不用每次专门起一轮排查。
+            logger.warning(
+                "[sticker] 目录无可用图片，表情包本轮未发送: %s（resolved via get_paths().stickers_dir()）",
+                folder,
+            )
             return
 
-        from core.qq_adapter import send_image
-        await send_image(target_id, path, is_group)
+        try:
+            from core.qq_adapter import send_image
+            await send_image(target_id, path, is_group)
+        except Exception as e:
+            # send_image 内部对 target_id 做 int() 转换，非数字 id（如桌宠 uid）
+            # 会在这里抛出而不是被 qq_adapter 自己吞掉；不让它连累下面的跨端广播。
+            logger.warning("[sticker] QQ 侧发送失败（不影响其他通道广播）: %s", e)
 
         payload = _build_sticker_payload(path, folder_emotion)
         if payload is not None:
             # QQ 保持原有 OneBot 图片发送；桌宠和手机经既有通道注册表收到同一份
-            # 自包含 payload，客户端可在独立工单中按 sticker 字段渲染。
+            # 自包含 payload，客户端按 sticker 字段渲染（渲染实现见各前端仓库）。
             from channels import registry
-            await registry.broadcast(
+            failures = await registry.broadcast(
                 "", target_id, sticker=payload, exclude_channels={"qq"},
             )
-        logger.info("[sticker] 发送表情包: %s", folder_emotion)
+            logger.info(
+                "[sticker] 已选中并尝试发送: %s，跨端广播失败通道=%s"
+                "（收到广播≠客户端已渲染，前端是否显示取决于其 sticker 字段实现）",
+                folder_emotion, failures or "无",
+            )
+        else:
+            logger.warning("[sticker] payload 构建失败（图片格式或读取问题）: %s", path)
 
     except Exception as e:
         log_error("sticker.maybe_send_sticker", e)

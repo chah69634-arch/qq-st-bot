@@ -799,7 +799,21 @@ async def detect_emotion(text: str) -> str:
             timeout=_CALL_TIMEOUTS["detect_emotion"],
         )
         result = (response.choices[0].message.content or "").strip().lower()
-        return result if result in _VALID_EMOTIONS else "neutral"
+        if result in _VALID_EMOTIONS:
+            return result
+        # 小模型有时不严格按"只返回一个词"的指令走（夹带标点/多余文字/中文），
+        # 严格 == 匹配会把这些一律静默判成 neutral 且不留任何日志，下游 sticker/TTS
+        # 因此永远拿不到非 neutral 的 emotion 却查不到原因。这里先做一次宽松匹配
+        # （原样输出中包含某个合法标签即可），仍失败才降级 neutral，但两种情况都留痕。
+        for label in _VALID_EMOTIONS:
+            if label in result:
+                logger.info(
+                    "[detect_emotion] 严格匹配未命中，宽松匹配到 %r（原始输出=%r）",
+                    label, result,
+                )
+                return label
+        logger.info("[detect_emotion] 输出无法解析为合法情绪，降级 neutral: 原始输出=%r", result)
+        return "neutral"
     except Exception as e:
         log_error("llm_client.detect_emotion", e)
         return "neutral"
