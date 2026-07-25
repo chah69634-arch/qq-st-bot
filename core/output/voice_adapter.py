@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 _GSV_PROVIDER = "gsv"
-_RESERVED_OPENAI_COMPAT_PROVIDER = "openai_compatible"
+_OPENAI_COMPAT_PROVIDER = "openai_compatible"
 _PROVIDER_ALIASES = {"gpt_sovits": _GSV_PROVIDER, "gsv": _GSV_PROVIDER}
 
 
@@ -90,13 +90,13 @@ def get_provider_config(cfg: dict | None = None) -> tuple[str, dict]:
 def get_provider_status(cfg: dict | None = None) -> dict:
     """Safe provider state for the admin panel; never includes credentials."""
     provider, selected = get_provider_config(cfg)
-    supported = provider in {_GSV_PROVIDER, _RESERVED_OPENAI_COMPAT_PROVIDER}
+    supported = provider in {_GSV_PROVIDER, _OPENAI_COMPAT_PROVIDER}
     if provider == _GSV_PROVIDER:
         ready = bool(selected.get("api_url") and selected.get("ref_audio"))
         reason = "" if ready else "GSV requires api_url and ref_audio"
-    elif provider == _RESERVED_OPENAI_COMPAT_PROVIDER:
-        ready = False
-        reason = "OpenAI-compatible/cloud provider is reserved but not activated"
+    elif provider == _OPENAI_COMPAT_PROVIDER:
+        ready = bool(selected.get("base_url"))
+        reason = "" if ready else "openai_compatible requires base_url (api_key optional for unauthenticated local deployments)"
     else:
         ready = False
         reason = f"Unknown TTS provider: {provider}"
@@ -170,17 +170,76 @@ class GsvProvider:
         return await asyncio.get_event_loop().run_in_executor(None, _sync_call)
 
 
-class ReservedOpenAICompatibleProvider:
-    """Configuration slot only; cloud protocol is intentionally not guessed."""
+class OpenAICompatibleProvider:
+    """OpenAI ``POST {base_url}/audio/speech`` 协议的通用 provider（Brief 107·B2）。
+
+    覆盖两类真实场景：真·OpenAI/走同协议的云服务；以及自建开源 TTS 套了一层
+    OpenAI 兼容外壳的部署（如 openai-edge-tts 之类的反代/网关，或引擎自带的
+    openai-compat 模式）。不绑定具体厂商，所有字段都从
+    ``tts.providers.openai_compatible`` 读，缺 base_url 直接判不可用（不去猜协议）。
+
+    per-emotion 音色切换与 GSV 的 ``emotions`` 块同构，但 GSV 换的是参考音频文件，
+    这里换的是 ``voice`` 预置音色名（云端/远程引擎通常不支持上传参考音频）：
+        emotions:
+          happy: {voice: "shimmer", speed: 1.1}
+          sad:   {voice: "onyx", speed: 0.9}
+    也接受纯字符串简写 ``happy: "shimmer"``（等价于只覆盖 voice，speed 用顶层默认）。
+    """
 
     async def synthesize(self, text: str, emotion: str, cfg: dict) -> bytes | None:
-        logger.warning("[voice_adapter] openai_compatible TTS is reserved but not activated")
-        return None
+        base_url = str(cfg.get("base_url") or "").rstrip("/")
+        if not base_url:
+            logger.warning("[voice_adapter] openai_compatible TTS 缺少 base_url，跳过")
+            return None
+        model = str(cfg.get("model") or "tts-1")
+        voice = str(cfg.get("voice") or "alloy")
+        response_format = str(cfg.get("response_format") or "wav")
+        api_key = str(cfg.get("api_key") or "")
+        speed = float(cfg.get("speed", 1.0))
+
+        if cfg.get("emotion_enabled", False):
+            voice_map = cfg.get("emotions", {}) or {}
+            evoice = voice_map.get(emotion) or voice_map.get("neutral")
+            if isinstance(evoice, dict):
+                voice = str(evoice.get("voice") or voice)
+                speed = float(evoice.get("speed") or speed)
+            elif isinstance(evoice, str) and evoice:
+                voice = evoice
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        payload = {
+            "model": model,
+            "input": text,
+            "voice": voice,
+            "response_format": response_format,
+            "speed": speed,
+        }
+
+        try:
+            import aiohttp
+            timeout = aiohttp.ClientTimeout(total=float(cfg.get("timeout", 20.0)))
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    f"{base_url}/audio/speech", json=payload, headers=headers
+                ) as resp:
+                    if resp.status != 200:
+                        body = (await resp.text())[:300]
+                        logger.warning(
+                            "[voice_adapter] openai_compatible TTS 返回非 200: "
+                            "status=%s body=%s", resp.status, body,
+                        )
+                        return None
+                    return await resp.read()
+        except Exception as e:
+            log_error("voice_adapter.openai_compatible.synthesize", e)
+            return None
 
 
 _PROVIDERS: dict[str, TtsProvider] = {
     _GSV_PROVIDER: GsvProvider(),
-    _RESERVED_OPENAI_COMPAT_PROVIDER: ReservedOpenAICompatibleProvider(),
+    _OPENAI_COMPAT_PROVIDER: OpenAICompatibleProvider(),
 }
 
 

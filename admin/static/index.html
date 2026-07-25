@@ -575,10 +575,10 @@
             <input type="checkbox" id="tts-emotion-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row" style="gap:8px;font-size:14px"><input type="checkbox" id="tts-desktop-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
         </div>
         <div class="form-row" style="max-width:640px">
-          <label class="field"><span>TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible" disabled>OpenAI-compatible / cloud (未实装)</option></select></label>
+          <label class="field"><span>TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible">OpenAI-compatible (自建/云端，POST /audio/speech)</option></select></label>
           <label class="field"><span>Provider status</span><input id="tts-provider-status" readonly></label>
         </div>
-        <label class="field" style="max-width:640px"><span>Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='{"api_url":"..."}'></textarea></label>
+        <label class="field" style="max-width:640px"><span>Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='GSV: {"api_url":"http://127.0.0.1:9880","ref_audio":"..."}  |  openai_compatible: {"base_url":"https://.../v1","api_key":"...","model":"tts-1","voice":"alloy"}'></textarea></label>
         <div class="form-row" style="max-width:640px">
           <label class="field">
             <span>API URL</span>
