@@ -1327,5 +1327,112 @@ async function loadApiContractCheck() {
 }
 
 // ══════════════════════════════════════════════════════════
+//  角色权限（observe-char-permissions，2026-07-25）
+// ══════════════════════════════════════════════════════════
+
+function _charPermUid() {
+  const el = document.getElementById('obs-charperm-uid');
+  return el ? el.value.trim() : '';
+}
+
+function _charPermCharId() {
+  const el = document.getElementById('obs-charperm-char');
+  return el ? el.value : '';
+}
+
+async function loadCharPermissions() {
+  const el = document.getElementById('char-permissions-content');
+  if (!el) return;
+  const charId = _charPermCharId();
+  if (!charId) { el.innerHTML = '<div style="color:var(--muted)">未选中角色</div>'; return; }
+  const uid = _charPermUid();
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const qs = uid ? `?char_id=${encodeURIComponent(charId)}&uid=${encodeURIComponent(uid)}` : `?char_id=${encodeURIComponent(charId)}`;
+    const d = await api('GET', '/observability/character-permissions' + qs);
+
+    let html = `<div style="margin-bottom:12px;font-size:12px;color:var(--muted)">
+      当前危险模式: <b style="color:${d.current_mode === 'danger' ? '#fbbf24' : '#86efac'}">${escapeHtml(d.current_mode)}</b>
+      · tool loop: ${d.tool_loop_enabled ? '已开启' : '已关闭'}
+      · 暴露面来源: ${escapeHtml(d.tool_categories_source || '')}
+    </div>`;
+
+    for (const cat of (d.categories || [])) {
+      const modeBadge = cat.mode_restricted
+        ? (cat.currently_blocked_by_mode
+            ? '<span style="font-size:11px;background:#3a1a1a;color:#f87171;padding:2px 8px;border-radius:8px">受危险模式闸门·当前拦截</span>'
+            : '<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:2px 8px;border-radius:8px">受危险模式闸门·当前放行</span>')
+        : '<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:2px 8px;border-radius:8px">不受危险模式约束</span>';
+      html += `<div class="card" style="margin-bottom:10px">
+        <div class="card-header" style="padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <h3 style="font-size:14px;margin:0">${escapeHtml(cat.category)}</h3>
+          ${cat.exposed_to_probe ? '<span style="font-size:11px;color:var(--muted)">探针可见</span>' : ''}
+          ${cat.exposed_to_tool_loop ? '<span style="font-size:11px;color:var(--muted)">tool loop 可见</span>' : ''}
+          ${modeBadge}
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="testCharPermissionLink('${cat.category}')">测试这条链路</button>
+        </div>
+        <div style="padding:8px 14px;font-size:12px;color:var(--muted)">
+          ${(cat.tools || []).map(t => `<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:8px;background:${t.config_enabled && !t.excluded_by_char ? 'var(--bg-secondary)' : '#2d1a1a'};${t.dangerous ? 'color:#fbbf24' : ''}">${escapeHtml(t.name)}${t.dangerous ? ' ⚠' : ''}${t.excluded_by_char ? '（被角色排除）' : (t.config_enabled ? '' : '（配置关闭）')}</span>`).join('') || '（该类目下无注册工具）'}
+        </div>
+      </div>`;
+    }
+
+    if (d.identity_consolidation) {
+      const ic = d.identity_consolidation;
+      html += `<div class="card" style="margin-bottom:10px">
+        <div class="card-header" style="padding:10px 14px;display:flex;align-items:center;gap:8px">
+          <h3 style="font-size:14px;margin:0">身份固化管线（角色改自己的记忆文件）</h3>
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="testCharPermissionLink('identity_consolidation')">测试这条链路</button>
+        </div>
+        <div style="padding:8px 14px;font-size:12px;color:var(--muted)">
+          identity.yaml: ${ic.identity_file_exists ? `存在，最后修改 ${escapeHtml(ic.identity_file_mtime_human || '')}` : '尚不存在（角色还没固化过身份）'}<br>
+          ${ic.would_consolidate_now ? '<span style="color:#fbbf24">当前已满足固化阈值，下一次慢队列处理时会真正触发</span>' : '当前未达固化阈值（不代表链路坏了，只是还没攒够）'}
+        </div>
+      </div>`;
+    } else {
+      html += `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">填写上方 uid 可查看该用户的身份固化管线状态。</div>`;
+    }
+
+    html += `<div id="char-perm-test-result"></div>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function testCharPermissionLink(link) {
+  const charId = _charPermCharId();
+  const uid = _charPermUid();
+  if (link === 'identity_consolidation' && !uid) {
+    toast('测试身份固化管线需要先填 uid', 'error');
+    return;
+  }
+  const resultEl = document.getElementById('char-perm-test-result');
+  if (resultEl) resultEl.innerHTML = '<div style="color:var(--muted);margin-top:8px">测试中…</div>';
+  try {
+    const d = await api('POST', '/observability/character-permissions/test', {
+      link, char_id: charId, uid: uid || 'admin_probe',
+    });
+    const badge = d.ok
+      ? '<span style="font-size:12px;background:#1a3a1a;color:#86efac;padding:3px 10px;border-radius:10px">通</span>'
+      : '<span style="font-size:12px;background:#3a1a1a;color:#f87171;padding:3px 10px;border-radius:10px">不通</span>';
+    let html = `<div class="card" style="margin-top:8px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">${badge}
+        <span style="font-size:12px;color:var(--muted)">${d.executed ? '（已真实执行）' : '（仅就绪检查，未实际执行）'}</span>
+      </div>
+      <div style="font-size:13px">${escapeHtml(d.detail || '')}</div>`;
+    if (d.checklist) {
+      html += '<div style="margin-top:8px">' + d.checklist.map(c =>
+        `<div style="font-size:12px;color:${c.pass ? '#86efac' : '#f87171'}">${c.pass ? '✓' : '✗'} ${escapeHtml(c.item)}</div>`
+      ).join('') + '</div>';
+    }
+    html += '</div>';
+    if (resultEl) resultEl.innerHTML = html;
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = `<div style="color:#ef4444;margin-top:8px">测试请求失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 //  梦境设定页（dream-settings）
 // ══════════════════════════════════════════════════════════

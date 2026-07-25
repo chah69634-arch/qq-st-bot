@@ -12,6 +12,7 @@ Contract tests for:
 import asyncio
 import json
 import time
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -320,3 +321,97 @@ class TestLoreEngineMatchTrace:
         kws = {t["kw"] for t in trace}
         assert "圣塞西尔" in kws or "学院" in kws
         assert "琴宁岛" in kws
+
+
+# ─── fetch_context 里 semantic_hits 装进 recall trace（2026-07-25 回归）───────
+#
+# core/memory/vector_store.query_async() 返回 (source_id, distance, ts) 三元组
+# （docstring 明确写着），但 fetch_context 里拼 recall trace 字典那一行曾经
+# `for _sid, _dist in _semantic_hits` 按二元解包，线上日志天天报
+# "[pipeline.fetch_context] recall trace write failed: too many values to
+# unpack (expected 2, got 3)"（茶茶反馈实际线上日志）。修复为按下标取值，
+# 与旁边 debug log 那行（line 359）一直用的写法保持一致。
+
+class _FakeCharacter:
+    name = "叶瑄"
+    presence_ext = {}
+
+
+class TestFetchContextSemanticHitsTraceUnpack:
+    def _make_pipeline(self):
+        from core.pipeline import Pipeline
+        lore = MagicMock()
+        lore.match.return_value = ([], [])
+        return Pipeline(_FakeCharacter(), lore_engine=lore, active_character_id=CHAR_ID)
+
+    def _stub_everything_else(self, monkeypatch):
+        import core.memory.event_log as _el
+        import core.memory.user_profile as _up
+        import core.memory.mid_term as _mt
+        import core.memory.short_term as _st
+        import core.memory.episodic_memory as _ep
+        import core.memory.user_identity as _ui
+        import core.dream.impression_loader as _il
+        import core.memory.group_context as _gc
+        import core.user_relation as _ur
+        import core.memory.mood_state as _ms
+
+        monkeypatch.setattr(_el, "search", AsyncMock(return_value=("", [])))
+        monkeypatch.setattr(_up, "load", lambda *a, **kw: {})
+        monkeypatch.setattr(_mt, "format_for_prompt", lambda *a, **kw: "")
+        monkeypatch.setattr(_st, "load_for_prompt", lambda *a, **kw: [])
+        monkeypatch.setattr(_ep, "retrieve", lambda *a, **kw: ([], []) if kw.get("return_trace") else [])
+        monkeypatch.setattr(_ep, "retrieve_fallback", lambda *a, **kw: ([], []) if kw.get("return_trace") else [])
+        monkeypatch.setattr(_ui, "format_for_prompt", AsyncMock(return_value=""))
+        monkeypatch.setattr(_il, "load_impression_text", lambda *a, **kw: "")
+        monkeypatch.setattr(_gc, "get_recent", lambda *a, **kw: "")
+        monkeypatch.setattr(_ms, "get_current", lambda *a, **kw: "neutral")
+        monkeypatch.setattr(_ms, "update", lambda *a, **kw: None)
+        monkeypatch.setattr(_ur, "get_relation", lambda *a, **kw: {"priority": 1})
+
+    def test_semantic_hits_with_ts_field_do_not_break_trace_write(self, sandbox, monkeypatch):
+        """query_async 返回三元组 (id, distance, ts) 时，recall trace 必须正常写入，
+        不得触发 '[pipeline.fetch_context] recall trace write failed' 警告。"""
+        self._stub_everything_else(monkeypatch)
+
+        import core.memory.embedding as _emb
+        monkeypatch.setattr(_emb, "embed", AsyncMock(return_value=[[0.1, 0.2, 0.3]]))
+
+        import core.memory.vector_store as _vs
+        three_tuples = [("ep_1", 0.12345, 1700000000.0), ("ep_2", 0.5, 1700000001.0)]
+        monkeypatch.setattr(_vs, "query_async", AsyncMock(return_value=three_tuples))
+
+        warnings: list = []
+        import logging
+
+        class _CapHandler(logging.Handler):
+            def emit(self, record):
+                if "recall trace write failed" in record.getMessage():
+                    warnings.append(record.getMessage())
+
+        pipeline_logger = logging.getLogger("core.pipeline")
+        handler = _CapHandler()
+        pipeline_logger.addHandler(handler)
+        try:
+            pipeline = self._make_pipeline()
+            asyncio.run(pipeline.fetch_context(
+                user_id="u_semhits", content="帮我回忆一下之前聊过的西瓜和绍兴的事情",
+            ))
+        finally:
+            pipeline_logger.removeHandler(handler)
+
+        assert warnings == [], f"三元组不应触发 recall trace 写入失败警告，实际: {warnings}"
+
+        from core.memory.scope import MemoryScope
+        from core.memory.path_resolver import resolve_path
+        from datetime import datetime
+        scope = MemoryScope.reality_scope("u_semhits", CHAR_ID)
+        trace_dir = resolve_path(scope, "recall_trace")
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        trace_file = trace_dir / f"{date_str}.jsonl"
+        assert trace_file.exists(), "recall trace 文件应被成功写入"
+        last_line = trace_file.read_text(encoding="utf-8").splitlines()[-1]
+        record = json.loads(last_line)
+        assert record["semantic_hits"] == [["ep_1", 0.1235], ["ep_2", 0.5]], (
+            "semantic_hits 应只保留 (id, 四舍五入的 distance)，正确丢弃第三个 ts 字段"
+        )

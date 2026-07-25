@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from admin.auth import require_scopes
 
 router = APIRouter()
@@ -52,3 +53,37 @@ async def resource_completeness(_auth=Depends(require_scopes("state.read"))):
 async def api_contract_check(_auth=Depends(require_scopes("state.read"))):
     from core.api_contract_check import run_check
     return run_check()
+
+
+@router.get(
+    "/observability/character-permissions",
+    summary="角色权限：桌面+手机工具类目暴露面、危险模式闸门、身份固化管线状态（2026-07-25）",
+)
+async def character_permissions(
+    char_id: str,
+    uid: str = "",
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.character_permissions import get_tool_category_status, get_identity_consolidation_status
+    result = get_tool_category_status(char_id)
+    if uid:
+        result["identity_consolidation"] = get_identity_consolidation_status(uid, char_id)
+    return result
+
+
+class _PermissionTestRequest(BaseModel):
+    link: str
+    char_id: str
+    uid: str
+
+
+@router.post(
+    "/observability/character-permissions/test",
+    summary="测试一条角色权限链路是否真的通（2026-07-25，见 core/character_permissions.py 关于哪些链路真实执行）",
+)
+async def character_permissions_test(
+    body: _PermissionTestRequest,
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.character_permissions import run_permission_test
+    return await run_permission_test(body.link, uid=body.uid, char_id=body.char_id)

@@ -137,3 +137,44 @@ async def test_override_applied_once_on_threshold_then_cleared(sandbox):
     profile = _up.load("uid_3x")
     assert profile["interests"] == "画画"
     assert "_pending_overrides" not in profile
+
+
+# ---------------------------------------------------------------------------
+# 8. location 单独降阈值为 1（2026-07-25，茶茶反馈"说了在绍兴，地点始终不更新"）
+#
+# 默认阈值=2 要求两次"连续一致提取"，但 extract_and_update 只喂最近 10 条用户
+# 发言——用户提一次新地点、话题很快岔开后就再也凑不出第二次，pending 永远停在
+# count=1，location 从此追不上现实（连带天气工具一直查旧城市）。location 是
+# "此刻状态"而非容易被幻觉污染的人设描述，理应单次生效；其余字段保持默认阈值
+# 不变（下面 test 8b 验证 name 仍是旧行为，防止误伤）。
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_location_single_extraction_overrides_immediately(sandbox):
+    from core.memory import user_profile as _up
+
+    _up.save("uid_loc", {"location": "杭州"})
+
+    await _up.update("uid_loc", {"location": "绍兴"})  # 只提一次，随后话题就岔开
+
+    profile = _up.load("uid_loc")
+    assert profile["location"] == "绍兴", "location 单次清晰提取应立即覆盖旧值，不应挂起等第二次"
+    assert "_pending_overrides" not in profile
+
+
+@pytest.mark.asyncio
+async def test_name_still_requires_two_consistent_extractions(sandbox):
+    """回归防误伤：只有 location 降阈值，name 等其余字段仍是默认 2 次连续阈值。"""
+    from core.memory import user_profile as _up
+
+    _up.save("uid_name", {"name": "小明"})
+
+    await _up.update("uid_name", {"name": "小红"})
+    profile = _up.load("uid_name")
+    assert profile["name"] == "小明", "name 单次新值不应立即覆盖（默认阈值仍为 2）"
+    assert profile["_pending_overrides"]["name"]["count"] == 1
+
+    await _up.update("uid_name", {"name": "小红"})
+    profile = _up.load("uid_name")
+    assert profile["name"] == "小红", "name 连续 2 次一致提取后应覆盖"
+    assert "_pending_overrides" not in profile

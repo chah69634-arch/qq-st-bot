@@ -5,6 +5,50 @@
 
 ## 当前仍存在
 
+### PROF-1：user_profile 场景类字段的反抖动阈值曾经"锁死"（已修复 2026-07-25）
+
+**状态**：`closed`（记录于此供以后同类字段参考，不是待办）
+
+`core/memory/user_profile.py::update()` 的 pending-override 反抖动机制默认要求同一
+新值被"连续 2 次一致提取"才落盘覆盖，本意是防止单次幻觉提取翻转已确认的值。但
+`location` 这类"此刻状态"字段用户通常只提一次（"我现在在绍兴"），`extract_and_update`
+每次只喂最近 10 条用户发言，话题一岔开就再也凑不出第二次一致提取，`location` 从此
+追不上现实——连带天气工具跟着一直查旧城市（`main.py` 把 `profile['location']` 当天气
+查询的默认城市）。已加 `_PENDING_OVERRIDE_THRESHOLD_BY_FIELD`，`location` 单独降为
+阈值 1，其余字段（name/pets/interests/occupation）保持阈值 2。同时修了 `main.py` 里
+`profile.get("location", "杭州")` 的经典 dict.get 语义坑（key 存在但值为 None 时不
+会触发 default，改用 `profile.get("location") or "杭州"`）。回归见
+`tests/test_user_profile_override.py`（8/8b 用例）、`tests/test_profile_location_fallback.py`。
+
+若未来再给某个"易变但用户通常只说一次"的字段加反抖动保护，请复用
+`_PENDING_OVERRIDE_THRESHOLD_BY_FIELD`，不要照抄默认阈值 2。
+
+### GROUP-1：跨角色印象摘要语气曾无约束、易读出暧昧色彩（已修复 2026-07-25）
+
+**状态**：`closed`
+
+`core/stage/char_relations.py::_relation_prompt()` 生成的角色间"第三人称印象"摘要
+会被 `core/stage/context.py::render_presence()` 原样当作既有事实注入每一轮群聊
+prompt（无 tag 门控、无相关性判断，roster 里任意两个角色只要有过互动就会被注入）。
+旧 prompt 对措辞语气没有约束，LLM 生成摘要时容易往暧昧/亲密方向靠，角色会把这段
+"既有印象"当真，没来由地说出"今晚我跟{另一角色}聊天的时候……"这类话（茶茶反馈）。
+已给 `_relation_prompt()` 加中性克制的措辞约束。这是内容侧修复；`render_presence()`
+本身"每轮无条件注入所有已知关系"的设计没有改动——这是群聊"在场感"功能故意要的
+效果（让角色记得彼此），如果以后还想加相关性门控（比如只在话题涉及对方时才注入），
+需要专门评估，不在这次修复范围内。
+
+### TRACE-1：recall trace 三元组解包报错（已修复 2026-07-25）
+
+**状态**：`closed`
+
+`core/pipeline.py::fetch_context()` 拼 recall trace 字典时，`semantic_hits` 那行按
+`for _sid, _dist in _semantic_hits` 二元解包，但 `core/memory/vector_store.py::
+query_async()` 返回的是 `(source_id, distance, ts)` 三元组，线上天天报
+`"[pipeline.fetch_context] recall trace write failed: too many values to unpack
+(expected 2, got 3)"`（茶茶反馈实际日志）。已改用下标取值（`h[0], h[1]`），与旁边
+debug log 那行一直用的写法一致。回归见 `tests/test_recall_trace.py::
+TestFetchContextSemanticHitsTraceUnpack`。
+
 ### PB4：Path B 降级观察期
 
 **状态**：`observe`
@@ -29,7 +73,7 @@
 感能力 Path C 全部覆盖，且已验证正确，103 号删除单依旧无阻塞项——这次修复只是让 Path B
 在被删除前的观察期内也是"真的能用"的，而不是名义上支持、实际从未生效。
 
-**2026-07-25 新增工具**：管理面板「观测」区新增两块只读面板，供日常自查：
+**2026-07-25 新增工具**：管理面板「观测」区新增三块面板，供日常自查：
 - `GET /observability/resource-completeness`（`core/resource_completeness.py`）——扫描
   各功能开关/素材配置状态，标出"关着"和"开了但缺素材"；附一份人工维护的"功能压根还没
   做"清单（当前含移动端 TTS 投递、桌宠语音条 UI 解耦、Live2D/3D 绑定前端消费三项，来源
@@ -38,6 +82,12 @@
   `_push_desktop_action` 产出的 type 字符串 + Path B 意图翻译表，和前端 `ws.ts` 的
   `_dispatchAction` switch 取差集，就是上面这次漂移的检测器。前端仓库不存在时优雅跳过
   （约定与本仓同级目录，或设 `EMERALD_CLIENT_REPO` 环境变量）。
+- `GET /observability/character-permissions` + `POST .../test`（
+  `core/character_permissions.py`）——按类目（info/desktop/memory/system/fs/
+  phone_control）列出对某角色的暴露面、是否受危险模式闸门约束，以及身份固化管线
+  （角色自己改 identity.yaml 那条后台链路）的状态；测试按钮对 identity_consolidation/
+  fs 两条安全链路真实执行一次，其余会产生真实副作用的类目（弹通知/震动/关机等）只做
+  就绪检查清单，不会代用户触发。
 
 ### ACT-1：阅读动向跨角色串桶
 

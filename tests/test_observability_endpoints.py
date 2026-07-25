@@ -128,6 +128,124 @@ def test_api_contract_check_gracefully_skips_when_frontend_repo_missing(sandbox,
     assert "backend_producible" in payload
 
 
+def test_character_permissions_requires_auth_and_returns_shape(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+    assert client.get("/observability/character-permissions?char_id=yexuan").status_code == 401
+
+    response = client.get("/observability/character-permissions?char_id=yexuan", headers=_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["char_id"] == "yexuan"
+    assert "current_mode" in payload
+    cats = {c["category"] for c in payload["categories"]}
+    assert cats == {"info", "desktop", "memory", "system", "fs", "phone_control"}
+    desktop = next(c for c in payload["categories"] if c["category"] == "desktop")
+    assert desktop["mode_restricted"] is True
+    info_cat = next(c for c in payload["categories"] if c["category"] == "info")
+    assert info_cat["mode_restricted"] is False
+
+
+def test_character_permissions_includes_identity_consolidation_when_uid_given(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+    payload = client.get(
+        "/observability/character-permissions?char_id=yexuan&uid=u1", headers=_headers()
+    ).json()
+    assert "identity_consolidation" in payload
+    assert payload["identity_consolidation"]["uid"] == "u1"
+
+
+def test_character_permissions_test_readiness_check_for_desktop_does_not_execute(sandbox, monkeypatch):
+    """desktop 类目的测试必须只做就绪检查，不得真的执行任何工具（避免弹通知等副作用）。"""
+    _active(sandbox)
+    client = _client(monkeypatch)
+
+    from core.tool_dispatcher import execute as _real_execute
+    execute_calls = []
+
+    async def _spy_execute(*a, **kw):
+        execute_calls.append(kw.get("tool_name"))
+        return await _real_execute(*a, **kw)
+
+    monkeypatch.setattr("core.tool_dispatcher.execute", _spy_execute)
+
+    response = client.post(
+        "/observability/character-permissions/test",
+        headers=_headers(),
+        json={"link": "desktop", "char_id": "yexuan", "uid": "u1"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["executed"] is False
+    assert "checklist" in payload
+    assert execute_calls == [], "desktop 类目测试不应真的调用 tool_dispatcher.execute"
+
+
+def test_character_permissions_test_identity_consolidation_actually_calls_pipeline(sandbox, monkeypatch):
+    """identity_consolidation 是唯一"真实执行"的链路——必须真的调到
+    consolidate_to_identity()，而不是伪造结果，否则用户还是看不出到底通不通。"""
+    _active(sandbox)
+    client = _client(monkeypatch)
+
+    calls = []
+
+    async def _fake_consolidate(uid, llm_client, *, char_id):
+        calls.append((uid, char_id))
+        return True
+
+    monkeypatch.setattr(
+        "core.memory.fixation_pipeline.consolidate_to_identity", _fake_consolidate
+    )
+
+    response = client.post(
+        "/observability/character-permissions/test",
+        headers=_headers(),
+        json={"link": "identity_consolidation", "char_id": "yexuan", "uid": "u_test"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["executed"] is True
+    assert payload["ok"] is True
+    assert payload["identity_changed"] is True
+    assert calls == [("u_test", "yexuan")]
+
+
+def test_character_permissions_test_identity_consolidation_surfaces_real_error(sandbox, monkeypatch):
+    """链路真的坏了（比如 LLM 调用炸了）时，测试按钮必须把错误亮出来，不能吞掉。"""
+    _active(sandbox)
+    client = _client(monkeypatch)
+
+    async def _boom(uid, llm_client, *, char_id):
+        raise RuntimeError("模拟 LLM 合成失败")
+
+    monkeypatch.setattr(
+        "core.memory.fixation_pipeline.consolidate_to_identity", _boom
+    )
+
+    response = client.post(
+        "/observability/character-permissions/test",
+        headers=_headers(),
+        json={"link": "identity_consolidation", "char_id": "yexuan", "uid": "u_test"},
+    )
+    payload = response.json()
+    assert payload["executed"] is True
+    assert payload["ok"] is False
+    assert "模拟 LLM 合成失败" in payload["detail"]
+
+
+def test_character_permissions_test_unknown_link_reports_failure(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+    response = client.post(
+        "/observability/character-permissions/test",
+        headers=_headers(),
+        json={"link": "not_a_real_link", "char_id": "yexuan", "uid": "u1"},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+
+
 def test_api_contract_check_detects_injected_drift(sandbox, monkeypatch, tmp_path):
     """回归造假：伪造一个前端仓库，只认识部分 type，验证 broken 列表能抓出缺口。"""
     _active(sandbox)

@@ -79,6 +79,7 @@
       <a data-page="observe-provenance" onclick="goto('observe-provenance')"><span class="icon">🧾</span><span data-i18n="nav.provenance">印象溯源</span></a>
       <a data-page="observe-resource-completeness" onclick="goto('observe-resource-completeness')"><span class="icon">🩺</span><span data-i18n="nav.resource_completeness">资源完整性</span></a>
       <a data-page="observe-api-contract" onclick="goto('observe-api-contract')"><span class="icon">🔗</span><span data-i18n="nav.api_contract">API 契约检查</span></a>
+      <a data-page="observe-char-permissions" onclick="goto('observe-char-permissions')"><span class="icon">🔐</span><span data-i18n="nav.char_permissions">角色权限</span></a>
     </div>
 
     <a data-page="pet"    onclick="goto('pet')"    style="display:none"><span class="icon">🐾</span><span data-i18n="nav.pet">宠物</span></a>
@@ -1778,6 +1779,17 @@
         <span style="font-size:12px;color:var(--muted)">需要 Emerald-client 与本仓同级目录，否则只显示后端侧产出</span>
       </div>
       <div id="api-contract-check-content"></div>
+    </div>
+
+    <!-- ── 角色权限 ── -->
+    <div class="page" id="page-observe-char-permissions">
+      <h1 class="page-title">角色权限 <span style="font-size:13px;font-weight:400;color:var(--muted)">桌面+手机工具类目暴露面 · 危险模式闸门 · 身份固化管线</span></h1>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+        <select id="obs-charperm-char" class="input" style="max-width:200px"></select>
+        <input id="obs-charperm-uid" class="input" placeholder="uid（选填，用于身份固化管线状态）" style="max-width:260px">
+        <button class="btn btn-ghost btn-sm" onclick="loadCharPermissions()">刷新</button>
+      </div>
+      <div id="char-permissions-content"></div>
     </div>
 
     <!-- ── 印象溯源 ── -->

@@ -142,7 +142,18 @@ async def _compress_facts(facts: list) -> list:
     return facts
 
 
-_PENDING_OVERRIDE_THRESHOLD = 2  # 连续 N 次一致提取才落盘覆盖
+_PENDING_OVERRIDE_THRESHOLD = 2  # 连续 N 次一致提取才落盘覆盖（默认，name/pets/interests/occupation 用）
+
+# 2026-07-25（茶茶反馈：说了"我现在在绍兴"，地点始终不更新，天气也一直查杭州）：
+# 默认阈值=2 对 location 不成立——extract_and_update 每次只喂最近 10 条用户发言，
+# 用户提一次新地点、话题很快聊别的岔开后就再也凑不出第二次"连续一致提取"，
+# pending_overrides 永远停在 count=1，profile['location'] 从此追不上现实（进而
+# get_probe_prompt 把这个陈旧值当"用户位置"注入，天气工具跟着一起查旧城市）。
+# location 是"此刻状态"而非容易被幻觉污染的人设描述，单次清晰提取（"我在绍兴"）
+# 应该立即生效；其余字段（尤其 name/occupation，更容易被单次误提取污染）继续用默认阈值。
+_PENDING_OVERRIDE_THRESHOLD_BY_FIELD: dict[str, int] = {
+    "location": 1,
+}
 
 # important_facts 冲突裁决合法 op 集合（Brief 45）
 _VALID_FACT_OPS: frozenset[str] = frozenset({"add", "update", "noop"})
@@ -196,7 +207,8 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_I
                 else:
                     current = {"new_value": value, "count": 1}
 
-                if current["count"] >= _PENDING_OVERRIDE_THRESHOLD:
+                threshold = _PENDING_OVERRIDE_THRESHOLD_BY_FIELD.get(key, _PENDING_OVERRIDE_THRESHOLD)
+                if current["count"] >= threshold:
                     profile[key] = value
                     pending.pop(key, None)
                     if not pending:
@@ -208,7 +220,7 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_I
                 else:
                     pending[key] = current
                     logger.debug(
-                        f"[user_profile] {key} pending override {current['count']}/{_PENDING_OVERRIDE_THRESHOLD}"
+                        f"[user_profile] {key} pending override {current['count']}/{threshold}"
                         f"：候选值 {value!r}"
                     )
 

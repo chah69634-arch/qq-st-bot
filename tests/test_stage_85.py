@@ -62,6 +62,19 @@ async def test_relation_handler_rolls_recent_moments_capped_at_five(sandbox, mon
     assert recent_moments("yexuan", "yexuanJ-5412") == [f"往事{i}" for i in range(3, 8)]
 
 
+def test_relation_prompt_constrains_tone_against_unwarranted_intimacy(sandbox):
+    """2026-07-25（茶茶反馈）：群聊里角色会没来由地说出对另一角色比较暧昧的话
+    （如"今晚我跟{另一角色}聊天的时候……"）——根因是 _relation_prompt() 生成的
+    摘要会被 core/stage/context.py::render_presence() 原样当作"既有印象"注入
+    每一轮群聊 prompt，角色会当真，而旧 prompt 对措辞语气没有任何约束。"""
+    from core.stage.char_relations import _relation_prompt
+
+    prompt = _relation_prompt("yexuan", "yexuanJ-5412", "甲→乙：一起写了首歌", {})
+    assert "不要主动往暧昧" in prompt or "不要臆测" in prompt, (
+        "_relation_prompt 必须显式约束措辞，禁止在互动内容之外主动添加暧昧色彩"
+    )
+
+
 def test_recent_moments_backward_compatible_with_old_relation_files(sandbox):
     from core.safe_write import safe_write_json
     from core.sandbox import get_paths

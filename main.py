@@ -401,7 +401,11 @@ async def handle_message(message: dict):
 
         from core.memory import user_profile as _up
         _profile = _up.load(user_id, char_id=_char_id)
-        _location = _profile.get("location", "杭州")
+        # 2026-07-25 修复：dict.get(key, default) 只在 key 缺失时才回落 default，
+        # 但 user_profile 的默认 schema 里 "location" 这个 key 永远存在（未设置时值是
+        # None，不是缺失），所以旧写法在用户从未提供地点时会把 None 传进探针 prompt，
+        # 而不是预期的兜底城市"杭州"。用 or 才是真正的"值为空则回落"。
+        _location = _profile.get("location") or "杭州"
         # 快速路径：关键词命中直接走，不调 LLM；只匹配 trusted_user_text，不含 media span
         _fast_match = _fast_path_match(_trusted_user_text)
         if _fast_match:

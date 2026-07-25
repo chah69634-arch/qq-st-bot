@@ -601,7 +601,12 @@ class Pipeline:
                 "episodic_fallback_hits": _episodic_fallback_trace,
                 "event_log_hits": _event_log_trace,
                 "lore_hits": _lore_trace,
-                "semantic_hits": [(_sid, round(_dist, 4)) for _sid, _dist in _semantic_hits],
+                # h = (source_id, distance, ts) — vector_store.query_async() 三元组，
+                # 用下标而非解包，兼容 core/memory/vector_store.py 之后再加字段（2026-07-25
+                # 排查：ts 加入后这里仍按二元解包，每轮都触发
+                # "recall trace write failed: too many values to unpack" 警告，见
+                # docs/known-issues.md）。
+                "semantic_hits": [(h[0], round(h[1], 4)) for h in _semantic_hits],
                 "web_recall_hits": _web_recall_hits,
                 "parsed_time_range": (
                     [round(_since_ts, 3) if _since_ts is not None else None,
