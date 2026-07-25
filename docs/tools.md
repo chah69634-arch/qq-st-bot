@@ -119,6 +119,47 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
 - 另外四个钩子（`disabled_layers` / `model_routing` / `proactive` / `tool_loop`）分别见
   `docs/prompt-layers.md`、`docs/model-presets.md`、`docs/scheduler.md`。
 
+### 角色资产路由（2026-07-25，与 `model_routing` 同构）
+
+`presence_ext` 再加四个可选字段，把"聊天模型走 `model_routing`"的模式复制到 TTS/表情包/
+模型上：
+
+```json
+"presence_ext": {
+  "tts_preset": "cheerful",
+  "sticker_pack": "cute_pack",
+  "live2d_model": "assistant.model3.json",
+  "model_3d": "assistant.glb"
+}
+```
+
+- `tts_preset`：引用 `config.yaml` `tts.presets.<name>` 命名预设，字段级覆盖全局 `tts:`
+  配置（如只换 `ref_audio`/`emotions`，其余继承全局），解析见
+  `core/output/voice_adapter.py::resolve_tts_config()`。声明了但 `tts.presets` 里找不到
+  → fail-soft 回落全局配置并记 warning，不让语音整体哑掉。
+- `sticker_pack`：引用 `userdata/assets/stickers_packs/<pack_name>/`，结构与通用池
+  `userdata/assets/stickers/` 一致（六个情绪子目录）；某个情绪在专属包里没有图片时
+  （不要求覆盖全部六种），`core/output/sticker.py::_pick_sticker()` 自动回落通用池。
+- `live2d_model` / `model_3d`：纯字符串透传，后端不解析、不校验、不做任何模型逻辑——
+  值原样经 `GET /characters/active-info` 与
+  `GET /character/{char_id}/asset-bindings` 下发，由前端自行映射到本地模型文件。
+  这两个字段的消费方在前端仓库，见 `cc-tasks/124`（桌宠客户端语音/UI 工单，同批
+  讨论了模型切换需要的落点）。
+
+读写端点（管理面板可调用，与 `model-routing` 端点姐妹篇）：
+`GET/PATCH /character/{char_id}/asset-bindings`。PATCH 每个字段独立生效——请求体里
+缺省的字段不改动现有值，传空字符串显式清除该字段（不是传 `null` 清除，避免一次只想
+改一个字段时把其余三个一起冲掉）。
+
+图像识别（vision）刻意不纳入角色资产路由：识图能力本身通用，不该按角色分裂成多份
+配置。只在"日常环境观察"（`vision`，Brief 56）和"桌面自动化专用"（`use_computer_vision`，
+新增，2026-07-25，与 `core/phone_control/vision_client.py` 的 `phone_control_vision`
+同构：dedicated 字段覆盖 > 回落 `vision`）之间分两个全局槽位——桌面自动化往往需要
+更强/更贵的 UI grounding 模型，不该让日常 vision 调用背这个成本。`use_computer_vision`
+目前只占位（无消费方，`desktop`/`system` 工具类目今天还是坐标无关的窗口级操作），
+供以后真正做"看屏幕点像素"类工具时直接复用配置层，见
+`core/perception/vlm_client.py::get_use_computer_vision_config()`。
+
 ---
 
 ## MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4）

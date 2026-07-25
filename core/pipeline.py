@@ -1484,13 +1484,13 @@ class Pipeline:
                 _tts_enabled = _cfg().get("tts", {}).get("enabled", False)
                 _tts_prob = _cfg().get("tts", {}).get("probability", 0.3)
                 if _tts_enabled and random.random() < _tts_prob:
-                    asyncio.create_task(self._send_tts(reply, target_id, is_group, emotion=_emotion))
+                    asyncio.create_task(self._send_tts(reply, target_id, is_group, emotion=_emotion, char_id=char_id))
                 # Sticker owns its own enabled/probability gates.  Do not share
                 # TTS's dice roll: otherwise TTS can suppress configured sticker
                 # probabilities before maybe_send_sticker gets a chance to apply them.
                 from core.output.sticker import maybe_send_sticker
                 asyncio.create_task(
-                    maybe_send_sticker(reply, target_id, is_group, emotion=_emotion)
+                    maybe_send_sticker(reply, target_id, is_group, emotion=_emotion, char_id=char_id)
                 )
             except Exception as e:
                 log_error("pipeline.post_process.tts_sticker", e)
@@ -1742,8 +1742,12 @@ class Pipeline:
         except Exception as e:
             log_error("pipeline._parse_and_execute_intent", e)
 
-    async def _send_tts(self, text: str, target_id: str, is_group: bool, emotion: str = "neutral"):
-        """异步 TTS 合成并通过 NapCat 发送语音消息，失败只记日志"""
+    async def _send_tts(self, text: str, target_id: str, is_group: bool, emotion: str = "neutral", char_id: str | None = None):
+        """异步 TTS 合成并通过 NapCat 发送语音消息，失败只记日志。
+
+        char_id 透传给 voice_adapter.synthesize()，按角色卡 presence_ext.tts_preset
+        解析命名 TTS 预设（角色资产路由）；未传时回落全局 tts 配置（现状行为不变）。
+        """
         from core.output.voice_adapter import synthesize, send_voice
         from core.error_handler import log_error
         import re
@@ -1763,7 +1767,7 @@ class Pipeline:
         else:
             clean = clean[:40]
         try:
-            audio_bytes = await synthesize(clean, emotion)
+            audio_bytes = await synthesize(clean, emotion, char_id=char_id)
             if audio_bytes:
                 await send_voice(target_id, audio_bytes, is_group)
                 logger.info(f"[pipeline.tts] 语音已发送 -> {target_id} (emotion={emotion})")

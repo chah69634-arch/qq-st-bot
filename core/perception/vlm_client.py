@@ -36,6 +36,31 @@ def get_visual_perception_config() -> dict:
     return shadow
 
 
+def get_use_computer_vision_config() -> dict:
+    """Resolve the desktop-automation ("use computer") vision config.
+
+    与 core/phone_control/vision_client.py::get_phone_control_vision_config() 同构：
+    这是通用视觉能力的第二个专用槽位（第一个是手机自动化），不按角色区分——图像识别
+    本身是通用能力，不走角色资产路由；只在"看一眼环境/描述画面"（``vision``）和
+    "为了精确点击/操作而需要抓取 UI 元素坐标"（``use_computer_vision``）两种用途之间
+    分槽，因为后者往往需要更强/更贵、专精 UI grounding 的模型，不该让日常 vision 调用
+    背这个成本，也不该让桌面自动化将就日常 vision 模型的精度。
+
+    解析顺序：use_computer_vision（专用，可选）> vision（通用视觉模型配置）。
+    只在需要执行桌面自动化动作（当前无消费方——`desktop`/`system` 工具类目今天还是
+    坐标无关的窗口级操作；这里先把配置槽占住，供后续真正做"看屏幕点像素"类工具时
+    直接复用，不必再补一轮路由设计）时才需要真正调用。
+    """
+    from core.config_loader import get_config
+
+    cfg = get_config()
+    dedicated = dict(cfg.get("use_computer_vision") or {})
+    general = dict(cfg.get("vision") or {})
+    merged = dict(general)
+    merged.update({k: v for k, v in dedicated.items() if v})
+    return merged
+
+
 @dataclass(frozen=True)
 class VisualObservation:
     scene: str

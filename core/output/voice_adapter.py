@@ -64,6 +64,52 @@ def _active_provider_name(cfg: dict) -> str:
     return _PROVIDER_ALIASES.get(requested, requested)
 
 
+def _char_tts_preset_name(char_id: str) -> str | None:
+    """角色卡 presence_ext.tts_preset（角色资产路由：与 presence_ext.model_routing 同构）。
+
+    fail-soft：加载失败/字段缺失 → None（回落全局 tts 配置，与现有单角色部署零迁移）。
+    """
+    try:
+        from core import character_loader
+        char = character_loader.load(char_id)
+        return (getattr(char, "presence_ext", None) or {}).get("tts_preset") or None
+    except Exception:
+        return None
+
+
+def resolve_tts_config(char_id: str | None = None) -> dict:
+    """把 ``tts.presets.<name>`` 命名预设叠加在全局 ``tts:`` 配置之上（角色资产路由）。
+
+    解析顺序：
+      1. char_id 为空 → 直接返回全局 tts 配置（未接线的旧调用点行为不变）。
+      2. 角色卡未声明 presence_ext.tts_preset → 回落全局配置。
+      3. 声明了但 tts.presets 里找不到同名预设 → 记 warning，回落全局配置（fail-soft，
+         不能因为一张卡填错预设名就让语音整体哑掉）。
+      4. 找到 → 预设字段覆盖全局同名字段（浅合并，预设可以只覆盖部分字段，如只换
+         provider/emotions，其余沿用全局默认）。
+
+    只做配置层合并，不改 get_provider_config() / synthesize() 已有的 provider 解析逻辑——
+    合并结果原样喂给它们，兼容 legacy 顶层 GSV 字段与 providers 块两种写法。
+    """
+    base = dict(get_config().get("tts", {}))
+    if not char_id:
+        return base
+    preset_name = _char_tts_preset_name(char_id)
+    if not preset_name:
+        return base
+    presets = base.get("presets") if isinstance(base.get("presets"), dict) else {}
+    preset = presets.get(preset_name)
+    if not isinstance(preset, dict):
+        logger.warning(
+            "[voice_adapter] char_id=%r 声明的 tts_preset=%r 未在 tts.presets 中找到，回落全局 tts 配置",
+            char_id, preset_name,
+        )
+        return base
+    merged = dict(base)
+    merged.update(preset)
+    return merged
+
+
 def get_provider_config(cfg: dict | None = None) -> tuple[str, dict]:
     """Return active provider settings with legacy top-level GSV fields mapped in.
 
@@ -243,7 +289,7 @@ _PROVIDERS: dict[str, TtsProvider] = {
 }
 
 
-async def synthesize(text: str, emotion: str = "neutral") -> bytes | None:
+async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None = None) -> bytes | None:
     """
     将文本合成为语音，返回 wav 音频二进制数据。
 
@@ -253,10 +299,13 @@ async def synthesize(text: str, emotion: str = "neutral") -> bytes | None:
         prompt_text  — 参考音频对应文字（可留空）
         speed        — 语速倍率，1.0 为正常
 
+    char_id：给定时按该角色卡 presence_ext.tts_preset 解析命名预设（角色资产路由，
+    见 resolve_tts_config()）；省略时用全局 tts 配置（未接线调用点的现状行为）。
+
     成功返回 bytes，失败返回 None（已记录详细日志）。
     超时 15 秒。
     """
-    provider, provider_cfg = get_provider_config()
+    provider, provider_cfg = get_provider_config(resolve_tts_config(char_id))
     started_at = time.perf_counter()
     adapter = _PROVIDERS.get(provider)
     if adapter is None:

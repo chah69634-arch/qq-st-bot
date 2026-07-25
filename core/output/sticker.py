@@ -20,14 +20,50 @@ _EMOTION_LABELS = ["无奈", "心疼", "开心", "委屈", "害羞", "沉默"]
 _TRIGGER_PROB = 0.06
 
 
-def _pick_sticker(emotion: str) -> str | None:
-    """从对应情绪文件夹随机抽一张图片，返回绝对路径"""
+_STICKER_EXTS = (".jpg", ".jpeg", ".png", ".gif")
+
+
+def _char_sticker_pack_name(char_id: str) -> str | None:
+    """角色卡 presence_ext.sticker_pack（角色资产路由：与 presence_ext.model_routing /
+    tts_preset 同构）。fail-soft：加载失败/字段缺失 → None（只用通用表情包池）。
+    """
+    try:
+        from core import character_loader
+        char = character_loader.load(char_id)
+        return (getattr(char, "presence_ext", None) or {}).get("sticker_pack") or None
+    except Exception:
+        return None
+
+
+def _list_images(folder: Path) -> list[Path]:
+    if not folder.exists():
+        return []
+    return [f for f in folder.iterdir() if f.suffix.lower() in _STICKER_EXTS]
+
+
+def _pick_sticker(emotion: str, char_id: str | None = None) -> str | None:
+    """从对应情绪文件夹随机抽一张图片，返回绝对路径。
+
+    char_id 给定且该角色声明了 presence_ext.sticker_pack 时，优先从该角色专属表情包池
+    （sticker_pack_dir()/<emotion>/）抽取；专属包没有这个情绪的图片（目录不存在或为空，
+    不要求专属包覆盖全部情绪）时回落读通用池 stickers_dir()/<emotion>/，与角色未配置
+    专属包时行为一致。
+    """
     from core.sandbox import get_paths
 
+    if char_id:
+        pack_name = _char_sticker_pack_name(char_id)
+        if pack_name:
+            pack_folder = get_paths().sticker_pack_dir(pack_name) / emotion
+            pack_files = _list_images(pack_folder)
+            if pack_files:
+                return str(random.choice(pack_files).resolve())
+            logger.debug(
+                "[sticker] 专属表情包池 %r 情绪 %r 无图片，回落通用池", pack_name, emotion,
+            )
+
     folder = get_paths().stickers_dir() / emotion
-    if not folder.exists():
-        return None
-    files = [f for f in folder.iterdir() if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".gif")]
+    files = _list_images(folder)
     if not files:
         return None
     return str(random.choice(files).resolve())
@@ -55,10 +91,13 @@ def _build_sticker_payload(path: str, emotion: str) -> dict | None:
     }
 
 
-async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False, emotion: str = ""):
+async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False, emotion: str = "", char_id: str | None = None):
     """
     根据情绪小概率发一张表情包。
     在post_process里调用，失败静默。
+
+    char_id：给定时优先用该角色专属表情包池，缺图回落通用池（角色资产路由，
+    见 _pick_sticker()）；省略时只用通用池（现状行为不变）。
     """
     try:
         sticker_cfg = get_config().get("sticker", {})
@@ -81,7 +120,7 @@ async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False,
         }
         folder_emotion = _EMOTION_MAP.get(emotion, "沉默")
 
-        path = _pick_sticker(folder_emotion)
+        path = _pick_sticker(folder_emotion, char_id=char_id)
         if not path:
             from core.sandbox import get_paths
             folder = get_paths().stickers_dir() / folder_emotion

@@ -262,19 +262,30 @@ async def upload_character(file: UploadFile = File(...), auth=Depends(require_sc
 
 @router.get("/characters/active-info", summary="当前活跃角色基本信息（前端初始化用）")
 async def get_active_char_info(auth=Depends(require_scopes("persona"))):
-    """返回当前活跃角色的显示名与性别，供前端替换角色占位文本。
+    """返回当前活跃角色的显示名、性别与资产绑定，供前端初始化用。
 
-    Response: {"char_id": "yexuan", "name": "叶瑄", "gender": "male"}
+    Response: {"char_id": "yexuan", "name": "叶瑄", "gender": "male",
+               "live2d_model": null, "model_3d": null}
+
+    2026-07-25：附带 live2d_model / model_3d 透传字段（presence_ext，见
+    /character/{char_id}/asset-bindings），前端切换角色时不用再单独一次请求
+    才知道该换哪个模型。tts_preset / sticker_pack 不放这里——那两个是后端内部
+    合成/选图时用，前端不需要。字段读取失败一律静默给 null，不影响角色名display。
     """
     active_id = _active_character_id()
     if not active_id:
-        return {"char_id": "", "name": "(未配置)", "gender": "neutral"}
+        return {"char_id": "", "name": "(未配置)", "gender": "neutral", "live2d_model": None, "model_3d": None}
     try:
         from core.character_loader import load as _load_char
         char = _load_char(active_id)
-        return {"char_id": active_id, "name": char.name, "gender": char.gender}
+        presence_ext = char.presence_ext or {}
+        return {
+            "char_id": active_id, "name": char.name, "gender": char.gender,
+            "live2d_model": presence_ext.get("live2d_model") or None,
+            "model_3d": presence_ext.get("model_3d") or None,
+        }
     except Exception:
-        return {"char_id": active_id, "name": active_id, "gender": "neutral"}
+        return {"char_id": active_id, "name": active_id, "gender": "neutral", "live2d_model": None, "model_3d": None}
 
 
 @router.get("/characters/{name}/export", summary="导出角色卡文件")
@@ -460,4 +471,124 @@ async def set_character_model_routing(
     return {
         "message": f"角色 {char_id!r} 的 model_routing 已更新",
         **resolve_routing_info(char_id),
+    }
+
+
+# ─── 角色资产路由（茶茶 2026-07-25 反馈）─────────────────────────────────────────
+# 与上面的 model_routing 绑定同构：chat 模型走 model_routing，TTS 走 tts_preset
+# （core/output/voice_adapter.py resolve_tts_config()），表情包走 sticker_pack
+# （core/output/sticker.py 缺图回落通用池），Live2D/3D 模型只做透传——后端不渲染
+# 模型，live2d_model/model_3d 只是字符串标识，交给前端自行解析映射到本地模型文件。
+# 图像识别（vision）刻意不纳入这里：是通用能力不按角色区分，只分「日常观察」
+# （vision）与「桌面自动化专用」（use_computer_vision，core/perception/vlm_client.py）
+# 两个全局槽位，见该模块函数注释。
+
+_ASSET_BINDING_FIELDS = ("tts_preset", "sticker_pack", "live2d_model", "model_3d")
+
+
+class AssetBindingsUpdate(BaseModel):
+    tts_preset: Optional[str] = None
+    sticker_pack: Optional[str] = None
+    live2d_model: Optional[str] = None
+    model_3d: Optional[str] = None
+    # None = 不修改该字段；空字符串 "" = 显式清除该字段的绑定。
+    # （与 model_routing 端点的"None=清除"语义不同，因为这里一次可能只想改一个字段，
+    # 全部按 None=清除会把其余三个字段一起冲掉；用空串表达"清除"更安全。）
+
+
+def _resolve_asset_bindings(char_id: str, presence_ext: dict) -> dict:
+    tts_preset = presence_ext.get("tts_preset") or None
+    resolved_tts_preset_exists = None
+    if tts_preset:
+        from core.config_loader import get_config
+        presets = get_config().get("tts", {}).get("presets", {})
+        resolved_tts_preset_exists = isinstance(presets, dict) and tts_preset in presets
+    return {
+        "char_id": char_id,
+        "tts_preset": tts_preset,
+        "tts_preset_resolved": resolved_tts_preset_exists,
+        "sticker_pack": presence_ext.get("sticker_pack") or None,
+        "live2d_model": presence_ext.get("live2d_model") or None,
+        "model_3d": presence_ext.get("model_3d") or None,
+    }
+
+
+@router.get("/character/{char_id}/asset-bindings", summary="读取角色卡的资产绑定（TTS预设/表情包/Live2D/3D模型）")
+async def get_character_asset_bindings(char_id: str, auth=Depends(require_scopes("persona"))):
+    """返回角色卡 presence_ext 里的资产绑定字段。
+
+    tts_preset_resolved：true/false/null——null 表示未声明 tts_preset（用全局 tts 配置，
+    不算错误状态）；false 表示声明了但在 tts.presets 里找不到（会在实际合成时 fail-soft
+    回落全局配置并记 warning，这里提前把这个隐患暴露给前端/管理面板，供 §9 资源完整性
+    检查复用同一份判断逻辑）。
+    """
+    reg = get_registry()
+    try:
+        reg.resolve(char_id, "character")
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"未知角色 id {char_id!r}")
+
+    from core import character_loader
+    try:
+        char = character_loader.load(char_id)
+        presence_ext = char.presence_ext or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"加载角色卡失败: {e}")
+
+    return _resolve_asset_bindings(char_id, presence_ext)
+
+
+@router.patch("/character/{char_id}/asset-bindings", summary="更新角色卡的资产绑定")
+async def set_character_asset_bindings(
+    char_id: str, body: AssetBindingsUpdate, auth=Depends(require_scopes("persona"))
+):
+    """就地修改角色卡 presence_ext 里的资产绑定字段。
+
+    每个字段独立：请求体缺省或为 null 的字段不改动现有值；传空字符串 "" 显式清除该
+    字段的绑定（回落对应默认行为：tts_preset 清除→用全局 tts 配置，sticker_pack 清除→
+    只用通用表情包池，live2d_model/model_3d 清除→前端用其自身默认模型）。
+    """
+    reg = get_registry()
+    try:
+        entry = reg.resolve(char_id, "character")
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"未知角色 id {char_id!r}")
+
+    path = entry.path()
+    if path.suffix.lower() != ".json":
+        raise HTTPException(status_code=422, detail="纯文本角色卡（.txt/.md）不支持资产绑定")
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取角色卡失败: {e}")
+
+    presence_ext = data.setdefault("presence_ext", {})
+    updates = body.model_dump(exclude_unset=True)
+    for field_name in _ASSET_BINDING_FIELDS:
+        if field_name not in updates:
+            continue
+        value = updates[field_name]
+        if not value:  # None 或 "" 均视为清除，语义上等价（都不写入 presence_ext）
+            presence_ext.pop(field_name, None)
+        else:
+            presence_ext[field_name] = value
+
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存角色卡失败: {e}")
+
+    _active_id = _active_character_id()
+    if _active_id:
+        try:
+            _reload_character(_active_id)
+        except Exception as _e:
+            _char_logger.warning(f"[character] asset-bindings 保存后热重载失败（非致命）: {_e}")
+
+    return {
+        "message": f"角色 {char_id!r} 的资产绑定已更新",
+        **_resolve_asset_bindings(char_id, presence_ext),
     }

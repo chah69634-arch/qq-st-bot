@@ -96,6 +96,10 @@ vision:
   api_key: YOUR_VISION_API_KEY
   model: glm-4v-flash
   base_url: https://open.bigmodel.cn/api/paas/v4/
+# use_computer_vision:  # 可选：桌面自动化("用电脑")专用视觉模型槽位，缺省回落上面的 vision
+#   model: glm-4.6v      # 与 phone_control_vision 同一形状；只覆盖需要的字段即可
+#   api_key: YOUR_KEY
+#   base_url: https://...
 qq:
   enabled: false  # 需要 QQ 机器人再开，并配置 NapCat；纯桌宠用户保持关闭即可
   host: 127.0.0.1

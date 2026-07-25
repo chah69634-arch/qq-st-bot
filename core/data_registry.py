@@ -130,6 +130,8 @@ REGISTRY: dict[str, PathMeta] = {
     "user_stickers_dir":          PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "legacy_stickers_dir":        PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "stickers_dir":               PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
+    "sticker_packs_root":         PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
+    "sticker_pack_dir":           PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "user_character_cards_dir":   PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "legacy_character_cards_dir": PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "character_card_dirs":        PathMeta("authored", "shared",          "global",   "ignore-but-authored"),

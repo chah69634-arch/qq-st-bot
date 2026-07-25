@@ -132,6 +132,18 @@ class DataPaths:
         primary = self.user_stickers_dir()
         return primary if primary.exists() else self.legacy_stickers_dir()
 
+    def sticker_packs_root(self) -> Path:
+        """角色专属表情包池根目录（角色资产路由：presence_ext.sticker_pack）。
+
+        每个 pack 是 sticker_packs_root()/<pack_name>/<emotion>/ 的子目录，结构与
+        通用池 stickers_dir()/<emotion>/ 一致；某个情绪在专属包里没有图片时，
+        core/output/sticker.py 会回落读通用池，专属包不需要覆盖全部六种情绪。
+        """
+        return self.userdata_root() / "assets" / "stickers_packs"
+
+    def sticker_pack_dir(self, pack_name: str) -> Path:
+        return self.sticker_packs_root() / pack_name
+
     def user_character_cards_dir(self) -> Path:
         return self.userdata_root() / "characters" / "cards"
 

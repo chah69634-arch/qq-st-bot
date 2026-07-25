@@ -9,7 +9,7 @@ async def test_sticker_keeps_qq_send_and_broadcasts_self_contained_payload(tmp_p
 
     image = tmp_path / "sticker.png"
     image.write_bytes(b"png-bytes")
-    monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion: str(image))
+    monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion, char_id=None: str(image))
     monkeypatch.setattr(sticker.random, "random", lambda: 0.0)
 
     qq_calls = []
@@ -68,7 +68,7 @@ async def test_sticker_logs_selected_folder_when_probability_hits_without_image(
 
     monkeypatch.setattr(sticker, "get_config", lambda: {"sticker": {"enabled": True, "trigger_prob": 1.0}})
     monkeypatch.setattr(sticker.random, "random", lambda: 0.0)
-    monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion: None)
+    monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion, char_id=None: None)
 
     with caplog.at_level("WARNING", logger="core.output.sticker"):
         await sticker.maybe_send_sticker("reply", "owner-1", emotion="happy")

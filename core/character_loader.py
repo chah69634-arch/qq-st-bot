@@ -94,6 +94,12 @@ class Character:
     # tool_categories: list[str] | None — tool loop 暴露面覆盖（core/pipeline.py run_agentic_loop）
     # proactive:       "full"（默认）| "off" — 主动发言总闸（core/scheduler/gating.py）
     # tool_loop:       "on" | "off" | 缺失 — 覆盖/回落全局 tool_loop.enabled（core/tool_dispatcher.py）
+    # 角色资产路由（2026-07-25，与 model_routing 同构，端点见
+    # admin/routers/character.py /character/{char_id}/asset-bindings）：
+    # tts_preset:   str | None — tts.presets.<name> 命名预设（core/output/voice_adapter.py resolve_tts_config）
+    # sticker_pack: str | None — 专属表情包池，缺图回落通用池（core/output/sticker.py _pick_sticker）
+    # live2d_model: str | None — 纯透传，后端不解析，前端自行映射到本地 Live2D 模型文件
+    # model_3d:     str | None — 纯透传，后端不解析，前端自行映射到本地 3D 模型文件
     presence_ext: dict = field(default_factory=dict)
 
 

@@ -128,7 +128,7 @@ async def test_synthesize_dispatches_to_selected_provider_and_records_result(mon
             captured.update(text=text, emotion=emotion, cfg=cfg)
             return b"wav"
 
-    monkeypatch.setattr(voice_adapter, "get_provider_config", lambda: ("gsv", {"ref_audio": "x.wav"}))
+    monkeypatch.setattr(voice_adapter, "get_provider_config", lambda cfg=None: ("gsv", {"ref_audio": "x.wav"}))
     monkeypatch.setitem(voice_adapter._PROVIDERS, "gsv", FakeProvider())
     monkeypatch.setattr("core.api_call_log.append", lambda **kwargs: captured.update(log=kwargs))
 
@@ -144,7 +144,7 @@ async def test_synthesize_dispatches_to_selected_provider_and_records_result(mon
 @pytest.mark.asyncio
 async def test_unknown_provider_is_recorded_as_failed_call(monkeypatch):
     captured = {}
-    monkeypatch.setattr(voice_adapter, "get_provider_config", lambda: ("unknown", {}))
+    monkeypatch.setattr(voice_adapter, "get_provider_config", lambda cfg=None: ("unknown", {}))
     monkeypatch.setattr("core.api_call_log.append", lambda **kwargs: captured.update(kwargs))
 
     assert await voice_adapter.synthesize("hello") is None
