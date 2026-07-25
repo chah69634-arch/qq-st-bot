@@ -117,6 +117,27 @@ async def _maybe_push_avatar_directive(mood_state: dict, char_id: str) -> None:
         logger.debug("[pipeline] avatar_directive push skipped: %s", e)
 
 
+# Path B 支持的全部 action 名单，与下方 _parse_and_execute_intent 里 intent_prompt 的操作
+# 类型枚举保持一致（intent_prompt 本身才是唯一权威来源；这里镜像一份供
+# core/api_contract_check.py 做后端↔前端契约自检，改 intent_prompt 时记得同步）。
+_INTENT_SUPPORTED_ACTIONS = (
+    "minimize_window", "play_song", "open_url", "play_pause",
+    "send_notification", "dream_invite", "toy_invite",
+)
+
+# action（LLM 输出）→ 实际推送给前端的 type 字符串。缺省 = 原样透传（minimize_window/
+# open_url/dream_invite/toy_invite 本来就和前端 ws.ts::_dispatchAction 的 case 一致）。
+# play_song 不走这张表——它委托 _play_song_wrapper 做网易云搜索后自己推送
+# "play_netease"，见 _parse_and_execute_intent 内 action == "play_song" 分支。
+# 2026-07-25 契约修复：send_notification/play_pause 此前直接透传，前端根本不认识
+# （前端实际用 show_notify/media_play_pause），三者经 Path B 时从未真正生效过，只是
+# 被始终优先的 Path C 同名正确实现掩盖了。
+_INTENT_ACTION_TYPE_MAP = {
+    "send_notification": "show_notify",
+    "play_pause": "media_play_pause",
+}
+
+
 def _intent_action_key(user_id: str, action: str, params: dict) -> str:
     """c2 幂等 key：uid + action_type + 关键参数（区分「关了想再关一次」的不同目标）。"""
     if action == "minimize_window":
@@ -1702,19 +1723,35 @@ class Pipeline:
                 )
                 return
 
-            from core.tool_dispatcher import _push_desktop_action
-            action_payload = {"type": action, **params}
-            last_result = "未执行"
-            for _ in range(2):
-                last_result = await _push_desktop_action(action_payload)
-                if last_result == "ok":
-                    break
-                await asyncio.sleep(0.5)
-            else:
-                _pending_perception.write(
-                    text=f"{action} 执行失败（重试2次）: {last_result}",
-                    action=action, result=last_result,
+            from core.tool_dispatcher import _push_desktop_action, _play_song_wrapper
+
+            # 契约修复见模块级 _INTENT_ACTION_TYPE_MAP / _INTENT_SUPPORTED_ACTIONS 注释。
+            if action == "play_song":
+                song_msg = await _play_song_wrapper(
+                    song_name=params.get("song_name", ""),
+                    artist=params.get("artist", ""),
                 )
+                _song_ok = not song_msg.startswith(("未找到", "搜索失败"))
+                last_result = "ok" if _song_ok else song_msg
+                if not _song_ok:
+                    _pending_perception.write(
+                        text=f"{action} 执行失败: {song_msg}",
+                        action=action, result=song_msg,
+                    )
+            else:
+                pushed_type = _INTENT_ACTION_TYPE_MAP.get(action, action)
+                action_payload = {"type": pushed_type, **params}
+                last_result = "未执行"
+                for _ in range(2):
+                    last_result = await _push_desktop_action(action_payload)
+                    if last_result == "ok":
+                        break
+                    await asyncio.sleep(0.5)
+                else:
+                    _pending_perception.write(
+                        text=f"{action} 执行失败（重试2次）: {last_result}",
+                        action=action, result=last_result,
+                    )
 
             if last_result == "ok":
                 _INTENT_LAST_ACTION[_ck] = _now

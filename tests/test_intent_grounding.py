@@ -736,6 +736,128 @@ def test_read_diary_casual_mention_no_fast_path(sandbox):
         assert _fast(msg) is None, f"「{msg}」不应命中 fast-path"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. 契约修复（2026-07-25）：Path B action type 必须与前端 ws.ts 一致
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def test_send_notification_path_b_translates_type(sandbox, monkeypatch):
+    """send_notification 前端 _dispatchAction 不认识该 type（前端实际用 show_notify），
+    Path B 推送前必须翻译，否则前端会 throw 'unsupported action type'。"""
+    _reset_intent_cooldown()
+
+    import core.llm_client as _llm
+
+    push_calls: list = []
+    monkeypatch.setattr("core.tool_dispatcher._push_desktop_action",
+                        AsyncMock(side_effect=lambda a: push_calls.append(a) or "ok"))
+    monkeypatch.setattr(_llm, "chat", AsyncMock(
+        return_value='{"action": "send_notification", "params": {"title": "提醒", "message": "喝水"}}'
+    ))
+
+    pipeline = _make_pipeline()
+    await pipeline._parse_and_execute_intent(
+        "好，等下提醒你记得喝水。",
+        trigger_name="",
+        user_content="等下提醒我喝水",
+        user_id="u1",
+    )
+
+    assert push_calls == [{"type": "show_notify", "title": "提醒", "message": "喝水"}], \
+        "send_notification 必须翻译为前端认识的 show_notify，params 保持透传"
+
+
+async def test_play_pause_path_b_translates_type(sandbox, monkeypatch):
+    """play_pause 前端不认识该 type（前端实际用 media_play_pause）。"""
+    _reset_intent_cooldown()
+
+    import core.llm_client as _llm
+
+    push_calls: list = []
+    monkeypatch.setattr("core.tool_dispatcher._push_desktop_action",
+                        AsyncMock(side_effect=lambda a: push_calls.append(a) or "ok"))
+    monkeypatch.setattr(_llm, "chat", AsyncMock(
+        return_value='{"action": "play_pause", "params": {}}'
+    ))
+
+    pipeline = _make_pipeline()
+    await pipeline._parse_and_execute_intent(
+        "我帮你把音乐暂停一下。",
+        trigger_name="",
+        user_content="帮我暂停音乐",
+        user_id="u1",
+    )
+
+    assert push_calls == [{"type": "media_play_pause"}], \
+        "play_pause 必须翻译为前端认识的 media_play_pause"
+
+
+async def test_play_song_path_b_delegates_to_netease_wrapper(sandbox, monkeypatch):
+    """play_song 前端只认 play_netease + song_id，Path B 自己拼 song_name/artist 直接推送
+    的话 type/params 前端都不认识——必须复用 Path C 已验证正确的网易云搜索 wrapper。"""
+    _reset_intent_cooldown()
+
+    import core.llm_client as _llm
+    import core.tool_dispatcher as _td
+
+    push_calls: list = []
+    monkeypatch.setattr("core.tool_dispatcher._push_desktop_action",
+                        AsyncMock(side_effect=lambda a: push_calls.append(a) or "ok"))
+    monkeypatch.setattr(_llm, "chat", AsyncMock(
+        return_value='{"action": "play_song", "params": {"song_name": "晴天", "artist": "周杰伦"}}'
+    ))
+
+    wrapper_calls: list = []
+
+    async def _fake_wrapper(song_name="", artist=""):
+        wrapper_calls.append((song_name, artist))
+        return "已找到「晴天」by 周杰伦（ID:123），正在播放"
+
+    monkeypatch.setattr(_td, "_play_song_wrapper", _fake_wrapper)
+
+    pipeline = _make_pipeline()
+    await pipeline._parse_and_execute_intent(
+        "我现在就给你放晴天。",
+        trigger_name="",
+        user_content="放一首晴天",
+        user_id="u1",
+    )
+
+    assert wrapper_calls == [("晴天", "周杰伦")], "play_song 必须委托给 Path C 的网易云搜索 wrapper"
+    assert not push_calls, "play_song 不应再由 Path B 自己直接推送（由 wrapper 内部负责）"
+
+
+async def test_play_song_path_b_not_found_records_failure(sandbox, monkeypatch):
+    """网易云搜索无结果时，Path B 应记 pending_perception 失败痕迹，而不是静默当作成功。"""
+    _reset_intent_cooldown()
+
+    import core.llm_client as _llm
+    import core.tool_dispatcher as _td
+    import core.pipeline as _pp
+
+    monkeypatch.setattr("core.tool_dispatcher._push_desktop_action", AsyncMock(return_value="ok"))
+    monkeypatch.setattr(_llm, "chat", AsyncMock(
+        return_value='{"action": "play_song", "params": {"song_name": "不存在的歌名asdasd"}}'
+    ))
+
+    async def _fake_wrapper(song_name="", artist=""):
+        return f"未找到「{song_name}」，请确认歌名是否正确"
+
+    monkeypatch.setattr(_td, "_play_song_wrapper", _fake_wrapper)
+
+    recorded: list = []
+    monkeypatch.setattr(_pp._pending_perception, "write", lambda **kw: recorded.append(kw))
+
+    pipeline = _make_pipeline()
+    await pipeline._parse_and_execute_intent(
+        "我现在就给你放不存在的歌名asdasd。",
+        trigger_name="",
+        user_content="放一首不存在的歌名asdasd",
+        user_id="u1",
+    )
+
+    assert recorded, "网易云搜索失败应记录 pending_perception，不能静默吞掉"
+
+
 def test_diary_hallucination_guard_in_author_note(sandbox):
     """
     build_prompt 的 author_note 层始终包含日记幻觉防护规则。
