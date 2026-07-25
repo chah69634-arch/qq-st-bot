@@ -299,6 +299,72 @@ async def synthesize_desktop_tts(body: DesktopTtsSynthesize, auth=Depends(requir
     return {"audio_b64": base64.b64encode(audio).decode("ascii"), "mime": "audio/wav"}
 
 
+# ─── 自动播放语音开关（四场景） ────────────────────────────────────────────────
+
+class TtsAutoPlayUpdate(BaseModel):
+    chat: Optional[bool] = None
+    dream: Optional[bool] = None
+    video_call: Optional[bool] = None
+    desktop_pet: Optional[bool] = None
+
+
+@router.get("/settings/tts-auto-play", summary="读取四个场景的自动播放语音开关")
+async def get_tts_auto_play(auth=Depends(require_scopes("persona"))):
+    cfg = get_config().get("tts", {}).get("auto_play", {})
+    # 降级兼容：若 auto_play 未配置，用 desktop_enabled 映射到 desktop_pet
+    if not cfg:
+        legacy_enabled = get_config().get("tts", {}).get("desktop_enabled", False)
+        cfg = {
+            "chat": False,
+            "dream": False,
+            "video_call": False,
+            "desktop_pet": legacy_enabled,
+        }
+    return {
+        "chat": bool(cfg.get("chat", False)),
+        "dream": bool(cfg.get("dream", False)),
+        "video_call": bool(cfg.get("video_call", False)),
+        "desktop_pet": bool(cfg.get("desktop_pet", False)),
+    }
+
+
+@router.post("/settings/tts-auto-play", summary="修改四个场景的自动播放语音开关")
+async def update_tts_auto_play(body: TtsAutoPlayUpdate, auth=Depends(require_scopes("persona"))):
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            full_cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+
+    tts_cfg = full_cfg.setdefault("tts", {})
+    auto_play_cfg = tts_cfg.setdefault("auto_play", {})
+
+    updates = body.model_dump(exclude_none=True)
+    auto_play_cfg.update(updates)
+
+    # 为向后兼容，同时更新 desktop_enabled（映射到 desktop_pet）
+    if "desktop_pet" in updates:
+        tts_cfg["desktop_enabled"] = updates["desktop_pet"]
+
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+
+    from core import config_loader
+    config_loader.reload_config()
+
+    updated_cfg = get_config().get("tts", {}).get("auto_play", {})
+    return {
+        "message": "自动播放语音开关已更新",
+        "chat": bool(updated_cfg.get("chat", False)),
+        "dream": bool(updated_cfg.get("dream", False)),
+        "video_call": bool(updated_cfg.get("video_call", False)),
+        "desktop_pet": bool(updated_cfg.get("desktop_pet", False)),
+    }
+
+
 # ─── 聊天模式 ──────────────────────────────────────────────────────────────────
 
 _VALID_MODES = {"chat", "roleplay"}
