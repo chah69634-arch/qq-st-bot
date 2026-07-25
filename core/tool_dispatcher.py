@@ -299,6 +299,21 @@ async def _desktop_notify_wrapper(title: str = "", message: str = "") -> str:
     return f"已发送通知：{message}" if result == "ok" else result
 
 
+async def _toy_invite_wrapper() -> str:
+    """Brief 103/109 迁移：toy_invite 原仅经 Path B（_parse_and_execute_intent）触发，
+    未在 _TOOL_REGISTRY 注册过，Path B 删除后会无替代路径。此处以与 Path B 完全一致的
+    action type（"toy_invite"，无 params）接入 Path A/C 正路，前端行为不变。"""
+    result = await _push_desktop_action({"type": "toy_invite"})
+    return "已邀请进入玩耍模式" if result == "ok" else result
+
+
+async def _dream_invite_wrapper() -> str:
+    """Brief 103/109 迁移：dream_invite 同 toy_invite，原仅经 Path B 触发，此处接入
+    正路，action type 与 Path B 保持一致（"dream_invite"，无 params）。"""
+    result = await _push_desktop_action({"type": "dream_invite"})
+    return "已邀请进入梦境" if result == "ok" else result
+
+
 async def _play_song_wrapper(song_name: str = "", artist: str = "") -> str:
     """调网易云搜索API获取歌曲ID并推送播放动作。"""
     try:
@@ -683,6 +698,38 @@ _TOOL_REGISTRY["desktop_notify"] = {
     },
     "examples": ["发个通知", "弹个提醒"],
     "keywords": ["发通知", "弹提醒"],
+}
+
+_TOOL_REGISTRY["toy_invite"] = {
+    "func": _toy_invite_wrapper,
+    "description": "邀请用户进入玩耍模式，向桌面客户端推送 UI 动作打开 ToyWindow。用户明确请求"
+                   "一起玩/开玩耍模式，或{char}在对话中明确表达「想和你玩玩具/一起玩/给你点小奖励」"
+                   "等当下、第一人称、主动邀请语义时调用；不要因只是提到玩具/奖励话题就自行触发。",
+    "dangerous": False,
+    "category": "desktop",
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    "examples": ["想和你一起玩玩具", "给你点小奖励，打开玩耍模式"],
+    "keywords": ["一起玩", "玩耍模式", "给你奖励"],
+}
+
+_TOOL_REGISTRY["dream_invite"] = {
+    "func": _dream_invite_wrapper,
+    "description": "邀请用户进入梦境，向桌面客户端推送邀请动作。用户明确请求一起入梦，或{char}"
+                   "在对话中明确表达「一起去梦里/想和你做梦/来梦里找我」等直接邀请语义时调用；"
+                   "不要因只是聊到梦境话题就自行触发。",
+    "dangerous": False,
+    "category": "desktop",
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    "examples": ["一起去梦里吧", "今晚来梦里找我"],
+    "keywords": ["一起做梦", "梦里找你", "入梦邀请"],
 }
 
 _TOOL_REGISTRY["play_song"] = {

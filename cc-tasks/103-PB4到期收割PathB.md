@@ -12,7 +12,8 @@
 
 1. 删 `core/pipeline.py::_parse_and_execute_intent` 及调用点。
 2. 删 `config.intent_reflex` 配置项（config.example.yaml 同步）、三道守卫、120s 幂等窗口。
-3. `toy_invite` 当前沿用 Path B 守卫与幂等窗口（docs/tools.md:451）——迁移到 tool loop / `_push_desktop_action` 正路，不得随删失效。**这是本单最大风险点，先核对 toy_invite 触发链再动手。**
+3. ~~`toy_invite` 当前沿用 Path B 守卫与幂等窗口（docs/tools.md:451）——迁移到 tool loop / `_push_desktop_action` 正路，不得随删失效。**这是本单最大风险点，先核对 toy_invite 触发链再动手。**~~
+   **2026-07-25 已完成**：`toy_invite` 与同样孤儿的 `dream_invite`（原文档未点出，一并核对时发现）均已注册进 `_TOOL_REGISTRY`（`desktop` 类目），Path A/C 均可触发，action payload 与 Path B 一致，前端协议不变。见 `docs/tools.md` 意图解析节、`docs/known-issues.md` PB4 条目。本单最大风险点已解除。
 4. 删 `origin="assistant_intent"` 预留分支（docs/tools.md:462）。
 5. 删对应测试；docs/tools.md、known-issues 同步更新。
 

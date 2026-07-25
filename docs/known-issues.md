@@ -12,6 +12,13 @@
 
 `config.intent_reflex.enabled` 默认关闭，旧 Path B 守卫暂留。观察期若出现 tool loop 已启用但“角色说了要做却没做”的用户可感缺口，在此登记触发消息、期望动作和实际结果；到期仍无记录则整删 `_parse_and_execute_intent`、守卫、幂等窗口及对应测试。
 
+**2026-07-25 更新**：此前最大的缺口——`dream_invite` / `toy_invite` 只经 Path B 触发、
+未注册进 `_TOOL_REGISTRY`（`cc-tasks/103` 点名的最大风险点）——已迁移补齐，两者现为
+`desktop` 类目正式工具，Path A/C 均可触发（见 `docs/tools.md` 意图解析节 2026-07-25 迁移
+说明）。至此 Path B 支持的 7 种意图全部有 Path C 同款覆盖，103 号删除单不再有已知阻塞项。
+仍需真机做一次冒烟（危险模式窗口内触发一次 desktop 类动作 + toy_invite/dream_invite，确认
+均由 tool loop 正常执行）后再确认到期删除。
+
 ### ACT-1：阅读动向跨角色串桶
 
 **状态**：`observe`（前端已分桶，待复现观察）

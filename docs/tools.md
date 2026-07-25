@@ -485,6 +485,15 @@ Path C 多步调用复用同一次探测结果。
 - `dream_invite`：角色明确邀请用户进入梦境；向桌面客户端推送邀请动作
 - `toy_invite`：角色明确邀请进入玩耍模式；向桌面客户端推送 `{type: toy_invite}` UI 动作，前端在玩耍模式开启时打开 ToyWindow（非危险动作，沿用 Path B 三道守卫与 120s 幂等窗口）
 
+> **2026-07-25 迁移**：`dream_invite` / `toy_invite` 此前只经 Path B 触发，未注册进
+> `_TOOL_REGISTRY`——是 PB4 到期删除单（`cc-tasks/103`）里点出的最大风险点：Path B
+> 若按计划整删，这两个动作会因无替代路径而彻底失效。现已补注册为 `desktop` 类目下的
+> 正式工具（`core/tool_dispatcher.py`），Path A 探针与 Path C tool loop 均可触发，
+> 推送的 action payload（`{"type": "toy_invite"}` / `{"type": "dream_invite"}`，均无
+> params）与 Path B 原始行为完全一致，前端协议不变。`_MODE_RESTRICTED_CATEGORIES`
+> 安全模式闸门同样适用。Path B 仍保留（config 关闭中），迁移完成后 103 号单不再需要
+> 因这两个动作而搁置。
+
 **execute() origin 闸门（Path A）：**
 
 `tool_dispatcher.execute()` 新增**必填**关键字参数 `origin: str`（无默认值）。
