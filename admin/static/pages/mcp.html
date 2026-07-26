@@ -9,10 +9,11 @@
         <button class="btn btn-primary btn-sm admin-inline-133" data-action="saveMcpEnabled" data-i18n="mcp.save_reload">保存并热同步</button>
       </div>
       <div class="card">
-        <div class="card-header"><h3 data-i18n="mcp.import_title">从 URL 导入 Streamable HTTP MCP</h3></div>
+        <div class="card-header"><h3 data-i18n="mcp.import_title">从 URL 导入 MCP</h3></div>
         <div class="form-row">
           <label class="field"><span>name</span><input id="mcp-import-name" type="text" placeholder="cedar_toy"></label>
           <label class="field"><span>url</span><input id="mcp-import-url" type="text" placeholder="https://example.com/mcp"></label>
+          <label class="field"><span>transport</span><select id="mcp-import-transport"><option value="streamable-http">streamable-http</option><option value="sse">sse</option></select></label>
         </div>
         <div class="form-row col-1"><label class="field"><span data-i18n="mcp.headers_label">headers（JSON，可选；建议 ${ENV_VAR}）</span><textarea id="mcp-import-headers" rows="3" placeholder='{"Authorization":"Bearer ${MCP_TOKEN}"}'></textarea></label></div>
         <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="300" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label></div>

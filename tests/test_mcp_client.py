@@ -12,7 +12,7 @@ call_tool 超时/异常→重连一次→再失败按失败处理、断线重连
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -72,6 +72,15 @@ async def _clean_registry_and_servers(monkeypatch):
 
 async def _noop_transport(stack, server_cfg):
     return None, None
+
+
+@asynccontextmanager
+async def _fake_transport_context(value, closed: list[str] | None = None, name: str = "transport"):
+    try:
+        yield value
+    finally:
+        if closed is not None:
+            closed.append(name)
 
 
 def _patch_client_session(monkeypatch, session_or_factory):
@@ -245,6 +254,111 @@ class TestHttpHeadersAndProbe:
 
         assert tools == [{"name": "inspect", "description": "inspect status"}]
         assert "mcp__remote__inspect" not in td._TOOL_REGISTRY
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# transport: stdio / SSE / Streamable HTTP，以及旧 http alias
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestOpenTransport:
+    async def test_stdio_opens_sdk_stdio_client_inside_exit_stack(self, monkeypatch):
+        import mcp
+        import mcp.client.stdio as stdio_module
+
+        calls = {}
+        closed: list[str] = []
+
+        class _Params:
+            def __init__(self, *, command, args):
+                calls["params"] = {"command": command, "args": args}
+
+        def _stdio_client(params):
+            calls["params_from_client"] = params
+            return _fake_transport_context(("stdio-read", "stdio-write"), closed, "stdio")
+
+        monkeypatch.setattr(mcp, "StdioServerParameters", _Params)
+        monkeypatch.setattr(stdio_module, "stdio_client", _stdio_client)
+
+        async with AsyncExitStack() as stack:
+            assert await mc._open_transport(stack, {"transport": "stdio", "command": ["server", "--flag"]}) == (
+                "stdio-read", "stdio-write",
+            )
+        assert calls["params"] == {"command": "server", "args": ["--flag"]}
+        assert closed == ["stdio"]
+
+    async def test_sse_opens_sdk_sse_client_inside_exit_stack(self, monkeypatch):
+        import mcp.client.sse as sse_module
+
+        calls = {}
+        closed: list[str] = []
+
+        def _sse_client(url, *, headers):
+            calls.update(url=url, headers=headers)
+            return _fake_transport_context(("sse-read", "sse-write"), closed, "sse")
+
+        monkeypatch.setattr(sse_module, "sse_client", _sse_client)
+
+        async with AsyncExitStack() as stack:
+            assert await mc._open_transport(stack, {
+                "transport": "sse", "url": "https://example.test/sse", "headers": {"X-Test": "yes"},
+            }) == ("sse-read", "sse-write")
+        assert calls == {"url": "https://example.test/sse", "headers": {"X-Test": "yes"}}
+        assert closed == ["sse"]
+
+    async def test_streamable_http_opens_current_sdk_client_inside_exit_stack(self, monkeypatch):
+        import mcp.client.streamable_http as http_module
+        import mcp.shared._httpx_utils as http_utils
+
+        calls = {}
+        closed: list[str] = []
+
+        def _http_client_factory(*, headers):
+            calls["factory_headers"] = headers
+            return _fake_transport_context("http-client", closed, "http-client")
+
+        def _streamable_http_client(url, *, http_client):
+            calls.update(url=url, http_client=http_client)
+            return _fake_transport_context(("http-read", "http-write", lambda: None), closed, "streamable-http")
+
+        monkeypatch.setattr(http_utils, "create_mcp_http_client", _http_client_factory)
+        monkeypatch.setattr(http_module, "streamable_http_client", _streamable_http_client, raising=False)
+
+        async with AsyncExitStack() as stack:
+            assert await mc._open_transport(stack, {
+                "transport": "streamable-http", "url": "https://example.test/mcp", "headers": {"X-Test": "yes"},
+            }) == ("http-read", "http-write")
+        assert calls == {
+            "factory_headers": {"X-Test": "yes"},
+            "url": "https://example.test/mcp",
+            "http_client": "http-client",
+        }
+        assert closed == ["streamable-http", "http-client"]
+
+    async def test_legacy_http_alias_uses_streamable_http_client(self, monkeypatch):
+        import mcp.client.streamable_http as http_module
+        import mcp.shared._httpx_utils as http_utils
+
+        calls = []
+
+        def _http_client_factory(*, headers):
+            calls.append(("factory", headers))
+            return _fake_transport_context("http-client")
+
+        def _streamable_http_client(url, *, http_client):
+            calls.append(("transport", url, http_client))
+            return _fake_transport_context(("http-read", "http-write", lambda: None))
+
+        monkeypatch.setattr(http_utils, "create_mcp_http_client", _http_client_factory)
+        monkeypatch.setattr(http_module, "streamable_http_client", _streamable_http_client, raising=False)
+
+        async with AsyncExitStack() as stack:
+            assert await mc._open_transport(stack, {
+                "transport": "http", "url": "https://example.test/mcp",
+            }) == ("http-read", "http-write")
+        assert calls == [
+            ("factory", None),
+            ("transport", "https://example.test/mcp", "http-client"),
+        ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

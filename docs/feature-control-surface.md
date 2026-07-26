@@ -33,7 +33,8 @@ TTS provider 由管理面（admin token）经 `GET/PUT /tts-config` 管理：`tt
 
 MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /settings/mcp/test`、
 `POST /settings/mcp/import`、`PATCH /settings/mcp/{name}` 和 `DELETE /settings/mcp/{name}` 管理。URL 导入必须先完成
-`initialize + list_tools` 测试才写入配置；HTTP headers 支持 `${ENV_VAR}` 展开，管理面不回显
+`initialize + list_tools` 测试才写入配置；URL 导入可选 `streamable-http`（推荐）或 `sse`，而配置文件也可声明
+`stdio`；旧 `http` 配置继续按 `streamable-http` 处理。HTTP headers 支持 `${ENV_VAR}` 展开，管理面不回显
 字面 header 值。删除会立即断开该 server 并摘除它的动态工具；总开关同步所有 session，单 server 的启停/白名单只重载该 server；工具调用以
 `caller=mcp__{server}__{tool}` 记录到 API 调用总账。桌面客户端不代理这些 admin 配置或密钥。
 

@@ -390,9 +390,9 @@ mcp_servers:
   enabled: false
   servers: []
     # - name: filesystem
-    #   transport: stdio            # stdio | http（streamable http）
+    #   transport: stdio            # stdio | sse | streamable-http（http 是旧版 streamable-http 别名）
     #   command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "D:/some/dir"]
-    #   # http 时用: url: https://your-mcp-server.example/mcp
+    #   # sse / streamable-http 时用: url: https://your-mcp-server.example/mcp
     #   # 可选 HTTP 鉴权头；支持 ${ENV_VAR} 展开，勿在示例/文档写入真实 token
     #   # headers: {Authorization: "Bearer ${MCP_SERVER_TOKEN}"}
     #   enabled: true             # per-server 开关；总开关仍由 mcp_servers.enabled 控制

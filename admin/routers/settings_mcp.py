@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import urlparse
 
 import yaml
@@ -16,11 +16,13 @@ from core.config_loader import get_config
 router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+_REMOTE_TRANSPORTS = ("sse", "streamable-http")
 
 
 class McpServerDraft(BaseModel):
     name: str
     url: str
+    transport: Literal["sse", "streamable-http", "http"] = "streamable-http"
     headers: dict[str, str] = Field(default_factory=dict)
     allow_tools: list[str] = Field(default_factory=list)
     enabled: bool = True
@@ -45,13 +47,18 @@ def _validate_draft(draft: McpServerDraft) -> dict:
     parsed = urlparse(draft.url.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=422, detail="URL 必须是完整的 http(s) MCP endpoint")
+    if draft.transport not in {*_REMOTE_TRANSPORTS, "http"}:
+        raise HTTPException(
+            status_code=422,
+            detail="transport 仅支持 sse 或 streamable-http（http 仅为兼容别名）",
+        )
     if not all(key.strip() and value for key, value in draft.headers.items()):
         raise HTTPException(status_code=422, detail="headers 的键和值都必须是非空字符串")
     if len(draft.allow_tools) > 200:
         raise HTTPException(status_code=422, detail="allow_tools 最多 200 项")
     return {
         "name": name,
-        "transport": "http",
+        "transport": draft.transport,
         "url": draft.url.strip(),
         "headers": dict(draft.headers),
         "allow_tools": list(dict.fromkeys(draft.allow_tools)),
@@ -143,7 +150,7 @@ async def test_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("ad
     return {"ok": True, "tools": tools}
 
 
-@router.post("/settings/mcp/import", summary="测试后导入 HTTP MCP server")
+@router.post("/settings/mcp/import", summary="测试后导入远程 MCP server")
 async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("admin"))):
     from core import config_loader, mcp_client
 

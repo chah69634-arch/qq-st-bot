@@ -11,6 +11,7 @@ function _mcpDraftFromForm() {
   return {
     name: document.getElementById('mcp-import-name').value.trim(),
     url: document.getElementById('mcp-import-url').value.trim(),
+    transport: document.getElementById('mcp-import-transport').value,
     headers,
     enabled: document.getElementById('mcp-import-enabled').checked,
     tool_timeout_s: Number(document.getElementById('mcp-import-timeout').value || 30),

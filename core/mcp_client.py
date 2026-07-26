@@ -36,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 _RESULT_CHAR_CAP = 2000
 _ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_SUPPORTED_TRANSPORTS = ("stdio", "sse", "streamable-http")
+_TRANSPORT_ALIASES = {"http": "streamable-http"}
 
 # server_name → handle；进程内单例，_connect_server 填充，_close_server 清空。
 _servers: dict[str, "_ServerHandle"] = {}
@@ -235,28 +237,81 @@ async def _send_command(name: str, cmd: str, payload: dict | None = None) -> obj
     return await done
 
 
-async def _open_transport(stack: AsyncExitStack, server_cfg: dict):
+def _normalized_transport(server_cfg: dict) -> str:
+    """Return the canonical transport name, retaining the old ``http`` alias."""
     transport = server_cfg.get("transport", "stdio")
-    if transport == "stdio":
-        from mcp import StdioServerParameters
-        from mcp.client.stdio import stdio_client
-        command = server_cfg.get("command") or []
-        if not command:
-            raise ValueError("stdio transport 需要非空 command 数组")
-        params = StdioServerParameters(command=command[0], args=list(command[1:]))
-        read, write = await stack.enter_async_context(stdio_client(params))
-        return read, write
-    if transport == "http":
-        from mcp.client.streamable_http import streamablehttp_client
-        url = server_cfg.get("url")
-        if not url:
-            raise ValueError("http transport 需要 url")
-        headers = _expand_headers(server_cfg.get("headers"))
+    if not isinstance(transport, str):
+        raise ValueError(
+            "transport 必须是字符串（支持 stdio | sse | streamable-http；http 为兼容别名）"
+        )
+    transport = _TRANSPORT_ALIASES.get(transport, transport)
+    if transport not in _SUPPORTED_TRANSPORTS:
+        raise ValueError(
+            f"未知 transport: {transport!r}（支持 stdio | sse | streamable-http；http 为兼容别名）"
+        )
+    return transport
+
+
+def _transport_url(server_cfg: dict, transport: str) -> str:
+    url = server_cfg.get("url")
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError(f"{transport} transport 需要非空 url")
+    return url.strip()
+
+
+async def _open_stdio_transport(stack: AsyncExitStack, server_cfg: dict):
+    from mcp import StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    command = server_cfg.get("command") or []
+    if not command:
+        raise ValueError("stdio transport 需要非空 command 数组")
+    params = StdioServerParameters(command=command[0], args=list(command[1:]))
+    return await stack.enter_async_context(stdio_client(params))
+
+
+async def _open_sse_transport(stack: AsyncExitStack, server_cfg: dict):
+    from mcp.client.sse import sse_client
+
+    url = _transport_url(server_cfg, "sse")
+    headers = _expand_headers(server_cfg.get("headers"))
+    return await stack.enter_async_context(sse_client(url, headers=headers))
+
+
+async def _open_streamable_http_transport(stack: AsyncExitStack, server_cfg: dict):
+    from mcp.client import streamable_http
+
+    url = _transport_url(server_cfg, "streamable-http")
+    headers = _expand_headers(server_cfg.get("headers"))
+
+    # Current MCP SDKs expose streamable_http_client(), whose headers belong on
+    # a caller-owned HTTP client.  Keep the older helper as a fallback for the
+    # project's declared mcp>=1.9 compatibility range.
+    current_client = getattr(streamable_http, "streamable_http_client", None)
+    if current_client is not None:
+        from mcp.shared._httpx_utils import create_mcp_http_client
+
+        http_client = await stack.enter_async_context(create_mcp_http_client(headers=headers))
         read, write, _get_session_id = await stack.enter_async_context(
-            streamablehttp_client(url, headers=headers)
+            current_client(url, http_client=http_client)
         )
         return read, write
-    raise ValueError(f"未知 transport: {transport!r}（只支持 stdio | http）")
+
+    legacy_client = streamable_http.streamablehttp_client
+    read, write, _get_session_id = await stack.enter_async_context(
+        legacy_client(url, headers=headers)
+    )
+    return read, write
+
+
+async def _open_transport(stack: AsyncExitStack, server_cfg: dict):
+    """Open one configured MCP transport inside the caller-owned exit stack."""
+    transport = _normalized_transport(server_cfg)
+    if transport == "stdio":
+        return await _open_stdio_transport(stack, server_cfg)
+    if transport == "sse":
+        return await _open_sse_transport(stack, server_cfg)
+    return await _open_streamable_http_transport(stack, server_cfg)
 
 
 async def _connect_server(name: str, server_cfg: dict) -> None:

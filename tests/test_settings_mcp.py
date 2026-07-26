@@ -6,6 +6,7 @@ import asyncio
 import pytest
 import yaml
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from admin.routers import settings_mcp as mod
 
@@ -33,6 +34,19 @@ def _draft(**overrides):
     }
     data.update(overrides)
     return mod.McpServerDraft(**data)
+
+
+def test_remote_transport_validation_defaults_to_streamable_http_and_accepts_sse():
+    assert mod._validate_draft(_draft())["transport"] == "streamable-http"
+    assert mod._validate_draft(_draft(transport="sse"))["transport"] == "sse"
+
+
+def test_remote_transport_validation_keeps_legacy_http_alias_and_rejects_unknown():
+    assert mod._validate_draft(_draft(transport="http"))["transport"] == "http"
+    invalid = _draft().model_dump()
+    invalid["transport"] = "websocket"
+    with pytest.raises(ValidationError):
+        mod.McpServerDraft(**invalid)
 
 
 def test_import_tests_before_write_and_hot_reloads(tmp_path, monkeypatch):
