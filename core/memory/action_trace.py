@@ -215,6 +215,74 @@ def recent(
     return entries[-max_items:]
 
 
+def tool_category(tool_name: str) -> str:
+    """Return the registered tool category without exposing tool arguments.
+
+    MCP tools are registered dynamically after startup, so their names remain a
+    safe fallback when an observation request races registration.
+    """
+    if tool_name.startswith("mcp__"):
+        return "mcp"
+    try:
+        from core.tool_dispatcher import _TOOL_REGISTRY
+        category = _TOOL_REGISTRY.get(tool_name, {}).get("category")
+        if isinstance(category, str) and category:
+            return category
+    except Exception as exc:
+        logger.debug("[action_trace] category lookup failed: %s", exc)
+    return "unknown"
+
+
+def query(
+    uid: str,
+    char_id: str,
+    *,
+    category: str = "",
+    limit: int = _MAX_ENTRIES,
+) -> list[dict]:
+    """Read persisted traces for the admin inspector, newest first.
+
+    Unlike :func:`recent`, this read-only inspection path intentionally still
+    exposes already-persisted rows after the runtime feature is switched off.
+    It never writes, mutates, or loads raw tool results.
+    """
+    try:
+        entries = _load(_trace_path(uid, char_id))
+    except Exception as exc:
+        logger.debug("[action_trace] observation query failed: %s", exc)
+        return []
+
+    rows = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        row = dict(entry)
+        row["category"] = tool_category(str(row.get("tool") or ""))
+        if category and row["category"] != category:
+            continue
+        rows.append(row)
+    return list(reversed(rows[-max(1, min(int(limit), _MAX_ENTRIES)):]))
+
+
+def list_uids(char_id: str) -> list[str]:
+    """List only uid buckets which already contain a persisted action trace."""
+    require_character_id(char_id)
+    try:
+        from core.sandbox import get_paths
+
+        root = get_paths().memory_char_root(char_id=char_id)
+        if not root.exists():
+            return []
+        return sorted(
+            child.name
+            for child in root.iterdir()
+            if child.is_dir() and (child / "action_trace.json").is_file()
+        )
+    except Exception as exc:
+        logger.debug("[action_trace] uid listing failed: %s", exc)
+        return []
+
+
 def format_line(entry: dict) -> str:
     """单条痕迹 → 角色视角一句话，供层 10.5 拼接。"""
     ts = entry.get("ts")

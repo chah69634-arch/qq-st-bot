@@ -72,6 +72,7 @@
       <a data-page="observe-group-arbiter" onclick="goto('observe-group-arbiter')"><span class="icon">⚖️</span><span data-i18n="nav.group_arbiter">群聊仲裁</span></a>
       <a data-page="observe-memory-summary" onclick="goto('observe-memory-summary')"><span class="icon">📚</span><span data-i18n="nav.memory_summary">记忆摘要</span></a>
       <a data-page="observe-prompt"  onclick="goto('observe-prompt')"> <span class="icon">🗂️</span><span data-i18n="nav.prompt_layers">Prompt 层检视</span></a>
+      <a data-page="observe-tools"   onclick="goto('observe-tools')">  <span class="icon">🛠️</span><span data-i18n="nav.tool_observability">工具观测</span></a>
       <a data-page="observe-probe"   onclick="goto('observe-probe')">  <span class="icon">🔭</span><span data-i18n="nav.probe">探针观测</span></a>
       <a data-page="observe-dream-prompt" onclick="goto('observe-dream-prompt')"><span class="icon">💭</span><span data-i18n="nav.dream_prompt">梦境 Prompt</span></a>
       <a data-page="observe-trigger-catalog" onclick="goto('observe-trigger-catalog')"><span class="icon">📡</span><span data-i18n="nav.trigger_catalog">触发器目录</span></a>
@@ -1710,6 +1711,30 @@
         </div>
         <div id="obs-recall-list" style="font-size:12px;color:var(--muted)">在上方输入 uid 后点击查看</div>
       </div>
+    </div>
+
+    <!-- ── 工具执行痕迹（Path A/B/C） ── -->
+    <div class="page" id="page-observe-tools">
+      <h1 class="page-title" data-i18n="observe.tools.title">工具观测</h1>
+      <div style="font-size:13px;color:var(--muted);margin:-10px 0 16px" data-i18n="observe.tools.subtitle">只读 · action_trace · 探针、意图解析与 Tool Loop</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="obs-tools-uid" placeholder="uid" style="width:150px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
+        <select id="obs-tools-category" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
+          <option value="" data-i18n="observe.tools.all">全部类目</option>
+          <option value="info" data-i18n="observe.tools.info">信息</option>
+          <option value="desktop" data-i18n="observe.tools.desktop">桌面</option>
+          <option value="memory" data-i18n="observe.tools.memory">记忆</option>
+          <option value="mcp">MCP</option>
+          <option value="fs" data-i18n="observe.tools.fs">文件系统</option>
+          <option value="system" data-i18n="observe.tools.system">系统</option>
+          <option value="phone_control" data-i18n="observe.tools.phone">手机控制</option>
+        </select>
+        <input type="number" id="obs-tools-limit" value="30" min="1" max="30" style="width:64px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
+        <button class="btn btn-ghost btn-sm" onclick="loadObserveTools()" data-i18n="common.refresh">刷新</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadObserveToolUidList()" data-i18n="observe.list_uid">列出 uid</button>
+      </div>
+      <div id="obs-tools-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+      <div id="obs-tools-content"></div>
     </div>
 
     <!-- ── 工具调度体系（探针观测） ── -->

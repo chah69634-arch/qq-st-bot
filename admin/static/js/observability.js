@@ -934,6 +934,68 @@ function exportSnapshotMd(kind) {
 }
 
 // ══════════════════════════════════════════════════════════
+//  工具观测（observe-tools）
+// ══════════════════════════════════════════════════════════
+
+async function loadObserveToolUidList() {
+  const listEl = document.getElementById('obs-tools-uid-list');
+  try {
+    const d = await api('GET', '/observability/tool-traces');
+    const uids = d.uids || [];
+    listEl.innerHTML = uids.length
+      ? t('observe.tools.uid_list', '有执行痕迹的 uid：') + uids.map(uid =>
+        `<a href="#" style="margin-left:8px;color:var(--accent)" onclick="document.getElementById('obs-tools-uid').value='${escapeHtml(uid)}';loadObserveTools();return false">${escapeHtml(uid)}</a>`
+      ).join('')
+      : t('observe.tools.empty_uid', '暂无工具执行痕迹。');
+  } catch (e) {
+    listEl.textContent = t('observe.tools.load_failed', '加载失败：{error}', {error: e.message});
+  }
+}
+
+async function _loadObserveToolMcpLedger(entries) {
+  const callers = [...new Set((entries || [])
+    .filter(entry => entry.category === 'mcp' && String(entry.tool || '').startsWith('mcp__'))
+    .map(entry => entry.tool))];
+  if (!callers.length) return '';
+  const rows = await Promise.all(callers.map(async caller => {
+    try {
+      const data = await getMcpRecentCalls(caller, 3);
+      return (data.entries || []).map(entry => ({ caller, entry }));
+    } catch (_) {
+      return [];
+    }
+  }));
+  const flat = rows.flat();
+  if (!flat.length) return `<div class="empty">${escapeHtml(t('observe.tools.mcp_ledger_empty', 'MCP 调用总账暂无对应记录。'))}</div>`;
+  return `<div class="card" style="margin-top:12px"><div class="card-header"><h3>${escapeHtml(t('observe.tools.mcp_ledger', 'MCP 调用总账'))}</h3><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('observe.tools.mcp_ledger_hint', '与 MCP 管理页复用同一只读总账'))}</span></div>${flat.map(({caller, entry}) => `<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px"><code>${escapeHtml(caller)}</code> · ${escapeHtml(entry.ok ? t('observe.tools.ok', '成功') : t('observe.tools.failed', '失败'))} · ${escapeHtml(String(entry.duration_ms ?? '?'))}ms</div>`).join('')}</div>`;
+}
+
+async function loadObserveTools() {
+  const uid = (document.getElementById('obs-tools-uid').value || '').trim();
+  const category = document.getElementById('obs-tools-category').value;
+  const limit = document.getElementById('obs-tools-limit').value || '30';
+  const el = document.getElementById('obs-tools-content');
+  if (!uid) { el.innerHTML = `<div class="empty">${escapeHtml(t('observe.tools.need_uid', '请输入 uid 后查看。'))}</div>`; return; }
+  el.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
+  try {
+    const query = new URLSearchParams({ limit });
+    if (category) query.set('category', category);
+    const d = await api('GET', `/observability/tool-traces/${encodeURIComponent(uid)}?${query}`);
+    const summary = Object.entries(d.categories || {}).map(([name, count]) => `<span class="badge" style="margin-right:6px">${escapeHtml(name)} ${escapeHtml(String(count))}</span>`).join('') || '—';
+    const entries = d.entries || [];
+    const rows = entries.length ? entries.map(entry => {
+      const statusClass = entry.status === 'ok' ? 'badge-success' : entry.status === 'failed' ? 'badge-danger' : 'badge-warn';
+      const ts = entry.ts ? new Date(entry.ts * 1000).toLocaleString() : '—';
+      return `<div style="padding:10px 14px;border-top:1px solid var(--border);font-size:12px"><div><code>${escapeHtml(entry.tool || '?')}</code> <span class="badge">${escapeHtml(entry.category || 'unknown')}</span> <span class="badge ${statusClass}">${escapeHtml(entry.status || '?')}</span> <span style="color:var(--muted)">${escapeHtml(entry.origin || '?')} · ${escapeHtml(ts)}</span></div>${entry.args_digest ? `<div style="margin-top:4px;color:var(--muted)">${escapeHtml(t('observe.tools.args', '参数：'))}${escapeHtml(entry.args_digest)}</div>` : ''}${entry.result_digest ? `<div style="margin-top:3px">${escapeHtml(t('observe.tools.result', '结果摘要：'))}${escapeHtml(entry.result_digest)}</div>` : ''}</div>`;
+    }).join('') : `<div class="empty">${escapeHtml(t('observe.tools.empty', '该筛选条件下暂无执行痕迹。'))}</div>`;
+    el.innerHTML = `<div class="card"><div class="card-header"><h3>${escapeHtml(t('observe.tools.recent', '最近工具执行'))}</h3><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('observe.tools.summary', '全部类目：'))}${summary}</span></div>${rows}</div>`;
+    if (!category || category === 'mcp') el.innerHTML += await _loadObserveToolMcpLedger(entries);
+  } catch (e) {
+    el.innerHTML = `<div class="empty">${escapeHtml(t('observe.tools.load_failed', '加载失败：{error}', {error: e.message}))}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 //  探针观测（observe-probe）
 // ══════════════════════════════════════════════════════════
 

@@ -62,11 +62,15 @@ async function _loadMcpRecentCalls(servers) {
     const target = document.getElementById(`mcp-call-${server.name}-${tool.name}`);
     if (!target) return;
     try {
-      const data = await api('GET', `/observability/api-calls?caller=${encodeURIComponent(`mcp__${server.name}__${tool.name}`)}&limit=1`);
+      const data = await getMcpRecentCalls(`mcp__${server.name}__${tool.name}`, 1);
       const entry = (data.entries || [])[0];
       target.textContent = entry ? `最近调用：${entry.ok ? '成功' : '失败'} · ${entry.duration_ms}ms` : '暂无调用记录';
     } catch (_) { target.textContent = '调用记录不可用'; }
   })));
+}
+
+async function getMcpRecentCalls(caller, limit = 1) {
+  return api('GET', `/observability/api-calls?caller=${encodeURIComponent(caller)}&limit=${Math.max(1, Math.min(limit, 30))}`);
 }
 
 async function saveMcpEnabled() {

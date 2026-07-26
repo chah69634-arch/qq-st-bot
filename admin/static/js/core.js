@@ -48,6 +48,7 @@ function goto(page) {
     'observe-group-arbiter': initObserveGroupArbiter,
     'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
     'observe-prompt':  () => { loadObservePromptUidList(); loadPromptAblation(); loadOutputSegmentEnforce(); },
+    'observe-tools':   () => loadObserveToolUidList(),
     'observe-probe':   () => loadObserveProbeUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
     'observe-trigger-catalog': () => loadTriggerCatalog(),
