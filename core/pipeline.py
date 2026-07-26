@@ -1794,13 +1794,11 @@ class Pipeline:
         char_id 透传给 voice_adapter.synthesize()，按角色卡 presence_ext.tts_preset
         解析命名 TTS 预设（角色资产路由）；未传时回落全局 tts 配置（现状行为不变）。
         """
-        from core.output.voice_adapter import synthesize, send_voice
+        from core.output.voice_adapter import clean_tts_text, synthesize, send_voice
         from core.error_handler import log_error
         import re
         # 清洗文本：去掉括号内的动作/环境描写，只保留说出口的话
-        clean = re.sub(r'（[^）]*）', '', text)  # 中文括号
-        clean = re.sub(r'\([^)]*\)', '', clean)   # 英文括号
-        clean = clean.strip()
+        clean = clean_tts_text(text)
         if not clean:
             logger.debug("[pipeline.tts] 清洗后文本为空，跳过语音")
             return

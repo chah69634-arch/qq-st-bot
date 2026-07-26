@@ -26,6 +26,20 @@ _QUEUE_MAX_ITEMS = 500
 _QUEUE_MAX_AGE_SECONDS = 24 * 60 * 60
 
 
+def _is_tts_available() -> bool:
+    """Whether a client may request audio without putting audio in the queue."""
+    try:
+        from core.config_loader import get_config
+        from core.output.voice_adapter import get_provider_status
+
+        cfg = get_config().get("tts", {})
+        return bool(cfg.get("enabled", False) and get_provider_status(cfg).get("ready", False))
+    except Exception:
+        # Queue delivery must never depend on optional TTS configuration.
+        logger.debug("[mobile_channel] could not determine TTS availability", exc_info=True)
+        return False
+
+
 class MobileChannel(BaseChannel):
     def __init__(self):
         self._active = False
@@ -166,6 +180,11 @@ class MobileChannel(BaseChannel):
                     item["char_id"] = char_id
                 if sticker is not None:
                     item["sticker"] = sticker
+                # The marker is deliberately tiny: audio stays out of the
+                # durable polling queue and is synthesized only if the mobile
+                # client elected to play it.
+                if content.strip():
+                    item["voice_available"] = _is_tts_available()
                 queue.append(item)
                 queue = self._prune_queue(queue)
                 safe_write_json(q_file, queue)

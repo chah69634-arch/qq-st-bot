@@ -205,6 +205,14 @@ tts:
       voice: ''
   enabled: false  # 纯增值功能(QQ 概率语音)，默认关；依赖本机部署的 GPT-SoVITS，面板「系统状态」页可开
   desktop_enabled: false  # 桌面端按需语音条；独立于 QQ 概率语音，默认关闭
+  # Per-surface automatic playback. All default to false so clients never
+  # synthesize audio or consume mobile data without an explicit opt-in.
+  auto_play:
+    chat: false
+    dream: false
+    video_call: false
+    desktop_pet: false
+    mobile: false
   probability: 0.1
   api_url: http://127.0.0.1:9872
   top_k: 15

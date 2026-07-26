@@ -4,7 +4,7 @@
 
 import base64
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -256,6 +256,9 @@ class DesktopTtsUpdate(BaseModel):
 class DesktopTtsSynthesize(BaseModel):
     text: str
     emotion: str = "neutral"
+    # Old desktop clients omit this. New clients should name their playback
+    # surface so the contract can evolve without desktop-only assumptions.
+    scene: Literal["chat", "dream", "video_call", "desktop_pet", "mobile"] = "desktop_pet"
 
 
 @router.get("/settings/tts-desktop", summary="读取桌面语音播放开关")
@@ -271,7 +274,12 @@ async def update_desktop_tts(body: DesktopTtsUpdate, auth=Depends(require_scopes
             full_cfg = yaml.safe_load(f) or {}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
-    full_cfg.setdefault("tts", {})["desktop_enabled"] = body.enabled
+    tts_cfg = full_cfg.setdefault("tts", {})
+    tts_cfg["desktop_enabled"] = body.enabled
+    # Keep the legacy endpoint and the per-scene control plane bidirectionally
+    # compatible. Otherwise an old desktop client can silently desynchronise
+    # the new desktop-pet setting.
+    tts_cfg.setdefault("auto_play", {})["desktop_pet"] = body.enabled
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
@@ -282,17 +290,17 @@ async def update_desktop_tts(body: DesktopTtsUpdate, auth=Depends(require_scopes
     return {"message": "桌面语音播放开关已更新", "enabled": body.enabled}
 
 
-@router.post("/tts/synthesize", summary="为桌面消息按需合成语音")
+@router.post("/tts/synthesize", summary="为客户端消息按需合成语音")
 async def synthesize_desktop_tts(body: DesktopTtsSynthesize, auth=Depends(require_scopes("persona"))):
     cfg = get_config().get("tts", {})
-    if not cfg.get("desktop_enabled", False):
-        raise HTTPException(status_code=409, detail="桌面语音播放未开启")
-    text = body.text.strip()
+    if not cfg.get("enabled", False):
+        raise HTTPException(status_code=409, detail="TTS 服务未开启")
+    from core.output.voice_adapter import clean_tts_text, synthesize
+    text = clean_tts_text(body.text)
     if not text:
         raise HTTPException(status_code=422, detail="text 不能为空")
     if len(text) > 4000:
         raise HTTPException(status_code=422, detail="单条语音文本不能超过 4000 字")
-    from core.output.voice_adapter import synthesize
     audio = await synthesize(text, body.emotion)
     if not audio:
         raise HTTPException(status_code=502, detail="TTS 未返回音频，请检查 API 与参考音频配置")
@@ -306,6 +314,7 @@ class TtsAutoPlayUpdate(BaseModel):
     dream: Optional[bool] = None
     video_call: Optional[bool] = None
     desktop_pet: Optional[bool] = None
+    mobile: Optional[bool] = None
 
 
 @router.get("/settings/tts-auto-play", summary="读取四个场景的自动播放语音开关")
@@ -319,12 +328,14 @@ async def get_tts_auto_play(auth=Depends(require_scopes("persona"))):
             "dream": False,
             "video_call": False,
             "desktop_pet": legacy_enabled,
+            "mobile": False,
         }
     return {
         "chat": bool(cfg.get("chat", False)),
         "dream": bool(cfg.get("dream", False)),
         "video_call": bool(cfg.get("video_call", False)),
         "desktop_pet": bool(cfg.get("desktop_pet", False)),
+        "mobile": bool(cfg.get("mobile", False)),
     }
 
 
@@ -362,6 +373,7 @@ async def update_tts_auto_play(body: TtsAutoPlayUpdate, auth=Depends(require_sco
         "dream": bool(updated_cfg.get("dream", False)),
         "video_call": bool(updated_cfg.get("video_call", False)),
         "desktop_pet": bool(updated_cfg.get("desktop_pet", False)),
+        "mobile": bool(updated_cfg.get("mobile", False)),
     }
 
 

@@ -22,6 +22,7 @@
 import asyncio
 import base64
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Protocol
@@ -287,6 +288,17 @@ _PROVIDERS: dict[str, TtsProvider] = {
     _GSV_PROVIDER: GsvProvider(),
     _OPENAI_COMPAT_PROVIDER: OpenAICompatibleProvider(),
 }
+
+
+def clean_tts_text(text: str) -> str:
+    """Remove non-spoken parenthetical narration before on-demand synthesis.
+
+    This is deliberately shared by QQ's proactive TTS and HTTP clients so a
+    Dream reply never has a different narration rule depending on the channel.
+    """
+    cleaned = re.sub(r"（[^）]*）", "", text)
+    cleaned = re.sub(r"\([^)]*\)", "", cleaned)
+    return cleaned.strip()
 
 
 async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None = None) -> bytes | None:
