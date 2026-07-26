@@ -114,7 +114,7 @@ model_presets:
    `tests/test_model_presets.py::TestRoutingFallback`）。管理面板「配置」页 §1 的
    probe/summary 只读展示（`GET /character/{char_id}/model-routing` /
    `resolve_routing_info()`）读的就是这份真实解析结果，不是另一套展示专用逻辑。
-3. `vision` 不进 routing_profiles：继续用独立的 `vision:` 块。
+3. `vision` 不进 routing_profiles：继续用独立的 `vision:` 块；手机自动化可选 `phone_control_vision:` 固定覆盖槽位，空字段继承通用 `vision`，不引入多 preset 或 profile。
 
 ModelClient 缓存（`core.model_registry._model_clients`）以**解析出的 preset 名**为 key，不是
 call_category 或 profile 名——每次调用都重新走上面 0~2 步解析 preset 名，天然随角色切换取到

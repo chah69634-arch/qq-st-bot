@@ -11,6 +11,7 @@ async function loadStatus() {
   loadContextConfig();
   loadLlmParams();
   loadVisionParams();
+  loadPhoneControlVisionParams();
   loadScreenPeekSettings();
   loadMetaMode();
   loadTtsConfig();

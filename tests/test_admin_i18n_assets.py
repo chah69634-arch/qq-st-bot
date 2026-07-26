@@ -117,6 +117,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "status.context.title",
         "status.llm.title",
         "status.vision.title",
+        "status.phone_vision.title",
         "status.screen.title",
         "status.relay.title",
         "status.tts.title",

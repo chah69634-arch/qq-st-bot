@@ -166,6 +166,25 @@
         </div>
       </div>
 
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.phone_vision.title">手机自动化视觉覆盖</h3>
+          <div>
+            <button class="btn btn-ghost btn-sm" data-action="loadPhoneControlVisionParams" data-i18n="common.refresh">刷新</button>
+            <button class="btn btn-primary btn-sm" data-action="savePhoneControlVisionParams" data-i18n="common.save">保存</button>
+          </div>
+        </div>
+        <p data-i18n="status.phone_vision.hint">仅覆盖手机自动化的视觉模型。留空即继承上方通用视觉配置；通常只需要填写模型名。</p>
+        <div class="form-row">
+          <label class="field"><span data-i18n="status.phone_vision.enabled">启用状态</span><select id="phone-vision-enabled"><option value="" data-i18n="status.phone_vision.inherit">继承通用配置</option><option value="true" data-i18n="status.phone_vision.enabled_true">启用</option><option value="false" data-i18n="status.phone_vision.enabled_false">关闭</option></select></label>
+          <label class="field"><span data-i18n="status.vision.model">模型</span><input id="phone-vision-model" type="text" data-i18n-placeholder="status.phone_vision.model_placeholder" placeholder="留空则继承通用模型"></label>
+        </div>
+        <div class="form-row">
+          <label class="field"><span data-i18n="status.phone_vision.base_url">Base URL 覆盖</span><input id="phone-vision-base-url" type="text" data-i18n-placeholder="status.phone_vision.base_url_placeholder" placeholder="留空则继承通用 Base URL"></label>
+          <label class="field"><span data-i18n="status.phone_vision.api_key">API Key 覆盖</span><input id="phone-vision-api-key" type="password" autocomplete="off" data-i18n-placeholder="status.phone_vision.api_key_placeholder" placeholder="留空则继承通用 API Key"></label>
+        </div>
+      </div>
+
       <!-- 屏幕内容查看设置 -->
       <div class="card">
         <div class="card-header">

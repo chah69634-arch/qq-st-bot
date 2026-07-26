@@ -104,6 +104,35 @@ async function saveVisionParams() {
   }
 }
 
+async function loadPhoneControlVisionParams() {
+  try {
+    const data = await api('GET', '/vision-params/phone-control');
+    const enabled = document.getElementById('phone-vision-enabled');
+    enabled.value = data.enabled === true ? 'true' : data.enabled === false ? 'false' : '';
+    document.getElementById('phone-vision-model').value = data.model || '';
+    document.getElementById('phone-vision-base-url').value = data.base_url || '';
+    document.getElementById('phone-vision-api-key').value = data.api_key || '';
+  } catch (e) {
+    toast(t('status.phone_vision.load_error', '读取手机自动化视觉覆盖失败: {error}', {error: e.message || e}), 'err');
+  }
+}
+
+async function savePhoneControlVisionParams() {
+  const enabled = document.getElementById('phone-vision-enabled').value;
+  const body = {
+    enabled: enabled === '' ? null : enabled === 'true',
+    model: document.getElementById('phone-vision-model').value.trim(),
+    base_url: document.getElementById('phone-vision-base-url').value.trim(),
+    api_key: document.getElementById('phone-vision-api-key').value.trim(),
+  };
+  try {
+    await api('PUT', '/vision-params/phone-control', body);
+    toast(t('status.phone_vision.saved', '手机自动化视觉覆盖已保存'), 'ok');
+  } catch (e) {
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');
+  }
+}
+
 // ══════════════════════════════════════════════════════════
 //  Proxy settings
 // ══════════════════════════════════════════════════════════

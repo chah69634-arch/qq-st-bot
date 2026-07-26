@@ -56,7 +56,8 @@ def get_phone_control_vision_config() -> dict:
     dedicated = dict(cfg.get("phone_control_vision") or {})
     general = dict(cfg.get("vision") or {})
     merged = dict(general)
-    merged.update({k: v for k, v in dedicated.items() if v})
+    # 空字符串表示“继承通用 vision”；False 是合法的显式布尔覆盖，不能被当成空值丢掉。
+    merged.update({k: v for k, v in dedicated.items() if v is not None and v != ""})
     return merged
 
 

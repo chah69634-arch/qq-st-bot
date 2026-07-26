@@ -4,6 +4,8 @@ GET  /llm-params                  — 读取当前 chat preset 的生成参数
 PUT  /llm-params                  — 修改当前 chat preset 的生成参数并热重载
 GET  /vision-params               — 读取 vision 配置
 PUT  /vision-params               — 修改 vision 配置并热重载
+GET  /vision-params/phone-control — 读取手机自动化视觉覆盖
+PUT  /vision-params/phone-control — 修改手机自动化视觉覆盖并热重载
 GET    /model-presets                        — 读取多模型 preset 配置（api_key 打码）
 PUT    /model-presets/active-routing          — 切换当前生效的路由方案
 PUT    /model-presets/presets/{name}          — 新增或更新一个 preset
@@ -307,6 +309,15 @@ class VisionParamsUpdate(BaseModel):
     base_url: Optional[str]   = None
 
 
+class PhoneControlVisionParamsUpdate(BaseModel):
+    """phone_control_vision 只存显式覆盖；空值删除字段并回退通用 vision。"""
+
+    enabled: Optional[bool] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+
+
 @router.get("/vision-params", summary="获取 Vision 配置")
 async def get_vision_params(auth=Depends(require_scopes("admin"))):
     cfg = get_config().get("vision", {})
@@ -344,6 +355,64 @@ async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_sc
     config_loader.reload_config()
     llm_client.reload_client()
     return {"message": "Vision 配置已更新", "vision": vision_cfg}
+
+
+def _phone_control_vision_view(cfg: dict) -> dict:
+    dedicated = cfg.get("phone_control_vision")
+    dedicated = dedicated if isinstance(dedicated, dict) else {}
+    return {
+        "enabled": dedicated.get("enabled"),
+        "api_key": dedicated.get("api_key", ""),
+        "model": dedicated.get("model", ""),
+        "base_url": dedicated.get("base_url", ""),
+    }
+
+
+@router.get("/vision-params/phone-control", summary="获取手机自动化视觉覆盖")
+async def get_phone_control_vision_params(auth=Depends(require_scopes("admin"))):
+    """仅返回覆盖字段；未填字段由客户端明确展示为继承通用 Vision。"""
+    return _phone_control_vision_view(get_config())
+
+
+@router.put("/vision-params/phone-control", summary="修改手机自动化视觉覆盖并热重载")
+async def update_phone_control_vision_params(
+    body: PhoneControlVisionParamsUpdate,
+    _auth=Depends(require_scopes("admin")),
+):
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            full_cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+
+    dedicated = full_cfg.get("phone_control_vision")
+    dedicated = dict(dedicated) if isinstance(dedicated, dict) else {}
+    for field in ("enabled", "api_key", "model", "base_url"):
+        if field not in body.model_fields_set:
+            continue
+        value = getattr(body, field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            dedicated.pop(field, None)
+        else:
+            dedicated[field] = value.strip() if isinstance(value, str) else value
+    if dedicated:
+        full_cfg["phone_control_vision"] = dedicated
+    else:
+        full_cfg.pop("phone_control_vision", None)
+
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+
+    from core import config_loader
+
+    config_loader.reload_config()
+    return {
+        "message": "手机自动化视觉覆盖已更新",
+        "phone_control_vision": _phone_control_vision_view(full_cfg),
+    }
 
 
 # ---------------------------------------------------------------------------
