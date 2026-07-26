@@ -263,21 +263,22 @@ async function _loadSetupOptional() {
     const unknown = escapeHtml(t('common.unknown', '未知'));
 
     el.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div class="setup-optional-model-summary">
+        <div class="setup-optional-summary-row">
           <span>TTS: ${tts ? (tts.enabled ? `<span class="badge badge-success">${enabled}</span>` : `<span class="badge">${disabled}</span>`) : `<span class="badge">${unknown}</span>`}</span>
-          <button class="btn btn-ghost btn-sm" onclick="goto('status')">${escapeHtml(t('setup.go_status', '前往系统状态页设置'))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["status"]'>${escapeHtml(t('setup.go_status', '前往系统状态页设置'))}</button>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div class="setup-optional-summary-row">
           <span>Vision: ${vision ? (vision.enabled ? `<span class="badge badge-success">${escapeHtml(t('setup.vision_enabled', '已启用（{model}）', {model: vision.model || t('setup.no_model', '未填模型')}))}</span>` : `<span class="badge">${disabled}</span>`) : `<span class="badge">${unknown}</span>`}</span>
-          <button class="btn btn-ghost btn-sm" onclick="goto('status')">${escapeHtml(t('setup.go_status', '前往系统状态页设置'))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["status"]'>${escapeHtml(t('setup.go_status', '前往系统状态页设置'))}</button>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-          <span>${escapeHtml(t('setup.probe_helper', 'probe 小模型'))} → <code style="font-family:var(--mono)">${escapeHtml(resolve('probe'))}</code>　${escapeHtml(t('setup.summary_helper', 'summary 小模型'))} → <code style="font-family:var(--mono)">${escapeHtml(resolve('summary'))}</code></span>
-          <button class="btn btn-ghost btn-sm" onclick="goto('model-routing')">${escapeHtml(t('setup.go_routing', '前往模型路由'))}</button>
+        <div class="setup-optional-summary-row">
+          <span>${escapeHtml(t('setup.probe_helper', 'probe 小模型'))} → <code class="setup-optional-mono-code">${escapeHtml(resolve('probe'))}</code>　${escapeHtml(t('setup.summary_helper', 'summary 小模型'))} → <code class="setup-optional-mono-code">${escapeHtml(resolve('summary'))}</code></span>
+          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["model-routing"]'>${escapeHtml(t('setup.go_routing', '前往模型路由'))}</button>
         </div>
       </div>
     `;
+    bindPageActions(el);
   } catch (e) {
     el.innerHTML = `<div class="empty">${escapeHtml(t('setup.optional_load_error', '加载失败: {error}', {error: _setupErrMsg(e)}))}</div>`;
   }

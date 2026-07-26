@@ -1,0 +1,22 @@
+
+      <h1 class="page-title" data-i18n="mcp.title">MCP 外部工具</h1>
+      <div class="card admin-inline-006">
+        <p data-i18n="mcp.security_notice" class="admin-inline-144">外部 MCP 的工具描述与返回内容均为不可信输入。仅在你明确需要时启用，并使用工具白名单；连接 token 请使用 ${ENV_VAR}，不要写进角色卡、Prompt 或文档。</p>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3 data-i18n="mcp.enabled_title">总开关</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpPage" data-i18n="common.refresh">刷新</button></div>
+        <label class="checkbox-row"><input type="checkbox" id="mcp-enabled"><span data-i18n="mcp.enabled_label">启用 MCP 外部工具（关闭会断开全部 MCP server）</span></label>
+        <button class="btn btn-primary btn-sm admin-inline-133" data-action="saveMcpEnabled" data-i18n="mcp.save_reload">保存并热同步</button>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3 data-i18n="mcp.import_title">从 URL 导入 Streamable HTTP MCP</h3></div>
+        <div class="form-row">
+          <label class="field"><span>name</span><input id="mcp-import-name" type="text" placeholder="cedar_toy"></label>
+          <label class="field"><span>url</span><input id="mcp-import-url" type="text" placeholder="https://example.com/mcp"></label>
+        </div>
+        <div class="form-row col-1"><label class="field"><span data-i18n="mcp.headers_label">headers（JSON，可选；建议 ${ENV_VAR}）</span><textarea id="mcp-import-headers" rows="3" placeholder='{"Authorization":"Bearer ${MCP_TOKEN}"}'></textarea></label></div>
+        <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="300" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label></div>
+        <div class="admin-inline-041"><button class="btn btn-ghost" data-action="testMcpImport" data-i18n="mcp.test_import">测试连接并发现工具</button><button class="btn btn-primary" id="mcp-import-save" data-action="importMcpServer" disabled data-i18n="mcp.confirm_import">确认导入</button></div>
+        <div id="mcp-import-result" class="admin-inline-133"></div>
+      </div>
+      <div class="card"><div class="card-header"><h3 data-i18n="mcp.servers_title">已配置 Servers</h3></div><div id="mcp-servers"><div class="loading" data-i18n="common.loading">加载中…</div></div></div>

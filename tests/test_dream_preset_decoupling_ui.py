@@ -4,17 +4,17 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-INDEX = (ROOT / "admin" / "static" / "index.html").read_text(encoding="utf-8")
+PAGE = (ROOT / "admin" / "static" / "pages" / "dream-settings.html").read_text(encoding="utf-8")
 SOURCE = (ROOT / "admin" / "static" / "js" / "dream-settings.js").read_text(encoding="utf-8")
 I18N = (ROOT / "admin" / "static" / "i18n.js").read_text(encoding="utf-8")
 
 
 def test_dream_preset_card_is_independent_from_world_selection():
-    assert 'id="dream-preset-card"' in INDEX
-    assert 'id="dream-preset-card" style="display:none"' not in INDEX
-    assert 'id="dream-preset-select"' in INDEX
-    assert 'onclick="createStandaloneDreamPreset()"' in INDEX
-    assert 'onclick="saveStandaloneDreamPresetSelection()"' in INDEX
+    assert 'id="dream-preset-card"' in PAGE
+    assert 'id="dream-preset-card" style="display:none"' not in PAGE
+    assert 'id="dream-preset-select"' in PAGE
+    assert 'data-action="createStandaloneDreamPreset"' in PAGE
+    assert 'data-action="saveStandaloneDreamPresetSelection"' in PAGE
 
     world_change = SOURCE.split("function onDreamWorldChange()", 1)[1].split(
         "async function loadDreamLore()", 1
@@ -42,4 +42,4 @@ def test_dream_preset_decoupling_copy_is_localized():
         "dream.preset.save_content",
         "dynamic.dream.preset_selection_saved",
     ):
-        assert INDEX.count(key) + SOURCE.count(f"'{key}'") + I18N.count(f"'{key}'") >= 3
+        assert PAGE.count(key) + SOURCE.count(f"'{key}'") + I18N.count(f"'{key}'") >= 3

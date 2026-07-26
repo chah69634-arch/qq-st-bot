@@ -14,12 +14,94 @@ window.addEventListener('admin-language-changed', () => {
 });
 
 
+const _pageFragmentLoads = new Map();
 
-function goto(page) {
+function _actionArgs(element) {
+  const raw = element.dataset.actionArgs;
+  if (!raw) return [];
+  try {
+    const args = JSON.parse(raw);
+    return Array.isArray(args) ? args : [];
+  } catch (error) {
+    console.error('[admin] invalid data-action-args', raw, error);
+    return [];
+  }
+}
+
+function _runAction(event) {
+  const element = event.currentTarget;
+  const action = element.dataset.action;
+  const args = _actionArgs(element);
+  if (action === 'focus-element') {
+    document.getElementById(args[0])?.click();
+    return;
+  }
+  const fn = window[action];
+  if (typeof fn !== 'function') {
+    console.error('[admin] missing action handler', action);
+    return;
+  }
+  fn(...args);
+}
+
+function bindPageActions(scope) {
+  if (!scope) return;
+  scope.querySelectorAll('[data-action]').forEach(element => {
+    if (element.dataset.actionBound === 'true') return;
+    element.addEventListener('click', _runAction);
+    element.dataset.actionBound = 'true';
+  });
+}
+
+async function loadPageFragment(page) {
+  const container = document.getElementById('page-' + page);
+  if (!container || container.dataset.pageLoaded === 'true') return container;
+  if (!_pageFragmentLoads.has(page)) {
+    const request = fetch(`/static/pages/${encodeURIComponent(page)}.html`)
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
+      .then(html => {
+        container.innerHTML = html;
+        container.dataset.pageLoaded = 'true';
+        window.AdminI18n?.applyI18n(container);
+        bindPageActions(container);
+        return container;
+      })
+      .catch(error => {
+        _pageFragmentLoads.delete(page);
+        console.error(`[admin] failed to load page fragment ${page}`, error);
+        throw error;
+      });
+    _pageFragmentLoads.set(page, request);
+  }
+  return _pageFragmentLoads.get(page);
+}
+
+function bindShellActions() {
+  bindPageActions(document.getElementById('auth-overlay'));
+  bindPageActions(document.querySelector('nav'));
+  bindPageActions(document.querySelector('main'));
+}
+
+
+async function goto(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  document.querySelector(`nav a[data-page="${page}"]`).classList.add('active');
+  const pageElement = document.getElementById('page-' + page);
+  if (!pageElement) {
+    console.error('[admin] unknown page', page);
+    return;
+  }
+  pageElement.classList.add('active');
+  document.querySelector(`nav a[data-page="${page}"]`)?.classList.add('active');
+
+  try {
+    await loadPageFragment(page);
+  } catch (_error) {
+    return;
+  }
 
   const loaders = {
     setup:           loadSetupPage,
@@ -61,6 +143,8 @@ function goto(page) {
   if (page !== 'scheduler') _stopWatchStatusPoller();
   if (loaders[page]) loaders[page]();
 }
+
+bindShellActions();
 
 // ══════════════════════════════════════════════════════════
 //  API helper

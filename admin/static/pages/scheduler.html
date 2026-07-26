@@ -1,0 +1,81 @@
+
+      <h1 class="page-title">调度器</h1>
+
+      <div class="card">
+        <div class="card-header"><h3>调度配置</h3><button class="btn btn-primary btn-sm" data-action="saveSchedulerConfig">保存</button></div>
+        <div id="sc-config-switches" class="admin-inline-033"></div>
+        <div class="form-row admin-inline-158">
+          <label class="field"><span>Owner ID</span><input id="sc-owner-id"></label>
+          <label class="field"><span>存在感提醒（分钟）</span><input type="number" min="1" id="sc-presence-minutes"></label>
+          <label class="field"><span>主动消息最小间隔（小时）</span><input type="number" min="0.1" max="24" step="0.1" id="sc-gap-hours"></label>
+        </div>
+        <label class="field admin-inline-158"><span>签名（每行一条）</span><textarea id="sc-signatures" rows="4"></textarea></label>
+      </div>
+      <!-- 触发状态 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>触发器状态</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadScheduler">刷新</button>
+        </div>
+        <div id="sc-status-table"><div class="loading">加载中…</div></div>
+      </div>
+
+      <!-- ProactiveLedger：统一发送预算与记账（CC 任务 19 · B） -->
+      <div class="card">
+        <div class="card-header">
+          <h3>主动发言账本</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadProactiveLedger">刷新</button>
+        </div>
+        <div id="sc-ledger-body" class="admin-inline-098">加载中…</div>
+      </div>
+
+      <!-- 手动触发 -->
+      <div class="card">
+        <div class="card-header"><h3>手动触发</h3></div>
+        <div class="admin-inline-041">
+          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["morning_greeting"]'>🌅 发早安</button>
+          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["night_reminder"]'>🌙 发晚安</button>
+          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["random_message"]'>💬 随机日间消息</button>
+          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["daily_journal"]'>📓 手动手账</button>
+          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["period_reminder"]'>🌸 生理期关心</button>
+          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["diary_reminder"]'>📝 日记提醒</button>
+          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["diary_share_reminder"]'>📖 日记分享提醒</button>
+        </div>
+      </div>
+
+      <!-- Watch 测试 -->
+      <div class="card">
+        <div class="card-header"><h3>Watch 事件测试</h3></div>
+        <div class="admin-inline-042">
+          <input type="number" id="sc-hr-value" placeholder="心率值" value="105" class="admin-inline-197">
+          <button class="btn btn-ghost btn-sm" data-action="testWatchEvent" data-action-args='["heart_rate"]'>发送心率事件</button>
+          <button class="btn btn-ghost btn-sm" data-action="testWatchEvent" data-action-args='["sleep_end"]'>发送睡醒事件</button>
+        </div>
+        <div class="admin-inline-090">
+          Watch 设备推送地址：<code class="admin-inline-073">POST /watch/event?secret=...</code>
+        </div>
+      </div>
+
+      <!-- Watch 状态 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Watch 状态</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadWatchStatus">刷新</button>
+        </div>
+        <div id="watch-status-body">
+  <table class="admin-inline-190">
+    <tr>
+      <td class="admin-inline-183">❤️ 心率</td>
+      <td id="ws-hr" class="admin-inline-116">暂无数据</td>
+    </tr>
+    <tr>
+      <td class="admin-inline-182">😴 睡眠</td>
+      <td id="ws-sleep" class="admin-inline-115">暂无数据</td>
+    </tr>
+    <tr>
+      <td class="admin-inline-182">🕐 最近事件</td>
+      <td id="ws-last" class="admin-inline-012">暂无数据</td>
+    </tr>
+  </table>
+</div>
+      </div>

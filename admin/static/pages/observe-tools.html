@@ -1,0 +1,21 @@
+
+      <h1 class="page-title" data-i18n="observe.tools.title">工具观测</h1>
+      <div data-i18n="observe.tools.subtitle" class="admin-inline-102">只读 · action_trace · 探针、意图解析与 Tool Loop</div>
+      <div class="admin-inline-046">
+        <input type="text" id="obs-tools-uid" placeholder="uid" class="admin-inline-200">
+        <select id="obs-tools-category" class="admin-inline-180">
+          <option value="" data-i18n="observe.tools.all">全部类目</option>
+          <option value="info" data-i18n="observe.tools.info">信息</option>
+          <option value="desktop" data-i18n="observe.tools.desktop">桌面</option>
+          <option value="memory" data-i18n="observe.tools.memory">记忆</option>
+          <option value="mcp">MCP</option>
+          <option value="fs" data-i18n="observe.tools.fs">文件系统</option>
+          <option value="system" data-i18n="observe.tools.system">系统</option>
+          <option value="phone_control" data-i18n="observe.tools.phone">手机控制</option>
+        </select>
+        <input type="number" id="obs-tools-limit" value="30" min="1" max="30" class="admin-inline-208">
+        <button class="btn btn-ghost btn-sm" data-action="loadObserveTools" data-i18n="common.refresh">刷新</button>
+        <button class="btn btn-ghost btn-sm" data-action="loadObserveToolUidList" data-i18n="observe.list_uid">列出 uid</button>
+      </div>
+      <div id="obs-tools-uid-list" class="admin-inline-086"></div>
+      <div id="obs-tools-content"></div>

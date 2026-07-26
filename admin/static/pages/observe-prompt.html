@@ -1,0 +1,83 @@
+
+      <h1 class="page-title">Prompt 层检视 <span class="admin-inline-105">只读 · 最近 10 轮</span></h1>
+
+      <!-- 层级开关（消融测试） -->
+      <div class="card admin-inline-128" id="obs-ablation-card">
+        <div class="card-header">
+          <h3>层级开关（消融测试）</h3>
+          <span class="admin-inline-082">只过滤注入，不短路检索；保存后下一轮对话起作用</span>
+        </div>
+        <div class="admin-inline-051">
+          <button class="btn btn-ghost btn-sm" data-action="loadPromptAblation">刷新</button>
+          <button class="btn btn-primary btn-sm" data-action="savePromptAblation">保存</button>
+        </div>
+        <div id="obs-ablation-list" class="admin-inline-080">加载中…</div>
+      </div>
+
+      <div class="card admin-inline-128" id="obs-segment-enforce-card">
+        <div class="card-header">
+          <h3>生成后段落兜底（实验）</h3>
+          <span class="admin-inline-082">只改发送副本，不写回短期记忆；默认关闭</span>
+        </div>
+        <div class="admin-inline-018">
+          <label class="admin-inline-027">
+            <input type="checkbox" id="obs-segment-enforce-enabled">
+            <span class="admin-inline-080">长篇单段回复按句末标点补一个空行</span>
+          </label>
+          <label class="admin-inline-082">阈值
+            <input type="number" id="obs-segment-enforce-min-len" min="1" max="5000" class="admin-inline-210">
+          </label>
+          <button class="btn btn-ghost btn-sm" data-action="loadOutputSegmentEnforce">刷新</button>
+          <button class="btn btn-primary btn-sm" data-action="saveOutputSegmentEnforce">保存</button>
+        </div>
+      </div>
+
+      <div class="admin-inline-048">
+        <input type="text" id="obs-prompt-uid" placeholder="uid (QQ号)" class="admin-inline-200">
+        <select id="obs-prompt-n" class="admin-inline-180">
+          <option value="0">最新轮</option>
+          <option value="1">次新轮</option>
+          <option value="2">第 3 轮</option>
+          <option value="3">第 4 轮</option>
+          <option value="4">第 5 轮</option>
+          <option value="5">第 6 轮</option>
+          <option value="6">第 7 轮</option>
+          <option value="7">第 8 轮</option>
+          <option value="8">第 9 轮</option>
+          <option value="9">第 10 轮</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" data-action="loadObservePrompt">查看</button>
+        <button class="btn btn-ghost btn-sm" data-action="loadObservePromptUidList">列出有快照的 uid</button>
+        <button class="btn btn-ghost btn-sm" data-action="exportSnapshotMd" data-action-args='["prompt"]'>导出 MD</button>
+      </div>
+      <div id="obs-prompt-uid-list" class="admin-inline-089"></div>
+      <!-- 顶部总览卡 -->
+      <div class="card admin-inline-059" id="obs-prompt-summary-card">
+        <div class="card-header"><h3>总览</h3><span id="obs-prompt-ts" class="admin-inline-082"></span></div>
+        <div id="obs-prompt-summary" class="admin-inline-112"></div>
+        <!-- token 进度条 -->
+        <div class="admin-inline-133">
+          <div class="admin-inline-088">Token 估算（字符数）</div>
+          <div id="obs-prompt-bar-wrap" class="admin-inline-187">
+            <div id="obs-prompt-bar" class="admin-inline-122"></div>
+            <div id="obs-prompt-bar-soft" class="admin-inline-185"></div>
+            <div id="obs-prompt-bar-hard" class="admin-inline-184"></div>
+          </div>
+          <div class="admin-inline-035">
+            <span>🟡 软警戒 15k</span><span>🔴 触发裁剪 20k</span><span>目标 ≤18k</span>
+          </div>
+        </div>
+      </div>
+      <!-- 层级列表 -->
+      <div id="obs-prompt-layers-list"></div>
+
+      <!-- 召回溯源 -->
+      <div class="card admin-inline-139" id="obs-recall-card">
+        <div class="card-header"><h3>召回溯源</h3><span class="admin-inline-082">recall_trace · episodic/event_log/lore/semantic(X2)/web_recall(X3)</span></div>
+        <div class="admin-inline-046">
+          <input type="date" id="obs-recall-date" class="admin-inline-180">
+          <input type="number" id="obs-recall-n" value="5" min="1" class="admin-inline-209">
+          <button class="btn btn-ghost btn-sm" data-action="loadObserveRecallTrace">查看（复用上方 uid）</button>
+        </div>
+        <div id="obs-recall-list" class="admin-inline-082">在上方输入 uid 后点击查看</div>
+      </div>

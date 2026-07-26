@@ -1,6 +1,8 @@
 from pathlib import Path
 import re
 
+from admin_static_assets import PAGES, read_admin_client_source
+
 
 STATIC = Path(__file__).parents[1] / "admin" / "static"
 
@@ -19,19 +21,53 @@ def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
     assert "type=\"module\"" not in index
 
 
-def test_split_static_assets_keep_global_navigation_and_inline_handler_functions():
+def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
-    source = "\n".join(
-        (STATIC / "js" / name).read_text(encoding="utf-8")
-        for name in re.findall(r'<script src="/static/js/([^"]+)"></script>', index)
-    )
+    fragments = sorted(PAGES.glob("*.html"))
 
-    for function in ("goto", "api", "escapeHtml", "loadMcpPage", "loadDreamSettings", "loadObserveVisual"):
-        assert re.search(rf"(?:async )?function {function}\(", source)
+    assert len(fragments) == 35
+    for fragment in fragments:
+        page = fragment.stem
+        assert f'id="page-{page}" data-page-fragment="{page}"' in index
+        assert fragment.read_text(encoding="utf-8").strip()
 
-    handlers = set(re.findall(r'onclick="([A-Za-z_]\w*)\(', index))
-    missing = sorted(
-        name for name in handlers
-        if not re.search(rf"(?:async )?function {name}\(", source)
-    )
-    assert not missing, f"inline handlers must remain global functions: {missing}"
+    source = read_admin_client_source()
+    assert "async function loadPageFragment(page)" in source
+    assert "fetch(`/static/pages/${encodeURIComponent(page)}.html`)" in source
+    assert "window.AdminI18n?.applyI18n(container)" in source
+
+
+def test_page_fragments_are_served_as_static_html():
+    from fastapi.testclient import TestClient
+
+    from admin.admin_server import app
+
+    client = TestClient(app)
+    for page in ("status", "observe-tools", "observe-resource-completeness"):
+        response = client.get(f"/static/pages/{page}.html")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+
+
+def test_split_pages_have_no_inline_style_or_onclick_and_actions_are_bound():
+    index = (STATIC / "index.html").read_text(encoding="utf-8")
+    html = "\n".join([index, *(path.read_text(encoding="utf-8") for path in PAGES.glob("*.html"))])
+    source = read_admin_client_source()
+    css = (STATIC / "style.css").read_text(encoding="utf-8")
+
+    assert 'onclick="' not in html
+    setup_source = (STATIC / "js" / "setup.js").read_text(encoding="utf-8")
+    assert 'onclick="' not in setup_source
+    assert 'style="' not in html
+    assert "function bindPageActions(scope)" in source
+    assert "element.addEventListener('click', _runAction)" in source
+    assert "function bindShellActions()" in source
+
+    actions = set(re.findall(r'data-action="([^"]+)"', html))
+    assert actions
+    for action in actions - {"focus-element"}:
+        assert re.search(rf"(?:async )?function {re.escape(action)}\(", source), action
+
+    utility_classes = set(re.findall(r"\b(admin-inline-\d+)\b", html))
+    assert utility_classes
+    assert all(f".{name}{{" in css for name in utility_classes)

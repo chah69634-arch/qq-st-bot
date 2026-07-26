@@ -1,0 +1,297 @@
+
+      <h1 class="page-title" data-i18n="status.title">系统状态</h1>
+      <div class="stat-row" id="stat-row">
+        <div class="stat"><div class="val" id="s-users">…</div><div class="lbl" data-i18n="status.known_users">已知用户</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 data-i18n="status.quick_actions">快捷操作</h3></div>
+        <div class="admin-inline-030">
+          <button class="btn btn-ghost" data-action="reloadConfig" data-i18n="status.reload_all">⚡ 热重载全部配置</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3 data-i18n="status.feature_switches">Feature switches</h3><button class="btn btn-ghost btn-sm" data-action="loadFeatureFlags" data-i18n="common.refresh">Refresh</button></div>
+        <div id="feature-flags-grid" class="admin-inline-055"><div class="loading" data-i18n="common.loading">加载中…</div></div>
+        <button class="btn btn-primary btn-sm admin-inline-135" data-action="saveFeatureFlags" data-i18n="status.save_reload">Save and reload</button>
+      </div>
+
+      <!-- 已注册工具（只读诊断） -->
+      <div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="status.registered_tools">已注册工具</span> <span class="badge admin-inline-076" data-i18n="status.read_only">只读</span></h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadToolRegistry" data-i18n="common.refresh">刷新</button>
+        </div>
+        <div id="tool-registry-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
+      </div>
+
+      <!-- 代理配置（只读镜像） -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.proxy.title">代理配置</h3><button class="btn btn-primary btn-sm" data-action="saveProxy" data-i18n="common.save">保存</button>
+          <button class="btn btn-ghost btn-sm" data-action="loadProxy" data-i18n="common.refresh">刷新</button>
+        </div>
+        <p data-i18n="status.proxy.hint" class="admin-inline-087">保存后热重载；仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
+        <div class="admin-inline-022">
+          <label class="checkbox-row admin-inline-117">
+            <input type="checkbox" id="proxy-enabled" class="admin-inline-202">
+            <span data-i18n="status.proxy.enable">启用代理</span>
+          </label>
+          <span id="proxy-status-badge" class="badge badge-danger" data-i18n="common.disabled">未启用</span>
+        </div>
+        <div class="form-row admin-inline-156">
+          <label class="field">
+            <span data-i18n="status.proxy.http">HTTP 代理地址</span>
+            <input type="text" id="proxy-http" placeholder="http://127.0.0.1:7897">
+          </label>
+          <label class="field">
+            <span data-i18n="status.proxy.https">HTTPS 代理地址</span>
+            <input type="text" id="proxy-https" placeholder="http://127.0.0.1:7897">
+          </label>
+        </div>
+      </div>
+
+      <!-- 上下文轮数（只读镜像） -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.context.title">上下文长度</h3><button class="btn btn-primary btn-sm" data-action="saveContextConfig" data-i18n="common.save">保存</button>
+          <button class="btn btn-ghost btn-sm" data-action="loadContextConfig" data-i18n="common.refresh">刷新</button>
+        </div>
+        <p data-i18n="status.context.hint" class="admin-inline-087">保存后热重载，影响后续新请求使用的上下文窗口。</p>
+        <div class="admin-inline-153">
+          <label class="field admin-inline-127">
+            <span data-i18n="status.context.max_rounds">最大轮数（每轮 = 一问一答）</span>
+            <div class="admin-inline-023">
+              <input type="range" id="ctx-slider" min="5" max="50" value="20" class="admin-inline-062">
+              <span id="ctx-val" class="admin-inline-173">20</span>
+              <span data-i18n="status.context.rounds" class="admin-inline-082">轮</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- LLM 生成参数（只读镜像） -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.llm.title">LLM 生成参数</h3><button class="btn btn-primary btn-sm" data-action="saveLlmParams" data-i18n="common.save">保存</button>
+          <button class="btn btn-ghost btn-sm" data-action="loadLlmParams" data-i18n="common.refresh">刷新</button>
+        </div>
+        <p data-i18n="status.llm.hint" class="admin-inline-087">legacy 参数可在此热更新；启用多模型后优先在「模型路由」编辑 preset 参数。</p>
+        <div class="admin-inline-053">
+          <div>
+            <div class="admin-inline-015">
+              <span class="admin-inline-106">max_tokens</span>
+              <span id="llm-max-tokens-val" class="admin-inline-010">1500</span>
+            </div>
+            <input type="range" id="llm-max-tokens" min="200" max="4000" step="100" value="1500" class="admin-inline-189">
+            <div data-i18n="status.llm.max_tokens" class="admin-inline-078">单次回复最大 token 数</div>
+          </div>
+          <div class="admin-inline-016">
+            <div class="admin-inline-084">
+              <span data-i18n="status.llm.recommended">推荐范围：</span><br>
+              <span data-i18n="status.llm.immersive">💬 沉浸对话 &nbsp;500–800</span><br>
+              <span data-i18n="status.llm.roleplay">🎭 角色扮演 &nbsp;1500–3000</span>
+            </div>
+          </div>
+          <div>
+            <div class="admin-inline-015">
+              <span class="admin-inline-106">temperature</span>
+              <span id="llm-temp-val" class="admin-inline-010">0.70</span>
+            </div>
+            <input type="range" id="llm-temperature" min="0.0" max="2.0" step="0.05" value="0.7" class="admin-inline-189">
+            <div data-i18n="status.llm.temperature" class="admin-inline-078">值越高回复越随机，越低越保守</div>
+          </div>
+          <div>
+            <div class="admin-inline-015">
+              <span class="admin-inline-106">top_p</span>
+              <span id="llm-topp-val" class="admin-inline-010">0.90</span>
+            </div>
+            <input type="range" id="llm-top-p" min="0.0" max="1.0" step="0.05" value="0.9" class="admin-inline-189">
+            <div data-i18n="status.llm.top_p" class="admin-inline-078">核采样概率，配合 temperature 控制多样性</div>
+          </div>
+          <div>
+            <div class="admin-inline-015">
+              <span class="admin-inline-106">frequency_penalty</span>
+              <span id="llm-fp-val" class="admin-inline-010">0.00</span>
+            </div>
+            <input type="range" id="llm-frequency-penalty" min="0.0" max="2.0" step="0.05" value="0.0" class="admin-inline-189">
+            <div data-i18n="status.llm.frequency_penalty" class="admin-inline-078">惩罚重复词，值越高越不容易重复用词</div>
+          </div>
+          <div></div>
+        </div>
+      </div>
+
+      <!-- 视觉模型配置（可编辑，保存后热重载；仅供 coplay 场景识别，与「视觉感知」影子观察是两套开关） -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" data-action="saveVisionParams" data-i18n="common.save">保存</button>
+          <label class="admin-inline-026">
+            <span data-i18n="status.vision.enable" class="admin-inline-099">启用</span>
+            <input type="checkbox" id="vision-enabled">
+          </label>
+        </div>
+        <p data-i18n="status.vision.key_hint" class="admin-inline-091">API Key 留空时保留已有密钥；保存后热重载。</p>
+        <p data-i18n="status.vision.scope_hint" class="admin-inline-092">此开关只影响陪玩场景识别（coplay），与「功能开关」页的「视觉感知」影子观察总闸是两套独立机制，互不控制，也不会打开桌宠客户端本地的截屏开关。</p>
+        <div class="admin-inline-178">
+          <div>
+            <div class="admin-inline-108">Provider</div>
+            <select id="vision-provider" class="admin-inline-195">
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="glm">GLM</option>
+              <option value="custom" data-i18n="status.vision.custom">自定义</option>
+            </select>
+          </div>
+          <div>
+            <div data-i18n="status.vision.model" class="admin-inline-108">模型</div>
+            <select id="vision-model-select" class="admin-inline-195">
+            </select>
+          </div>
+          <div class="admin-inline-119">
+            <div class="admin-inline-108">API Key</div>
+            <input type="password" id="vision-api-key" placeholder="留空则保留已有 API Key" data-i18n-placeholder="status.vision.key_placeholder" class="admin-inline-196">
+          </div>
+          <div class="admin-inline-119">
+            <div class="admin-inline-107">Base URL
+              <span data-i18n="status.vision.base_hint" class="admin-inline-079">（自动填写，自定义时可修改）</span>
+            </div>
+            <input type="text" id="vision-base-url" class="admin-inline-196">
+          </div>
+          <div class="admin-inline-120">
+            <b>Gemini</b>：<span data-i18n="status.vision.gemini_before">免费，前往</span> <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com</a> <span data-i18n="status.vision.gemini_after">申请 API Key，推荐模型 gemini-2.0-flash</span><br>
+            <b>GLM</b>：<span data-i18n="status.vision.glm_before">免费，前往</span> <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener">bigmodel.cn</a> <span data-i18n="status.vision.glm_after">申请，推荐模型 glm-4v-flash</span><br>
+            <b>OpenAI</b>：<span data-i18n="status.vision.openai_help">付费，需要信用卡，推荐模型 gpt-4o-mini</span><br>
+            <b data-i18n="status.vision.custom">自定义</b>：<span data-i18n="status.vision.custom_help">手动填写 Base URL 和模型名</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 屏幕内容查看设置 -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.screen.title">屏幕内容查看</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadScreenPeekSettings" data-i18n="common.refresh">刷新</button>
+        </div>
+        <div class="admin-inline-024">
+          <label class="checkbox-row admin-inline-117">
+            <input type="checkbox" id="sp-enabled" class="admin-inline-202">
+            <span data-i18n="status.vision.enable">启用</span>
+          </label>
+          <label class="field admin-inline-168">
+            <span data-i18n="status.screen.cooldown">冷却分钟数</span>
+            <input type="number" id="sp-cooldown" min="5" max="240" value="30">
+          </label>
+          <button class="btn btn-primary btn-sm" data-action="saveScreenPeekSettings" data-i18n="common.save">保存</button>
+        </div>
+      </div>
+
+      <!-- 危险模式（手机自动化 / 桌面-系统类工具总闸） -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.dangermode.title">危险模式</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadMetaMode" data-i18n="common.refresh">刷新</button>
+        </div>
+        <div class="admin-inline-025">
+          <div id="metamode-status" class="admin-inline-113">—</div>
+          <label class="field admin-inline-168">
+            <span data-i18n="status.dangermode.ttl">持续分钟数</span>
+            <input type="number" id="metamode-ttl" min="5" max="1440" value="120">
+          </label>
+          <button class="btn btn-primary btn-sm" id="metamode-toggle-btn" data-action="toggleMetaMode" data-i18n="status.dangermode.enter">切换到危险模式</button>
+        </div>
+        <div data-i18n="status.dangermode.help" class="admin-inline-085">
+          手机自动化（phone_control）、桌面/系统类工具只在危险模式下才会真的执行，安全模式下会拒绝并提示。危险模式到期后自动回落安全模式。
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" data-action="loadRelaySettings" data-i18n="common.refresh">刷新</button></div>
+        <div class="form-row admin-inline-158"><label class="field"><span>Base URL</span><input id="relay-base-url"></label><label class="field"><span>Topic</span><input id="relay-topic"></label></div>
+        <label class="field admin-inline-158"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
+        <button class="btn btn-primary btn-sm" data-action="saveRelaySettings" data-i18n="common.save">保存</button>
+      </div>
+      <!-- TTS 配置 -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.tts.title">TTS 配置</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadTtsConfig" data-i18n="common.refresh">刷新</button>
+        </div>
+        <div class="admin-inline-021">
+          <label class="checkbox-row admin-inline-117">
+            <input type="checkbox" id="tts-enabled" class="admin-inline-202">
+            <span data-i18n="status.vision.enable">启用</span>
+          </label>
+          <label class="checkbox-row admin-inline-117">
+            <input type="checkbox" id="tts-emotion-enabled" class="admin-inline-202"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row admin-inline-117"><input type="checkbox" id="tts-desktop-enabled" class="admin-inline-202"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
+        </div>
+        <div class="form-row admin-inline-156">
+          <label class="field"><span>TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible">OpenAI-compatible (自建/云端，POST /audio/speech)</option></select></label>
+          <label class="field"><span>Provider status</span><input id="tts-provider-status" readonly></label>
+        </div>
+        <label class="field admin-inline-156"><span>Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='GSV: {"api_url":"http://127.0.0.1:9880","ref_audio":"..."}  |  openai_compatible: {"base_url":"https://.../v1","api_key":"...","model":"tts-1","voice":"alloy"}'></textarea></label>
+        <div class="form-row admin-inline-156">
+          <label class="field">
+            <span>API URL</span>
+            <input type="text" id="tts-api-url" placeholder="http://127.0.0.1:9880">
+          </label>
+          <label class="field">
+            <span data-i18n="status.tts.ref_audio">参考音频路径</span>
+            <input type="text" id="tts-ref-audio" placeholder="ref.wav">
+          </label>
+        </div>
+        <div class="form-row col-1 admin-inline-156">
+          <label class="field">
+            <span data-i18n="status.tts.ref_text">参考文本</span>
+            <input type="text" id="tts-prompt-text" placeholder="参考音频对应文本" data-i18n-placeholder="status.tts.ref_placeholder">
+          </label>
+        </div>
+        <label class="field admin-inline-152">
+          <span><span data-i18n="status.tts.speed">语速</span> <span id="tts-speed-val" class="admin-inline-009">1.00</span></span>
+          <input type="range" id="tts-speed" min="0.5" max="2.0" step="0.05" value="1.0"
+            oninput="document.getElementById('tts-speed-val').textContent = parseFloat(this.value).toFixed(2)" class="admin-inline-189">
+        </label>
+        <button class="btn btn-primary btn-sm" data-action="saveTtsConfig" data-i18n="common.save">保存</button>
+        <button class="btn btn-ghost btn-sm" data-action="testTtsConfig" data-i18n="status.tts.test">试听当前 Provider</button>
+        <button class="btn btn-ghost btn-sm" data-action="loadTtsCallLog" data-i18n="status.tts.call_log">最近合成记录</button>
+        <pre id="tts-call-log" class="admin-inline-157"></pre>
+      </div>
+
+      <!-- 表情包 -->
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="status.sticker.title">表情包</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadStickerConfig" data-i18n="common.refresh">刷新</button>
+        </div>
+        <div class="form-row admin-inline-154">
+          <label class="checkbox-row admin-inline-118">
+            <input type="checkbox" id="sticker-enabled" class="admin-inline-202">
+            <span data-i18n="status.sticker.enable">启用</span>
+          </label>
+          <label class="field">
+            <span data-i18n="status.sticker.trigger_prob">触发概率（0–1）</span>
+            <input type="number" id="sticker-trigger-prob" min="0" max="1" step="0.01" value="0.06">
+          </label>
+        </div>
+        <button class="btn btn-primary btn-sm" data-action="saveStickerConfig" data-i18n="common.save">保存</button>
+      </div>
+
+      <!-- 用户称谓 -->
+      <div class="card">
+        <div class="card-header"><h3 data-i18n="status.pronoun.title">用户称谓</h3></div>
+        <div class="admin-inline-020">
+          <label class="field admin-inline-068">
+            <span data-i18n="status.pronoun.user">用户</span>
+            <select id="pn-uid-select" onchange="loadUserPronoun()"></select>
+          </label>
+          <label class="field admin-inline-167">
+            <span data-i18n="status.pronoun.value">称谓</span>
+            <select id="pn-value">
+              <option value="她" data-i18n="status.pronoun.she">她</option>
+              <option value="他" data-i18n="status.pronoun.he">他</option>
+              <option value="TA" data-i18n="status.pronoun.they">TA</option>
+              <option value="它" data-i18n="status.pronoun.it">它</option>
+            </select>
+          </label>
+          <button class="btn btn-primary btn-sm admin-inline-138" data-action="saveUserPronoun" data-i18n="common.save">保存</button>
+        </div>
+      </div>

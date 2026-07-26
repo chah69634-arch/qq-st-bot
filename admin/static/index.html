@@ -22,72 +22,72 @@
     <p data-i18n="auth.subtitle">His Presence · 输入管理密钥登录</p>
     <input type="password" id="key-input" placeholder="secret_key" autocomplete="current-password">
     <div class="err" id="auth-err"></div>
-    <button class="btn btn-primary" style="width:100%" onclick="doLogin()" data-i18n="auth.login">登录</button>
+    <button class="btn btn-primary admin-inline-188" data-action="doLogin" data-i18n="auth.login">登录</button>
   </div>
 </div>
 
 <!-- Main app -->
-<div id="app" style="display:none">
+<div id="app" class="admin-inline-056">
   <nav>
     <div class="nav-logo">
       <h2 data-i18n="nav.console">运维控制台</h2>
       <p id="nav-host">127.0.0.1:8080</p>
     </div>
-    <a data-page="setup" onclick="goto('setup')"><span class="icon">🧩</span><span data-i18n="nav.setup">配置</span></a>
+    <a data-page="setup" data-action="goto" data-action-args='["setup"]'><span class="icon">🧩</span><span data-i18n="nav.setup">配置</span></a>
 
-    <div class="nav-group-header" onclick="toggleNavGroup('create')"><span class="nav-caret" id="caret-create">▾</span><span data-i18n="nav.group.creation">🎨 创作</span></div>
+    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["create"]'><span class="nav-caret" id="caret-create">▾</span><span data-i18n="nav.group.creation">🎨 创作</span></div>
     <div class="nav-group" id="navgroup-create">
-      <a data-page="character"      onclick="goto('character')">      <span class="icon">🃏</span><span data-i18n="nav.character">角色卡</span></a>
-      <a data-page="lorebook"       onclick="goto('lorebook')">       <span class="icon">🌍</span><span data-i18n="nav.lorebook">现实设定</span></a>
-      <a data-page="dream-settings" onclick="goto('dream-settings')"> <span class="icon">🌙</span><span data-i18n="nav.dream_settings">梦境设定</span></a>
+      <a data-page="character"      data-action="goto" data-action-args='["character"]'>      <span class="icon">🃏</span><span data-i18n="nav.character">角色卡</span></a>
+      <a data-page="lorebook"       data-action="goto" data-action-args='["lorebook"]'>       <span class="icon">🌍</span><span data-i18n="nav.lorebook">现实设定</span></a>
+      <a data-page="dream-settings" data-action="goto" data-action-args='["dream-settings"]'> <span class="icon">🌙</span><span data-i18n="nav.dream_settings">梦境设定</span></a>
     </div>
 
-    <div class="nav-group-header" onclick="toggleNavGroup('ops')"><span class="nav-caret" id="caret-ops">▾</span><span data-i18n="nav.group.operations">🛠 运维</span></div>
+    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["ops"]'><span class="nav-caret" id="caret-ops">▾</span><span data-i18n="nav.group.operations">🛠 运维</span></div>
     <div class="nav-group" id="navgroup-ops">
-      <a class="active" data-page="status" onclick="goto('status')"><span class="icon">📊</span><span data-i18n="nav.status">系统状态</span></a>
-      <a data-page="scheduler" onclick="goto('scheduler')"><span class="icon">⏰</span><span data-i18n="nav.scheduler">调度器</span></a>
-      <a data-page="users"     onclick="goto('users')">    <span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
-      <a data-page="logs"      onclick="goto('logs')">     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
-      <a data-page="auth-tokens" onclick="goto('auth-tokens')"><span class="icon">🔑</span><span data-i18n="nav.auth_tokens">Token</span></a>
-      <a data-page="model-routing" onclick="goto('model-routing')"><span class="icon">🔀</span><span data-i18n="nav.model_routing">模型路由</span></a>
-      <a data-page="mcp" onclick="goto('mcp')"><span class="icon">🧩</span><span data-i18n="nav.mcp">MCP 外部工具</span></a>
-      <a data-page="relationship-facts" onclick="goto('relationship-facts')"><span class="icon">📌</span><span data-i18n="nav.relationship_facts">关系事实</span></a>
+      <a class="active" data-page="status" data-action="goto" data-action-args='["status"]'><span class="icon">📊</span><span data-i18n="nav.status">系统状态</span></a>
+      <a data-page="scheduler" data-action="goto" data-action-args='["scheduler"]'><span class="icon">⏰</span><span data-i18n="nav.scheduler">调度器</span></a>
+      <a data-page="users"     data-action="goto" data-action-args='["users"]'>    <span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
+      <a data-page="logs"      data-action="goto" data-action-args='["logs"]'>     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
+      <a data-page="auth-tokens" data-action="goto" data-action-args='["auth-tokens"]'><span class="icon">🔑</span><span data-i18n="nav.auth_tokens">Token</span></a>
+      <a data-page="model-routing" data-action="goto" data-action-args='["model-routing"]'><span class="icon">🔀</span><span data-i18n="nav.model_routing">模型路由</span></a>
+      <a data-page="mcp" data-action="goto" data-action-args='["mcp"]'><span class="icon">🧩</span><span data-i18n="nav.mcp">MCP 外部工具</span></a>
+      <a data-page="relationship-facts" data-action="goto" data-action-args='["relationship-facts"]'><span class="icon">📌</span><span data-i18n="nav.relationship_facts">关系事实</span></a>
     </div>
 
-    <div class="nav-group-header" onclick="toggleNavGroup('state')"><span class="nav-caret" id="caret-state">▾</span><span data-i18n="nav.group.internal_state">🔬 内部状态</span></div>
+    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["state"]'><span class="nav-caret" id="caret-state">▾</span><span data-i18n="nav.group.internal_state">🔬 内部状态</span></div>
     <div class="nav-group" id="navgroup-state">
-      <a data-page="observe-mood"    onclick="goto('observe-mood')">   <span class="icon">🌸</span><span data-i18n="nav.mood">情绪·花园</span></a>
-      <a data-page="observe-dream"   onclick="goto('observe-dream')">  <span class="icon">🌙</span><span data-i18n="nav.dream_state">梦境状态</span></a>
-      <a data-page="observe-memory"  onclick="goto('observe-memory')"> <span class="icon">🧠</span><span data-i18n="nav.memory">记忆探查</span></a>
-      <a data-page="observe-hidden"  onclick="goto('observe-hidden')"> <span class="icon">🔬</span><span data-i18n="nav.hidden_state">隐性状态</span></a>
-      <a data-page="observe-chatlog" onclick="goto('observe-chatlog')"><span class="icon">💬</span><span data-i18n="nav.chat_log">聊天日志</span></a>
-      <a data-page="observe-runtime" onclick="goto('observe-runtime')"><span class="icon">⚙️</span><span data-i18n="nav.runtime">运行时内部态</span></a>
+      <a data-page="observe-mood"    data-action="goto" data-action-args='["observe-mood"]'>   <span class="icon">🌸</span><span data-i18n="nav.mood">情绪·花园</span></a>
+      <a data-page="observe-dream"   data-action="goto" data-action-args='["observe-dream"]'>  <span class="icon">🌙</span><span data-i18n="nav.dream_state">梦境状态</span></a>
+      <a data-page="observe-memory"  data-action="goto" data-action-args='["observe-memory"]'> <span class="icon">🧠</span><span data-i18n="nav.memory">记忆探查</span></a>
+      <a data-page="observe-hidden"  data-action="goto" data-action-args='["observe-hidden"]'> <span class="icon">🔬</span><span data-i18n="nav.hidden_state">隐性状态</span></a>
+      <a data-page="observe-chatlog" data-action="goto" data-action-args='["observe-chatlog"]'><span class="icon">💬</span><span data-i18n="nav.chat_log">聊天日志</span></a>
+      <a data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime">运行时内部态</span></a>
     </div>
 
-    <div class="nav-group-header" onclick="toggleNavGroup('observe')"><span class="nav-caret" id="caret-observe">▾</span><span data-i18n="nav.group.observation">🔍 观测</span></div>
+    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["observe"]'><span class="nav-caret" id="caret-observe">▾</span><span data-i18n="nav.group.observation">🔍 观测</span></div>
     <div class="nav-group" id="navgroup-observe">
-      <a data-page="observe-growth"  onclick="goto('observe-growth')"> <span class="icon">🌱</span><span data-i18n="nav.growth">成长</span></a>
-      <a data-page="observe-visual"  onclick="goto('observe-visual')"> <span class="icon">👁️</span><span data-i18n="nav.visual">视觉</span></a>
-      <a data-page="observe-spend"   onclick="goto('observe-spend')">  <span class="icon">💰</span><span data-i18n="nav.spend">支出</span></a>
-      <a data-page="observe-group-arbiter" onclick="goto('observe-group-arbiter')"><span class="icon">⚖️</span><span data-i18n="nav.group_arbiter">群聊仲裁</span></a>
-      <a data-page="observe-memory-summary" onclick="goto('observe-memory-summary')"><span class="icon">📚</span><span data-i18n="nav.memory_summary">记忆摘要</span></a>
-      <a data-page="observe-prompt"  onclick="goto('observe-prompt')"> <span class="icon">🗂️</span><span data-i18n="nav.prompt_layers">Prompt 层检视</span></a>
-      <a data-page="observe-tools"   onclick="goto('observe-tools')">  <span class="icon">🛠️</span><span data-i18n="nav.tool_observability">工具观测</span></a>
-      <a data-page="observe-probe"   onclick="goto('observe-probe')">  <span class="icon">🔭</span><span data-i18n="nav.probe">探针观测</span></a>
-      <a data-page="observe-dream-prompt" onclick="goto('observe-dream-prompt')"><span class="icon">💭</span><span data-i18n="nav.dream_prompt">梦境 Prompt</span></a>
-      <a data-page="observe-trigger-catalog" onclick="goto('observe-trigger-catalog')"><span class="icon">📡</span><span data-i18n="nav.trigger_catalog">触发器目录</span></a>
-      <a data-page="observe-vector"     onclick="goto('observe-vector')">    <span class="icon">🧬</span><span data-i18n="nav.vector_store">向量库</span></a>
-      <a data-page="observe-provenance" onclick="goto('observe-provenance')"><span class="icon">🧾</span><span data-i18n="nav.provenance">印象溯源</span></a>
-      <a data-page="observe-resource-completeness" onclick="goto('observe-resource-completeness')"><span class="icon">🩺</span><span data-i18n="nav.resource_completeness">资源完整性</span></a>
-      <a data-page="observe-api-contract" onclick="goto('observe-api-contract')"><span class="icon">🔗</span><span data-i18n="nav.api_contract">API 契约检查</span></a>
-      <a data-page="observe-char-permissions" onclick="goto('observe-char-permissions')"><span class="icon">🔐</span><span data-i18n="nav.char_permissions">角色权限</span></a>
+      <a data-page="observe-growth"  data-action="goto" data-action-args='["observe-growth"]'> <span class="icon">🌱</span><span data-i18n="nav.growth">成长</span></a>
+      <a data-page="observe-visual"  data-action="goto" data-action-args='["observe-visual"]'> <span class="icon">👁️</span><span data-i18n="nav.visual">视觉</span></a>
+      <a data-page="observe-spend"   data-action="goto" data-action-args='["observe-spend"]'>  <span class="icon">💰</span><span data-i18n="nav.spend">支出</span></a>
+      <a data-page="observe-group-arbiter" data-action="goto" data-action-args='["observe-group-arbiter"]'><span class="icon">⚖️</span><span data-i18n="nav.group_arbiter">群聊仲裁</span></a>
+      <a data-page="observe-memory-summary" data-action="goto" data-action-args='["observe-memory-summary"]'><span class="icon">📚</span><span data-i18n="nav.memory_summary">记忆摘要</span></a>
+      <a data-page="observe-prompt"  data-action="goto" data-action-args='["observe-prompt"]'> <span class="icon">🗂️</span><span data-i18n="nav.prompt_layers">Prompt 层检视</span></a>
+      <a data-page="observe-tools"   data-action="goto" data-action-args='["observe-tools"]'>  <span class="icon">🛠️</span><span data-i18n="nav.tool_observability">工具观测</span></a>
+      <a data-page="observe-probe"   data-action="goto" data-action-args='["observe-probe"]'>  <span class="icon">🔭</span><span data-i18n="nav.probe">探针观测</span></a>
+      <a data-page="observe-dream-prompt" data-action="goto" data-action-args='["observe-dream-prompt"]'><span class="icon">💭</span><span data-i18n="nav.dream_prompt">梦境 Prompt</span></a>
+      <a data-page="observe-trigger-catalog" data-action="goto" data-action-args='["observe-trigger-catalog"]'><span class="icon">📡</span><span data-i18n="nav.trigger_catalog">触发器目录</span></a>
+      <a data-page="observe-vector"     data-action="goto" data-action-args='["observe-vector"]'>    <span class="icon">🧬</span><span data-i18n="nav.vector_store">向量库</span></a>
+      <a data-page="observe-provenance" data-action="goto" data-action-args='["observe-provenance"]'><span class="icon">🧾</span><span data-i18n="nav.provenance">印象溯源</span></a>
+      <a data-page="observe-resource-completeness" data-action="goto" data-action-args='["observe-resource-completeness"]'><span class="icon">🩺</span><span data-i18n="nav.resource_completeness">资源完整性</span></a>
+      <a data-page="observe-api-contract" data-action="goto" data-action-args='["observe-api-contract"]'><span class="icon">🔗</span><span data-i18n="nav.api_contract">API 契约检查</span></a>
+      <a data-page="observe-char-permissions" data-action="goto" data-action-args='["observe-char-permissions"]'><span class="icon">🔐</span><span data-i18n="nav.char_permissions">角色权限</span></a>
     </div>
 
-    <a data-page="pet"    onclick="goto('pet')"    style="display:none"><span class="icon">🐾</span><span data-i18n="nav.pet">宠物</span></a>
-    <a data-page="yexuan" onclick="goto('yexuan')" style="display:none"><span class="icon">💬</span><span data-i18n="nav.chat_with">与</span> <span class="nav-char-name">叶瑄</span></a>
+    <a data-page="pet"    data-action="goto" data-action-args='["pet"]' class="admin-inline-056"><span class="icon">🐾</span><span data-i18n="nav.pet">宠物</span></a>
+    <a data-page="yexuan" data-action="goto" data-action-args='["yexuan"]' class="admin-inline-056"><span class="icon">💬</span><span data-i18n="nav.chat_with">与</span> <span class="nav-char-name">叶瑄</span></a>
     <div class="nav-bottom">
       <div class="key-hint" id="nav-key-hint"></div>
-      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px" onclick="logout()" data-i18n="nav.logout">退出登录</button>
+      <button class="btn btn-ghost btn-sm admin-inline-191" data-action="logout" data-i18n="nav.logout">退出登录</button>
     </div>
   </nav>
 
@@ -101,1121 +101,74 @@
     </div>
 
     <!-- ── 配置中心（Brief 93 §1） ── -->
-    <div class="page" id="page-setup">
-      <h1 class="page-title" data-i18n="setup.title">配置</h1>
-
-      <div class="card" id="setup-missing-banner" style="display:none;border-color:var(--danger);background:color-mix(in srgb, var(--danger) 10%, transparent)">
-        <p id="setup-missing-banner-text" style="margin:0;color:var(--danger);font-weight:600" data-i18n="setup.missing">⚠ 未配置将无法聊天/主动触发失效：请先填写下方「基础聊天模型」必填项</p>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3><span data-i18n="setup.base.title">基础聊天模型</span> <span class="badge badge-warn"><span data-i18n="common.required">必填</span>①</span></h3>
-          <span id="setup-base-status" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="setup.base.description">日常对话实际调用的模型连接。已配置 model_presets 时写入当前生效路由的主聊天 preset；未配置时写入旧版 llm: 块——两种情况都会自动识别，不需要你判断。更细粒度的多模型 preset / 路由切换见「模型路由」页。</p>
-        <div class="form-row col-1">
-          <label class="field">
-            <span>base_url</span>
-            <input type="text" id="setup-base-url" placeholder="https://api.deepseek.com">
-          </label>
-        </div>
-        <div class="form-row">
-          <label class="field">
-            <span>model</span>
-            <input type="text" id="setup-base-model-name" placeholder="deepseek-chat">
-          </label>
-          <label class="field">
-            <span>api_key <span id="setup-base-key-state" style="font-size:11px;color:var(--muted)"></span></span>
-            <input type="password" id="setup-base-api-key" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
-          </label>
-        </div>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
-          <button class="btn btn-primary" onclick="saveSetupBaseModel()" data-i18n="common.save">保存</button>
-          <button class="btn" id="setup-base-test-btn" onclick="testSetupBaseModel()" data-i18n="setup.base.test">测试连接</button>
-          <span id="setup-base-test-result" class="mono" style="font-size:12px"></span>
-        </div>
-      </div>
-
-      <div class="card" id="setup-character-tip" style="display:none;border-color:var(--accent)">
-        <p style="margin:0;font-size:13px;line-height:1.6" data-i18n="setup.character_tip">
-          💡 当前用的还是内置占位角色卡（"角色名"），去「角色卡」页创建/编辑属于你自己的角色，聊天才会有真实人设。
-        </p>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:8px">
-          <button class="btn btn-primary btn-sm" onclick="goto('character')" data-i18n="setup.character_tip.go">前往角色卡</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3>Owner ID <span class="badge badge-warn"><span data-i18n="common.required">必填</span>②</span></h3>
-          <span id="setup-owner-status" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-        <p style="font-size:12px;color:var(--danger);margin-bottom:12px" data-i18n="setup.owner.description">建议直接填你的 QQ 号——若此处用了别的 id，之后接 QQ 时会按 QQ 号另起一套记忆，与桌宠期记忆不互通。留空 = 主动触发调度器会静默跳过主动消息，且记忆文件可能挂在错误/缺省 uid 下。</p>
-        <div class="form-row">
-          <label class="field">
-            <span data-i18n="setup.owner.id_label">owner_id（仅 A-Za-z0-9_- ）</span>
-            <input type="text" id="setup-owner-id" placeholder="建议填你的 QQ 号" data-i18n-placeholder="setup.owner.id_placeholder">
-          </label>
-          <label class="field">
-            <span data-i18n="setup.owner.birthday_label">owner_birthday（可选，MM-DD）</span>
-            <input type="text" id="setup-owner-birthday" placeholder="例如 04-24" data-i18n-placeholder="setup.owner.birthday_placeholder">
-          </label>
-        </div>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
-          <button class="btn btn-primary" onclick="saveSetupOwner()" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3><span data-i18n="setup.embedding.title">语义 Embedding</span> <span class="badge" data-i18n="setup.strongly_recommended">强烈建议</span></h3>
-          <span id="setup-embedding-status" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="setup.embedding.description">作用：长期记忆语义召回（情景记忆/往事检索按语义匹配而非纯关键词）。缺失后果：召回质量降级为关键词匹配，不会导致聊天崩溃或阻塞（fail-open）。</p>
-        <div class="form-row col-1">
-          <label class="field">
-            <span>base_url</span>
-            <input type="text" id="setup-embed-base-url" placeholder="https://api.siliconflow.cn/v1">
-          </label>
-        </div>
-        <div class="form-row">
-          <label class="field">
-            <span>model</span>
-            <input type="text" id="setup-embed-model" placeholder="BAAI/bge-m3">
-          </label>
-          <label class="field">
-            <span>dim</span>
-            <input type="number" id="setup-embed-dim" placeholder="1024">
-          </label>
-        </div>
-        <div class="form-row col-1">
-          <label class="field">
-            <span>api_key <span id="setup-embed-key-state" style="font-size:11px;color:var(--muted)"></span></span>
-            <input type="password" id="setup-embed-api-key" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
-          </label>
-        </div>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
-          <button class="btn btn-primary" onclick="saveSetupEmbedding()" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h3><span data-i18n="setup.optional_models.title">其余模型路由</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="setup.optional_models.description">以下只读展示当前实际生效的路由，不在本页编辑：</p>
-        <div id="setup-optional-body"><div class="loading" data-i18n="common.loading">加载中…</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3><span data-i18n="setup.mail.title">邮件通道</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
-          <span id="setup-mail-status" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="setup.mail.description">角色写信功能的 SMTP 发信配置；默认关闭，纯增值功能。总开关也可以在「Token」页「通道开关」区切换。</p>
-        <div class="form-row">
-          <label class="checkbox-row" style="gap:8px;font-size:14px">
-            <input type="checkbox" id="setup-mail-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span data-i18n="setup.mail.enable">启用邮件通道</span>
-          </label>
-        </div>
-        <div class="form-row">
-          <label class="field">
-            <span>smtp_host</span>
-            <input type="text" id="setup-mail-host" placeholder="smtp.gmail.com">
-          </label>
-          <label class="field">
-            <span>smtp_port</span>
-            <input type="number" id="setup-mail-port" placeholder="587">
-          </label>
-        </div>
-        <div class="form-row">
-          <label class="field">
-            <span>smtp_user</span>
-            <input type="text" id="setup-mail-user" placeholder="发信邮箱账号" data-i18n-placeholder="setup.mail.user_placeholder">
-          </label>
-          <label class="field">
-            <span>smtp_password <span id="setup-mail-password-state" style="font-size:11px;color:var(--muted)"></span></span>
-            <input type="password" id="setup-mail-password" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
-          </label>
-        </div>
-        <div class="form-row">
-          <label class="field">
-            <span>from_addr</span>
-            <input type="text" id="setup-mail-from-addr" placeholder="发送邮箱地址" data-i18n-placeholder="setup.mail.from_addr_placeholder">
-          </label>
-          <label class="field">
-            <span>from_name</span>
-            <input type="text" id="setup-mail-from-name" placeholder="角色名" data-i18n-placeholder="setup.mail.from_name_placeholder">
-          </label>
-        </div>
-        <div class="form-row">
-          <label class="field">
-            <span>to_addr</span>
-            <input type="text" id="setup-mail-to-addr" placeholder="接收邮箱地址" data-i18n-placeholder="setup.mail.to_addr_placeholder">
-          </label>
-          <label class="field">
-            <span>subject_prefix</span>
-            <input type="text" id="setup-mail-subject-prefix" placeholder="【来信】" data-i18n-placeholder="setup.mail.subject_placeholder">
-          </label>
-        </div>
-        <div class="form-row col-1">
-          <label class="field">
-            <span data-i18n="setup.mail.proxy_label">proxy_url（可选，SMTP 端口被墙时用）</span>
-            <input type="text" id="setup-mail-proxy-url" placeholder="http://127.0.0.1:7897">
-          </label>
-        </div>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
-          <button class="btn btn-primary" onclick="saveSetupMail()" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h3><span data-i18n="setup.anniversaries.title">自定义纪念日</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="setup.anniversaries.description">letter_writer / festival 消费；命中当天会主动提起。JSON 数组编辑，字段：key/month/day 必填，year_start 留空=每年都当作第 0 年（只用 prompt_zero），prompt_zero/prompt_years 可选（prompt_years 支持 {char}/{years} 占位符）。</p>
-        <div class="form-row col-1">
-          <label class="field">
-            <span data-i18n="setup.anniversaries.label">anniversaries（JSON 数组）</span>
-            <textarea id="setup-anniversaries-json" rows="8" style="font-family:var(--mono);font-size:12px" data-i18n-placeholder="setup.anniversaries.placeholder" placeholder='[
-  {"key": "first_date", "month": 6, "day": 14, "year_start": 2024, "prompt_years": "在一起{years}年了"}
-]'></textarea>
-          </label>
-        </div>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
-          <button class="btn btn-primary" onclick="saveSetupAnniversaries()" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3><span data-i18n="setup.diary.title">Obsidian 日记路径</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
-          <span id="setup-diary-status" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="setup.diary.description">日记读取功能（daily_journal/diary_reminder/diary_inject）读取此目录下按 YYYY-MM-DD.md 命名的日记文件；不填则回落到本地 fallback 目录。角色白名单（diary.characters）不在本页编辑。</p>
-        <div class="form-row col-1">
-          <label class="field">
-            <span>obsidian_path</span>
-            <input type="text" id="setup-diary-path" placeholder="例如 E:\obsidian_note\Psychology\Calendar" data-i18n-placeholder="setup.diary.placeholder">
-          </label>
-        </div>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
-          <button class="btn btn-primary" onclick="saveSetupDiary()" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h3><span data-i18n="setup.coplay.title">Coplay 后台游戏检测白名单</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="setup.coplay.description">陪玩模式（coplay）用于识别非 Steam 游戏：armed 状态下按 process_name 做 psutil 进程名匹配（大小写不敏感，.exe 可写可不写）。save_dir 可选，填了才会做存档变化检测。JSON 数组编辑，name/process_name 必填。</p>
-        <div class="form-row col-1">
-          <label class="field">
-            <span data-i18n="setup.coplay.label">game_whitelist（JSON 数组）</span>
-            <textarea id="setup-coplay-games-json" rows="8" style="font-family:var(--mono);font-size:12px" data-i18n-placeholder="setup.coplay.placeholder" placeholder='[
-  {"name": "示例游戏", "process_name": "game.exe", "save_dir": "C:\\Users\\你\\Saved Games\\示例游戏"}
-]'></textarea>
-          </label>
-        </div>
-        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
-          <button class="btn btn-primary" onclick="saveSetupCoplayGames()" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-    </div>
+    <div class="page" id="page-setup" data-page-fragment="setup"></div>
 
     <!-- ── MCP 管理（Brief 110） ── -->
-    <div class="page" id="page-mcp">
-      <h1 class="page-title" data-i18n="mcp.title">MCP 外部工具</h1>
-      <div class="card" style="border-color:var(--warn)">
-        <p style="margin:0;color:var(--warn);line-height:1.6" data-i18n="mcp.security_notice">外部 MCP 的工具描述与返回内容均为不可信输入。仅在你明确需要时启用，并使用工具白名单；连接 token 请使用 ${ENV_VAR}，不要写进角色卡、Prompt 或文档。</p>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="mcp.enabled_title">总开关</h3><button class="btn btn-ghost btn-sm" onclick="loadMcpPage()" data-i18n="common.refresh">刷新</button></div>
-        <label class="checkbox-row"><input type="checkbox" id="mcp-enabled"><span data-i18n="mcp.enabled_label">启用 MCP 外部工具（关闭会断开全部 MCP server）</span></label>
-        <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveMcpEnabled()" data-i18n="mcp.save_reload">保存并热同步</button>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="mcp.import_title">从 URL 导入 Streamable HTTP MCP</h3></div>
-        <div class="form-row">
-          <label class="field"><span>name</span><input id="mcp-import-name" type="text" placeholder="cedar_toy"></label>
-          <label class="field"><span>url</span><input id="mcp-import-url" type="text" placeholder="https://example.com/mcp"></label>
-        </div>
-        <div class="form-row col-1"><label class="field"><span data-i18n="mcp.headers_label">headers（JSON，可选；建议 ${ENV_VAR}）</span><textarea id="mcp-import-headers" rows="3" placeholder='{"Authorization":"Bearer ${MCP_TOKEN}"}'></textarea></label></div>
-        <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="300" value="30"></label><label class="checkbox-row" style="align-self:end"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="testMcpImport()" data-i18n="mcp.test_import">测试连接并发现工具</button><button class="btn btn-primary" id="mcp-import-save" onclick="importMcpServer()" disabled data-i18n="mcp.confirm_import">确认导入</button></div>
-        <div id="mcp-import-result" style="margin-top:12px"></div>
-      </div>
-      <div class="card"><div class="card-header"><h3 data-i18n="mcp.servers_title">已配置 Servers</h3></div><div id="mcp-servers"><div class="loading" data-i18n="common.loading">加载中…</div></div></div>
-    </div>
+    <div class="page" id="page-mcp" data-page-fragment="mcp"></div>
 
     <!-- ── 系统状态 ── -->
-    <div class="page active" id="page-status">
-      <h1 class="page-title" data-i18n="status.title">系统状态</h1>
-      <div class="stat-row" id="stat-row">
-        <div class="stat"><div class="val" id="s-users">…</div><div class="lbl" data-i18n="status.known_users">已知用户</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.quick_actions">快捷操作</h3></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-ghost" onclick="reloadConfig()" data-i18n="status.reload_all">⚡ 热重载全部配置</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.feature_switches">Feature switches</h3><button class="btn btn-ghost btn-sm" onclick="loadFeatureFlags()" data-i18n="common.refresh">Refresh</button></div>
-        <div id="feature-flags-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px"><div class="loading" data-i18n="common.loading">加载中…</div></div>
-        <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="saveFeatureFlags()" data-i18n="status.save_reload">Save and reload</button>
-      </div>
-
-      <!-- 已注册工具（只读诊断） -->
-      <div class="card">
-        <div class="card-header">
-          <h3><span data-i18n="status.registered_tools">已注册工具</span> <span class="badge" style="font-size:10px;vertical-align:middle;opacity:.7" data-i18n="status.read_only">只读</span></h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadToolRegistry()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div id="tool-registry-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
-      </div>
-
-      <!-- 代理配置（只读镜像） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.proxy.title">代理配置</h3><button class="btn btn-primary btn-sm" onclick="saveProxy()" data-i18n="common.save">保存</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadProxy()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="status.proxy.hint">保存后热重载；仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-          <label class="checkbox-row" style="gap:8px;font-size:14px">
-            <input type="checkbox" id="proxy-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span data-i18n="status.proxy.enable">启用代理</span>
-          </label>
-          <span id="proxy-status-badge" class="badge badge-danger" data-i18n="common.disabled">未启用</span>
-        </div>
-        <div class="form-row" style="max-width:640px">
-          <label class="field">
-            <span data-i18n="status.proxy.http">HTTP 代理地址</span>
-            <input type="text" id="proxy-http" placeholder="http://127.0.0.1:7897">
-          </label>
-          <label class="field">
-            <span data-i18n="status.proxy.https">HTTPS 代理地址</span>
-            <input type="text" id="proxy-https" placeholder="http://127.0.0.1:7897">
-          </label>
-        </div>
-      </div>
-
-      <!-- 上下文轮数（只读镜像） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.context.title">上下文长度</h3><button class="btn btn-primary btn-sm" onclick="saveContextConfig()" data-i18n="common.save">保存</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadContextConfig()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="status.context.hint">保存后热重载，影响后续新请求使用的上下文窗口。</p>
-        <div style="max-width:480px">
-          <label class="field" style="margin-bottom:14px">
-            <span data-i18n="status.context.max_rounds">最大轮数（每轮 = 一问一答）</span>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
-              <input type="range" id="ctx-slider" min="5" max="50" value="20"
-                style="flex:1;accent-color:var(--accent)">
-              <span id="ctx-val" style="min-width:28px;text-align:center;font-weight:700;color:var(--accent)">20</span>
-              <span style="font-size:12px;color:var(--muted)" data-i18n="status.context.rounds">轮</span>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- LLM 生成参数（只读镜像） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.llm.title">LLM 生成参数</h3><button class="btn btn-primary btn-sm" onclick="saveLlmParams()" data-i18n="common.save">保存</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadLlmParams()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="status.llm.hint">legacy 参数可在此热更新；启用多模型后优先在「模型路由」编辑 preset 参数。</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 32px;max-width:760px">
-          <div>
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:600">max_tokens</span>
-              <span id="llm-max-tokens-val" style="color:var(--accent);font-weight:700;font-size:15px">1500</span>
-            </div>
-            <input type="range" id="llm-max-tokens" min="200" max="4000" step="100" value="1500"
-              style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.max_tokens">单次回复最大 token 数</div>
-          </div>
-          <div style="display:flex;align-items:center">
-            <div style="font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)">
-              <span data-i18n="status.llm.recommended">推荐范围：</span><br>
-              <span data-i18n="status.llm.immersive">💬 沉浸对话 &nbsp;500–800</span><br>
-              <span data-i18n="status.llm.roleplay">🎭 角色扮演 &nbsp;1500–3000</span>
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:600">temperature</span>
-              <span id="llm-temp-val" style="color:var(--accent);font-weight:700;font-size:15px">0.70</span>
-            </div>
-            <input type="range" id="llm-temperature" min="0.0" max="2.0" step="0.05" value="0.7"
-              style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.temperature">值越高回复越随机，越低越保守</div>
-          </div>
-          <div>
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:600">top_p</span>
-              <span id="llm-topp-val" style="color:var(--accent);font-weight:700;font-size:15px">0.90</span>
-            </div>
-            <input type="range" id="llm-top-p" min="0.0" max="1.0" step="0.05" value="0.9"
-              style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.top_p">核采样概率，配合 temperature 控制多样性</div>
-          </div>
-          <div>
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:600">frequency_penalty</span>
-              <span id="llm-fp-val" style="color:var(--accent);font-weight:700;font-size:15px">0.00</span>
-            </div>
-            <input type="range" id="llm-frequency-penalty" min="0.0" max="2.0" step="0.05" value="0.0"
-              style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.frequency_penalty">惩罚重复词，值越高越不容易重复用词</div>
-          </div>
-          <div></div>
-        </div>
-      </div>
-
-      <!-- 视觉模型配置（可编辑，保存后热重载；仅供 coplay 场景识别，与「视觉感知」影子观察是两套开关） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" onclick="saveVisionParams()" data-i18n="common.save">保存</button>
-          <label style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:13px;color:var(--muted)" data-i18n="status.vision.enable">启用</span>
-            <input type="checkbox" id="vision-enabled">
-          </label>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin:0 16px 8px" data-i18n="status.vision.key_hint">API Key 留空时保留已有密钥；保存后热重载。</p>
-        <p style="font-size:12px;color:var(--warning,#c77);margin:0 16px 8px" data-i18n="status.vision.scope_hint">此开关只影响陪玩场景识别（coplay），与「功能开关」页的「视觉感知」影子观察总闸是两套独立机制，互不控制，也不会打开桌宠客户端本地的截屏开关。</p>
-        <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          <div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px">Provider</div>
-            <select id="vision-provider" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)">
-              <option value="gemini">Gemini</option>
-              <option value="openai">OpenAI</option>
-              <option value="glm">GLM</option>
-              <option value="custom" data-i18n="status.vision.custom">自定义</option>
-            </select>
-          </div>
-          <div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="status.vision.model">模型</div>
-            <select id="vision-model-select" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)">
-            </select>
-          </div>
-          <div style="grid-column:1/-1">
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px">API Key</div>
-            <input type="password" id="vision-api-key" placeholder="留空则保留已有 API Key" data-i18n-placeholder="status.vision.key_placeholder"
-              style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);box-sizing:border-box">
-          </div>
-          <div style="grid-column:1/-1">
-            <div style="font-size:13px;font-weight:600;margin-bottom:4px">Base URL
-              <span style="font-size:11px;font-weight:400;color:var(--muted)" data-i18n="status.vision.base_hint">（自动填写，自定义时可修改）</span>
-            </div>
-            <input type="text" id="vision-base-url"
-              style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);box-sizing:border-box">
-          </div>
-          <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)">
-            <b>Gemini</b>：<span data-i18n="status.vision.gemini_before">免费，前往</span> <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com</a> <span data-i18n="status.vision.gemini_after">申请 API Key，推荐模型 gemini-2.0-flash</span><br>
-            <b>GLM</b>：<span data-i18n="status.vision.glm_before">免费，前往</span> <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener">bigmodel.cn</a> <span data-i18n="status.vision.glm_after">申请，推荐模型 glm-4v-flash</span><br>
-            <b>OpenAI</b>：<span data-i18n="status.vision.openai_help">付费，需要信用卡，推荐模型 gpt-4o-mini</span><br>
-            <b data-i18n="status.vision.custom">自定义</b>：<span data-i18n="status.vision.custom_help">手动填写 Base URL 和模型名</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 屏幕内容查看设置 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.screen.title">屏幕内容查看</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadScreenPeekSettings()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;max-width:520px">
-          <label class="checkbox-row" style="gap:8px;font-size:14px">
-            <input type="checkbox" id="sp-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span data-i18n="status.vision.enable">启用</span>
-          </label>
-          <label class="field" style="min-width:160px;margin-bottom:0">
-            <span data-i18n="status.screen.cooldown">冷却分钟数</span>
-            <input type="number" id="sp-cooldown" min="5" max="240" value="30">
-          </label>
-          <button class="btn btn-primary btn-sm" onclick="saveScreenPeekSettings()" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-
-      <!-- 危险模式（手机自动化 / 桌面-系统类工具总闸） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.dangermode.title">危险模式</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadMetaMode()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;max-width:640px">
-          <div id="metamode-status" style="font-size:14px;color:var(--muted)">—</div>
-          <label class="field" style="min-width:160px;margin-bottom:0">
-            <span data-i18n="status.dangermode.ttl">持续分钟数</span>
-            <input type="number" id="metamode-ttl" min="5" max="1440" value="120">
-          </label>
-          <button class="btn btn-primary btn-sm" id="metamode-toggle-btn" onclick="toggleMetaMode()" data-i18n="status.dangermode.enter">切换到危险模式</button>
-        </div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border);margin-top:10px" data-i18n="status.dangermode.help">
-          手机自动化（phone_control）、桌面/系统类工具只在危险模式下才会真的执行，安全模式下会拒绝并提示。危险模式到期后自动回落安全模式。
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" onclick="loadRelaySettings()" data-i18n="common.refresh">刷新</button></div>
-        <div class="form-row" style="max-width:760px"><label class="field"><span>Base URL</span><input id="relay-base-url"></label><label class="field"><span>Topic</span><input id="relay-topic"></label></div>
-        <label class="field" style="max-width:760px"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
-        <button class="btn btn-primary btn-sm" onclick="saveRelaySettings()" data-i18n="common.save">保存</button>
-      </div>
-      <!-- TTS 配置 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.tts.title">TTS 配置</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadTtsConfig()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-          <label class="checkbox-row" style="gap:8px;font-size:14px">
-            <input type="checkbox" id="tts-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span data-i18n="status.vision.enable">启用</span>
-          </label>
-          <label class="checkbox-row" style="gap:8px;font-size:14px">
-            <input type="checkbox" id="tts-emotion-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row" style="gap:8px;font-size:14px"><input type="checkbox" id="tts-desktop-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
-        </div>
-        <div class="form-row" style="max-width:640px">
-          <label class="field"><span>TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible">OpenAI-compatible (自建/云端，POST /audio/speech)</option></select></label>
-          <label class="field"><span>Provider status</span><input id="tts-provider-status" readonly></label>
-        </div>
-        <label class="field" style="max-width:640px"><span>Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='GSV: {"api_url":"http://127.0.0.1:9880","ref_audio":"..."}  |  openai_compatible: {"base_url":"https://.../v1","api_key":"...","model":"tts-1","voice":"alloy"}'></textarea></label>
-        <div class="form-row" style="max-width:640px">
-          <label class="field">
-            <span>API URL</span>
-            <input type="text" id="tts-api-url" placeholder="http://127.0.0.1:9880">
-          </label>
-          <label class="field">
-            <span data-i18n="status.tts.ref_audio">参考音频路径</span>
-            <input type="text" id="tts-ref-audio" placeholder="ref.wav">
-          </label>
-        </div>
-        <div class="form-row col-1" style="max-width:640px">
-          <label class="field">
-            <span data-i18n="status.tts.ref_text">参考文本</span>
-            <input type="text" id="tts-prompt-text" placeholder="参考音频对应文本" data-i18n-placeholder="status.tts.ref_placeholder">
-          </label>
-        </div>
-        <label class="field" style="max-width:300px;margin-bottom:14px">
-          <span><span data-i18n="status.tts.speed">语速</span> <span id="tts-speed-val" style="color:var(--accent);font-weight:700">1.00</span></span>
-          <input type="range" id="tts-speed" min="0.5" max="2.0" step="0.05" value="1.0"
-            oninput="document.getElementById('tts-speed-val').textContent = parseFloat(this.value).toFixed(2)"
-            style="width:100%;accent-color:var(--accent)">
-        </label>
-        <button class="btn btn-primary btn-sm" onclick="saveTtsConfig()" data-i18n="common.save">保存</button>
-        <button class="btn btn-ghost btn-sm" onclick="testTtsConfig()" data-i18n="status.tts.test">试听当前 Provider</button>
-        <button class="btn btn-ghost btn-sm" onclick="loadTtsCallLog()" data-i18n="status.tts.call_log">最近合成记录</button>
-        <pre id="tts-call-log" style="max-width:640px;max-height:160px;overflow:auto;white-space:pre-wrap"></pre>
-      </div>
-
-      <!-- 表情包 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.sticker.title">表情包</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadStickerConfig()" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div class="form-row" style="max-width:480px;align-items:end">
-          <label class="checkbox-row" style="gap:8px;font-size:14px;margin-bottom:14px">
-            <input type="checkbox" id="sticker-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span data-i18n="status.sticker.enable">启用</span>
-          </label>
-          <label class="field">
-            <span data-i18n="status.sticker.trigger_prob">触发概率（0–1）</span>
-            <input type="number" id="sticker-trigger-prob" min="0" max="1" step="0.01" value="0.06">
-          </label>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="saveStickerConfig()" data-i18n="common.save">保存</button>
-      </div>
-
-      <!-- 用户称谓 -->
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.pronoun.title">用户称谓</h3></div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:560px">
-          <label class="field" style="flex:1;min-width:160px;margin-bottom:0">
-            <span data-i18n="status.pronoun.user">用户</span>
-            <select id="pn-uid-select" onchange="loadUserPronoun()"></select>
-          </label>
-          <label class="field" style="min-width:120px;margin-bottom:0">
-            <span data-i18n="status.pronoun.value">称谓</span>
-            <select id="pn-value">
-              <option value="她" data-i18n="status.pronoun.she">她</option>
-              <option value="他" data-i18n="status.pronoun.he">他</option>
-              <option value="TA" data-i18n="status.pronoun.they">TA</option>
-              <option value="它" data-i18n="status.pronoun.it">它</option>
-            </select>
-          </label>
-          <button class="btn btn-primary btn-sm" onclick="saveUserPronoun()" style="margin-top:18px" data-i18n="common.save">保存</button>
-        </div>
-      </div>
-    </div>
+    <div class="page active" id="page-status" data-page-fragment="status"></div>
 
     <!-- ── 用户管理 ── -->
-    <div class="page" id="page-users">
-      <h1 class="page-title">用户管理</h1>
-
-      <!-- 群聊蒸馏 -->
-      <div class="card" style="display:none">
-        <div class="card-header">
-          <h3>群聊蒸馏</h3>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-          <input type="text" id="distill-group-id" placeholder="输入群号…" style="width:200px">
-          <button class="btn btn-primary btn-sm" onclick="runGroupDistill()">立即蒸馏</button>
-          <span style="font-size:12px;color:var(--muted)">分析群聊记录，生成话题/成员性格/有趣发言摘要</span>
-        </div>
-        <textarea id="distill-result" readonly placeholder="蒸馏结果将显示在这里…"
-                  style="min-height:120px;width:100%;background:var(--bg);color:var(--text);resize:vertical"></textarea>
-      </div>
-
-      <div class="search-row">
-        <input type="text" id="user-search" placeholder="搜索用户 ID…" oninput="filterUsers()">
-        <button class="btn btn-ghost btn-sm" onclick="loadUsers()">刷新</button>
-      </div>
-      <div class="card" id="user-table-card">
-        <div id="user-table-body"><div class="loading">加载中…</div></div>
-      </div>
-
-      <!-- 黑名单（并入用户管理） -->
-      <div class="card">
-        <div class="card-header"><h3>添加黑名单</h3></div>
-        <div style="display:flex;gap:8px">
-          <input type="text" id="bl-add-input" placeholder="输入 QQ 号" style="max-width:220px">
-          <button class="btn btn-danger" onclick="addBlacklist()">屏蔽</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header">
-          <h3>当前黑名单</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadBlacklist()">刷新</button>
-        </div>
-        <div id="bl-list"><div class="loading">加载中…</div></div>
-      </div>
-    </div>
+    <div class="page" id="page-users" data-page-fragment="users"></div>
 
     <!-- ── 现实设定（世界书 + 破限） ── -->
-    <div class="page" id="page-lorebook">
-      <h1 class="page-title">现实设定</h1>
-      <div class="card">
-        <div class="card-header">
-          <h3>条目列表</h3>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="loadLorebook()">刷新</button>
-          <label style="position:relative">
-            <input type="file" id="lore-import-file" accept=".txt" style="display:none"
-                  onchange="importLorebookTxt(event)">
-            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('lore-import-file').click()">📥 导入txt</button>
-          </label>
-          <button class="btn btn-ghost btn-sm" onclick="exportLorebook()">📤 导出JSON</button>
-          <input type="file" id="lore-json-input" accept=".json" style="display:none" onchange="importLorebookJson(this.files[0])">
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('lore-json-input').click()">📥 导入JSON</button>
-          <button class="btn btn-primary btn-sm" onclick="openLoreModal(null)">＋ 新增</button>
-        </div>
-        </div>
-        <div id="lore-table-body"><div class="loading">加载中…</div></div>
-      </div>
-      <!-- 破限条目 -->
-      <div class="card" style="margin-top:16px">
-        <div class="card-header">
-          <h3>破限预设条目</h3>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="loadJbEntries()">刷新</button>
-            <button class="btn btn-ghost btn-sm" onclick="exportJbEntries()">📤 导出JSON</button>
-            <input type="file" id="jb-json-input" accept=".json" style="display:none" onchange="importJbEntriesJson(this.files[0])">
-            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jb-json-input').click()">📥 导入JSON</button>
-            <input type="file" id="jb-txt-input" accept=".txt" style="display:none" onchange="importJbEntriesTxt(this.files[0])">
-            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jb-txt-input').click()">📥 导入txt</button>
-            <button class="btn btn-primary btn-sm" onclick="openJbModal(null)">＋ 新增</button>
-          </div>
-        </div>
-        <div id="jb-table-body"><div class="loading">加载中…</div></div>
-      </div>
-
-      <!-- 破限编辑弹窗 -->
-      <div id="jb-modal" class="modal" style="display:none">
-        <div class="modal-box">
-          <h3 id="jb-modal-title">新增破限条目</h3>
-          <label>标题</label>
-          <input id="jb-title" class="input" placeholder="条目标题">
-          <label style="margin-top:8px">层级</label>
-          <select id="jb-layer" class="input">
-            <option value="0">层0（身份设定）</option>
-            <option value="2">层2（背景补充）</option>
-            <option value="11">层11（表达规则，权重最高）</option>
-          </select>
-          <label style="margin-top:8px">内容</label>
-          <textarea id="jb-content" class="input" rows="6" placeholder="注入的prompt内容"></textarea>
-          <label style="margin-top:8px">
-            <input type="checkbox" id="jb-enabled" checked> 启用此条目
-          </label>
-          <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-            <button class="btn btn-ghost" onclick="closeJbModal()">取消</button>
-            <button class="btn btn-primary" onclick="saveJbEntry()">保存</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="page" id="page-lorebook" data-page-fragment="lorebook"></div>
 
     <!-- ── 梦境设定（世界 / 剧本 / 镜像 三模式创作） ── -->
-    <div class="page" id="page-dream-settings">
-      <h1 class="page-title">梦境设定</h1>
-
-      <!-- 模式选择：只影响本页显示哪套创作栏，不改变入梦模式选择逻辑 -->
-      <div class="card">
-        <div class="card-header">
-          <h3>创作模式</h3>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <select id="dream-authoring-mode-select" style="min-width:160px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)"
-                  onchange="onDreamAuthoringModeChange()">
-            <option value="sandbox">sandbox · 沙盒</option>
-            <option value="scenario">scenario · 剧本</option>
-            <option value="mirror">mirror · 镜像</option>
-          </select>
-          <span style="font-size:12px;color:var(--muted)">与入梦时选择的 dream_mode 相互独立，这里只决定本页显示的创作栏</span>
-        </div>
-      </div>
-
-      <!-- sandbox 创作栏 -->
-      <div id="dream-authoring-sandbox">
-        <!-- 世界选择 + 管理 -->
-        <div class="card">
-          <div class="card-header">
-            <h3>选择世界</h3>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-ghost btn-sm" onclick="loadDreamWorlds()">刷新</button>
-              <button class="btn btn-primary btn-sm" onclick="newDreamWorld()">＋ 新建</button>
-              <button class="btn btn-ghost btn-sm" onclick="renameDreamWorld()">✏️ 重命名</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteDreamWorld()">🗑 删除</button>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px">
-            <select id="dream-world-select" style="min-width:180px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)"
-                    onchange="onDreamWorldChange()">
-              <option value="">-- 选择世界 --</option>
-            </select>
-            <span data-i18n="dream.world.hint" style="font-size:12px;color:var(--muted)">Switching worlds loads its lorebook. _default / reality_derived are reserved and cannot be renamed or deleted.</span>
-          </div>
-        </div>
-
-        <!-- 世界书条目 -->
-        <div class="card" id="dream-lore-card" style="display:none">
-          <div class="card-header">
-            <h3>世界书条目</h3>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-ghost btn-sm" onclick="loadDreamLore()">刷新</button>
-              <button class="btn btn-primary btn-sm" onclick="openDreamLoreModal()">＋ 新增</button>
-            </div>
-          </div>
-          <div id="dream-lore-list"><div class="loading">加载中…</div></div>
-        </div>
-
-        <!-- 独立破限预设：可与世界书同时选用，也可单独生效。 -->
-        <div class="card" id="dream-preset-card">
-          <div class="card-header">
-            <h3 data-i18n="dream.preset.independent_title">Independent Jailbreak Presets</h3>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-ghost btn-sm" data-i18n="common.refresh" onclick="loadStandaloneDreamPresets()">Refresh</button>
-              <button class="btn btn-primary btn-sm" data-i18n="common.create" onclick="createStandaloneDreamPreset()">Create</button>
-              <button class="btn btn-danger btn-sm" data-i18n="common.delete" onclick="deleteStandaloneDreamPreset()">Delete</button>
-            </div>
-          </div>
-          <p data-i18n="dream.preset.independent_hint" style="margin:0 0 10px;font-size:12px;color:var(--muted)">Presets are independent assets. Select one or more for the next dream; a world and its lorebook are optional.</p>
-          <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap">
-            <select id="dream-preset-select" multiple size="5" onchange="onStandaloneDreamPresetChange()"
-                    aria-label="Dream jailbreak presets"
-                    style="min-width:260px;flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)"></select>
-            <button class="btn btn-ghost btn-sm" data-i18n="dream.preset.save_selection" onclick="saveStandaloneDreamPresetSelection()">Save selected presets</button>
-          </div>
-          <textarea id="dream-preset-text" data-i18n-placeholder="dream.preset.placeholder" placeholder="Jailbreak preset Markdown…"
-                    style="width:100%;min-height:240px;font-family:var(--mono);font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;box-sizing:border-box;resize:vertical"></textarea>
-          <div style="display:flex;justify-content:flex-end;margin-top:8px">
-            <button class="btn btn-primary btn-sm" data-i18n="dream.preset.save_content" onclick="saveStandaloneDreamPreset()">Save content</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- scenario 创作栏 -->
-      <div id="dream-authoring-scenario" style="display:none">
-        <div class="card">
-          <div class="card-header">
-            <h3>剧本列表</h3>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-ghost btn-sm" onclick="loadDreamScenarios()">刷新</button>
-              <button class="btn btn-primary btn-sm" onclick="openDreamScenarioEditor(null)">＋ 新建剧本</button>
-            </div>
-          </div>
-          <div id="dream-scenario-list"><div class="loading">加载中…</div></div>
-        </div>
-
-        <div class="card" id="dream-scenario-editor-card" style="display:none">
-          <div class="card-header">
-            <h3 id="dream-scenario-editor-title">新建剧本</h3>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-ghost btn-sm" onclick="closeDreamScenarioEditor()">取消</button>
-              <button class="btn btn-primary btn-sm" onclick="saveDreamScenario()">保存</button>
-            </div>
-          </div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-            v0.1 表单化关键字段 + 原始 YAML 双栏：ID / 标题只是快速入口，最终以右侧 YAML 为准，保存直接写 YAML 文本。
-          </div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap">
-            <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px">
-              <label class="field">
-                <span>剧本 ID（对应 data/dream/scenarios/{id}.yaml）</span>
-                <input type="text" id="ds-id" placeholder="例如 prison_demo">
-              </label>
-              <label class="field">
-                <span>标题（title）</span>
-                <input type="text" id="ds-title" placeholder="剧本标题">
-              </label>
-              <button class="btn btn-ghost btn-sm" onclick="fillDreamScenarioSkeleton()" style="align-self:flex-start">生成骨架模板</button>
-            </div>
-            <div style="flex:2;min-width:320px">
-              <textarea id="ds-yaml" placeholder="剧本 YAML 原文…"
-                        style="width:100%;min-height:360px;font-family:var(--mono);font-size:12px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;box-sizing:border-box;resize:vertical"></textarea>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- mirror 只读说明 -->
-      <div id="dream-authoring-mirror" style="display:none">
-        <div class="card">
-          <div class="card-header"><h3>镜像模式（mirror）</h3></div>
-          <div style="font-size:13px;line-height:1.8;color:var(--text)">
-            Mirror 没有可创作的物件，这不是功能缺失，而是设计如此：它读取用户隐性状态
-            （User Hidden State）的粗粒度快照，自动生成隐喻倾向材料注入梦境，全程只读、
-            不诊断、不暴露具体数值。梦醒后按门控写回，强度低于 sandbox 且带独立标记。
-            如需调整梦境内容，请切到 sandbox（编辑世界书/预设）或 scenario（编辑剧本）。
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="page" id="page-dream-settings" data-page-fragment="dream-settings"></div>
 
     <!-- 梦境世界书编辑 Modal -->
     <div class="modal-backdrop" id="dream-lore-modal">
-      <div class="modal" style="max-width:560px">
+      <div class="modal admin-inline-155">
         <div class="modal-header">
           <h3 id="dream-lore-modal-title">新增世界书条目</h3>
-          <button class="btn btn-ghost btn-sm" onclick="closeDreamLoreModal()">✕</button>
+          <button class="btn btn-ghost btn-sm" data-action="closeDreamLoreModal">✕</button>
         </div>
-        <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div class="admin-inline-179">
           <label class="field">
             <span>Keywords（触发关键词，逗号分隔）</span>
             <input type="text" id="dl-keywords" placeholder="关键词1, 关键词2">
           </label>
           <label class="field">
             <span>Content</span>
-            <textarea id="dl-content" rows="8"
-              style="font-family:var(--mono);font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical"></textarea>
+            <textarea id="dl-content" rows="8" class="admin-inline-075"></textarea>
           </label>
-          <div style="display:flex;gap:20px;align-items:center">
-            <label class="field" style="flex:1">
+          <div class="admin-inline-036">
+            <label class="field admin-inline-061">
               <span>Insertion Order</span>
               <input type="number" id="dl-insertion-order" value="0" min="0">
             </label>
-            <label class="checkbox-row" style="margin-top:18px">
+            <label class="checkbox-row admin-inline-138">
               <input type="checkbox" id="dl-regex">
               <span>Regex 匹配</span>
             </label>
           </div>
         </div>
-        <div style="padding:0 20px 20px;display:flex;gap:8px;justify-content:flex-end">
-          <button class="btn btn-ghost" onclick="closeDreamLoreModal()">取消</button>
-          <button class="btn btn-primary" onclick="saveDreamLoreEntry()">保存</button>
+        <div class="admin-inline-174">
+          <button class="btn btn-ghost" data-action="closeDreamLoreModal">取消</button>
+          <button class="btn btn-primary" data-action="saveDreamLoreEntry">保存</button>
         </div>
       </div>
     </div>
 
     <!-- ── 角色卡编辑器 ── -->
-    <div class="page" id="page-character">
-      <h1 class="page-title">角色卡编辑器</h1>
-
-      <!-- 选择与操作栏 -->
-      <div class="card">
-        <div class="card-header">
-          <h3>当前角色</h3>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <button class="btn btn-ghost btn-sm" onclick="loadCharacterList()">刷新</button>
-            <button class="btn btn-primary btn-sm" onclick="newCharacter()">➕ 新建角色卡</button>
-            <label style="position:relative">
-              <input type="file" id="char-upload-file" accept=".json,.txt,.md" style="display:none"
-                     onchange="uploadCharacterFile(event)">
-              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('char-upload-file').click()">
-                ⬆ 上传角色卡
-              </button>
-             <button class="btn btn-ghost btn-sm" onclick="exportCharacter()">📤 导出</button>
-            </label>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select id="char-select" style="flex:1;max-width:280px" onchange="onCharSelectChange()">
-            <option value="">-- 加载中 --</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="setActiveCharacter()">设为当前</button>
-
-          <button class="btn btn-ghost btn-sm" onclick="renameCharacter()">✏️ 重命名</button>
-
-          <span id="char-active-badge" class="badge badge-accent" style="display:none"></span>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-top:8px">支持 .json / .txt / .md</p>
-      </div>
-
-      <!-- 与用户关系：只读提示 + 跳转（关系是角色×用户维度的运行时状态，不在角色卡编辑，见用户管理页） -->
-      <div class="card" style="padding:10px 14px;font-size:12px;color:var(--muted)">
-        💡 与用户的关系（称呼、亲密度等）不在角色卡里编辑——那是运行时状态，请去
-        <a href="javascript:void(0)" onclick="goto('users')" style="color:var(--accent)">用户管理</a> 页查看/修改。
-      </div>
-
-      <!-- 编辑表单 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 id="char-edit-title">角色卡内容</h3>
-          <button class="btn btn-primary btn-sm" onclick="saveCharacter()">保存</button>
-        </div>
-        <!-- txt/md 纯文本编辑区 -->
-        <div id="char-text-form" style="display:none">
-          <textarea id="char-text-content"
-                    style="width:100%;min-height:400px;font-family:monospace;font-size:13px;resize:vertical"></textarea>
-          <div style="margin-top:8px">
-            <button class="btn btn-primary" onclick="saveCharacter()">保存角色卡</button>
-          </div>
-        </div>
-        <!-- json 多字段表单 -->
-        <div id="char-edit-form" style="display:none">
-          <div class="form-row">
-            <label class="field">
-              <span>name（角色名）</span>
-              <input type="text" id="char-name">
-            </label>
-            <label class="field">
-              <span>gender（性别）</span>
-              <select id="char-gender" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)">
-                <option value="neutral">neutral（ta）</option>
-                <option value="female">female（她）</option>
-                <option value="male">male（他）</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>scenario（场景）</span>
-              <input type="text" id="char-scenario">
-            </label>
-          </div>
-          <div class="form-row col-1">
-            <label class="field">
-              <span>system_prompt（人设核心）</span>
-              <textarea id="char-system-prompt" style="min-height:200px"></textarea>
-            </label>
-          </div>
-          <div class="form-row col-1">
-            <label class="field">
-              <span>description（外貌/背景描述）</span>
-              <textarea id="char-description" style="min-height:120px"></textarea>
-            </label>
-          </div>
-          <div class="form-row col-1">
-            <label class="field">
-              <span>personality（性格）</span>
-              <textarea id="char-personality" style="min-height:72px"></textarea>
-            </label>
-          </div>
-          <div class="form-row col-1">
-            <label class="field">
-              <span>mes_example（对话示例）</span>
-              <textarea id="char-mes-example" style="min-height:120px"></textarea>
-            </label>
-          </div>
-
-          <!-- 生日 -->
-          <div class="form-row">
-            <label class="field">
-              <span>birthday 月</span>
-              <input type="number" id="char-birthday-month" min="1" max="12" placeholder="月（1-12）">
-            </label>
-            <label class="field">
-              <span>birthday 日</span>
-              <input type="number" id="char-birthday-day" min="1" max="31" placeholder="日（1-31）">
-            </label>
-            <label class="field" style="flex:2">
-              <span>birthday prompt</span>
-              <input type="text" id="char-birthday-prompt" placeholder="生日提示文字（留空=未设置）">
-            </label>
-          </div>
-
-          <!-- 高级 raw JSON -->
-          <details style="margin-top:12px;border:1px solid var(--border);border-radius:6px;padding:10px 12px">
-            <summary style="cursor:pointer;font-weight:500;font-size:13px">高级（raw JSON）</summary>
-            <div style="margin-top:10px">
-              <label class="field">
-                <span>anniversaries（纪念日列表，JSON 数组）</span>
-                <textarea id="char-anniversaries" style="min-height:100px;font-family:monospace;font-size:12px" placeholder="[]"></textarea>
-              </label>
-              <label class="field" style="margin-top:10px">
-                <span>first_mes（开场白，多数角色卡不使用）</span>
-                <textarea id="char-first-mes" style="min-height:60px"></textarea>
-              </label>
-            </div>
-          </details>
-
-          <div style="margin-top:12px">
-            <button class="btn btn-primary" onclick="saveCharacter()">保存角色卡</button>
-          </div>
-        </div>
-        <div id="char-empty" class="empty">请从上方选择一个角色卡</div>
-      </div>
-    </div>
+    <div class="page" id="page-character" data-page-fragment="character"></div>
 
 
 
     <!-- ── 错误日志 ── -->
-    <div class="page" id="page-logs">
-      <h1 class="page-title">错误日志</h1>
-      <div class="card">
-        <div class="card-header">
-          <h3>最近日志</h3>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select id="log-lines" style="width:100px" onchange="loadLogs()">
-              <option value="100">100 行</option>
-              <option value="200" selected>200 行</option>
-              <option value="500">500 行</option>
-            </select>
-            <button class="btn btn-ghost btn-sm" onclick="loadLogs()">刷新</button>
-            <button class="btn btn-danger btn-sm" onclick="clearLogs()">清空日志</button>
-          </div>
-        </div>
-        <div class="log-box" id="log-box">加载中…</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:8px" id="log-meta"></div>
-      </div>
-    </div>
+    <div class="page" id="page-logs" data-page-fragment="logs"></div>
 
     <!-- ── Token 管理（Brief 22） ── -->
-    <div class="page" id="page-auth-tokens">
-      <h1 class="page-title">Token 管理
-        <span id="at-whoami" style="float:right;font-size:12px;color:var(--muted);font-weight:400"></span>
-      </h1>
-
-      <div class="card">
-        <div class="card-header">
-          <h3>通道开关</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadChannelToggles()">刷新</button>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-          只列出有独立总开关的通道；desktop / mobile / device 通道没有单独的 enabled 开关，
-          是否可用取决于对应 token 是否已配置且未停用（见下方 Token 列表）。
-        </p>
-        <div id="ch-toggle-body"><div class="loading">加载中…</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3>Token 列表</h3>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-ghost btn-sm" onclick="loadAuthTokens()">刷新</button>
-            <button class="btn btn-primary btn-sm" onclick="openCreateTokenModal()">Create</button>
-          </div>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-          出于安全设计，已有 token 的明文无法再次查看（服务端只存哈希）；丢失请 Rotate。
-        </p>
-        <div id="at-table-body"><div class="loading">加载中…</div></div>
-      </div>
-    </div>
+    <div class="page" id="page-auth-tokens" data-page-fragment="auth-tokens"></div>
 
     <!-- ── 模型路由 ── -->
-    <div class="page" id="page-model-routing">
-      <h1 class="page-title">模型路由</h1>
-
-      <div class="card" style="border-color:var(--accent)">
-        <div class="card-header"><h3>这个页面是干什么的？</h3></div>
-        <p style="font-size:13px;color:var(--text);line-height:1.8">
-          三个概念，从下往上理解：<br>
-          ① <strong>Preset</strong>（模型连接）= 一个"你能用的模型"：服务商地址 + 密钥 + 模型名，
-          填一个 preset 相当于告诉后端"这里有一个能调用的模型"。<br>
-          ② <strong>Routing Profile</strong>（分配方案）= 一套"谁用谁"的表：把不同用途的调用
-          （比如角色正式回复 vs. 后台判断/摘要这类不需要用户看到的杂活）分别指给某个 preset。
-          不是每类都要填——留空的类别会自动回退用这套方案里的 <code style="font-family:var(--mono)">chat</code>，
-          所以新手只填 <code style="font-family:var(--mono)">chat</code> 一项就能跑起来。<br>
-          ③ <strong>当前生效路由方案</strong> = 现在实际在用的那一套分配方案。可以配多套（比如「日常省钱」
-          「重要场合上强模型」），需要时切换。
-        </p>
-        <p style="font-size:13px;color:var(--muted);margin-top:10px">
-          配置顺序：先在下方「Presets」新建至少一个模型连接 → 再到「Routing Profiles」新建/编辑一套方案，
-          把 <code style="font-family:var(--mono)">chat</code> 指向刚才建的 preset → 最上方「当前生效路由方案」
-          切换到这套方案即可生效。
-        </p>
-      </div>
-
-      <div class="card" id="mr-legacy-banner" style="display:none">
-        <p style="font-size:13px;color:var(--muted);margin:0">
-          当前配置未开启 <code style="font-family:var(--mono)">model_presets</code> 块（legacy 模式，等价合成了单个
-          <code style="font-family:var(--mono)">legacy</code> preset）。请先在 <code style="font-family:var(--mono)">config.yaml</code>
-          里加上 <code style="font-family:var(--mono)">model_presets:</code> 顶层块（参见 <code style="font-family:var(--mono)">config.example.yaml</code><span data-i18n="static.routing.legacy_tail">），可点击右侧按钮把当前 legacy 连接初始化为可编辑 preset。</span><button class="btn btn-primary btn-sm" style="margin-left:12px" onclick="bootstrapModelPresets()">一键初始化</button>
-        </p>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3>当前生效路由方案</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadModelRouting()">刷新</button>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-          下拉框选一个下方已建好的 routing profile，点「切换」立即对全局生效。
-          注：如果某个角色卡自己单独绑定了一套方案（在「角色卡」页设置），该角色对话时优先用它自己绑定的那套，
-          不受这里的全局选择影响。
-        </p>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <select id="mr-active-routing-select" style="min-width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)"></select>
-          <button class="btn btn-primary btn-sm" onclick="switchActiveRouting()">切换</button>
-          <span id="mr-active-routing-current" style="font-size:12px;color:var(--muted)"></span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3>Presets</h3>
-          <button class="btn btn-primary btn-sm" onclick="openPresetModal()">+ 新建 Preset</button>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-          一个 preset 就是一个"模型连接"：填好服务商地址、密钥、模型名，就能在下方 Routing Profiles 里被指派任务。
-          新建后建议先点「测试」，确认这组配置真的能打通再拿去用。
-        </p>
-        <div id="mr-presets-body"><div class="loading">加载中…</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3>Routing Profiles</h3>
-          <button class="btn btn-primary btn-sm" onclick="openProfileModal()">+ 新建/编辑 Profile</button>
-        </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">
-          一个 profile 就是一套"把哪类调用交给哪个 preset"的分配表（call_category → preset）。
-          没单独指定的类别会自动回退用这套方案里的 <code style="font-family:var(--mono)">chat</code>，
-          所以只填 <code style="font-family:var(--mono)">chat</code> 也能正常跑；其余类别都是不面向用户的后台
-          "杂活"，想省钱可以单独指到便宜模型。
-        </p>
-        <details style="margin-bottom:12px">
-          <summary style="cursor:pointer;font-size:12px;color:var(--muted)">各 category 是干什么的？点开看</summary>
-          <div style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.9">
-            <div><code style="font-family:var(--mono)">chat</code> —— 角色的正式回复，用户实际看到的每一句话。质量要求最高，建议配主力模型。</div>
-            <div><code style="font-family:var(--mono)">intent</code> —— 判断"要不要触发某个动作"的轻量辅助判断，不面向用户，配便宜模型即可。</div>
-            <div><code style="font-family:var(--mono)">probe</code> —— 每轮先判断要不要调用工具的轻量"探针"调用，配便宜模型即可。</div>
-            <div><code style="font-family:var(--mono)">summary</code> —— 生成摘要（压缩长对话、总结一局陪玩/一场梦），配便宜模型即可。</div>
-            <div><code style="font-family:var(--mono)">detect_emotion</code> —— 识别文字里的情绪标签，配便宜模型即可。</div>
-            <div><code style="font-family:var(--mono)">consolidation</code> —— 把短期记忆整理沉淀为长期记忆、提炼关系事实等后台整理，配便宜模型即可。</div>
-            <div><code style="font-family:var(--mono)">perform</code> —— 把回复文字映射成动作/表情演出指令（只有开启"表演意图映射"功能时才会用到）。</div>
-            <div><code style="font-family:var(--mono)">monologue</code> —— 角色说话前的内心独白/思考草稿（只有开启"思考链"功能时才会用到）。</div>
-          </div>
-        </details>
-        <div id="mr-profiles-body"><div class="loading">加载中…</div></div>
-      </div>
-    </div>
+    <div class="page" id="page-model-routing" data-page-fragment="model-routing"></div>
 
     <!-- Preset 新建/编辑弹窗 -->
     <div class="modal-backdrop" id="mr-preset-modal">
-      <div class="modal" style="width:560px">
+      <div class="modal admin-inline-206">
         <h3 id="mr-preset-modal-title">新建 Preset</h3>
         <div class="form-row col-1">
           <label class="field">
@@ -1225,7 +178,7 @@
         </div>
         <div class="form-row">
           <label class="field">
-            <span>provider_kind <span style="font-size:11px;color:var(--muted)">（按服务商选，决定怎么拼请求）</span></span>
+            <span>provider_kind <span class="admin-inline-077">（按服务商选，决定怎么拼请求）</span></span>
             <select id="mr-preset-kind">
               <option value="openai">openai（OpenAI 官方 / 兼容 OpenAI 协议的中转、代理）</option>
               <option value="deepseek">deepseek（DeepSeek 官方 / 兼容 DeepSeek 协议）</option>
@@ -1234,7 +187,7 @@
             </select>
           </label>
           <label class="field">
-            <span>tool_call_mode <span style="font-size:11px;color:var(--muted)">（模型支不支持"工具调用"）</span></span>
+            <span>tool_call_mode <span class="admin-inline-077">（模型支不支持"工具调用"）</span></span>
             <select id="mr-preset-tool-mode">
               <option value="function_calling">function_calling（大多数新模型选这个）</option>
               <option value="xml_fallback">xml_fallback（模型不支持函数调用时选这个，退化用文字协议模拟）</option>
@@ -1243,39 +196,39 @@
         </div>
         <div class="form-row col-1">
           <label class="field">
-            <span>base_url <span style="font-size:11px;color:var(--muted)">（服务商文档里的 API 地址，不是网页地址）</span></span>
+            <span>base_url <span class="admin-inline-077">（服务商文档里的 API 地址，不是网页地址）</span></span>
             <input type="text" id="mr-preset-base-url" placeholder="https://api.deepseek.com">
           </label>
         </div>
         <div class="form-row col-1">
           <label class="field">
-            <span>api_key <span style="font-size:11px;color:var(--muted)">（服务商给你的密钥，通常 sk- 开头；留空=不修改已有值）</span></span>
+            <span>api_key <span class="admin-inline-077">（服务商给你的密钥，通常 sk- 开头；留空=不修改已有值）</span></span>
             <input type="password" id="mr-preset-api-key" placeholder="sk-...">
           </label>
         </div>
         <div class="form-row col-1">
           <label class="field">
-            <span>model <span style="font-size:11px;color:var(--muted)">（具体模型名，照抄服务商文档，不能瞎填）</span></span>
+            <span>model <span class="admin-inline-077">（具体模型名，照抄服务商文档，不能瞎填）</span></span>
             <input type="text" id="mr-preset-model" placeholder="claude-sonnet-4-6">
           </label>
         </div>
         <div class="form-row col-1">
           <label class="field">
-            <span>params <span style="font-size:11px;color:var(--muted)">（可选，覆盖生成参数，如 {"temperature":0.8}；新手不填就用默认值，能正常跑）</span></span>
-            <textarea id="mr-preset-params" rows="2" placeholder="{}" style="font-family:var(--mono);font-size:12px"></textarea>
+            <span>params <span class="admin-inline-077">（可选，覆盖生成参数，如 {"temperature":0.8}；新手不填就用默认值，能正常跑）</span></span>
+            <textarea id="mr-preset-params" rows="2" placeholder="{}" class="admin-inline-074"></textarea>
           </label>
         </div>
-        <div id="mr-preset-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+        <div id="mr-preset-err" class="admin-inline-011"></div>
         <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closePresetModal()">取消</button>
-          <button class="btn btn-primary" onclick="submitPresetModal()">保存</button>
+          <button class="btn btn-ghost" data-action="closePresetModal">取消</button>
+          <button class="btn btn-primary" data-action="submitPresetModal">保存</button>
         </div>
       </div>
     </div>
 
     <!-- Routing Profile 新建/编辑弹窗 -->
     <div class="modal-backdrop" id="mr-profile-modal">
-      <div class="modal" style="width:480px">
+      <div class="modal admin-inline-204">
         <h3>新建/编辑 Routing Profile</h3>
         <div class="form-row col-1">
           <label class="field">
@@ -1284,51 +237,24 @@
           </label>
         </div>
         <div id="mr-profile-categories"></div>
-        <div id="mr-profile-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+        <div id="mr-profile-err" class="admin-inline-011"></div>
         <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closeProfileModal()">取消</button>
-          <button class="btn btn-primary" onclick="submitProfileModal()">保存</button>
+          <button class="btn btn-ghost" data-action="closeProfileModal">取消</button>
+          <button class="btn btn-primary" data-action="submitProfileModal">保存</button>
         </div>
       </div>
     </div>
 
     <!-- ── 关系事实 ── -->
-    <div class="page" id="page-relationship-facts">
-      <h1 class="page-title">关系事实</h1>
-
-      <div class="card">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <label class="field" style="flex:1;min-width:160px;margin-bottom:0">
-            <span>用户</span>
-            <select id="rf-uid-select" onchange="loadRelationshipFacts()"></select>
-          </label>
-          <label class="field" style="flex:1;min-width:120px;margin-bottom:0">
-            <span>状态过滤</span>
-            <select id="rf-status-filter" onchange="loadRelationshipFacts()">
-              <option value="">全部</option>
-              <option value="pending">待审核</option>
-              <option value="confirmed">已确认</option>
-              <option value="archived">已归档</option>
-            </select>
-          </label>
-          <button class="btn btn-ghost btn-sm" onclick="loadRelationshipFacts()" style="margin-top:18px">刷新</button>
-          <button class="btn btn-ghost btn-sm" onclick="runRelationshipFactSuggester()" style="margin-top:18px">运行称呼建议器</button>
-          <button class="btn btn-primary btn-sm" onclick="openFactModal()" style="margin-top:18px">+ 手动添加</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div id="rf-list-body"><div class="empty">选择一个用户后加载</div></div>
-      </div>
-    </div>
+    <div class="page" id="page-relationship-facts" data-page-fragment="relationship-facts"></div>
 
     <!-- 关系事实 新建/编辑弹窗 -->
     <div class="modal-backdrop" id="rf-fact-modal">
-      <div class="modal" style="width:560px">
+      <div class="modal admin-inline-206">
         <h3 id="rf-fact-modal-title">添加关系事实</h3>
         <div class="form-row col-1">
           <label class="field">
-            <span>关键词 <span style="font-size:11px;color:var(--muted)">（逗号分隔）</span></span>
+            <span>关键词 <span class="admin-inline-077">（逗号分隔）</span></span>
             <input type="text" id="rf-fact-keywords" placeholder="姐姐, 亲爱的">
           </label>
         </div>
@@ -1348,570 +274,134 @@
             <input type="number" id="rf-fact-order" value="60">
           </label>
         </div>
-        <div id="rf-fact-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+        <div id="rf-fact-err" class="admin-inline-011"></div>
         <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closeFactModal()">取消</button>
-          <button class="btn btn-primary" onclick="submitFactModal()">保存</button>
+          <button class="btn btn-ghost" data-action="closeFactModal">取消</button>
+          <button class="btn btn-primary" data-action="submitFactModal">保存</button>
         </div>
       </div>
     </div>
 
     <!-- ── 宠物 ── -->
-    <div class="page" id="page-pet">
-      <h1 class="page-title">宠物</h1>
-
-      <!-- 宠物状态卡 -->
-      <div class="card" id="pet-status-card">
-        <div class="card-header">
-          <h3>宠物状态</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadPet()">刷新</button>
-        </div>
-        <div id="pet-display"><div class="loading">加载中…</div></div>
-      </div>
-
-      <!-- 设置宠物 -->
-      <div class="card">
-        <div class="card-header"><h3>设置宠物</h3></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;max-width:500px">
-          <label class="field" style="flex:1;min-width:140px">
-            <span>名字</span>
-            <input type="text" id="pet-name-input" placeholder="给它起个名字…">
-          </label>
-          <label class="field" style="flex:1;min-width:120px">
-            <span>种类</span>
-            <select id="pet-species-input">
-              <option value="猫">🐱 猫</option>
-              <option value="狗">🐶 狗</option>
-              <option value="兔子">🐰 兔子</option>
-              <option value="鸟">🐦 鸟</option>
-              <option value="其他">其他</option>
-            </select>
-          </label>
-          <button class="btn btn-primary btn-sm" onclick="savePet()" style="margin-bottom:1px">保存</button>
-        </div>
-      </div>
-    </div>
+    <div class="page" id="page-pet" data-page-fragment="pet"></div>
 
     <!-- ── 与叶瑄 ── -->
-    <div class="page" id="page-yexuan">
-      <h1 class="page-title">与<span id="page-char-name">叶瑄</span></h1>
-
-      <!-- 好感度状态栏 -->
-      <div class="card" style="padding:14px 20px">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <div>
-            <span id="chat-level-label" style="font-size:15px;font-weight:600;color:var(--accent)">——</span>
-            <span id="chat-affection-val" style="font-size:13px;color:var(--muted);margin-left:8px">好感度: —</span>
-          </div>
-          <div style="flex:1;max-width:260px">
-            <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-              <div id="chat-aff-bar" style="height:100%;background:var(--accent);border-radius:3px;width:0%;transition:width .4s"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 对话区 -->
-      <div class="card" style="padding:0;overflow:hidden">
-        <div id="chat-messages" style="
-          min-height:360px;max-height:480px;overflow-y:auto;
-          padding:20px;display:flex;flex-direction:column;gap:10px">
-          <div class="empty" style="margin:auto;opacity:.5">发送消息开始对话</div>
-        </div>
-        <div style="border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px">
-          <input type="text" id="chat-input" placeholder="说点什么…" style="flex:1"
-                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMsg();}">
-          <button class="btn btn-primary" onclick="sendChatMsg()" id="chat-send-btn">发送</button>
-        </div>
-      </div>
-    </div>
+    <div class="page" id="page-yexuan" data-page-fragment="yexuan"></div>
 
     <!-- ── 调度器 ── -->
-    <div class="page" id="page-scheduler">
-      <h1 class="page-title">调度器</h1>
-
-      <div class="card">
-        <div class="card-header"><h3>调度配置</h3><button class="btn btn-primary btn-sm" onclick="saveSchedulerConfig()">保存</button></div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px" id="sc-config-switches"></div>
-        <div class="form-row" style="max-width:760px">
-          <label class="field"><span>Owner ID</span><input id="sc-owner-id"></label>
-          <label class="field"><span>存在感提醒（分钟）</span><input type="number" min="1" id="sc-presence-minutes"></label>
-          <label class="field"><span>主动消息最小间隔（小时）</span><input type="number" min="0.1" max="24" step="0.1" id="sc-gap-hours"></label>
-        </div>
-        <label class="field" style="max-width:760px"><span>签名（每行一条）</span><textarea id="sc-signatures" rows="4"></textarea></label>
-      </div>
-      <!-- 触发状态 -->
-      <div class="card">
-        <div class="card-header">
-          <h3>触发器状态</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadScheduler()">刷新</button>
-        </div>
-        <div id="sc-status-table"><div class="loading">加载中…</div></div>
-      </div>
-
-      <!-- ProactiveLedger：统一发送预算与记账（CC 任务 19 · B） -->
-      <div class="card">
-        <div class="card-header">
-          <h3>主动发言账本</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadProactiveLedger()">刷新</button>
-        </div>
-        <div id="sc-ledger-body" style="font-size:13px">加载中…</div>
-      </div>
-
-      <!-- 手动触发 -->
-      <div class="card">
-        <div class="card-header"><h3>手动触发</h3></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="scTrigger('morning_greeting')">🌅 发早安</button>
-          <button class="btn btn-ghost btn-sm" onclick="scTrigger('night_reminder')">🌙 发晚安</button>
-          <button class="btn btn-ghost btn-sm" onclick="scTrigger('random_message')">💬 随机日间消息</button>
-          <button class="btn btn-ghost btn-sm" onclick="scTrigger('daily_journal')">📓 手动手账</button>
-          <button class="btn btn-ghost btn-sm" onclick="scTrigger('period_reminder')">🌸 生理期关心</button>
-          <button class="btn btn-ghost btn-sm" onclick="scTrigger('diary_reminder')">📝 日记提醒</button>
-          <button class="btn btn-ghost btn-sm" onclick="scTrigger('diary_share_reminder')">📖 日记分享提醒</button>
-        </div>
-      </div>
-
-      <!-- Watch 测试 -->
-      <div class="card">
-        <div class="card-header"><h3>Watch 事件测试</h3></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <input type="number" id="sc-hr-value" placeholder="心率值" style="width:100px" value="105">
-          <button class="btn btn-ghost btn-sm" onclick="testWatchEvent('heart_rate')">发送心率事件</button>
-          <button class="btn btn-ghost btn-sm" onclick="testWatchEvent('sleep_end')">发送睡醒事件</button>
-        </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:8px">
-          Watch 设备推送地址：<code style="font-family:var(--mono)">POST /watch/event?secret=...</code>
-        </div>
-      </div>
-
-      <!-- Watch 状态 -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Watch 状态</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadWatchStatus()">刷新</button>
-        </div>
-        <div id="watch-status-body">
-  <table style="width:100%;font-size:13px;border-collapse:collapse">
-    <tr>
-      <td style="padding:8px 0;color:var(--muted);width:120px">❤️ 心率</td>
-      <td id="ws-hr" style="font-weight:600;color:var(--accent)">暂无数据</td>
-    </tr>
-    <tr>
-      <td style="padding:8px 0;color:var(--muted)">😴 睡眠</td>
-      <td id="ws-sleep" style="font-weight:600">暂无数据</td>
-    </tr>
-    <tr>
-      <td style="padding:8px 0;color:var(--muted)">🕐 最近事件</td>
-      <td id="ws-last" style="color:var(--muted);font-size:12px">暂无数据</td>
-    </tr>
-  </table>
-</div>
-      </div>
-    </div>
+    <div class="page" id="page-scheduler" data-page-fragment="scheduler"></div>
 
     <!-- ── 观测：情绪·花园 ── -->
-    <div class="page" id="page-observe-mood">
-      <h1 class="page-title">情绪·花园 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读</span></h1>
-      <div class="card">
-        <div class="card-header"><h3>当前情绪状态</h3><button class="btn btn-ghost btn-sm" onclick="loadObserveMood()">刷新</button></div>
-        <pre id="obs-mood-raw" style="font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:300px;overflow:auto">加载中…</pre>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>花园状态</h3></div>
-        <pre id="obs-garden-raw" style="font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:300px;overflow:auto">加载中…</pre>
-      </div>
-    </div>
+    <div class="page" id="page-observe-mood" data-page-fragment="observe-mood"></div>
 
     <!-- ── 观测：梦境状态 ── -->
-    <div class="page" id="page-observe-dream">
-      <h1 class="page-title">梦境状态 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读</span></h1>
-      <div class="card">
-        <div class="card-header"><h3>当前梦境</h3><button class="btn btn-ghost btn-sm" onclick="loadObserveDream()">刷新</button></div>
-        <div id="obs-dream-status" style="margin-bottom:8px;font-size:14px;font-weight:600"></div>
-        <pre id="obs-dream-raw" style="font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:400px;overflow:auto">加载中…</pre>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>梦境统计</h3></div>
-        <pre id="obs-dream-stats" style="font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px">加载中…</pre>
-      </div>
-    </div>
+    <div class="page" id="page-observe-dream" data-page-fragment="observe-dream"></div>
 
     <!-- ── 观测：记忆探查 ── -->
-    <div class="page" id="page-observe-memory">
-      <h1 class="page-title">记忆探查 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读</span></h1>
-      <div class="card">
-        <div class="card-header">
-          <h3>短期记忆</h3>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="obs-mem-uid" placeholder="uid (QQ号)" style="width:140px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-            <button class="btn btn-ghost btn-sm" onclick="loadObserveMemory()">读取</button>
-          </div>
-        </div>
-        <pre id="obs-memory-raw" style="font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:500px;overflow:auto">输入 uid 后点击「读取」</pre>
-      </div>
-    </div>
+    <div class="page" id="page-observe-memory" data-page-fragment="observe-memory"></div>
 
     <!-- ── 观测：隐性状态 ── -->
-    <div class="page" id="page-observe-hidden">
-      <h1 class="page-title">隐性状态 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读</span></h1>
-      <div class="card">
-        <div class="card-header"><h3>UserHiddenState + Dream Snapshot</h3><button class="btn btn-ghost btn-sm" onclick="loadObserveHidden()">刷新</button></div>
-        <pre id="obs-hidden-raw" style="font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:600px;overflow:auto">加载中…</pre>
-      </div>
-    </div>
+    <div class="page" id="page-observe-hidden" data-page-fragment="observe-hidden"></div>
 
     <!-- ── 观测：聊天日志 ── -->
-    <div class="page" id="page-observe-chatlog">
-      <h1 class="page-title">聊天日志 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读</span></h1>
-      <div class="card">
-        <div class="card-header">
-          <h3>按日期浏览</h3>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select id="obs-chatlog-date" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)" onchange="loadObserveChatlogDay()">
-              <option value="">— 选择日期 —</option>
-            </select>
-            <button class="btn btn-ghost btn-sm" onclick="loadObserveChatlogDates()">刷新日期</button>
-          </div>
-        </div>
-        <div id="obs-chatlog-body" style="font-size:13px;line-height:1.8;max-height:600px;overflow:auto;padding:4px 0">
-          点击「刷新日期」后选择日期查看。
-        </div>
-      </div>
-    </div>
+    <div class="page" id="page-observe-chatlog" data-page-fragment="observe-chatlog"></div>
 
     <!-- ── 观测：运行时内部态 ── -->
-    <div class="page" id="page-observe-runtime">
-      <h1 class="page-title">运行时内部态 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读快照</span></h1>
-      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="loadObserveRuntime()">刷新</button>
-        <span style="font-size:12px;color:var(--muted)">数据为瞬时快照，不实时更新</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
-        <div class="card">
-          <div class="card-header"><h3>slow_queue</h3></div>
-          <pre id="obs-rt-queue" style="font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px">—</pre>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>死信队列 DLQ</h3></div>
-          <pre id="obs-rt-dlq" style="font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px">—</pre>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>pending_perception</h3></div>
-          <pre id="obs-rt-pending" style="font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px">—</pre>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>锁状态</h3></div>
-          <pre id="obs-rt-locks" style="font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px">—</pre>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>活跃通道</h3></div>
-          <pre id="obs-rt-channels" style="font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px">—</pre>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>当前情绪</h3></div>
-          <pre id="obs-rt-mood" style="font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px">—</pre>
-        </div>
-      </div>
-    </div>
+    <div class="page" id="page-observe-runtime" data-page-fragment="observe-runtime"></div>
 
     <!-- ── 观测：Prompt 层检视器 ── -->
-    <div class="page" id="page-observe-growth">
-      <h1 class="page-title">成长观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 兴趣、作品、技巧笔记与练习轨迹</span></h1>
-      <div class="card"><div class="card-header"><h3>角色成长</h3><div style="display:flex;gap:8px"><select id="obs-growth-char" onchange="loadObserveGrowth()"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveGrowth()">刷新</button></div></div><div id="obs-growth-content" class="empty">加载中…</div></div>
-    </div>
+    <div class="page" id="page-observe-growth" data-page-fragment="observe-growth"></div>
 
-    <div class="page" id="page-observe-visual">
-      <h1 class="page-title">视觉观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 30 天 shadow trace</span></h1>
-      <div class="card"><div class="card-header"><h3>视觉活动</h3><div style="display:flex;gap:8px"><input id="obs-visual-date" type="date" onchange="loadObserveVisual()"><button class="btn btn-ghost btn-sm" onclick="loadObserveVisual()">刷新</button></div></div><div id="obs-visual-content" class="empty">加载中…</div></div>
-    </div>
+    <div class="page" id="page-observe-visual" data-page-fragment="observe-visual"></div>
 
-    <div class="page" id="page-observe-spend">
-      <h1 class="page-title">支出观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 额度、意向单与台账</span></h1>
-      <div id="obs-spend-content"><div class="card empty">加载中…</div></div>
-    </div>
+    <div class="page" id="page-observe-spend" data-page-fragment="observe-spend"></div>
 
-    <div class="page" id="page-observe-group-arbiter">
-      <h1 class="page-title"><span data-i18n="group.title">群聊仲裁</span> <span style="font-size:13px;font-weight:400;color:var(--muted)" data-i18n="group.subtitle">只读 · 候选评分、角色关系、群聊 Prompt 与群聊梦境 Prompt</span></h1>
-      <div class="card"><div class="card-header"><h3 data-i18n="group.stage">Stage 群聊</h3><div style="display:flex;gap:8px"><select id="obs-arbiter-group" onchange="loadObserveGroupArbiter()"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveGroupArbiter()" data-i18n="common.refresh">刷新</button></div></div><div id="obs-arbiter-content" class="empty" data-i18n="common.loading">加载中…</div></div>
-    </div>
+    <div class="page" id="page-observe-group-arbiter" data-page-fragment="observe-group-arbiter"></div>
 
-    <div class="page" id="page-observe-memory-summary">
-      <h1 class="page-title">记忆摘要 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 淘汰摘要归档与召回轨迹</span></h1>
-      <div class="card"><div class="card-header"><h3>用户记忆</h3><div style="display:flex;gap:8px"><input id="obs-memory-summary-uid" placeholder="用户 UID"><select id="obs-memory-summary-char"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveMemorySummary()">读取</button></div></div><div id="obs-memory-summary-content" class="empty">输入 UID 后读取</div></div>
-    </div>
+    <div class="page" id="page-observe-memory-summary" data-page-fragment="observe-memory-summary"></div>
 
     <!-- ── 观测：Prompt 层检视器 ── -->
-    <div class="page" id="page-observe-prompt">
-      <h1 class="page-title">Prompt 层检视 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 10 轮</span></h1>
-
-      <!-- 层级开关（消融测试） -->
-      <div class="card" id="obs-ablation-card" style="margin-bottom:16px">
-        <div class="card-header">
-          <h3>层级开关（消融测试）</h3>
-          <span style="font-size:12px;color:var(--muted)">只过滤注入，不短路检索；保存后下一轮对话起作用</span>
-        </div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
-          <button class="btn btn-ghost btn-sm" onclick="loadPromptAblation()">刷新</button>
-          <button class="btn btn-primary btn-sm" onclick="savePromptAblation()">保存</button>
-        </div>
-        <div id="obs-ablation-list" style="font-size:12px">加载中…</div>
-      </div>
-
-      <div class="card" id="obs-segment-enforce-card" style="margin-bottom:16px">
-        <div class="card-header">
-          <h3>生成后段落兜底（实验）</h3>
-          <span style="font-size:12px;color:var(--muted)">只改发送副本，不写回短期记忆；默认关闭</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <label style="display:flex;align-items:center;gap:8px;flex:1">
-            <input type="checkbox" id="obs-segment-enforce-enabled">
-            <span style="font-size:12px">长篇单段回复按句末标点补一个空行</span>
-          </label>
-          <label style="font-size:12px;color:var(--muted)">阈值
-            <input type="number" id="obs-segment-enforce-min-len" min="1" max="5000" style="width:72px;margin-left:4px">
-          </label>
-          <button class="btn btn-ghost btn-sm" onclick="loadOutputSegmentEnforce()">刷新</button>
-          <button class="btn btn-primary btn-sm" onclick="saveOutputSegmentEnforce()">保存</button>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
-        <input type="text" id="obs-prompt-uid" placeholder="uid (QQ号)" style="width:150px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-        <select id="obs-prompt-n" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-          <option value="0">最新轮</option>
-          <option value="1">次新轮</option>
-          <option value="2">第 3 轮</option>
-          <option value="3">第 4 轮</option>
-          <option value="4">第 5 轮</option>
-          <option value="5">第 6 轮</option>
-          <option value="6">第 7 轮</option>
-          <option value="7">第 8 轮</option>
-          <option value="8">第 9 轮</option>
-          <option value="9">第 10 轮</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="loadObservePrompt()">查看</button>
-        <button class="btn btn-ghost btn-sm" onclick="loadObservePromptUidList()">列出有快照的 uid</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportSnapshotMd('prompt')">导出 MD</button>
-      </div>
-      <div id="obs-prompt-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
-      <!-- 顶部总览卡 -->
-      <div class="card" id="obs-prompt-summary-card" style="display:none;margin-bottom:16px">
-        <div class="card-header"><h3>总览</h3><span id="obs-prompt-ts" style="font-size:12px;color:var(--muted)"></span></div>
-        <div id="obs-prompt-summary" style="font-size:13px;line-height:1.8;padding:4px 0"></div>
-        <!-- token 进度条 -->
-        <div style="margin-top:12px">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Token 估算（字符数）</div>
-          <div id="obs-prompt-bar-wrap" style="position:relative;height:20px;background:var(--bg-secondary);border-radius:4px;overflow:hidden">
-            <div id="obs-prompt-bar" style="height:100%;background:var(--accent);transition:width .3s"></div>
-            <div id="obs-prompt-bar-soft" style="position:absolute;top:0;height:100%;width:2px;background:#f59e0b"></div>
-            <div id="obs-prompt-bar-hard" style="position:absolute;top:0;height:100%;width:2px;background:#ef4444"></div>
-          </div>
-          <div style="display:flex;gap:16px;font-size:11px;color:var(--muted);margin-top:4px">
-            <span>🟡 软警戒 15k</span><span>🔴 触发裁剪 20k</span><span>目标 ≤18k</span>
-          </div>
-        </div>
-      </div>
-      <!-- 层级列表 -->
-      <div id="obs-prompt-layers-list"></div>
-
-      <!-- 召回溯源 -->
-      <div class="card" id="obs-recall-card" style="margin-top:24px">
-        <div class="card-header"><h3>召回溯源</h3><span style="font-size:12px;color:var(--muted)">recall_trace · episodic/event_log/lore/semantic(X2)/web_recall(X3)</span></div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
-          <input type="date" id="obs-recall-date" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-          <input type="number" id="obs-recall-n" value="5" min="1" style="width:70px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-          <button class="btn btn-ghost btn-sm" onclick="loadObserveRecallTrace()">查看（复用上方 uid）</button>
-        </div>
-        <div id="obs-recall-list" style="font-size:12px;color:var(--muted)">在上方输入 uid 后点击查看</div>
-      </div>
-    </div>
+    <div class="page" id="page-observe-prompt" data-page-fragment="observe-prompt"></div>
 
     <!-- ── 工具执行痕迹（Path A/B/C） ── -->
-    <div class="page" id="page-observe-tools">
-      <h1 class="page-title" data-i18n="observe.tools.title">工具观测</h1>
-      <div style="font-size:13px;color:var(--muted);margin:-10px 0 16px" data-i18n="observe.tools.subtitle">只读 · action_trace · 探针、意图解析与 Tool Loop</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
-        <input type="text" id="obs-tools-uid" placeholder="uid" style="width:150px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-        <select id="obs-tools-category" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-          <option value="" data-i18n="observe.tools.all">全部类目</option>
-          <option value="info" data-i18n="observe.tools.info">信息</option>
-          <option value="desktop" data-i18n="observe.tools.desktop">桌面</option>
-          <option value="memory" data-i18n="observe.tools.memory">记忆</option>
-          <option value="mcp">MCP</option>
-          <option value="fs" data-i18n="observe.tools.fs">文件系统</option>
-          <option value="system" data-i18n="observe.tools.system">系统</option>
-          <option value="phone_control" data-i18n="observe.tools.phone">手机控制</option>
-        </select>
-        <input type="number" id="obs-tools-limit" value="30" min="1" max="30" style="width:64px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-        <button class="btn btn-ghost btn-sm" onclick="loadObserveTools()" data-i18n="common.refresh">刷新</button>
-        <button class="btn btn-ghost btn-sm" onclick="loadObserveToolUidList()" data-i18n="observe.list_uid">列出 uid</button>
-      </div>
-      <div id="obs-tools-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
-      <div id="obs-tools-content"></div>
-    </div>
+    <div class="page" id="page-observe-tools" data-page-fragment="observe-tools"></div>
 
     <!-- ── 工具调度体系（探针观测） ── -->
-    <div class="page" id="page-observe-probe">
-      <h1 class="page-title">探针观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 5 轮 · 全通道</span></h1>
-      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
-        <input type="text" id="obs-probe-uid" placeholder="uid" style="width:150px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-        <select id="obs-probe-n" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-          <option value="0">最新轮</option>
-          <option value="1">次新轮</option>
-          <option value="2">第 3 轮</option>
-          <option value="3">第 4 轮</option>
-          <option value="4">第 5 轮</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="loadObserveProbe()">查看</button>
-        <button class="btn btn-ghost btn-sm" onclick="loadObserveProbeUidList()">列出 uid</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportSnapshotMd('probe')">导出 MD</button>
-      </div>
-      <div id="obs-probe-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
-      <div id="obs-probe-content"></div>
-    </div>
+    <div class="page" id="page-observe-probe" data-page-fragment="observe-probe"></div>
 
     <!-- ── 梦境 Prompt 检视 ── -->
-    <div class="page" id="page-observe-dream-prompt">
-      <h1 class="page-title">梦境 Prompt 检视 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 5 轮 · 独立于现实 pipeline</span></h1>
-      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
-        <input type="text" id="obs-dream-prompt-uid" placeholder="uid" style="width:150px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-        <select id="obs-dream-prompt-n" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
-          <option value="0">最新轮</option>
-          <option value="1">次新轮</option>
-          <option value="2">第 3 轮</option>
-          <option value="3">第 4 轮</option>
-          <option value="4">第 5 轮</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="loadObserveDreamPrompt()">查看</button>
-        <button class="btn btn-ghost btn-sm" onclick="loadObserveDreamPromptUidList()">列出 uid</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportSnapshotMd('dream')">导出 MD</button>
-      </div>
-      <div id="obs-dream-prompt-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
-      <div id="obs-dream-prompt-content"></div>
-    </div>
+    <div class="page" id="page-observe-dream-prompt" data-page-fragment="observe-dream-prompt"></div>
 
     <!-- ── 触发器目录 ── -->
-    <div class="page" id="page-observe-trigger-catalog">
-      <h1 class="page-title">触发器目录 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · proposer 注册表 + 最近真实触发快照</span></h1>
-      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="loadTriggerCatalog()">刷新</button>
-        <span style="font-size:12px;color:var(--muted)">进程重启后样本清空；首次触发后才显示 seed prompt / search_query / 回复</span>
-      </div>
-      <div id="trigger-catalog-content"></div>
-    </div>
+    <div class="page" id="page-observe-trigger-catalog" data-page-fragment="observe-trigger-catalog"></div>
 
     <!-- ── 资源完整性/功能状态检查 ── -->
-    <div class="page" id="page-observe-resource-completeness">
-      <h1 class="page-title">资源完整性 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 哪个开关没开 · 哪个功能缺素材 · 哪个还没做</span></h1>
-      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="loadResourceCompleteness()">刷新</button>
-      </div>
-      <div id="resource-completeness-content"></div>
-    </div>
+    <div class="page" id="page-observe-resource-completeness" data-page-fragment="observe-resource-completeness"></div>
 
     <!-- ── API 契约检查 ── -->
-    <div class="page" id="page-observe-api-contract">
-      <h1 class="page-title">API 契约检查 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 后端可产出的 desktop action type ↔ 前端 ws.ts 能识别的 type</span></h1>
-      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="loadApiContractCheck()">刷新</button>
-        <span style="font-size:12px;color:var(--muted)">需要 Emerald-client 与本仓同级目录，否则只显示后端侧产出</span>
-      </div>
-      <div id="api-contract-check-content"></div>
-    </div>
+    <div class="page" id="page-observe-api-contract" data-page-fragment="observe-api-contract"></div>
 
     <!-- ── 角色权限 ── -->
-    <div class="page" id="page-observe-char-permissions">
-      <h1 class="page-title">角色权限 <span style="font-size:13px;font-weight:400;color:var(--muted)">桌面+手机工具类目暴露面 · 危险模式闸门 · 身份固化管线</span></h1>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-        <select id="obs-charperm-char" class="input" style="max-width:200px"></select>
-        <input id="obs-charperm-uid" class="input" placeholder="uid（选填，用于身份固化管线状态）" style="max-width:260px">
-        <button class="btn btn-ghost btn-sm" onclick="loadCharPermissions()">刷新</button>
-      </div>
-      <div id="char-permissions-content"></div>
-    </div>
+    <div class="page" id="page-observe-char-permissions" data-page-fragment="observe-char-permissions"></div>
 
     <!-- ── 印象溯源 ── -->
-    <div class="page" id="page-observe-provenance">
-      <h1 class="page-title">印象溯源 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 每条概括何时·因何·从哪条聊天记录改动</span></h1>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-        <select id="prov-uid" class="input" style="max-width:180px"></select>
-        <input id="prov-artifact" class="input" placeholder="artifact（如 identity，可空）" style="max-width:200px">
-        <input id="prov-field" class="input" placeholder="field（如 trust_pattern，可空）" style="max-width:200px">
-        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px"><input type="checkbox" id="prov-scope"> 仅叶瑄自身漂移</label>
-        <button class="btn btn-ghost btn-sm" onclick="loadProvenance()">查询</button>
-      </div>
-      <div id="prov-content"></div>
-    </div>
+    <div class="page" id="page-observe-provenance" data-page-fragment="observe-provenance"></div>
 
     <!-- ── 向量库 ── -->
-    <div class="page" id="page-observe-vector">
-      <h1 class="page-title">向量库 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · sqlite-vec 语义索引</span></h1>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-        <select id="vec-uid" class="input" style="max-width:180px"></select>
-        <select id="vec-source" class="input" style="max-width:160px"><option value="">全部 source</option></select>
-        <button class="btn btn-ghost btn-sm" onclick="loadVector()">刷新</button>
-      </div>
-      <div id="vec-stats" style="margin-bottom:12px"></div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input id="vec-q" class="input" placeholder="语义检索：输入一句话，找最相近的记忆…" style="flex:1">
-        <button class="btn btn-ghost btn-sm" onclick="searchVector()">检索</button>
-      </div>
-      <div id="vec-content"></div>
-    </div>
+    <div class="page" id="page-observe-vector" data-page-fragment="observe-vector"></div>
 
   </main>
 </div>
 
 <!-- 密钥本快捷入口悬浮按钮（Brief 93 §2）：desktop / mobile 客户端要的 token 都在这个文件里 -->
-<button id="secrets-book-fab" class="btn btn-primary" onclick="openSecretsBook()"
+<button id="secrets-book-fab" class="btn btn-primary admin-inline-060" data-action="openSecretsBook"
         title="desktop / mobile 客户端要的 token 都在这个文件里"
-        style="display:none;position:fixed;right:24px;bottom:24px;z-index:500;border-radius:24px;padding:10px 18px;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+       >
   🔑 打开密钥本
 </button>
 
 <!-- User Memory Modal -->
 <div class="modal-backdrop" id="mem-modal">
-  <div class="modal" style="width:640px">
+  <div class="modal admin-inline-207">
     <h3 id="mem-modal-title">用户记忆</h3>
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="mem-tabs">
-      <button class="btn btn-ghost btn-sm" id="mt-profile" onclick="memTab('profile')">画像</button>
-      <button class="btn btn-ghost btn-sm" id="mt-history" onclick="memTab('history')">对话历史</button>
-      <button class="btn btn-ghost btn-sm" id="mt-rag"     onclick="memTab('rag')">RAG 搜索</button>
+    <div id="mem-tabs" class="admin-inline-049">
+      <button class="btn btn-ghost btn-sm" id="mt-profile" data-action="memTab" data-action-args='["profile"]'>画像</button>
+      <button class="btn btn-ghost btn-sm" id="mt-history" data-action="memTab" data-action-args='["history"]'>对话历史</button>
+      <button class="btn btn-ghost btn-sm" id="mt-rag"     data-action="memTab" data-action-args='["rag"]'>RAG 搜索</button>
     </div>
 
     <!-- Profile tab -->
     <div id="mem-profile-panel">
       <div id="profile-view"></div>
-      <div style="margin-top:14px;display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="editProfile()">编辑画像</button>
-        <button class="btn btn-danger btn-sm" onclick="clearMemoryPart('profile')">清空画像</button>
+      <div class="admin-inline-136">
+        <button class="btn btn-ghost btn-sm" data-action="editProfile">编辑画像</button>
+        <button class="btn btn-danger btn-sm" data-action="clearMemoryPart" data-action-args='["profile"]'>清空画像</button>
       </div>
     </div>
 
     <!-- History tab -->
-    <div id="mem-history-panel" style="display:none">
+    <div id="mem-history-panel" class="admin-inline-056">
       <div class="msg-list" id="msg-list"></div>
-      <div style="margin-top:14px">
-        <button class="btn btn-danger btn-sm" onclick="clearMemoryPart('short-term')">清空短期历史</button>
+      <div class="admin-inline-135">
+        <button class="btn btn-danger btn-sm" data-action="clearMemoryPart" data-action-args='["short-term"]'>清空短期历史</button>
       </div>
     </div>
 
     <!-- RAG tab -->
-    <div id="mem-rag-panel" style="display:none">
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input type="text" id="rag-query" placeholder="输入关键词语义搜索…" style="flex:1">
-        <button class="btn btn-primary btn-sm" onclick="searchRAG()">搜索</button>
+    <div id="mem-rag-panel" class="admin-inline-056">
+      <div class="admin-inline-045">
+        <input type="text" id="rag-query" placeholder="输入关键词语义搜索…" class="admin-inline-061">
+        <button class="btn btn-primary btn-sm" data-action="searchRAG">搜索</button>
       </div>
-      <div id="rag-results" style="font-size:13px;color:var(--muted)">输入关键词后点击搜索</div>
-      <div style="margin-top:14px">
-        <button class="btn btn-danger btn-sm" onclick="clearMemoryPart('rag')">清空 RAG 记忆</button>
+      <div id="rag-results" class="admin-inline-099">输入关键词后点击搜索</div>
+      <div class="admin-inline-135">
+        <button class="btn btn-danger btn-sm" data-action="clearMemoryPart" data-action-args='["rag"]'>清空 RAG 记忆</button>
       </div>
     </div>
 
     <div class="modal-footer">
-      <button class="btn btn-danger" onclick="clearAllMemory()">清除全部记忆</button>
-      <button class="btn btn-ghost" onclick="closeMemModal()">关闭</button>
+      <button class="btn btn-danger" data-action="clearAllMemory">清除全部记忆</button>
+      <button class="btn btn-ghost" data-action="closeMemModal">关闭</button>
     </div>
   </div>
 </div>
@@ -1933,19 +423,19 @@
     </div>
     <div class="form-row col-1">
       <label class="field"><span>重要事实（每行一条）</span>
-        <textarea id="pe-facts" style="min-height:80px"></textarea>
+        <textarea id="pe-facts" class="admin-inline-166"></textarea>
       </label>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeProfileEdit()">取消</button>
-      <button class="btn btn-primary" onclick="saveProfile()">保存</button>
+      <button class="btn btn-ghost" data-action="closeProfileEdit">取消</button>
+      <button class="btn btn-primary" data-action="saveProfile">保存</button>
     </div>
   </div>
 </div>
 
 <!-- Lorebook Edit Modal -->
 <div class="modal-backdrop" id="lore-modal">
-  <div class="modal" style="width:560px">
+  <div class="modal admin-inline-206">
     <h3 id="lore-modal-title">新增世界书条目</h3>
     <div class="form-row col-1">
       <label class="field">
@@ -1956,35 +446,35 @@
     <div class="form-row col-1">
       <label class="field">
         <span>注入内容</span>
-        <textarea id="lore-content" style="min-height:100px" placeholder="当关键词命中时注入到 prompt 的世界观描述…"></textarea>
+        <textarea id="lore-content" placeholder="当关键词命中时注入到 prompt 的世界观描述…" class="admin-inline-159"></textarea>
       </label>
     </div>
     <div class="form-row">
       <label class="field">
         <span>注入顺序（数字越小越靠前）</span>
-        <input type="number" id="lore-insertion-order" value="100" min="0" max="9999" style="width:120px">
+        <input type="number" id="lore-insertion-order" value="100" min="0" max="9999" class="admin-inline-198">
       </label>
-      <div style="display:flex;flex-direction:column;gap:8px;justify-content:flex-end;padding-bottom:4px">
+      <div class="admin-inline-029">
         <div class="checkbox-row">
-          <input type="checkbox" id="lore-regex" style="width:15px;height:15px;accent-color:var(--accent)">
+          <input type="checkbox" id="lore-regex" class="admin-inline-201">
           <span>正则模式（keyword 作为正则表达式）</span>
         </div>
         <div class="checkbox-row">
-          <input type="checkbox" id="lore-enabled" checked style="width:15px;height:15px;accent-color:var(--accent)">
+          <input type="checkbox" id="lore-enabled" checked class="admin-inline-201">
           <span>启用此条目</span>
         </div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeLoreModal()">取消</button>
-      <button class="btn btn-primary" onclick="saveLoreEntry()">保存</button>
+      <button class="btn btn-ghost" data-action="closeLoreModal">取消</button>
+      <button class="btn btn-primary" data-action="saveLoreEntry">保存</button>
     </div>
   </div>
 </div>
 
 <!-- Token: Create -->
 <div class="modal-backdrop" id="at-create-modal">
-  <div class="modal" style="width:480px">
+  <div class="modal admin-inline-204">
     <h3>创建 Token</h3>
     <div class="form-row col-1">
       <label class="field">
@@ -1998,22 +488,22 @@
         <select id="at-create-profile" onchange="renderAtCreateScopesHint()"></select>
       </label>
     </div>
-    <div id="at-create-scopes-hint" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
-    <div id="at-create-err" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+    <div id="at-create-scopes-hint" class="admin-inline-089"></div>
+    <div id="at-create-err" class="admin-inline-011"></div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeCreateTokenModal()">取消</button>
-      <button class="btn btn-primary" onclick="submitCreateToken()">创建</button>
+      <button class="btn btn-ghost" data-action="closeCreateTokenModal">取消</button>
+      <button class="btn btn-primary" data-action="submitCreateToken">创建</button>
     </div>
   </div>
 </div>
 
 <!-- Token: 通用确认弹窗（Rotate / Disable，自我保护红字视目标动态附加） -->
 <div class="modal-backdrop" id="at-confirm-modal">
-  <div class="modal" style="width:480px">
+  <div class="modal admin-inline-204">
     <h3 id="at-confirm-title">确认操作</h3>
-    <div id="at-confirm-body" style="font-size:13px;line-height:1.7;white-space:pre-wrap;margin-bottom:8px"></div>
+    <div id="at-confirm-body" class="admin-inline-109"></div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeAtConfirmModal()">取消</button>
+      <button class="btn btn-ghost" data-action="closeAtConfirmModal">取消</button>
       <button class="btn btn-danger" id="at-confirm-btn">确认</button>
     </div>
   </div>
@@ -2021,15 +511,15 @@
 
 <!-- Token: 创建/轮换成功（明文仅显示一次） -->
 <div class="modal-backdrop" id="at-success-modal">
-  <div class="modal" style="width:520px">
+  <div class="modal admin-inline-205">
     <h3>新的 Token（仅显示一次）</h3>
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:var(--mono);font-size:13px;word-break:break-all;margin-bottom:16px" id="at-success-token"></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-ghost btn-sm" onclick="copyAtToken()">复制 Token</button>
-      <button class="btn btn-ghost btn-sm" onclick="copyAtPasswordEntry()">复制密码本条目</button>
+    <div id="at-success-token" class="admin-inline-004"></div>
+    <div class="admin-inline-037">
+      <button class="btn btn-ghost btn-sm" data-action="copyAtToken">复制 Token</button>
+      <button class="btn btn-ghost btn-sm" data-action="copyAtPasswordEntry">复制密码本条目</button>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-primary" onclick="closeAtSuccessModal()">关闭</button>
+      <button class="btn btn-primary" data-action="closeAtSuccessModal">关闭</button>
     </div>
   </div>
 </div>

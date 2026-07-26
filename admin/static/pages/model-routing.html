@@ -1,0 +1,86 @@
+
+      <h1 class="page-title">模型路由</h1>
+
+      <div class="card admin-inline-005">
+        <div class="card-header"><h3>这个页面是干什么的？</h3></div>
+        <p class="admin-inline-104">
+          三个概念，从下往上理解：<br>
+          ① <strong>Preset</strong>（模型连接）= 一个"你能用的模型"：服务商地址 + 密钥 + 模型名，
+          填一个 preset 相当于告诉后端"这里有一个能调用的模型"。<br>
+          ② <strong>Routing Profile</strong>（分配方案）= 一套"谁用谁"的表：把不同用途的调用
+          （比如角色正式回复 vs. 后台判断/摘要这类不需要用户看到的杂活）分别指给某个 preset。
+          不是每类都要填——留空的类别会自动回退用这套方案里的 <code class="admin-inline-073">chat</code>，
+          所以新手只填 <code class="admin-inline-073">chat</code> 一项就能跑起来。<br>
+          ③ <strong>当前生效路由方案</strong> = 现在实际在用的那一套分配方案。可以配多套（比如「日常省钱」
+          「重要场合上强模型」），需要时切换。
+        </p>
+        <p class="admin-inline-101">
+          配置顺序：先在下方「Presets」新建至少一个模型连接 → 再到「Routing Profiles」新建/编辑一套方案，
+          把 <code class="admin-inline-073">chat</code> 指向刚才建的 preset → 最上方「当前生效路由方案」
+          切换到这套方案即可生效。
+        </p>
+      </div>
+
+      <div class="card admin-inline-056" id="mr-legacy-banner">
+        <p class="admin-inline-103">
+          当前配置未开启 <code class="admin-inline-073">model_presets</code> 块（legacy 模式，等价合成了单个
+          <code class="admin-inline-073">legacy</code> preset）。请先在 <code class="admin-inline-073">config.yaml</code>
+          里加上 <code class="admin-inline-073">model_presets:</code> 顶层块（参见 <code class="admin-inline-073">config.example.yaml</code><span data-i18n="static.routing.legacy_tail">），可点击右侧按钮把当前 legacy 连接初始化为可编辑 preset。</span><button class="btn btn-primary btn-sm admin-inline-131" data-action="bootstrapModelPresets">一键初始化</button>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>当前生效路由方案</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadModelRouting">刷新</button>
+        </div>
+        <p class="admin-inline-087">
+          下拉框选一个下方已建好的 routing profile，点「切换」立即对全局生效。
+          注：如果某个角色卡自己单独绑定了一套方案（在「角色卡」页设置），该角色对话时优先用它自己绑定的那套，
+          不受这里的全局选择影响。
+        </p>
+        <div class="admin-inline-019">
+          <select id="mr-active-routing-select" class="admin-inline-171"></select>
+          <button class="btn btn-primary btn-sm" data-action="switchActiveRouting">切换</button>
+          <span id="mr-active-routing-current" class="admin-inline-082"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Presets</h3>
+          <button class="btn btn-primary btn-sm" data-action="openPresetModal">+ 新建 Preset</button>
+        </div>
+        <p class="admin-inline-087">
+          一个 preset 就是一个"模型连接"：填好服务商地址、密钥、模型名，就能在下方 Routing Profiles 里被指派任务。
+          新建后建议先点「测试」，确认这组配置真的能打通再拿去用。
+        </p>
+        <div id="mr-presets-body"><div class="loading">加载中…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Routing Profiles</h3>
+          <button class="btn btn-primary btn-sm" data-action="openProfileModal">+ 新建/编辑 Profile</button>
+        </div>
+        <p class="admin-inline-089">
+          一个 profile 就是一套"把哪类调用交给哪个 preset"的分配表（call_category → preset）。
+          没单独指定的类别会自动回退用这套方案里的 <code class="admin-inline-073">chat</code>，
+          所以只填 <code class="admin-inline-073">chat</code> 也能正常跑；其余类别都是不面向用户的后台
+          "杂活"，想省钱可以单独指到便宜模型。
+        </p>
+        <details class="admin-inline-126">
+          <summary class="admin-inline-013">各 category 是干什么的？点开看</summary>
+          <div class="admin-inline-141">
+            <div><code class="admin-inline-073">chat</code> —— 角色的正式回复，用户实际看到的每一句话。质量要求最高，建议配主力模型。</div>
+            <div><code class="admin-inline-073">intent</code> —— 判断"要不要触发某个动作"的轻量辅助判断，不面向用户，配便宜模型即可。</div>
+            <div><code class="admin-inline-073">probe</code> —— 每轮先判断要不要调用工具的轻量"探针"调用，配便宜模型即可。</div>
+            <div><code class="admin-inline-073">summary</code> —— 生成摘要（压缩长对话、总结一局陪玩/一场梦），配便宜模型即可。</div>
+            <div><code class="admin-inline-073">detect_emotion</code> —— 识别文字里的情绪标签，配便宜模型即可。</div>
+            <div><code class="admin-inline-073">consolidation</code> —— 把短期记忆整理沉淀为长期记忆、提炼关系事实等后台整理，配便宜模型即可。</div>
+            <div><code class="admin-inline-073">perform</code> —— 把回复文字映射成动作/表情演出指令（只有开启"表演意图映射"功能时才会用到）。</div>
+            <div><code class="admin-inline-073">monologue</code> —— 角色说话前的内心独白/思考草稿（只有开启"思考链"功能时才会用到）。</div>
+          </div>
+        </details>
+        <div id="mr-profiles-body"><div class="loading">加载中…</div></div>
+      </div>

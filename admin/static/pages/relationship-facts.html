@@ -1,0 +1,27 @@
+
+      <h1 class="page-title">关系事实</h1>
+
+      <div class="card">
+        <div class="admin-inline-017">
+          <label class="field admin-inline-068">
+            <span>用户</span>
+            <select id="rf-uid-select" onchange="loadRelationshipFacts()"></select>
+          </label>
+          <label class="field admin-inline-066">
+            <span>状态过滤</span>
+            <select id="rf-status-filter" onchange="loadRelationshipFacts()">
+              <option value="">全部</option>
+              <option value="pending">待审核</option>
+              <option value="confirmed">已确认</option>
+              <option value="archived">已归档</option>
+            </select>
+          </label>
+          <button class="btn btn-ghost btn-sm admin-inline-138" data-action="loadRelationshipFacts">刷新</button>
+          <button class="btn btn-ghost btn-sm admin-inline-138" data-action="runRelationshipFactSuggester">运行称呼建议器</button>
+          <button class="btn btn-primary btn-sm admin-inline-138" data-action="openFactModal">+ 手动添加</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="rf-list-body"><div class="empty">选择一个用户后加载</div></div>
+      </div>

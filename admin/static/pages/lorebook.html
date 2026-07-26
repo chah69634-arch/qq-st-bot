@@ -1,0 +1,60 @@
+
+      <h1 class="page-title">现实设定</h1>
+      <div class="card">
+        <div class="card-header">
+          <h3>条目列表</h3>
+          <div class="admin-inline-041">
+          <button class="btn btn-ghost btn-sm" data-action="loadLorebook">刷新</button>
+          <label class="admin-inline-186">
+            <input type="file" id="lore-import-file" accept=".txt"
+                  onchange="importLorebookTxt(event)" class="admin-inline-056">
+            <button class="btn btn-ghost btn-sm" data-action="focus-element" data-action-args='["lore-import-file"]'>📥 导入txt</button>
+          </label>
+          <button class="btn btn-ghost btn-sm" data-action="exportLorebook">📤 导出JSON</button>
+          <input type="file" id="lore-json-input" accept=".json" onchange="importLorebookJson(this.files[0])" class="admin-inline-056">
+          <button class="btn btn-ghost btn-sm" data-action="focus-element" data-action-args='["lore-json-input"]'>📥 导入JSON</button>
+          <button class="btn btn-primary btn-sm" data-action="openLoreModal" data-action-args='[null]'>＋ 新增</button>
+        </div>
+        </div>
+        <div id="lore-table-body"><div class="loading">加载中…</div></div>
+      </div>
+      <!-- 破限条目 -->
+      <div class="card admin-inline-137">
+        <div class="card-header">
+          <h3>破限预设条目</h3>
+          <div class="admin-inline-041">
+            <button class="btn btn-ghost btn-sm" data-action="loadJbEntries">刷新</button>
+            <button class="btn btn-ghost btn-sm" data-action="exportJbEntries">📤 导出JSON</button>
+            <input type="file" id="jb-json-input" accept=".json" onchange="importJbEntriesJson(this.files[0])" class="admin-inline-056">
+            <button class="btn btn-ghost btn-sm" data-action="focus-element" data-action-args='["jb-json-input"]'>📥 导入JSON</button>
+            <input type="file" id="jb-txt-input" accept=".txt" onchange="importJbEntriesTxt(this.files[0])" class="admin-inline-056">
+            <button class="btn btn-ghost btn-sm" data-action="focus-element" data-action-args='["jb-txt-input"]'>📥 导入txt</button>
+            <button class="btn btn-primary btn-sm" data-action="openJbModal" data-action-args='[null]'>＋ 新增</button>
+          </div>
+        </div>
+        <div id="jb-table-body"><div class="loading">加载中…</div></div>
+      </div>
+
+      <!-- 破限编辑弹窗 -->
+      <div id="jb-modal" class="modal admin-inline-056">
+        <div class="modal-box">
+          <h3 id="jb-modal-title">新增破限条目</h3>
+          <label>标题</label>
+          <input id="jb-title" class="input" placeholder="条目标题">
+          <label class="admin-inline-140">层级</label>
+          <select id="jb-layer" class="input">
+            <option value="0">层0（身份设定）</option>
+            <option value="2">层2（背景补充）</option>
+            <option value="11">层11（表达规则，权重最高）</option>
+          </select>
+          <label class="admin-inline-140">内容</label>
+          <textarea id="jb-content" class="input" rows="6" placeholder="注入的prompt内容"></textarea>
+          <label class="admin-inline-140">
+            <input type="checkbox" id="jb-enabled" checked> 启用此条目
+          </label>
+          <div class="admin-inline-050">
+            <button class="btn btn-ghost" data-action="closeJbModal">取消</button>
+            <button class="btn btn-primary" data-action="saveJbEntry">保存</button>
+          </div>
+        </div>
+      </div>

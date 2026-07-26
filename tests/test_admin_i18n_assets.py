@@ -2,7 +2,7 @@ from pathlib import Path
 from html.parser import HTMLParser
 import re
 
-from admin_static_assets import read_admin_client_source
+from admin_static_assets import PAGES, read_admin_client_source, read_admin_page
 
 ROOT = Path(__file__).parents[1]
 INDEX = ROOT / "admin" / "static" / "index.html"
@@ -107,13 +107,7 @@ def test_all_navigation_links_use_semantic_i18n_keys():
 def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
-    status = re.search(
-        r'<div class="page active" id="page-status">(.*?)'
-        r'<div class="page" id="page-users">',
-        index,
-        re.S,
-    )
-    assert status is not None
+    status = read_admin_page("status")
 
     for key in (
         "status.title",
@@ -128,7 +122,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "status.tts.title",
         "status.pronoun.title",
     ):
-        assert f'data-i18n="{key}"' in status.group(1)
+        assert f'data-i18n="{key}"' in status
 
     assert "t('flag.' + name, item.label)" in index
     for flag in (
@@ -150,22 +144,16 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     ):
         assert f"'flag.{flag}'" in runtime
 
-    assert "https://aistudio.google.com/app/apikey" in status.group(1)
-    assert "https://open.bigmodel.cn/usercenter/apikeys" in status.group(1)
+    assert "https://aistudio.google.com/app/apikey" in status
+    assert "https://open.bigmodel.cn/usercenter/apikeys" in status
 
 
 def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
-    page = re.search(
-        r'<div class="page" id="page-observe-group-arbiter">(.*?)'
-        r'<div class="page" id="page-observe-memory-summary">',
-        index,
-        re.S,
-    )
-    assert page is not None
+    page = read_admin_page("observe-group-arbiter")
     for key in ("group.title", "group.subtitle", "group.stage", "common.refresh"):
-        assert f'data-i18n="{key}"' in page.group(1)
+        assert f'data-i18n="{key}"' in page
 
     for key in (
         "group.trace",
@@ -187,13 +175,7 @@ def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():
 def test_setup_page_and_common_empty_state_are_localized():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
-    page = re.search(
-        r'<div class="page" id="page-setup">(.*?)'
-        r'<div class="page active" id="page-status">',
-        index,
-        re.S,
-    )
-    assert page is not None
+    page = read_admin_page("setup")
 
     for key in (
         "setup.title",
@@ -206,11 +188,11 @@ def test_setup_page_and_common_empty_state_are_localized():
         "setup.diary.title",
         "setup.coplay.title",
     ):
-        assert f'data-i18n="{key}"' in page.group(1)
+        assert f'data-i18n="{key}"' in page
         assert runtime.count(f"'{key}'") == 2
 
-    assert page.group(1).count('data-i18n="common.save"') == 7
-    assert 'data-i18n-placeholder="setup.secret.keep"' in page.group(1)
+    assert page.count('data-i18n="common.save"') == 7
+    assert 'data-i18n-placeholder="setup.secret.keep"' in page
     assert "t('setup.base.saved'" in index
     assert "t('setup.mail.saved'" in index
     assert "t('setup.diary.saved'" in index
@@ -230,10 +212,10 @@ def test_chinese_and_english_dictionaries_have_identical_semantic_keys():
 
 
 def test_every_static_visible_chinese_string_is_localized_or_authored_content():
-    index = INDEX.read_text(encoding="utf-8")
     runtime = I18N.read_text(encoding="utf-8")
     parser = _VisibleChineseParser()
-    parser.feed(index)
+    for source in [INDEX, *sorted(PAGES.glob("*.html"))]:
+        parser.feed(source.read_text(encoding="utf-8"))
     translated_values = _chinese_dictionary_values(runtime)
     allowed_authored_values = {"叶瑄", "中文"}
 

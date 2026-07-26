@@ -1,0 +1,134 @@
+
+      <h1 class="page-title">角色卡编辑器</h1>
+
+      <!-- 选择与操作栏 -->
+      <div class="card">
+        <div class="card-header">
+          <h3>当前角色</h3>
+          <div class="admin-inline-042">
+            <button class="btn btn-ghost btn-sm" data-action="loadCharacterList">刷新</button>
+            <button class="btn btn-primary btn-sm" data-action="newCharacter">➕ 新建角色卡</button>
+            <label class="admin-inline-186">
+              <input type="file" id="char-upload-file" accept=".json,.txt,.md"
+                     onchange="uploadCharacterFile(event)" class="admin-inline-056">
+              <button class="btn btn-ghost btn-sm" data-action="focus-element" data-action-args='["char-upload-file"]'>
+                ⬆ 上传角色卡
+              </button>
+             <button class="btn btn-ghost btn-sm" data-action="exportCharacter">📤 导出</button>
+            </label>
+          </div>
+        </div>
+        <div class="admin-inline-039">
+          <select id="char-select" onchange="onCharSelectChange()" class="admin-inline-064">
+            <option value="">-- 加载中 --</option>
+          </select>
+          <button class="btn btn-primary btn-sm" data-action="setActiveCharacter">设为当前</button>
+
+          <button class="btn btn-ghost btn-sm" data-action="renameCharacter">✏️ 重命名</button>
+
+          <span id="char-active-badge" class="badge badge-accent admin-inline-056"></span>
+        </div>
+        <p class="admin-inline-090">支持 .json / .txt / .md</p>
+      </div>
+
+      <!-- 与用户关系：只读提示 + 跳转（关系是角色×用户维度的运行时状态，不在角色卡编辑，见用户管理页） -->
+      <div class="card admin-inline-176">
+        💡 与用户的关系（称呼、亲密度等）不在角色卡里编辑——那是运行时状态，请去
+        <a href="javascript:void(0)" data-action="goto" data-action-args='["users"]' class="admin-inline-008">用户管理</a> 页查看/修改。
+      </div>
+
+      <!-- 编辑表单 -->
+      <div class="card">
+        <div class="card-header">
+          <h3 id="char-edit-title">角色卡内容</h3>
+          <button class="btn btn-primary btn-sm" data-action="saveCharacter">保存</button>
+        </div>
+        <!-- txt/md 纯文本编辑区 -->
+        <div id="char-text-form" class="admin-inline-056">
+          <textarea id="char-text-content" class="admin-inline-194"></textarea>
+          <div class="admin-inline-140">
+            <button class="btn btn-primary" data-action="saveCharacter">保存角色卡</button>
+          </div>
+        </div>
+        <!-- json 多字段表单 -->
+        <div id="char-edit-form" class="admin-inline-056">
+          <div class="form-row">
+            <label class="field">
+              <span>name（角色名）</span>
+              <input type="text" id="char-name">
+            </label>
+            <label class="field">
+              <span>gender（性别）</span>
+              <select id="char-gender" class="admin-inline-181">
+                <option value="neutral">neutral（ta）</option>
+                <option value="female">female（她）</option>
+                <option value="male">male（他）</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>scenario（场景）</span>
+              <input type="text" id="char-scenario">
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>system_prompt（人设核心）</span>
+              <textarea id="char-system-prompt" class="admin-inline-163"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>description（外貌/背景描述）</span>
+              <textarea id="char-description" class="admin-inline-161"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>personality（性格）</span>
+              <textarea id="char-personality" class="admin-inline-165"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span>mes_example（对话示例）</span>
+              <textarea id="char-mes-example" class="admin-inline-161"></textarea>
+            </label>
+          </div>
+
+          <!-- 生日 -->
+          <div class="form-row">
+            <label class="field">
+              <span>birthday 月</span>
+              <input type="number" id="char-birthday-month" min="1" max="12" placeholder="月（1-12）">
+            </label>
+            <label class="field">
+              <span>birthday 日</span>
+              <input type="number" id="char-birthday-day" min="1" max="31" placeholder="日（1-31）">
+            </label>
+            <label class="field admin-inline-070">
+              <span>birthday prompt</span>
+              <input type="text" id="char-birthday-prompt" placeholder="生日提示文字（留空=未设置）">
+            </label>
+          </div>
+
+          <!-- 高级 raw JSON -->
+          <details class="admin-inline-134">
+            <summary class="admin-inline-014">高级（raw JSON）</summary>
+            <div class="admin-inline-132">
+              <label class="field">
+                <span>anniversaries（纪念日列表，JSON 数组）</span>
+                <textarea id="char-anniversaries" placeholder="[]" class="admin-inline-160"></textarea>
+              </label>
+              <label class="field admin-inline-132">
+                <span>first_mes（开场白，多数角色卡不使用）</span>
+                <textarea id="char-first-mes" class="admin-inline-164"></textarea>
+              </label>
+            </div>
+          </details>
+
+          <div class="admin-inline-133">
+            <button class="btn btn-primary" data-action="saveCharacter">保存角色卡</button>
+          </div>
+        </div>
+        <div id="char-empty" class="empty">请从上方选择一个角色卡</div>
+      </div>

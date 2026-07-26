@@ -1,0 +1,216 @@
+
+      <h1 class="page-title" data-i18n="setup.title">配置</h1>
+
+      <div class="card admin-inline-058" id="setup-missing-banner">
+        <p id="setup-missing-banner-text" data-i18n="setup.missing" class="admin-inline-143">⚠ 未配置将无法聊天/主动触发失效：请先填写下方「基础聊天模型」必填项</p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="setup.base.title">基础聊天模型</span> <span class="badge badge-warn"><span data-i18n="common.required">必填</span>①</span></h3>
+          <span id="setup-base-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.base.description" class="admin-inline-087">日常对话实际调用的模型连接。已配置 model_presets 时写入当前生效路由的主聊天 preset；未配置时写入旧版 llm: 块——两种情况都会自动识别，不需要你判断。更细粒度的多模型 preset / 路由切换见「模型路由」页。</p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>base_url</span>
+            <input type="text" id="setup-base-url" placeholder="https://api.deepseek.com">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>model</span>
+            <input type="text" id="setup-base-model-name" placeholder="deepseek-chat">
+          </label>
+          <label class="field">
+            <span>api_key <span id="setup-base-key-state" class="admin-inline-077"></span></span>
+            <input type="password" id="setup-base-api-key" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupBaseModel" data-i18n="common.save">保存</button>
+          <button class="btn" id="setup-base-test-btn" data-action="testSetupBaseModel" data-i18n="setup.base.test">测试连接</button>
+          <span id="setup-base-test-result" class="mono admin-inline-080"></span>
+        </div>
+      </div>
+
+      <div class="card admin-inline-057" id="setup-character-tip">
+        <p data-i18n="setup.character_tip" class="admin-inline-145">
+          💡 当前用的还是内置占位角色卡（"角色名"），去「角色卡」页创建/编辑属于你自己的角色，聊天才会有真实人设。
+        </p>
+        <div class="modal-footer admin-inline-125">
+          <button class="btn btn-primary btn-sm" data-action="goto" data-action-args='["character"]' data-i18n="setup.character_tip.go">前往角色卡</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Owner ID <span class="badge badge-warn"><span data-i18n="common.required">必填</span>②</span></h3>
+          <span id="setup-owner-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.owner.description" class="admin-inline-081">建议直接填你的 QQ 号——若此处用了别的 id，之后接 QQ 时会按 QQ 号另起一套记忆，与桌宠期记忆不互通。留空 = 主动触发调度器会静默跳过主动消息，且记忆文件可能挂在错误/缺省 uid 下。</p>
+        <div class="form-row">
+          <label class="field">
+            <span data-i18n="setup.owner.id_label">owner_id（仅 A-Za-z0-9_- ）</span>
+            <input type="text" id="setup-owner-id" placeholder="建议填你的 QQ 号" data-i18n-placeholder="setup.owner.id_placeholder">
+          </label>
+          <label class="field">
+            <span data-i18n="setup.owner.birthday_label">owner_birthday（可选，MM-DD）</span>
+            <input type="text" id="setup-owner-birthday" placeholder="例如 04-24" data-i18n-placeholder="setup.owner.birthday_placeholder">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupOwner" data-i18n="common.save">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="setup.embedding.title">语义 Embedding</span> <span class="badge" data-i18n="setup.strongly_recommended">强烈建议</span></h3>
+          <span id="setup-embedding-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.embedding.description" class="admin-inline-087">作用：长期记忆语义召回（情景记忆/往事检索按语义匹配而非纯关键词）。缺失后果：召回质量降级为关键词匹配，不会导致聊天崩溃或阻塞（fail-open）。</p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>base_url</span>
+            <input type="text" id="setup-embed-base-url" placeholder="https://api.siliconflow.cn/v1">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>model</span>
+            <input type="text" id="setup-embed-model" placeholder="BAAI/bge-m3">
+          </label>
+          <label class="field">
+            <span>dim</span>
+            <input type="number" id="setup-embed-dim" placeholder="1024">
+          </label>
+        </div>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>api_key <span id="setup-embed-key-state" class="admin-inline-077"></span></span>
+            <input type="password" id="setup-embed-api-key" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupEmbedding" data-i18n="common.save">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3><span data-i18n="setup.optional_models.title">其余模型路由</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
+        <p data-i18n="setup.optional_models.description" class="admin-inline-087">以下只读展示当前实际生效的路由，不在本页编辑：</p>
+        <div id="setup-optional-body"><div class="loading" data-i18n="common.loading">加载中…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="setup.mail.title">邮件通道</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
+          <span id="setup-mail-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.mail.description" class="admin-inline-087">角色写信功能的 SMTP 发信配置；默认关闭，纯增值功能。总开关也可以在「Token」页「通道开关」区切换。</p>
+        <div class="form-row">
+          <label class="checkbox-row admin-inline-117">
+            <input type="checkbox" id="setup-mail-enabled" class="admin-inline-202">
+            <span data-i18n="setup.mail.enable">启用邮件通道</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>smtp_host</span>
+            <input type="text" id="setup-mail-host" placeholder="smtp.gmail.com">
+          </label>
+          <label class="field">
+            <span>smtp_port</span>
+            <input type="number" id="setup-mail-port" placeholder="587">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>smtp_user</span>
+            <input type="text" id="setup-mail-user" placeholder="发信邮箱账号" data-i18n-placeholder="setup.mail.user_placeholder">
+          </label>
+          <label class="field">
+            <span>smtp_password <span id="setup-mail-password-state" class="admin-inline-077"></span></span>
+            <input type="password" id="setup-mail-password" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>from_addr</span>
+            <input type="text" id="setup-mail-from-addr" placeholder="发送邮箱地址" data-i18n-placeholder="setup.mail.from_addr_placeholder">
+          </label>
+          <label class="field">
+            <span>from_name</span>
+            <input type="text" id="setup-mail-from-name" placeholder="角色名" data-i18n-placeholder="setup.mail.from_name_placeholder">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>to_addr</span>
+            <input type="text" id="setup-mail-to-addr" placeholder="接收邮箱地址" data-i18n-placeholder="setup.mail.to_addr_placeholder">
+          </label>
+          <label class="field">
+            <span>subject_prefix</span>
+            <input type="text" id="setup-mail-subject-prefix" placeholder="【来信】" data-i18n-placeholder="setup.mail.subject_placeholder">
+          </label>
+        </div>
+        <div class="form-row col-1">
+          <label class="field">
+            <span data-i18n="setup.mail.proxy_label">proxy_url（可选，SMTP 端口被墙时用）</span>
+            <input type="text" id="setup-mail-proxy-url" placeholder="http://127.0.0.1:7897">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupMail" data-i18n="common.save">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3><span data-i18n="setup.anniversaries.title">自定义纪念日</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
+        <p data-i18n="setup.anniversaries.description" class="admin-inline-087">letter_writer / festival 消费；命中当天会主动提起。JSON 数组编辑，字段：key/month/day 必填，year_start 留空=每年都当作第 0 年（只用 prompt_zero），prompt_zero/prompt_years 可选（prompt_years 支持 {char}/{years} 占位符）。</p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span data-i18n="setup.anniversaries.label">anniversaries（JSON 数组）</span>
+            <textarea id="setup-anniversaries-json" rows="8" data-i18n-placeholder="setup.anniversaries.placeholder" placeholder='[
+  {"key": "first_date", "month": 6, "day": 14, "year_start": 2024, "prompt_years": "在一起{years}年了"}
+]' class="admin-inline-074"></textarea>
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupAnniversaries" data-i18n="common.save">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="setup.diary.title">Obsidian 日记路径</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
+          <span id="setup-diary-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.diary.description" class="admin-inline-087">日记读取功能（daily_journal/diary_reminder/diary_inject）读取此目录下按 YYYY-MM-DD.md 命名的日记文件；不填则回落到本地 fallback 目录。角色白名单（diary.characters）不在本页编辑。</p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>obsidian_path</span>
+            <input type="text" id="setup-diary-path" placeholder="例如 E:\obsidian_note\Psychology\Calendar" data-i18n-placeholder="setup.diary.placeholder">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupDiary" data-i18n="common.save">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3><span data-i18n="setup.coplay.title">Coplay 后台游戏检测白名单</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
+        <p data-i18n="setup.coplay.description" class="admin-inline-087">陪玩模式（coplay）用于识别非 Steam 游戏：armed 状态下按 process_name 做 psutil 进程名匹配（大小写不敏感，.exe 可写可不写）。save_dir 可选，填了才会做存档变化检测。JSON 数组编辑，name/process_name 必填。</p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span data-i18n="setup.coplay.label">game_whitelist（JSON 数组）</span>
+            <textarea id="setup-coplay-games-json" rows="8" data-i18n-placeholder="setup.coplay.placeholder" placeholder='[
+  {"name": "示例游戏", "process_name": "game.exe", "save_dir": "C:\\Users\\你\\Saved Games\\示例游戏"}
+]' class="admin-inline-074"></textarea>
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupCoplayGames" data-i18n="common.save">保存</button>
+        </div>
+      </div>
