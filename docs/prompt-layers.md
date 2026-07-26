@@ -26,8 +26,8 @@
 | `3.8_activity` | 屏幕活动快照（以角色旁白注入，无方括号标签；内容来自 activity_snapshot 的类别字段，不含原始应用名） | tagged（见下） | `data/runtime/characters/{char_id}/inner/activity_snapshot.json`（TTL 5分钟） |
 | `3.8_growth_self` | 角色自身近期兴趣、等级与最新心得；软提示，不作数据播报 | tagged：成长 domain 或直接询问角色近况 | `core/growth/interest_state.py` + `core/growth/notes.py`（只读、失败不注入） |
 | `3.9_screen_awareness` | 桌面实时感知摘要（粗粒度应用/活动类别 + 模糊编辑状态；不注入窗口标题或屏幕原文） | 活动相关 tagged 快照 5 分钟内，或用户活跃且快照 3 分钟内 | `core.memory.realtime_state`（纯内存，重启清零） |
-| `5_profile` | 用户画像（名字/位置/宠物/兴趣/职业）+ stable/misc 标签事实 | 有内容即注 | `user_profile.load()` |
-| `5_profile_pref` | 用户偏好/习惯类事实（pref.*/habit/health tag） | recency 90天窗口内 OR 当前轮 tag 命中 | `user_profile.load()` → `_is_recency_tag()` |
+| `5_profile` | 用户画像 core（名字/位置/职业/宠物；不含兴趣或自由文本） | 白名单且总长度 ≤360 字符 | `user_profile.select_for_prompt()` |
+| `5_profile_pref` | 用户偏好/习惯类事实（pref.*/habit/health tag） | recency/tag 命中；最多 6 条且总长度 ≤360 字符 | `user_profile.select_for_prompt()` |
 | `5.1_user_facts` | 跨角色全局用户事实（uid-only，与角色主观记忆无关，标题明确区分不是角色记忆） | `user_facts_text` 非空 | `core/memory/user_facts.py` → `format_for_prompt()` |
 | `5.2_reminders` | 待办备忘录列表 | 有待办即注 | `get_reminders()` |
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
@@ -316,6 +316,9 @@ token_estimate = sum(len(m["content"]) for m in messages)
 # 汉字 1字符 ≈ 0.5~0.7 token
 ```
 
+为兼容既有裁剪阈值，`token_estimate` 暂仍保留这个历史字符计数语义。prompt 快照新增
+`char_estimate`（明确字符数）与 `estimated_tokens`（`chars / 1.7` 的展示估算），不改变全局裁剪算法。
+
 ### 阈值
 
 | 字符数 | 行为 |
@@ -596,6 +599,10 @@ Reality prompt 环形缓冲按 uid 保存最近 10 轮，足够群聊页聚合�
 ## 固定/召回 标注（provenance）
 
 每一轮 prompt 快照（`GET /observe/prompt-layers/{uid}`）里，每个层现在带一个 `provenance` 字段，指示它当轮是如何进入 prompt 的：
+
+`5_profile` / `5_profile_pref` 还提供选择与预算字段：`budget_chars`、`budget_items`、
+`over_char_budget`，以及 provenance 内的 `archived_fact_count`、`sensitive_blocked_count`、
+`budget_excluded_count`。这些字段只报告计数和选择依据，不复制被归档或阻断的原文。
 
 | mode | 管理面板徽章 | 含义 |
 |---|---|---|

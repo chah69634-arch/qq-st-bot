@@ -67,26 +67,34 @@ def capture(uid: str, messages: list[dict], meta: dict) -> None:
             # No explicit provenance — infer "always" for layers without conditions
             provenance = {"mode": "always"}
         else:
-            provenance = {
-                "mode": prov.get("mode", "always"),
-                "triggers_checked": prov.get("triggers_checked", []),
-                "matched_tags": prov.get("matched_tags", []),
-                "rag_query": prov.get("rag_query", ""),
-                "source": prov.get("source", ""),
-                "hits": prov.get("hits", []),
-            }
+            # Preserve layer-specific selection/budget metadata instead of
+            # flattening it to the older six-field subset.  This is an
+            # in-memory admin-only capture, and builders must still avoid
+            # putting raw private profile text in provenance.
+            provenance = dict(prov) if isinstance(prov, dict) else {"mode": "always"}
+            provenance.setdefault("mode", "always")
         layers.append({
             "layer": layer,
             "position": i,
             "chars": chars,
-            "est_tokens": round(chars / 1.7, 1),
+            "est_tokens": msg.get("_estimated_tokens", round(chars / 1.7, 1)),
+            "budget_chars": msg.get("_budget_chars"),
+            "budget_items": msg.get("_budget_items"),
+            "over_char_budget": (
+                msg.get("_budget_chars") is not None
+                and chars > msg["_budget_chars"]
+            ),
             "drop_priority": msg.get("_drop_priority"),
             "role": msg.get("role", "system"),
             "content": msg.get("content", ""),
             "provenance": provenance,
         })
 
-    token_estimate = meta.get("token_estimate", sum(m["chars"] for m in layers))
+    # token_estimate is preserved for existing callers, but it has always been
+    # a character estimate.  New fields make the unit explicit.
+    char_estimate = meta.get("char_estimate", sum(m["chars"] for m in layers))
+    token_estimate = meta.get("token_estimate", char_estimate)
+    estimated_tokens = meta.get("estimated_tokens", round(char_estimate / 1.7, 1))
     removed = meta.get("removed_layers", [])
 
     # Mark which layers were pruned
@@ -106,6 +114,8 @@ def capture(uid: str, messages: list[dict], meta: dict) -> None:
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "origin": _capture_origin.get(),   # set by caller before build_prompt
         "token_estimate": token_estimate,
+        "char_estimate": char_estimate,
+        "estimated_tokens": estimated_tokens,
         "soft_warn_threshold": SOFT_WARN,
         "hard_trigger_threshold": HARD_TRIGGER,
         "prune_target": PRUNE_TARGET,

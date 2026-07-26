@@ -2,7 +2,7 @@
 tests/test_p3_profile_recency_recall.py — P3 验收
 
 验收条件：
-1. 旧 important_facts（纯 str）归一化兜底，仍能读取和注入
+1. 旧 important_facts（纯 str）归一化兜底，读取侧视为 archival，不再常驻注入
 2. pref.music（旧 ts=0）+ 近期 habit：平时只注入 habit；tag 命中时 pref.music 也被召回
 3. 稳定字段（occupation/location）行为不变，始终出现在 5_profile 层
 4. _normalize_fact / _is_recency_tag 行为正确
@@ -80,71 +80,27 @@ def _make_profile(**kwargs) -> dict:
 
 
 def _build_layer5(profile: dict, tags: set[str]) -> tuple[list, list]:
-    """
-    直接调用 prompt_builder 内部层 5 逻辑，提取注入的 5_profile 和 5_profile_pref 消息。
-    返回 (profile_msgs, pref_msgs)。
-    """
-    import importlib
-    import types
+    """Exercise the production layer-5 selector, not a copied implementation."""
+    from core.memory.user_profile import select_for_prompt
 
-    pb = importlib.import_module("core.prompt_builder")
-
-    # 构建最小化 messages 列表，然后用层 5 相关代码填充
-    # 直接复用模块内的辅助函数来检验
-    from core.memory.user_profile import _normalize_fact, _is_recency_tag, _RECENCY_WINDOW_SECONDS
-    import time as _time_mod
-
-    messages: list[dict] = []
-    profile_parts: list[str] = []
-    if profile.get("name"):
-        profile_parts.append(f"名字：{profile['name']}")
-    if profile.get("location"):
-        profile_parts.append(f"地点：{profile['location']}")
-    if profile.get("occupation"):
-        profile_parts.append(f"职业：{profile['occupation']}")
-
-    _current_ts = _time_mod.time()
-    _current_tags: set[str] = tags
-    _stable_facts: list[str] = []
-    _recency_facts: list[tuple] = []
-
-    for raw_fact in profile.get("important_facts") or []:
-        norm = _normalize_fact(raw_fact)
-        text = norm["text"]
-        if not text:
-            continue
-        fact_tag = norm["tag"]
-        if _is_recency_tag(fact_tag):
-            _recency_facts.append((norm["ts"], text, fact_tag))
-        else:
-            _stable_facts.append(text)
-
-    if _stable_facts:
-        profile_parts.append("其他：" + "；".join(_stable_facts))
-
-    _recalled_tagged: list[str] = []
-    _recalled_recency: list[str] = []
-    for ts, text, fact_tag in sorted(_recency_facts, key=lambda x: -x[0]):
-        in_window = (_current_ts - ts) < _RECENCY_WINDOW_SECONDS
-        tag_key = fact_tag.removeprefix("pref.") if fact_tag.startswith("pref.") else fact_tag
-        tag_hit = any(tag_key in t or t in tag_key for t in _current_tags)
-        if tag_hit:
-            _recalled_tagged.append(text)
-        elif in_window:
-            _recalled_recency.append(text)
-    _recalled_facts = _recalled_tagged + _recalled_recency
-
-    profile_msgs = []
-    pref_msgs = []
-    if profile_parts:
-        profile_msgs.append({"_layer": "5_profile", "content_parts": profile_parts})
-    if _recalled_facts:
-        pref_msgs.append({
+    selection = select_for_prompt(profile, tags)
+    profile_msgs = (
+        [{"_layer": "5_profile", "content_parts": [selection["core_text"]]}]
+        if selection["core_text"] else []
+    )
+    recalled = [
+        line[2:] for line in selection["pref_text"].splitlines()
+        if line.startswith("- ")
+    ]
+    pref_msgs = (
+        [{
             "_layer": "5_profile_pref",
-            "recalled": _recalled_facts,
-            "tagged": _recalled_tagged,
-            "recency": _recalled_recency,
-        })
+            "recalled": recalled,
+            "tagged": ["selected"] * selection["pref_provenance"]["tagged_count"],
+            "recency": ["selected"] * selection["pref_provenance"]["recency_count"],
+        }]
+        if selection["pref_text"] else []
+    )
     return profile_msgs, pref_msgs
 
 
@@ -208,15 +164,12 @@ class TestRecencyAndTagRecall:
 
 class TestLegacyStrFacts:
 
-    def test_old_str_fact_injected_as_stable(self):
-        """纯 str 条目归一化为 misc tag → 走稳定段注入"""
+    def test_old_str_fact_is_archival_not_ambient_context(self):
+        """纯 str 条目归一化为 misc，但不再作为稳定段常驻注入。"""
         profile = _make_profile(important_facts=["喜欢画画", "养了一只猫"])
         profile_msgs, pref_msgs = _build_layer5(profile, tags=set())
 
-        assert profile_msgs, "稳定段应有内容"
-        stable_content = " ".join(profile_msgs[0]["content_parts"])
-        assert "喜欢画画" in stable_content
-        assert "养了一只猫" in stable_content
+        assert not profile_msgs
         assert not pref_msgs, "纯 misc 条目不应出现在偏好段"
 
     def test_mixed_str_and_dict_facts(self):
@@ -229,8 +182,7 @@ class TestLegacyStrFacts:
             ]
         )
         profile_msgs, pref_msgs = _build_layer5(profile, tags=set())
-        stable_content = " ".join(profile_msgs[0]["content_parts"])
-        assert "有一只柴犬" in stable_content
+        assert not profile_msgs, "legacy misc 不得进入常驻 core"
         assert pref_msgs and "喜欢看动漫" in pref_msgs[0]["recalled"]
 
 
@@ -246,14 +198,13 @@ class TestStableFieldsAlwaysInjected:
         assert "大学生" in content
         assert "杭州" in content
 
-    def test_stable_tag_fact_in_stable_segment(self):
-        """tag=stable 的条目归入稳定段，不受 recency 门控"""
+    def test_stable_tag_fact_is_archival(self):
+        """tag=stable 的自由文本保留在档案中，但不再常驻注入。"""
         profile = _make_profile(
             important_facts=[{"text": "曾留学两年", "tag": "stable", "ts": 0}]
         )
         profile_msgs, pref_msgs = _build_layer5(profile, tags=set())
-        stable_content = " ".join(profile_msgs[0]["content_parts"])
-        assert "曾留学两年" in stable_content
+        assert not profile_msgs
         assert not pref_msgs
 
     def test_out_of_window_recency_fact_suppressed(self):

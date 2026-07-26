@@ -44,6 +44,186 @@ _RECENCY_WINDOW_BY_TAG: dict[str, int] = {
     "status.project": 30 * 86400,
 }
 
+# Prompt-side profile budgets.  These intentionally protect the hot read path
+# rather than deleting or rewriting the underlying profile: older free-form
+# facts remain available for the later, explicit atomisation migration.
+PROFILE_CORE_MAX_CHARS = 360
+PROFILE_PREF_MAX_CHARS = 360
+PROFILE_PREF_MAX_FACTS = 6
+
+# Only objective, compact profile fields are suitable for every-turn context.
+# Interests are preferences, not identity core; relationship/history/inference
+# already belong to their dedicated memory layers.
+_PROFILE_CORE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("name", "名字"),
+    ("location", "地点"),
+    ("occupation", "职业"),
+    ("pets", "宠物"),
+)
+
+# This is a deliberately narrow final read-side guard.  It does not classify
+# data or delete it; it prevents explicitly intimate/sexual material from
+# becoming an ambient every-turn prompt injection when older data has been
+# misclassified as stable or a preference.
+_SENSITIVE_PROMPT_RE = re.compile(
+    r"性偏好|性经验|性行为|性爱|性交|裸体|裸露|自慰|高潮|性欲|床事|床上|亲密关系"
+)
+
+
+def _is_sensitive_for_prompt(text: str) -> bool:
+    return bool(_SENSITIVE_PROMPT_RE.search(text or ""))
+
+
+def _take_with_char_budget(text: str, remaining: int) -> str:
+    """Fit text into a hard character budget without emitting an empty item."""
+    if remaining <= 0:
+        return ""
+    if len(text) <= remaining:
+        return text
+    if remaining == 1:
+        return "…"
+    return text[: remaining - 1] + "…"
+
+
+def select_for_prompt(
+    profile: dict,
+    tags: set[str] | None = None,
+    *,
+    now: float | None = None,
+) -> dict:
+    """Select the bounded, safe profile projection used by prompt layer 5.
+
+    ``stable``/``misc`` legacy facts are intentionally archival on this read
+    path: they stay on disk untouched, but no longer become permanent prompt
+    context.  Tagged or fresh preference facts keep their retrieval behaviour,
+    subject to a strict item and character cap.
+    """
+    current_ts = time.time() if now is None else now
+    current_tags = tags or set()
+
+    core_prefix = "<用户概况>\n【关于这个用户】\n"
+    core_suffix = "\n</用户概况>"
+    core_remaining = max(0, PROFILE_CORE_MAX_CHARS - len(core_prefix) - len(core_suffix))
+    core_parts: list[str] = []
+    selected_fields: list[str] = []
+    sensitive_blocked = 0
+    core_budget_excluded = 0
+    archived_scalar_fields: list[str] = []
+
+    # ``interests`` is intentionally not listed above: it is a preference and
+    # must not bypass relevance selection merely because it is a legacy scalar.
+    if profile.get("interests"):
+        archived_scalar_fields.append("interests")
+
+    for field, label in _PROFILE_CORE_FIELDS:
+        value = str(profile.get(field) or "").strip()
+        if not value:
+            continue
+        if _is_sensitive_for_prompt(value):
+            sensitive_blocked += 1
+            continue
+        item_prefix = "" if not core_parts else "，"
+        rendered_prefix = f"{item_prefix}{label}："
+        available_value = core_remaining - len(rendered_prefix)
+        fitted = _take_with_char_budget(value, available_value)
+        if not fitted:
+            core_budget_excluded += 1
+            continue
+        core_parts.append(f"{rendered_prefix}{fitted}")
+        core_remaining -= len(rendered_prefix) + len(fitted)
+        selected_fields.append(field)
+
+    core_text = ""
+    if core_parts:
+        core_text = core_prefix + "".join(core_parts) + core_suffix
+
+    tagged_candidates: list[tuple[float, str, str]] = []
+    recency_candidates: list[tuple[float, str, str]] = []
+    archived_fact_count = 0
+    for raw_fact in profile.get("important_facts") or []:
+        norm = _normalize_fact(raw_fact)
+        text = norm["text"].strip()
+        if not text:
+            continue
+        fact_tag = norm["tag"]
+        if _is_sensitive_for_prompt(text):
+            sensitive_blocked += 1
+            if not _is_recency_tag(fact_tag):
+                archived_fact_count += 1
+            continue
+        if not _is_recency_tag(fact_tag):
+            # Legacy stable/misc text is retained as archival data until the
+            # structured-record migration; it is not safe as ambient context.
+            archived_fact_count += 1
+            continue
+        tag_key = fact_tag.removeprefix("pref.") if fact_tag.startswith("pref.") else fact_tag
+        tag_hit = any(tag_key in current_tag or current_tag in tag_key for current_tag in current_tags)
+        candidate = (norm["ts"], text, fact_tag)
+        if tag_hit:
+            tagged_candidates.append(candidate)
+        elif (current_ts - norm["ts"]) < _recency_window_for(fact_tag):
+            recency_candidates.append(candidate)
+
+    tagged_candidates.sort(key=lambda item: -item[0])
+    recency_candidates.sort(key=lambda item: -item[0])
+    pref_prefix = "<用户偏好>\n【用户近期偏好与习惯】\n"
+    pref_suffix = "\n</用户偏好>"
+    pref_remaining = max(0, PROFILE_PREF_MAX_CHARS - len(pref_prefix) - len(pref_suffix))
+    pref_lines: list[str] = []
+    selected_tagged = 0
+    selected_recency = 0
+    pref_budget_excluded = 0
+    seen_texts: set[str] = set()
+
+    for source, candidates in (("tagged", tagged_candidates), ("recency", recency_candidates)):
+        for _, text, _ in candidates:
+            if len(pref_lines) >= PROFILE_PREF_MAX_FACTS:
+                pref_budget_excluded += 1
+                continue
+            if text in seen_texts:
+                continue
+            line_prefix = "- " if not pref_lines else "\n- "
+            fitted = _take_with_char_budget(text, pref_remaining - len(line_prefix))
+            if not fitted:
+                pref_budget_excluded += 1
+                continue
+            pref_lines.append(line_prefix + fitted)
+            pref_remaining -= len(line_prefix) + len(fitted)
+            seen_texts.add(text)
+            if source == "tagged":
+                selected_tagged += 1
+            else:
+                selected_recency += 1
+
+    pref_text = ""
+    if pref_lines:
+        pref_text = pref_prefix + "".join(pref_lines) + pref_suffix
+
+    return {
+        "core_text": core_text,
+        "pref_text": pref_text,
+        "core_provenance": {
+            "mode": "budgeted_whitelist",
+            "source": "user_profile",
+            "selected_fields": selected_fields,
+            "archived_fact_count": archived_fact_count,
+            "archived_scalar_fields": archived_scalar_fields,
+            "sensitive_blocked_count": sensitive_blocked,
+            "budget_chars": PROFILE_CORE_MAX_CHARS,
+            "budget_excluded_count": core_budget_excluded,
+        },
+        "pref_provenance": {
+            "mode": "tagged" if selected_tagged else "recency",
+            "source": "user_profile",
+            "tagged_count": selected_tagged,
+            "recency_count": selected_recency,
+            "sensitive_blocked_count": sensitive_blocked,
+            "budget_chars": PROFILE_PREF_MAX_CHARS,
+            "budget_items": PROFILE_PREF_MAX_FACTS,
+            "budget_excluded_count": pref_budget_excluded,
+        },
+    }
+
 
 def _recency_window_for(tag: str) -> int:
     return _RECENCY_WINDOW_BY_TAG.get(tag, _RECENCY_WINDOW_SECONDS)

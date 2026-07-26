@@ -147,8 +147,8 @@ trigger_signal=)` 落盘：每次 run ≤3 条（超出截断）、同值跳过�
 | **3.9** | **screen_awareness** | **tagged/fresh** | 桌面实时感知；一行；drop_priority=25 |
 | 4 | group_context | cond | 群聊上下文 |
 | 4.2 | stage_transcript | cond | 共享舞台对话；drop_priority=90 |
-| 5 | profile | cond | 用户画像（稳定字段 + stable/misc 事实，100% 注入） |
-| 5_profile_pref | profile_pref | cond | 偏好/习惯类事实（pref.\*/habit/health tag），recency 90天门控或 tag 命中时注入 |
+| 5 | profile | cond | 用户画像 core（白名单客观字段；360 字符硬预算） |
+| 5_profile_pref | profile_pref | cond | 偏好/习惯类事实（pref.\*/habit/health tag）；recency/tag 命中、最多 6 条且 360 字符 |
 | 5.1 | user_facts | cond | 跨角色客观信息 |
 | 5.2 | reminders | cond | 待办备忘 |
 | 5.5 | lore | cond | 世界书；drop_priority=80 |
@@ -1442,16 +1442,24 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 | `pref.media` | 影视/游戏偏好 | recency 门控 |
 | `habit` | 日常习惯 | recency 门控 |
 | `health` | 身体/精神状态 | recency 门控 |
-| `stable` | 稳定客观事实 | 始终注入 |
-| `misc` | 其他（旧数据默认） | 始终注入 |
+| `stable` | 历史稳定自由文本 | archival，默认不注入 |
+| `misc` | 其他（旧数据默认） | archival，默认不注入 |
 
 ### 层 5 注入规则（prompt_builder.py）
 
-- **稳定段**（`name / location / pets / interests / occupation` + tag 为 `stable/misc` 的 facts）：维持平铺，100% 注入到层 `5_profile`。
+- **core 段**（层 `5_profile`）：只允许 `name / location / occupation / pets`，总长度硬限制为 360 字符。`interests` 是偏好，不得绕过相关性门控进入 core。
+- **legacy archival**：tag 为 `stable/misc` 的 `important_facts` 继续原样保留在 profile 文件中，但读取侧不再注入 prompt；它们等待后续原子事实迁移，绝不在本阶段自动摘要或删除。
 - **偏好/习惯段**（`pref.* / habit / health` tag，层 `5_profile_pref`）：
-  - `(now - ts) < 90天`：直接注入（recency 门控）
-  - 当前轮次 tag 命中该偏好前缀（如 query tag 含 "music" 且 fact tag = "pref.music"）：无论新旧均注入
-  - 两者都不满足：不注入，不占 context
+  - `(now - ts) < 90天`：可候选注入（`status.project` 为 30 天）
+  - 当前轮次 tag 命中该偏好前缀（如 query tag 含 "music" 且 fact tag = "pref.music"）：无论新旧均为高优先候选
+  - 结果按 tag 命中优先、再按新鲜度选择，最多 6 条、总长度硬限制为 360 字符
+  - 明确的性/亲密敏感内容在读取侧默认不注入；数据仍保留在档案中
+
+### Layer 5 观测
+
+`GET /observe/prompt-layers/{uid}` 的 layer 5 快照会返回 `budget_chars`、`budget_items`、`over_char_budget` 与完整 `provenance`。其中可观察选择字段、被视为 archival 的旧事实数、敏感阻断数和预算排除数；不在 provenance 中复制档案原文。
+
+快照顶层同时保留旧字段 `token_estimate`（历史兼容：实际为字符计数），并新增单位明确的 `char_estimate` 与 `estimated_tokens`。全局裁剪阈值仍按原有字符估算运行，本次不改变裁剪器。
 
 ### extract_and_update LLM 提示
 

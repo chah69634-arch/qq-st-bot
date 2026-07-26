@@ -864,79 +864,30 @@ def build(
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 5：关于这个用户（用户画像）
-    # 稳定字段（name/location/pets/occupation）+ stable/misc 标签事实：100% 注入
-    # 易变事实（pref.*/habit/health/status.project）：recency 门控或 tag 命中时召回
+    # 只注入有明确白名单的客观 core 字段；旧 stable/misc 自由文本在读取侧
+    # 视为 archival，保留在磁盘但不再作为常驻 prompt。偏好/习惯保留 tag/新鲜度
+    # 召回，同时有独立硬预算，避免 profile 层绕过全局裁剪器持续膨胀。
     # ─────────────────────────────────────────────────────────────────────────
-    import time as _time_mod
-    from core.memory.user_profile import _normalize_fact, _is_recency_tag, _recency_window_for
+    from core.memory.user_profile import select_for_prompt
 
-    profile_parts = []
-    if profile.get("name"):
-        profile_parts.append(f"名字：{profile['name']}")
-    if profile.get("location"):
-        profile_parts.append(f"地点：{profile['location']}")
-    if profile.get("pets"):
-        profile_parts.append(f"宠物：{profile['pets']}")
-    if profile.get("interests"):
-        profile_parts.append(f"兴趣：{profile['interests']}")
-    if profile.get("occupation"):
-        profile_parts.append(f"职业：{profile['occupation']}")
-
-    # 分拣 important_facts：稳定段直接平铺，易变段按 recency/tag 召回
-    _current_ts = _time_mod.time()
-    _current_tags: set[str] = tags if tags else set()
-    _stable_facts: list[str] = []
-    _recency_facts: list[tuple] = []  # (ts, text, tag)
-
-    for raw_fact in profile.get("important_facts") or []:
-        norm = _normalize_fact(raw_fact)
-        text = norm["text"]
-        if not text:
-            continue
-        fact_tag = norm["tag"]
-        if _is_recency_tag(fact_tag):
-            _recency_facts.append((norm["ts"], text, fact_tag))
-        else:
-            _stable_facts.append(text)
-
-    if _stable_facts:
-        profile_parts.append("其他：" + "；".join(_stable_facts))
-
-    # 易变段：recency 窗口内 OR 当前话题 tag 命中时注入（tag 前缀匹配）
-    _recalled_tagged: list[str] = []   # tag 命中召回
-    _recalled_recency: list[str] = []  # 仅 recency 窗口召回
-    for ts, text, fact_tag in sorted(_recency_facts, key=lambda x: -x[0]):
-        in_window = (_current_ts - ts) < _recency_window_for(fact_tag)
-        # tag 命中：pref.music → 查 "music" 是否在当前 tags；habit → 查 "habit"
-        tag_key = fact_tag.removeprefix("pref.") if fact_tag.startswith("pref.") else fact_tag
-        tag_hit = any(tag_key in t or t in tag_key for t in _current_tags)
-        if tag_hit:
-            _recalled_tagged.append(text)
-        elif in_window:
-            _recalled_recency.append(text)
-    _recalled_facts = _recalled_tagged + _recalled_recency
-
-    if profile_parts:
+    _profile_selection = select_for_prompt(profile, tags)
+    if _profile_selection["core_text"]:
         messages.append({
             "role": "system",
-            "content": "<用户概况>\n【关于这个用户】\n" + "，".join(profile_parts) + "\n</用户概况>",
+            "content": _profile_selection["core_text"],
             "_layer": "5_profile",
+            "_budget_chars": _profile_selection["core_provenance"]["budget_chars"],
+            "_provenance": _profile_selection["core_provenance"],
         })
 
-    if _recalled_facts:
+    if _profile_selection["pref_text"]:
         messages.append({
             "role": "system",
-            "content": (
-                "<用户偏好>\n【用户近期偏好与习惯】\n"
-                + "\n".join(f"- {f}" for f in _recalled_facts)
-                + "\n</用户偏好>"
-            ),
+            "content": _profile_selection["pref_text"],
             "_layer": "5_profile_pref",
-            "_provenance": {
-                "mode": "tagged" if _recalled_tagged else "recency",
-                "tagged_count": len(_recalled_tagged),
-                "recency_count": len(_recalled_recency),
-            },
+            "_budget_chars": _profile_selection["pref_provenance"]["budget_chars"],
+            "_budget_items": _profile_selection["pref_provenance"]["budget_items"],
+            "_provenance": _profile_selection["pref_provenance"],
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1711,6 +1662,16 @@ def build(
     # token 估算警戒 + 强制裁剪
     # 估算基于字符数（1 token ≈ 1.5~2 汉字，此处保守用字符数做硬上限）
     # ─────────────────────────────────────────────────────────────────────────
+    # Every final message carries a uniform observation envelope.  Builders that
+    # know their selection details supply richer _provenance above; legacy
+    # layers retain the established always-mode default.  This metadata stays
+    # internal and is stripped at the LLM API boundary.
+    for _meta_message in messages:
+        _meta_message.setdefault("_provenance", {"mode": "always"})
+        _meta_message["_estimated_tokens"] = round(
+            len(_meta_message.get("content", "")) / 1.7, 1
+        )
+
     _layers_before_trim = [
         m.get("_report_layer") or m.get("_layer", "unknown") for m in messages
     ]
@@ -1762,6 +1723,11 @@ def build(
         ],
         "layers_before_trim": _layers_before_trim,
         "token_estimate": sum(len(m["content"]) for m in messages),
+        # token_estimate is a historical character-count field used by the
+        # trimmer thresholds.  Keep it compatible, and expose unambiguous
+        # character/token estimates for the observability surface.
+        "char_estimate": sum(len(m["content"]) for m in messages),
+        "estimated_tokens": round(sum(len(m["content"]) for m in messages) / 1.7, 1),
         "tags": list(_tags),
         "removed_layers": _removed_layers,
         "ablated_layers": _ablated_layers,
