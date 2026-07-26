@@ -91,10 +91,22 @@ def _build_sticker_payload(path: str, emotion: str) -> dict | None:
     }
 
 
-async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False, emotion: str = "", char_id: str | None = None):
+async def maybe_send_sticker(
+    reply: str,
+    target_id: str | None = None,
+    is_group: bool = False,
+    emotion: str = "",
+    char_id: str | None = None,
+    *,
+    recipient_id: str | None = None,
+):
     """
     根据情绪小概率发一张表情包。
     在post_process里调用，失败静默。
+
+    ``target_id`` is a QQ destination when present; it is deliberately
+    optional because desktop/mobile replies have no QQ address.  Cross-channel
+    sticker delivery uses ``recipient_id`` instead and must not be gated by QQ.
 
     char_id：给定时优先用该角色专属表情包池，缺图回落通用池（角色资产路由，
     见 _pick_sticker()）；省略时只用通用池（现状行为不变）。
@@ -133,13 +145,12 @@ async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False,
             )
             return
 
-        try:
-            from core.qq_adapter import send_image
-            await send_image(target_id, path, is_group)
-        except Exception as e:
-            # send_image 内部对 target_id 做 int() 转换，非数字 id（如桌宠 uid）
-            # 会在这里抛出而不是被 qq_adapter 自己吞掉；不让它连累下面的跨端广播。
-            logger.warning("[sticker] QQ 侧发送失败（不影响其他通道广播）: %s", e)
+        if target_id:
+            try:
+                from core.qq_adapter import send_image
+                await send_image(target_id, path, is_group)
+            except Exception as e:
+                logger.warning("[sticker] QQ 侧发送失败（不影响其他通道广播）: %s", e)
 
         payload = _build_sticker_payload(path, folder_emotion)
         if payload is not None:
@@ -147,7 +158,7 @@ async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False,
             # 自包含 payload，客户端按 sticker 字段渲染（渲染实现见各前端仓库）。
             from channels import registry
             failures = await registry.broadcast(
-                "", target_id, sticker=payload, exclude_channels={"qq"},
+                "", recipient_id or target_id or "", sticker=payload, exclude_channels={"qq"},
             )
             logger.info(
                 "[sticker] 已选中并尝试发送: %s，跨端广播失败通道=%s"

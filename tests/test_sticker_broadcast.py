@@ -42,6 +42,71 @@ async def test_sticker_keeps_qq_send_and_broadcasts_self_contained_payload(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_sticker_broadcasts_without_qq_target_for_desktop_reply(tmp_path, monkeypatch):
+    """Desktop/mobile replies have no QQ id but must still receive a sticker."""
+    from core.output import sticker
+
+    image = tmp_path / "sticker.png"
+    image.write_bytes(b"png-bytes")
+    monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion, char_id=None: str(image))
+    monkeypatch.setattr(sticker.random, "random", lambda: 0.0)
+    monkeypatch.setattr(
+        "core.qq_adapter.send_image",
+        lambda *_args, **_kwargs: pytest.fail("desktop reply must not try QQ delivery"),
+    )
+
+    broadcasts = []
+
+    async def _broadcast(content, user_id, **kwargs):
+        broadcasts.append((content, user_id, kwargs))
+        return {}
+
+    monkeypatch.setattr("channels.registry.broadcast", _broadcast)
+    await sticker.maybe_send_sticker(
+        "reply", None, emotion="happy", recipient_id="desktop-owner",
+    )
+
+    assert len(broadcasts) == 1
+    content, user_id, kwargs = broadcasts[0]
+    assert (content, user_id) == ("", "desktop-owner")
+    assert kwargs["sticker"]["kind"] == "sticker"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_schedules_sticker_without_qq_target(sandbox, monkeypatch):
+    """Regression: an empty QQ target must not suppress desktop sticker delivery."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.pipeline import Pipeline
+    from core.write_envelope import stamp_user_chat
+
+    class _Character:
+        name = "Companion"
+
+    calls = []
+
+    async def _sticker(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr("core.llm_client.detect_emotion", AsyncMock(return_value="happy"))
+    monkeypatch.setattr("core.llm_client.chat", AsyncMock(return_value=""))
+    monkeypatch.setattr("core.output.sticker.maybe_send_sticker", _sticker)
+    monkeypatch.setattr("core.memory.mood_state.update", lambda *_args, **_kwargs: None)
+
+    pipeline = Pipeline(_Character(), lore_engine=None)
+    await pipeline.post_process(
+        "desktop-owner", "你好", "很高兴见到你。", target_id="", envelope=stamp_user_chat(),
+    )
+    await asyncio.sleep(0)
+
+    assert calls
+    args, kwargs = calls[0]
+    assert args[1] is None
+    assert kwargs["recipient_id"] == "desktop-owner"
+
+
+@pytest.mark.asyncio
 async def test_sticker_total_switch_prevents_all_side_effects(monkeypatch):
     from core.output import sticker
 

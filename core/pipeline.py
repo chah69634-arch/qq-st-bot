@@ -1507,6 +1507,9 @@ class Pipeline:
             })
 
         # ── side effects：保持 asyncio.create_task ────────────────────────────
+        # QQ TTS needs a OneBot destination. Sticker delivery is different:
+        # desktop/mobile have no QQ id but can receive its self-contained
+        # payload through the channel registry, so do not share this gate.
         if target_id and _emotion != "neutral":
             try:
                 from core.config_loader import get_config as _cfg
@@ -1515,15 +1518,28 @@ class Pipeline:
                 _tts_prob = _cfg().get("tts", {}).get("probability", 0.3)
                 if _tts_enabled and random.random() < _tts_prob:
                     asyncio.create_task(self._send_tts(reply, target_id, is_group, emotion=_emotion, char_id=char_id))
-                # Sticker owns its own enabled/probability gates.  Do not share
-                # TTS's dice roll: otherwise TTS can suppress configured sticker
-                # probabilities before maybe_send_sticker gets a chance to apply them.
+            except Exception as e:
+                log_error("pipeline.post_process.tts", e)
+
+        # Stickers are only for a real owner-message reply.  `target_id` is
+        # optional QQ routing data, not a delivery prerequisite for desktop or
+        # mobile.  The sticker helper keeps QQ image delivery optional and
+        # broadcasts the data-URL payload to active non-QQ channels.
+        if envelope.can_affect_mood and not trigger_name and _emotion:
+            try:
                 from core.output.sticker import maybe_send_sticker
                 asyncio.create_task(
-                    maybe_send_sticker(reply, target_id, is_group, emotion=_emotion, char_id=char_id)
+                    maybe_send_sticker(
+                        reply,
+                        target_id or None,
+                        is_group,
+                        emotion=_emotion,
+                        char_id=char_id,
+                        recipient_id=user_id,
+                    )
                 )
             except Exception as e:
-                log_error("pipeline.post_process.tts_sticker", e)
+                log_error("pipeline.post_process.sticker", e)
 
         try:
             logger.info(f"[pipeline.intent] 开始解析，reply前30字={reply[:30]!r}")
