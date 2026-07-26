@@ -103,7 +103,6 @@ REGISTRY: dict[str, PathMeta] = {
     "author_note_state":      PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "presence":               PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "yexuan_inner_diary":     PathMeta("canonical", "character_inner", "per_char",      "ignore"),
-    "pet_file":               PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "garden":                 PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "character_growth":       PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
     "interest_state":         PathMeta("canonical", "character_inner", "per_char",      "ignore"),

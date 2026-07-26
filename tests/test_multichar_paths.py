@@ -54,14 +54,11 @@ def test_character_inner_v1_paths(dp, tmp_path, method, expected_parts):
         assert fn() == fn(char_id="yexuan")
 
 
-@pytest.mark.parametrize("method,expected_parts", [
-    ("pet_file",         ("runtime", "characters", "yexuan", "pet.json")),
-    ("garden",           ("runtime", "characters", "yexuan", "garden")),
-])
-def test_character_inner_v1_top_paths(dp, tmp_path, method, expected_parts):
-    fn = getattr(dp, method)
-    assert fn(char_id="yexuan") == tmp_path.joinpath(*expected_parts)
-    assert fn() == fn(char_id="yexuan")
+def test_character_inner_v1_top_paths(dp, tmp_path):
+    assert dp.garden(char_id="yexuan") == tmp_path.joinpath(
+        "runtime", "characters", "yexuan", "garden"
+    )
+    assert dp.garden() == dp.garden(char_id="yexuan")
 
 
 # ── character_inner authored 静态路径（不走沙盒 _p，绝对路径略去 base）─────────

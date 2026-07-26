@@ -406,7 +406,6 @@ def build(
     perception_block: str = "",
     author_note_extra: str = "",
     affection_info: str = "",
-    pet_info: str = "",
     current_time: str = "",
     reminders: list = None,
     diary_context: str = "",

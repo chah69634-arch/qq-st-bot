@@ -231,9 +231,6 @@ class DataPaths:
     def diary_context(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("chars", char_id, "diary_context")
 
-    def pet_file(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
-        return self._p("runtime", "characters", char_id, "pet.json")
-
     def episodic_memory(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("chars", char_id, "episodic_memory")
 

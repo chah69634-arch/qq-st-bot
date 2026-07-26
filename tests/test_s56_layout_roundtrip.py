@@ -289,25 +289,6 @@ def test_presence_write_new_path(sandbox):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# pet 读-改-写往返
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def test_pet_create_writes_new_path_and_reload(sandbox):
-    """create_pet() → 写新路径 → get_pet() 从新路径读回。"""
-    from core.pet import create_pet, get_pet
-
-    create_pet("Kitty", "猫")
-
-    assert sandbox.pet_file().exists(), "create_pet 应写入新路径"
-
-    loaded = get_pet()
-    assert loaded is not None
-    assert loaded["name"] == "Kitty"
-    assert loaded["species"] == "猫"
-
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # garden 读-改-写往返
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -324,5 +305,4 @@ def test_garden_water_writes_new_path(sandbox):
     state = get_state(char_id="yexuan")
     slot_keys = {s["slot_key"] for s in state["slots"]}
     assert "calm" in slot_keys
-
 

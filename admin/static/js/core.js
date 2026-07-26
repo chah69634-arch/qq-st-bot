@@ -115,8 +115,6 @@ async function goto(page) {
     character:       loadCharacterPage,
     lorebook:        () => { loadLorebook(); loadJbEntries(); },
     'dream-settings': loadDreamSettings,
-    pet:             loadPet,
-    yexuan:          loadYexuanPage,
     scheduler:       loadScheduler,
     'observe-mood':    loadObserveMood,
     'observe-dream':   loadObserveDream,

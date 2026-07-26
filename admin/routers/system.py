@@ -81,47 +81,6 @@ async def reload_config(auth=Depends(require_scopes("admin"))):
     return {"message": "config.yaml / relations.yaml / blacklist.yaml 已全部热重载"}
 
 
-@router.get("/pet", summary="获取宠物状态")
-async def get_pet_status(auth=Depends(require_scopes("admin"))):
-    from core.pet import get_pet, pet_greeting
-    pet = get_pet()
-    if pet is None:
-        return {"pet": None}
-    return {"pet": {**pet, "greeting": pet_greeting(pet)}}
-
-
-@router.post("/pet", summary="创建或更新宠物")
-async def upsert_pet(body: dict, auth=Depends(require_scopes("admin"))):
-    name    = (body.get("name") or "").strip()
-    species = (body.get("species") or "猫").strip()
-    if not name:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=422, detail="name 不能为空")
-    from core.pet import create_pet
-    pet = create_pet(name, species)
-    return {"message": f"宠物 {name}（{species}）已创建/更新", "pet": pet}
-
-
-@router.put("/pet/interact", summary="与宠物互动（摸摸头/喂食）")
-async def pet_interact(body: dict, auth=Depends(require_scopes("admin"))):
-    action = body.get("action", "")
-    from core.pet import get_pet, update_pet, pet_greeting
-    pet = get_pet()
-    if pet is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="还没有宠物")
-    if action == "pet":       # 摸摸头
-        pet = update_pet("mood",   min(100, int(pet.get("mood", 80)) + 10))
-        msg = f"（{pet['name']}被摸了摸，心情好了一点）"
-    elif action == "feed":    # 喂食
-        pet = update_pet("hunger", max(0, int(pet.get("hunger", 20)) - 30))
-        msg = f"（{pet['name']}吃得很满足）"
-    else:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=422, detail="action 只接受 'pet' 或 'feed'")
-    return {"message": msg, "pet": {**pet, "greeting": pet_greeting(pet)}}
-
-
 @router.post("/group-distill", summary="对指定群的聊天记录进行 LLM 蒸馏")
 async def group_distill(body: dict, auth=Depends(require_scopes("admin"))):
     """读取群消息记录，调用 LLM 生成摘要"""

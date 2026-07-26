@@ -260,7 +260,6 @@ def test_legacy_bridge_localizes_dynamic_dom_and_protects_raw_content():
         "dynamic.logs.",
         "dynamic.memory.",
         "dynamic.observe.",
-        "dynamic.pet.",
         "dynamic.routing.",
         "dynamic.scheduler.",
         "dynamic.tokens.",

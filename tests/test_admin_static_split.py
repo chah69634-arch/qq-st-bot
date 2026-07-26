@@ -25,7 +25,7 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     fragments = sorted(PAGES.glob("*.html"))
 
-    assert len(fragments) == 35
+    assert len(fragments) == 33
     for fragment in fragments:
         page = fragment.stem
         assert f'id="page-{page}" data-page-fragment="{page}"' in index
@@ -35,6 +35,24 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     assert "async function loadPageFragment(page)" in source
     assert "fetch(`/static/pages/${encodeURIComponent(page)}.html`)" in source
     assert "window.AdminI18n?.applyI18n(container)" in source
+
+
+def test_removed_legacy_pet_and_chat_panels_have_no_static_entrypoint():
+    index = (STATIC / "index.html").read_text(encoding="utf-8")
+
+    for page in ("pet", "yexuan"):
+        assert not (PAGES / f"{page}.html").exists()
+        assert f'data-page="{page}"' not in index
+        assert f'data-page-fragment="{page}"' not in index
+    assert "pet-chat.js" not in index
+
+
+def test_removed_legacy_pet_api_and_storage_module_have_no_entrypoint():
+    from admin.routers.system import router
+
+    route_paths = {route.path for route in router.routes}
+    assert not route_paths.intersection({"/pet", "/pet/interact"})
+    assert not (Path(__file__).parents[1] / "core" / "pet.py").exists()
 
 
 def test_page_fragments_are_served_as_static_html():
