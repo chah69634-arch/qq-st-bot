@@ -37,6 +37,10 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _GSV_PROVIDER = "gsv"
 _OPENAI_COMPAT_PROVIDER = "openai_compatible"
 _PROVIDER_ALIASES = {"gpt_sovits": _GSV_PROVIDER, "gsv": _GSV_PROVIDER}
+_DEFAULT_GPT_MODEL = "不训练直接推v3底模！"
+_DEFAULT_SOVITS_MODEL = "不训练直接推v2ProPlus底模！"
+_GSV_SYNTHESIS_LOCK = asyncio.Lock()
+_GSV_ACTIVE_MODELS: dict[str, tuple[str, str]] = {}
 
 
 def _resolve_audio_path(path: str) -> str:
@@ -58,6 +62,23 @@ def _resolve_audio_path(path: str) -> str:
         logger.debug(f"[voice_adapter] ref_audio glob fallback {p.name} → {matches[0].name}")
         return str(matches[0])
     return str(p)
+
+
+def _resolve_gsv_model_path(path: str) -> str:
+    """Resolve a local model path when it belongs to this project.
+
+    GPT-SoVITS also accepts its own registered model IDs, so an unknown relative
+    path deliberately passes through unchanged instead of being rejected here.
+    """
+    raw = str(path or "").strip()
+    if not raw:
+        return raw
+    candidate = Path(raw) if Path(raw).is_absolute() else _PROJECT_ROOT / raw
+    return str(candidate) if candidate.is_file() else raw
+
+
+def _gsv_model_target(cfg: dict, key: str, fallback_key: str, default: str) -> str:
+    return _resolve_gsv_model_path(str(cfg.get(key) or cfg.get(fallback_key) or default))
 
 
 def _active_provider_name(cfg: dict) -> str:
@@ -126,6 +147,7 @@ def get_provider_config(cfg: dict | None = None) -> tuple[str, dict]:
             "api_url", "ref_audio", "prompt_text", "speed", "emotion_enabled",
             "emotions", "how_to_cut", "top_k", "top_p", "temperature",
             "ref_free", "if_freeze", "sample_steps", "if_sr", "pause_second",
+            "gpt_model_path", "sovits_model_path", "gpt_model_fallback", "sovits_model_fallback",
         )
         if key in cfg
     }
@@ -185,6 +207,9 @@ class GsvProvider:
             logger.warning("[voice_adapter] GSV ref_audio is not configured")
             return None
 
+        gpt_model = _gsv_model_target(cfg, "gpt_model_path", "gpt_model_fallback", _DEFAULT_GPT_MODEL)
+        sovits_model = _gsv_model_target(cfg, "sovits_model_path", "sovits_model_fallback", _DEFAULT_SOVITS_MODEL)
+
         def _sync_call():
             import os
             from gradio_client import Client, handle_file
@@ -192,6 +217,40 @@ class GsvProvider:
             os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
             os.environ["NO_PROXY"] = "localhost,127.0.0.1,::1"
             client = Client(api_url)
+            active_models = _GSV_ACTIVE_MODELS.get(api_url)
+            desired_models = (gpt_model, sovits_model)
+            if active_models != desired_models:
+                # Model selection is global mutable state inside a GSV server.
+                # The surrounding async lock keeps a different request from
+                # changing weights between this switch and its synthesis call.
+                def switch_or_fallback(*, api_name: str, argument: str, desired: str, fallback: str) -> str:
+                    try:
+                        client.predict(**{argument: desired}, api_name=api_name)
+                        return desired
+                    except Exception as error:
+                        if desired == fallback:
+                            raise
+                        logger.warning(
+                            "[voice_adapter] GSV model switch failed for %s; falling back to base model: %s",
+                            argument,
+                            error,
+                        )
+                        client.predict(**{argument: fallback}, api_name=api_name)
+                        return fallback
+
+                active_sovits = switch_or_fallback(
+                    api_name="/change_sovits_weights",
+                    argument="sovits_path",
+                    desired=sovits_model,
+                    fallback=_DEFAULT_SOVITS_MODEL,
+                )
+                active_gpt = switch_or_fallback(
+                    api_name="/change_gpt_weights",
+                    argument="gpt_path",
+                    desired=gpt_model,
+                    fallback=_DEFAULT_GPT_MODEL,
+                )
+                _GSV_ACTIVE_MODELS[api_url] = (active_gpt, active_sovits)
             result = client.predict(
                 ref_wav_path=handle_file(ref_audio),
                 prompt_text=prompt_txt,
@@ -214,7 +273,8 @@ class GsvProvider:
             with open(result, "rb") as f:
                 return f.read()
 
-        return await asyncio.get_event_loop().run_in_executor(None, _sync_call)
+        async with _GSV_SYNTHESIS_LOCK:
+            return await asyncio.get_event_loop().run_in_executor(None, _sync_call)
 
 
 class OpenAICompatibleProvider:

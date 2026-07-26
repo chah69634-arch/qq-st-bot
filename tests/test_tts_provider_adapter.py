@@ -1,4 +1,6 @@
 import pytest
+import sys
+from types import SimpleNamespace
 
 from core.output import voice_adapter
 
@@ -29,6 +31,57 @@ def test_new_provider_block_overrides_legacy_gsv_fields():
     assert provider == "gsv"
     assert cfg["api_url"] == "http://new"
     assert cfg["ref_audio"] == "new.wav"
+
+
+def test_gsv_model_paths_use_explicit_values_or_default_base_models():
+    assert voice_adapter._gsv_model_target(
+        {"gpt_model_path": "custom.ckpt"},
+        "gpt_model_path",
+        "gpt_model_fallback",
+        voice_adapter._DEFAULT_GPT_MODEL,
+    ) == "custom.ckpt"
+    assert voice_adapter._gsv_model_target(
+        {},
+        "sovits_model_path",
+        "sovits_model_fallback",
+        voice_adapter._DEFAULT_SOVITS_MODEL,
+    ) == voice_adapter._DEFAULT_SOVITS_MODEL
+
+
+@pytest.mark.asyncio
+async def test_gsv_switches_models_before_synthesis(tmp_path, monkeypatch):
+    reference = tmp_path / "reference.wav"
+    output = tmp_path / "output.wav"
+    reference.write_bytes(b"reference")
+    output.write_bytes(b"wav")
+    calls = []
+
+    class FakeClient:
+        def __init__(self, api_url):
+            assert api_url == "http://gsv-test"
+
+        def predict(self, **kwargs):
+            calls.append(kwargs)
+            return str(output) if kwargs["api_name"] == "/get_tts_wav" else None
+
+    monkeypatch.setitem(sys.modules, "gradio_client", SimpleNamespace(Client=FakeClient, handle_file=lambda path: path))
+    voice_adapter._GSV_ACTIVE_MODELS.pop("http://gsv-test", None)
+
+    audio = await voice_adapter.GsvProvider().synthesize(
+        "你好。",
+        "neutral",
+        {
+            "api_url": "http://gsv-test",
+            "ref_audio": str(reference),
+            "gpt_model_path": "custom.ckpt",
+            "sovits_model_path": "custom.pth",
+        },
+    )
+
+    assert audio == b"wav"
+    assert calls[0] == {"sovits_path": "custom.pth", "api_name": "/change_sovits_weights"}
+    assert calls[1] == {"gpt_path": "custom.ckpt", "api_name": "/change_gpt_weights"}
+    assert calls[2]["api_name"] == "/get_tts_wav"
 
 
 def test_openai_compatible_without_base_url_not_ready_and_does_not_leak_secret():

@@ -6,6 +6,8 @@ function _renderTtsProvider(provider) {
   document.getElementById('tts-provider-params').value = JSON.stringify(params, null, 2);
   document.getElementById('tts-api-url').value = params.api_url || '';
   document.getElementById('tts-ref-audio').value = params.ref_audio || '';
+  document.getElementById('tts-gpt-model-path').value = params.gpt_model_path || '';
+  document.getElementById('tts-sovits-model-path').value = params.sovits_model_path || '';
   document.getElementById('tts-prompt-text').value = params.prompt_text || '';
   const speed = parseFloat(params.speed) || 1.0;
   document.getElementById('tts-speed').value = speed;
@@ -49,6 +51,8 @@ async function saveTtsConfig() {
   if (provider === 'openai_compatible') { toast(t('status.tts.provider_unavailable', '该 TTS Provider 尚未实装，不能保存。'), 'err'); return; }
   providerParams.api_url = document.getElementById('tts-api-url').value.trim();
   providerParams.ref_audio = document.getElementById('tts-ref-audio').value.trim();
+  providerParams.gpt_model_path = document.getElementById('tts-gpt-model-path').value.trim();
+  providerParams.sovits_model_path = document.getElementById('tts-sovits-model-path').value.trim();
   providerParams.prompt_text = document.getElementById('tts-prompt-text').value.trim();
   providerParams.speed = parseFloat(document.getElementById('tts-speed').value);
   const body = {

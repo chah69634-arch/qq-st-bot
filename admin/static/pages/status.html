@@ -247,7 +247,7 @@
           <label class="field"><span data-i18n="status.tts.provider">TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv" data-i18n="status.tts.provider_gsv">GPT-SoVITS / GSV</option><option value="openai_compatible" data-i18n="status.tts.provider_openai_compatible">OpenAI-compatible (自建/云端，POST /audio/speech)</option></select></label>
           <label class="field"><span data-i18n="status.tts.provider_status">Provider status</span><input id="tts-provider-status" readonly></label>
         </div>
-        <label class="field admin-inline-156"><span data-i18n="status.tts.provider_params">Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='GSV: {"api_url":"http://127.0.0.1:9880","ref_audio":"..."}  |  openai_compatible: {"base_url":"https://.../v1","api_key":"...","model":"tts-1","voice":"alloy"}'></textarea></label>
+        <label class="field admin-inline-156"><span data-i18n="status.tts.provider_params">Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='GSV: {"api_url":"http://127.0.0.1:9880","ref_audio":"...","gpt_model_path":"example.ckpt"}  |  openai_compatible: {"base_url":"https://.../v1","api_key":"...","model":"tts-1","voice":"alloy"}'></textarea></label>
         <div class="form-row admin-inline-156">
           <label class="field">
             <span data-i18n="status.tts.api_url">API URL</span>
@@ -257,6 +257,10 @@
             <span data-i18n="status.tts.ref_audio">参考音频路径</span>
             <input type="text" id="tts-ref-audio" placeholder="ref.wav">
           </label>
+        </div>
+        <div class="form-row admin-inline-156">
+          <label class="field"><span data-i18n="status.tts.gpt_model">GPT 模型路径</span><input type="text" id="tts-gpt-model-path" placeholder="example.ckpt"></label>
+          <label class="field"><span data-i18n="status.tts.sovits_model">SoVITS 模型路径</span><input type="text" id="tts-sovits-model-path" placeholder="example.pth"></label>
         </div>
         <div class="form-row col-1 admin-inline-156">
           <label class="field">

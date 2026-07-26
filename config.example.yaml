@@ -220,11 +220,16 @@ tts:
   temperature: 1.0
   sample_steps: 8
   pause_second: 0.3
-  how_to_cut: 按标点符号切
+  how_to_cut: 按中文句号。切
   ref_free: false
   if_freeze: false
   if_sr: false
   ref_audio: userdata/characters/authored/角色id/voice/default.wav
+  # 留空时 GSV 切到对应默认底模；填写时可用相对路径或 GSV 已注册的模型 ID。
+  gpt_model_path: ''       # 例：example.ckpt
+  sovits_model_path: ''    # 例：example.pth
+  gpt_model_fallback: 不训练直接推v3底模！
+  sovits_model_fallback: 不训练直接推v2ProPlus底模！
   prompt_text: ''
   speed: 1.0
   emotion_enabled: true
