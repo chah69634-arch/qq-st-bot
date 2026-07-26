@@ -70,26 +70,83 @@ def _check_sticker() -> CheckResult:
     return CheckResult(id="sticker", label="表情包", status="ok", detail=f"素材目录：{folder}")
 
 
+def _tts_provider_status() -> tuple[bool, dict[str, Any] | None, str]:
+    """Read provider readiness once per check without exposing provider secrets."""
+    from core.output.voice_adapter import get_provider_status
+
+    try:
+        status = get_provider_status()
+    except Exception as e:
+        return False, None, f"provider status read failed: {e}"
+    if not status.get("ready", False):
+        return False, status, "provider is not ready"
+    return True, status, ""
+
+
 def _check_tts() -> CheckResult:
     from core.config_loader import get_config
     cfg = get_config().get("tts", {})
-    qq_on = cfg.get("enabled", False)
-    desktop_on = cfg.get("desktop_enabled", False)
-    if not qq_on and not desktop_on:
-        return CheckResult(id="tts", label="TTS 语音", status="off", detail="tts.enabled 与 tts.desktop_enabled 均为 false")
-    from core.output.voice_adapter import get_provider_status
-    try:
-        status = get_provider_status()
-        ready = status.get("ready", False)
-    except Exception as e:
-        return CheckResult(id="tts", label="TTS 语音", status="unknown", detail=f"provider 状态读取失败: {e}")
+    if not cfg.get("enabled", False):
+        return CheckResult(
+            id="tts",
+            label="TTS 合成服务",
+            status="off",
+            detail="tts.enabled=false；/tts/synthesize 不会合成音频",
+        )
+    ready, status, error = _tts_provider_status()
+    if status is None:
+        return CheckResult(id="tts", label="TTS 合成服务", status="unknown", detail=error)
     if not ready:
         return CheckResult(
-            id="tts", label="TTS 语音", status="missing_asset",
-            detail=f"开关已开，但当前 provider（{status.get('provider', '?')}）未就绪: {status}",
+            id="tts", label="TTS 合成服务", status="missing_asset",
+            detail=f"tts.enabled=true，但当前 provider（{status.get('provider', '?')}）未就绪",
             category="asset",
         )
-    return CheckResult(id="tts", label="TTS 语音", status="ok", detail=f"provider={status.get('provider')}")
+    return CheckResult(
+        id="tts",
+        label="TTS 合成服务",
+        status="ok",
+        detail=f"provider={status.get('provider')}；/tts/synthesize 可按需合成",
+    )
+
+
+def _check_desktop_voice_bar() -> CheckResult:
+    """Report the desktop manual voice-bar contract separately from TTS itself."""
+    from core.config_loader import get_config
+
+    cfg = get_config().get("tts", {})
+    if not cfg.get("desktop_enabled", False):
+        return CheckResult(
+            id="desktop_voice_bar",
+            label="桌宠手动语音条",
+            status="off",
+            detail="tts.desktop_enabled=false；桌面端设置页不会显示可用语音条",
+        )
+    if not cfg.get("enabled", False):
+        return CheckResult(
+            id="desktop_voice_bar",
+            label="桌宠手动语音条",
+            status="missing_asset",
+            detail="语音条已开启，但 tts.enabled=false；点击后无法合成音频",
+            category="asset",
+        )
+    ready, status, error = _tts_provider_status()
+    if status is None:
+        return CheckResult(id="desktop_voice_bar", label="桌宠手动语音条", status="unknown", detail=error)
+    if not ready:
+        return CheckResult(
+            id="desktop_voice_bar",
+            label="桌宠手动语音条",
+            status="missing_asset",
+            detail=f"语音条已开启，但 provider（{status.get('provider', '?')}）未就绪",
+            category="asset",
+        )
+    return CheckResult(
+        id="desktop_voice_bar",
+        label="桌宠手动语音条",
+        status="ok",
+        detail="桌面端可显示语音条，点击后按需调用 /tts/synthesize；自动播放另见已知缺口",
+    )
 
 
 def _check_vision() -> CheckResult:
@@ -195,7 +252,8 @@ def _check_active_character_assets() -> CheckResult:
 
 _CHECKS: list[tuple[str, str, Any]] = [
     ("sticker", "表情包", _check_sticker),
-    ("tts", "TTS 语音", _check_tts),
+    ("tts", "TTS 合成服务", _check_tts),
+    ("desktop_voice_bar", "桌宠手动语音条", _check_desktop_voice_bar),
     ("vision", "图像识别（通用视觉）", _check_vision),
     ("use_computer_vision", "用电脑（桌面自动化视觉）", _check_use_computer_vision),
     ("tool_loop", "工具多步执行(Path C)", _check_tool_loop),
@@ -214,15 +272,13 @@ _KNOWN_GAPS: list[KnownGap] = [
     KnownGap(
         id="mobile_tts_delivery",
         label="移动端 TTS 语音投递",
-        detail="后端 TTS 合成/表情包广播均已支持，但移动端轮询协议目前没有音频投递路径"
-               "（sticker 走 broadcast payload 有覆盖，TTS 没有）。见 cc-tasks/125 方案 A/B。",
+        detail="后端已提供 mobile 场景的按需合成与 voice_available 标记；但移动端尚未消费该标记、请求音频并渲染/播放。",
         source="cc-tasks/125",
     ),
     KnownGap(
-        id="desktop_voice_bar_decouple",
-        label="桌宠语音条 UI 解耦 + 自动播放开关",
-        detail="后端已支持 char 级 TTS 预设与四场景自动播放语义，前端语音条仍嵌在气泡容器内，"
-               "自动播放开关（聊天/梦境/视频通话/桌宠四选）尚未落地。",
+        id="desktop_tts_auto_play",
+        label="桌宠 TTS 自动播放设置与消费",
+        detail="桌面端已有独立的手动语音条设置与按需播放；后端也保存五场景 auto_play 状态，但前端尚未提供场景开关或在聊天/梦境/视频/桌宠消息到达时自动合成播放。",
         source="cc-tasks/124",
     ),
     KnownGap(

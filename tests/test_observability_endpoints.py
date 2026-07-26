@@ -103,6 +103,28 @@ def test_resource_completeness_single_check_failure_is_isolated(sandbox, monkeyp
     assert len(payload["checks"]) == len(_rc._CHECKS)
 
 
+def test_resource_completeness_observes_tts_and_desktop_voice_bar(monkeypatch):
+    import core.resource_completeness as _rc
+
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"tts": {"enabled": True, "desktop_enabled": True}},
+    )
+    monkeypatch.setattr(
+        "core.output.voice_adapter.get_provider_status",
+        lambda: {"ready": True, "provider": "gsv"},
+    )
+
+    checks = {item["id"]: item for item in _rc.run_all_checks()["checks"]}
+    assert checks["tts"]["status"] == "ok"
+    assert checks["desktop_voice_bar"]["status"] == "ok"
+    assert "按需调用 /tts/synthesize" in checks["desktop_voice_bar"]["detail"]
+
+    gaps = {item["id"]: item for item in _rc.run_all_checks()["known_gaps"]}
+    assert "desktop_voice_bar_decouple" not in gaps
+    assert "desktop_tts_auto_play" in gaps
+
+
 def test_api_contract_check_requires_auth_and_returns_shape(sandbox, monkeypatch):
     _active(sandbox)
     client = _client(monkeypatch)
