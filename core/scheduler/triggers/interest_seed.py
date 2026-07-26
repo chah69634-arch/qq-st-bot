@@ -44,13 +44,6 @@ def collect_candidates(uid: str, char_id: str) -> list[dict]:
                 candidates.append({"name": DOMAIN_CANDIDATE_NAMES[domain], "domain": domain, "origin": "topic_stats"})
     except Exception: pass
     try:
-        from core.memory.user_profile import load
-        for fact in load(uid, char_id=char_id).get("important_facts", []):
-            if isinstance(fact, dict) and str(fact.get("tag", "")).startswith("pref."):
-                text = str(fact.get("text", "")).strip()
-                if text: candidates.append({"name": text[:40], "domain": _domain(text), "origin": "user_pref_mirror"})
-    except Exception: pass
-    try:
         from core.sandbox import get_paths
         raw = json.loads(get_paths().trait_state(char_id=char_id).read_text(encoding="utf-8"))
         values = raw.get("traits", raw)

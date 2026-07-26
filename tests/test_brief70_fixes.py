@@ -101,11 +101,14 @@ def test_interest_candidates_use_ranked_domains_and_human_names(monkeypatch):
     from core.scheduler.triggers.interest_seed import collect_candidates
 
     monkeypatch.setattr("core.memory.event_log.get_recent_days", lambda *args, **kwargs: "画画画画画歌")
-    monkeypatch.setattr("core.memory.user_profile.load", lambda *args, **kwargs: {"important_facts": []})
+    monkeypatch.setattr("core.memory.user_profile.load", lambda *args, **kwargs: {
+        "important_facts": [{"text": "用户喜欢某个游戏，希望一起体验", "tag": "pref.media"}],
+    })
     candidates = collect_candidates("owner", "c")
     topical = [item for item in candidates if item["origin"] == "topic_stats"]
     assert topical[0]["domain"] == "drawing"
     assert topical[0]["name"] != "画"
+    assert all(item["origin"] != "user_pref_mirror" for item in candidates)
 
 
 @pytest.mark.asyncio

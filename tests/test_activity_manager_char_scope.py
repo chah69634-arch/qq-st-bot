@@ -198,6 +198,18 @@ def test_growth_presence_yields_to_tagged_growth_layer(monkeypatch):
     assert am.get_prompt_fragment("character_c", suppress_growth=False) == "在练写作"
 
 
+def test_retired_growth_presence_is_replaced_immediately(monkeypatch):
+    stale_state = {
+        "current": "在练用户偏好原句", "source": "growth", "interest_id": "legacy-pref",
+        "expected_until_ts": time.time() + 3600,
+    }
+    monkeypatch.setattr(am, "_load_state", lambda char_id: stale_state)
+    monkeypatch.setattr("core.growth.interest_state.active_interests", lambda char_id: [])
+    monkeypatch.setattr(am, "switch_activity", lambda char_id: {"current": "在看书"})
+
+    assert am.get_current("character_c")["current"] == "在看书"
+
+
 # ── 5. admin/routers/activity.py 响应体带 char_id ────────────────────────────
 
 @pytest.mark.asyncio

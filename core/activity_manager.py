@@ -216,6 +216,22 @@ def should_switch(char_id: str = _DEFAULT_CHAR_ID) -> bool:
     expected_until = state.get("expected_until_ts", 0)
     return time.time() > expected_until
 
+
+def _growth_activity_is_still_active(state: dict, char_id: str) -> bool:
+    """Reject a persisted growth presence when its interest was retired."""
+    if state.get("source") != "growth":
+        return True
+    interest_id = str(state.get("interest_id") or "")
+    if not interest_id:
+        return False
+    try:
+        from core.growth.interest_state import active_interests
+        return any(str(item.get("id") or "") == interest_id for item in active_interests(char_id))
+    except Exception:
+        # A transient read failure must not force a replacement activity.
+        return True
+
+
 def switch_activity(char_id: str = _DEFAULT_CHAR_ID) -> dict:
     """切换到新activity，返回新状态。"""
     arc = _get_current_arc()
@@ -263,9 +279,10 @@ def switch_activity(char_id: str = _DEFAULT_CHAR_ID) -> dict:
 
 def get_current(char_id: str = _DEFAULT_CHAR_ID) -> dict:
     """获取当前activity状态，必要时自动切换。"""
-    if should_switch(char_id=char_id):
+    state = _load_state(char_id=char_id)
+    if not state or time.time() > state.get("expected_until_ts", 0) or not _growth_activity_is_still_active(state, char_id):
         return switch_activity(char_id=char_id)
-    return _load_state(char_id=char_id)
+    return state
 
 _PATTERN_WORDS = ["每次", "总是", "一直", "从来", "每天", "每周"]
 

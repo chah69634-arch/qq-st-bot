@@ -17,6 +17,11 @@ PAUSE_AFTER_DAYS = 30
 RETIRE_AFTER_DAYS = 90
 VALID_DOMAINS = frozenset({"writing", "music", "drawing", "other"})
 VALID_ORIGINS = frozenset({"topic_stats", "user_pref_mirror", "trait_underrepresented"})
+# Brief 58 once mirrored a full user preference into a character interest.  Those
+# entries have no character-owned, actionable skill name and must not drive
+# practice, prompt context, or ambient presence.  Keep the old origin readable
+# so the original record can be audited, but retire it during normalization.
+RETIRED_ORIGINS = frozenset({"user_pref_mirror"})
 
 
 def _path(char_id: str):
@@ -37,7 +42,10 @@ def _normalise(raw: object) -> dict:
             continue
         entry = dict(item)
         entry["domain"] = entry.get("domain") if entry.get("domain") in VALID_DOMAINS else "other"
+        entry["origin"] = entry.get("origin") if entry.get("origin") in VALID_ORIGINS else "topic_stats"
         entry["status"] = entry.get("status") if entry.get("status") in {"active", "paused", "retired"} else "active"
+        if entry["origin"] in RETIRED_ORIGINS:
+            entry["status"] = "retired"
         entry["level"] = min(5, max(1, int(entry.get("level", 1) or 1)))
         entry["recent_scores"] = [float(v) for v in entry.get("recent_scores", []) if isinstance(v, (int, float))][-RECENT_SCORE_LIMIT:]
         entry["learning_progress"] = learning_progress(entry["recent_scores"])

@@ -1572,6 +1572,7 @@ DELETE /memory/{uid}/event-log/{YYYY-MM-DD}
 ## 角色成长状态（Brief 58-60）
 
 - 兴趣唯一真值：`data/runtime/characters/{char_id}/inner/interest_state.json`，角色级、不分 uid。
+- 兴趣名必须是角色可执行的短学习目标；用户 `pref.*` 事实只保留在用户画像，不能镜像为角色兴趣。历史 `user_pref_mirror` 条目读取时视为 `retired`，保留原记录供审计但不再驱动练习、prompt 或动向。
 - 练习作品：`data/runtime/characters/{char_id}/works/{interest_id}/`，正文与盲评永不进入对话记忆链。
 - 技巧笔记：`data/runtime/characters/{char_id}/notes/{interest_id}.md`，只注入后台练习 prompt，不注入对话 prompt。
 - 唯一回流面是 `action_trace` 的一行“练习发生过”事实；兴趣新增、状态迁移、升级、笔记学习和 MCP 解锁均写 provenance。
