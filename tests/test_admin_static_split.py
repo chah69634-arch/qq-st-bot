@@ -57,6 +57,15 @@ def test_removed_legacy_pet_api_and_storage_module_have_no_entrypoint():
     assert not (Path(__file__).parents[1] / "core" / "pet.py").exists()
 
 
+def test_scheduler_split_keeps_its_runtime_constants_and_ledger_loader():
+    scheduler = (STATIC / "js" / "scheduler.js").read_text(encoding="utf-8")
+
+    assert "const SC_TRIGGER_LABELS = {" in scheduler
+    assert "const SC_BOOL_FIELDS = [" in scheduler
+    assert "async function loadProactiveLedger()" in scheduler
+    assert "api('GET', '/scheduler/proactive-ledger')" in scheduler
+
+
 def test_page_fragments_are_served_as_static_html():
     from fastapi.testclient import TestClient
 
@@ -91,3 +100,12 @@ def test_split_pages_have_no_inline_style_or_onclick_and_actions_are_bound():
     utility_classes = set(re.findall(r"\b(admin-inline-\d+)\b", html))
     assert utility_classes
     assert all(f".{name}{{" in css for name in utility_classes)
+
+
+def test_migrated_utility_css_has_no_orphaned_rules():
+    css = (STATIC / "style.css").read_text(encoding="utf-8")
+    source = read_admin_client_source()
+
+    defined = set(re.findall(r"\.((?:admin-inline)-\d+)\{", css))
+    used = set(re.findall(r"\b(admin-inline-\d+)\b", source))
+    assert defined <= used
