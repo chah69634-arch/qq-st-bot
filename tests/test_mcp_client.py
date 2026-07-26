@@ -106,6 +106,22 @@ class TestConnectServerRegistration:
         assert "srv1" in mc._servers
         assert mc._servers["srv1"].tool_names == ["mcp__srv1__read_file"]
 
+    async def test_preserves_read_only_annotation_for_generic_documentation_guidance(self, monkeypatch):
+        session = _FakeSession()
+        session.tools_result = SimpleNamespace(tools=[
+            SimpleNamespace(
+                name="lookup_action_spec", description="Explains action parameters and options",
+                inputSchema={"type": "object", "properties": {}},
+                annotations=SimpleNamespace(readOnlyHint=True),
+            ),
+        ])
+        monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+        _patch_client_session(monkeypatch, session)
+
+        await mc._connect_server("srv1", {"transport": "stdio", "command": ["fake"]})
+
+        assert td._TOOL_REGISTRY["mcp__srv1__lookup_action_spec"]["mcp_read_only"] is True
+
     async def test_allow_tools_whitelist_filters(self, monkeypatch):
         session = _FakeSession()
         session.tools_result = SimpleNamespace(tools=[
@@ -135,6 +151,32 @@ class TestConnectServerRegistration:
 
         assert td._TOOL_REGISTRY["mcp__srv1__read_file"] == {"marker": "static"}
         assert mc._servers["srv1"].tool_names == []
+
+
+def test_opaque_parameter_guidance_uses_registry_metadata_not_a_hardcoded_guide_name(monkeypatch):
+    registry = {
+        "mcp__arcade__play": {
+            "category": "mcp", "mcp_server": "arcade", "description": "play an action",
+        },
+        "mcp__arcade__lookup_action_spec": {
+            "category": "mcp", "mcp_server": "arcade", "mcp_read_only": True,
+            "description": "Explains action parameters and available options",
+        },
+    }
+    monkeypatch.setattr(td, "_TOOL_REGISTRY", registry)
+    note = td.format_mcp_opaque_params_note([
+        {"type": "function", "function": {
+            "name": "mcp__arcade__play",
+            "parameters": {"type": "object", "properties": {
+                "params": {"type": "object", "additionalProperties": True},
+            }},
+        }},
+    ])
+
+    assert "mcp__arcade__play" in note
+    assert "mcp__arcade__lookup_action_spec" in note
+    assert "不要根据工具名猜测" in note
+    assert "get_guide" not in note
 
 
 # ─────────────────────────────────────────────────────────────────────────────

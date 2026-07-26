@@ -941,6 +941,7 @@ class Pipeline:
         from core.error_handler import log_error
         from core.tool_dispatcher import (
             execute as _execute,
+            format_mcp_opaque_params_note,
             get_tools_schema,
             get_tool_loop_relay_prompt,
             parse_tail_brace,
@@ -986,6 +987,8 @@ class Pipeline:
                 len(tools),
             )
 
+        mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
+
         loop_msgs = list(messages)
         # 工具意愿软提示（Brief 29 · 5，Brief 28 补丁；Brief 120 补充尾部花括号约定，
         # Brief 122 补充"调用过程本身不入台词"）：利用 recency 位置，插在用户消息
@@ -1020,6 +1023,7 @@ class Pipeline:
                     "（）动作描写里；对方说「去调用工具玩一下」只是在推动你去做这件事，"
                     "不是要你复述你打算怎么调。你的回复永远只是你这个角色本身的自然语言"
                     "反应，调用细节只对系统可见。"
+                    + ("\n\n" + mcp_opaque_params_note if mcp_opaque_params_note else "")
                 ),
                 "_layer": "11.5_tool_nudge",
             })

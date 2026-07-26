@@ -6,6 +6,7 @@ GET  /vision-params               — 读取 vision 配置
 PUT  /vision-params               — 修改 vision 配置并热重载
 GET  /vision-params/phone-control — 读取手机自动化视觉覆盖
 PUT  /vision-params/phone-control — 修改手机自动化视觉覆盖并热重载
+GET/PUT /llm-debug-requests       — 管理高敏感 LLM 请求快照开关与保留期
 GET    /model-presets                        — 读取多模型 preset 配置（api_key 打码）
 PUT    /model-presets/active-routing          — 切换当前生效的路由方案
 PUT    /model-presets/presets/{name}          — 新增或更新一个 preset
@@ -117,6 +118,57 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("
     config_loader.reload_config()
     llm_client.reload_client()
     return {"message": "LLM 参数已更新", "params": {k: target_params[k] for k in updates if k in target_params}}
+
+
+# ---------------------------------------------------------------------------
+# /llm-debug-requests — explicit opt-in full semantic request snapshots
+# ---------------------------------------------------------------------------
+
+class LlmDebugRequestsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    keep_days: Optional[int] = None
+
+
+def _llm_debug_request_settings(cfg: dict) -> dict:
+    raw = cfg.get("llm_debug_requests", {})
+    raw = raw if isinstance(raw, dict) else {}
+    try:
+        keep_days = int(raw.get("keep_days", 1))
+    except (TypeError, ValueError):
+        keep_days = 1
+    return {"enabled": bool(raw.get("enabled", False)), "keep_days": max(1, min(7, keep_days))}
+
+
+@router.get("/llm-debug-requests", summary="读取 LLM 请求快照调试开关")
+async def get_llm_debug_requests(_auth=Depends(require_scopes("admin"))):
+    """Admin-only: snapshots contain prompt text and tool schemas."""
+    return _llm_debug_request_settings(get_config())
+
+
+@router.put("/llm-debug-requests", summary="更新 LLM 请求快照调试开关")
+async def update_llm_debug_requests(body: LlmDebugRequestsUpdate, _auth=Depends(require_scopes("admin"))):
+    if body.keep_days is not None and not 1 <= body.keep_days <= 7:
+        raise HTTPException(status_code=422, detail="keep_days 必须在 1~7 之间")
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            full_cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+
+    target = full_cfg.setdefault("llm_debug_requests", {})
+    for field in body.model_fields_set:
+        setattr_value = getattr(body, field)
+        if setattr_value is not None:
+            target[field] = setattr_value
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+
+    from core import config_loader
+    config_loader.reload_config()
+    return _llm_debug_request_settings(full_cfg)
 
 
 # ---------------------------------------------------------------------------

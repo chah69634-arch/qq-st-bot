@@ -39,7 +39,38 @@ async function loadMcpPage() {
       : '<div class="empty">尚未配置 MCP server。先填写 URL 并测试连接。</div>';
     bindPageActions(serversEl);
     await _loadMcpRecentCalls(data.servers || []);
+    await loadMcpDebugRequests();
   } catch (e) { serversEl.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+
+async function loadMcpDebugRequests() {
+  const out = document.getElementById('mcp-llm-debug-entries');
+  if (!out) return;
+  try {
+    const [settings, snapshots] = await Promise.all([
+      api('GET', '/llm-debug-requests'),
+      api('GET', '/observability/llm-debug-requests?limit=10'),
+    ]);
+    document.getElementById('mcp-llm-debug-enabled').checked = !!settings.enabled;
+    document.getElementById('mcp-llm-debug-keep-days').value = String(settings.keep_days || 1);
+    out.textContent = (snapshots.entries || []).length
+      ? (snapshots.entries || []).map(entry => JSON.stringify(entry, null, 2)).join('\n\n')
+      : t('mcp.llm_debug.empty', '暂无请求快照。开启后完成一次模型调用，再刷新此处。');
+  } catch (e) {
+    out.textContent = t('mcp.llm_debug.load_error', '读取调试快照失败: {error}', { error: e.message });
+  }
+}
+
+async function saveMcpDebugRequests() {
+  try {
+    const keep_days = Number(document.getElementById('mcp-llm-debug-keep-days').value || 1);
+    await api('PUT', '/llm-debug-requests', {
+      enabled: document.getElementById('mcp-llm-debug-enabled').checked,
+      keep_days,
+    });
+    toast(t('mcp.llm_debug.saved', 'LLM 请求调试设置已保存'), 'ok');
+    await loadMcpDebugRequests();
+  } catch (e) { toast(t('mcp.llm_debug.save_error', '保存调试设置失败: {error}', { error: e.message }), 'err'); }
 }
 
 function _renderMcpServer(server) {

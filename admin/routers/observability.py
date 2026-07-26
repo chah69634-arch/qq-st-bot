@@ -13,6 +13,22 @@ async def api_calls(caller: str = "", provider: str = "", limit: int = Query(100
 
 
 @router.get(
+    "/observability/llm-debug-requests",
+    summary="读取 LLM 请求调试快照（高敏感）",
+    description="仅当 llm_debug_requests.enabled 为真时才会产生快照；内容含 prompt 与工具 schema。",
+)
+async def llm_debug_requests(
+    purpose: str = "",
+    limit: int = Query(20, ge=1, le=100),
+    _auth=Depends(require_scopes("admin")),
+):
+    from core.llm_debug_requests import query
+
+    entries = query(purpose=purpose, limit=limit)
+    return {"entries": entries, "count": len(entries)}
+
+
+@router.get(
     "/observability/tool-traces",
     summary="列出有工具执行痕迹的 uid（只读）",
 )

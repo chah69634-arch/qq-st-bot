@@ -582,6 +582,40 @@ async def test_nudge_hint_forbids_narrating_tool_call_as_dialogue(monkeypatch):
     assert "不是说给对方听" in nudge["content"]
 
 
+@pytest.mark.asyncio
+async def test_nudge_hint_derives_opaque_mcp_parameter_guidance_from_current_registry(monkeypatch):
+    import core.tool_dispatcher as td
+
+    _patch_tool_loop_config(monkeypatch, categories=["mcp"])
+    schema = [{"type": "function", "function": {
+        "name": "mcp__arcade__play",
+        "description": "play",
+        "parameters": {"type": "object", "properties": {
+            "params": {"type": "object", "additionalProperties": True},
+        }},
+    }}]
+    monkeypatch.setattr(td, "get_tools_schema", lambda categories=None: schema)
+    monkeypatch.setattr(td, "_TOOL_REGISTRY", {
+        "mcp__arcade__play": {"category": "mcp", "mcp_server": "arcade", "description": "play"},
+        "mcp__arcade__inspect_action": {
+            "category": "mcp", "mcp_server": "arcade", "mcp_read_only": True,
+            "description": "Describes parameters for an action",
+        },
+    })
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="ok", tool_calls=[], assistant_message={"role": "assistant", "content": "ok"}),
+    ])
+    _script_execute(monkeypatch, [])
+
+    await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "play"}], uid="u1", char_id="c1", session_state=object(),
+    )
+
+    nudge = next(m for m in chat_turn_calls[0]["messages"] if m.get("_layer") == "11.5_tool_nudge")
+    assert "mcp__arcade__inspect_action" in nudge["content"]
+    assert "不要根据工具名猜测" in nudge["content"]
+
+
 # ── 13. Brief 120·工具循环二次调用兜底（尾部花括号方案）────────────────────
 #
 # 覆盖 cc-tasks/120-工具循环二次调用兜底-尾部花括号方案.md §4 的验收要求：

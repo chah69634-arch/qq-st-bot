@@ -274,6 +274,10 @@ class DataPaths:
         """Fail-open external API observability ledger, rotated by the writer."""
         return self._p("runtime", "observability", "api_calls.jsonl")
 
+    def llm_debug_request_log(self) -> Path:
+        """Explicit opt-in LLM request snapshots; contains sensitive prompt content."""
+        return self._p("runtime", "observability", "llm_debug_requests.jsonl")
+
     def spend_ledger(self) -> Path:
         """Brief 57 append-only spending mandate ledger."""
         return self._p("runtime", "spend", "ledger.jsonl")

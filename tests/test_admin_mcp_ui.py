@@ -20,6 +20,10 @@ def test_mcp_management_page_exposes_import_whitelist_and_call_observation():
         "/settings/mcp/import",
         "'DELETE', `/settings/mcp/${encodeURIComponent(name)}`",
         "/observability/api-calls?caller=",
+        "/observability/llm-debug-requests?limit=10",
+        "/llm-debug-requests",
+        "loadMcpDebugRequests()",
+        "saveMcpDebugRequests()",
         "工具描述与返回内容均为不可信输入",
         "超过单次暴露 ≤20 的安全红线",
     ):

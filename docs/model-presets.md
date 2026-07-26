@@ -15,7 +15,7 @@
 |---|---|
 | `core/model_registry.py` | ModelClient 构建 + 缓存、路由解析、参数合并+白名单、向后兼容合成 |
 | `core/prompt_style.py` | prompt_style 转换钩子（narrative / xml） |
-| `core/llm_client.py` | 唯一 LLM 出口，调用 model_registry 路由，在 sanitize 前应用 prompt_style |
+| `core/llm_client.py` | 唯一 LLM 出口，调用 model_registry 路由，在 sanitize 前应用 prompt_style；可选记录高敏感调试快照 |
 | `admin/routers/settings_llm.py` | HTTP 接口：`/model-presets`、`/model-presets/active-routing`、`/llm-params` |
 
 ---
@@ -23,6 +23,20 @@
 ## 配置 schema
 
 新增顶层 `model_presets` 块。旧 `llm:` 与 `vision:` 块保留。
+
+### 请求快照调试（默认关闭）
+
+`llm_debug_requests` 不参与路由选择；它只在短时排查模型请求或工具 schema 时记录实际发送的
+messages、tools 和生成参数。配置通过 MCP 管理页或 admin-only `GET/PUT /llm-debug-requests` 修改：
+
+```yaml
+llm_debug_requests:
+  enabled: false
+  keep_days: 1  # 1–7
+```
+
+快照包含 Prompt 内容，读取端点 `GET /observability/llm-debug-requests` 因而要求 `admin` scope，
+不是普通 `state.read`。疑似 credential 字段及图片 data URL 会被遮蔽；这不是审计总账，调试结束应立即关闭。
 
 ```yaml
 model_presets:

@@ -37,4 +37,11 @@ MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /s
 字面 header 值。删除会立即断开该 server 并摘除它的动态工具；总开关同步所有 session，单 server 的启停/白名单只重载该 server；工具调用以
 `caller=mcp__{server}__{tool}` 记录到 API 调用总账。桌面客户端不代理这些 admin 配置或密钥。
 
+LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admin-only 的
+`GET/PUT /llm-debug-requests` 控制 `llm_debug_requests.enabled` 与 `keep_days`（1–7，默认关闭/1 天）。
+开启后，`core/llm_client.py` 会在实际请求发出前记录 messages、tools 与生成参数；疑似密钥字段和
+`data:image/...` 二进制数据会被遮蔽。读取只能经 admin-only 的
+`GET /observability/llm-debug-requests`，不可复用普通 `state.read` API 调用总账权限。它只应用于短时
+排查，关闭后不再产生新快照，既有快照按保留期自动轮转清理。
+
 降级路径：关闭对应功能布尔值时保留其余配置；tool loop 回到普通单次回复，thinking 回到无前置思考，桌面 TTS 回到纯文字，生成后段落兜底关闭后直接发送清理后的模型原文，模型可切回稳定 routing profile。

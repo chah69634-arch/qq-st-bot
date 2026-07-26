@@ -304,12 +304,27 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
             "parameters": tool.inputSchema or {"type": "object", "properties": {}},
             "mcp_server": name,
             "mcp_tool": tool.name,
+            # MCP annotations are optional.  Keep the read-only declaration so
+            # the tool-loop can safely point models at server-provided docs /
+            # inspection tools without guessing from a tool's name.
+            "mcp_read_only": _tool_is_read_only(tool),
         }
         handle.tool_names.append(reg_name)
 
     _servers[name] = handle
     _record_init(name, ok=True, tools=details)
     logger.info("[mcp_client] server '%s' 已连接，注册 %d 个工具", name, len(handle.tool_names))
+
+
+def _tool_is_read_only(tool) -> bool:
+    """Read the optional MCP ``readOnlyHint`` from dict or SDK-model annotations."""
+    annotations = getattr(tool, "annotations", None)
+    if isinstance(annotations, dict):
+        return annotations.get("readOnlyHint") is True or annotations.get("read_only_hint") is True
+    return (
+        getattr(annotations, "readOnlyHint", None) is True
+        or getattr(annotations, "read_only_hint", None) is True
+    )
 
 
 async def test_server_config(server_cfg: dict) -> list[dict]:

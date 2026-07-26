@@ -53,6 +53,28 @@ def _record_api_call(
     )
 
 
+def _record_debug_request(
+    *,
+    provider: str,
+    model: str,
+    purpose: str,
+    messages: list[dict],
+    tools: list[dict] | None,
+    request_kwargs: dict[str, Any],
+) -> None:
+    """Persist an opt-in semantic request snapshot without affecting the call."""
+    from core.llm_debug_requests import append
+
+    append(
+        provider=provider,
+        model=model,
+        purpose=purpose,
+        messages=messages,
+        tools=tools,
+        request_kwargs=request_kwargs,
+    )
+
+
 def _log_completed_call(*, provider: str, model: str, purpose: str, started_at: float) -> None:
     duration_ms = int((time.perf_counter() - started_at) * 1000)
     logger.info(
@@ -178,6 +200,14 @@ async def chat(
             safe_msgs = sanitize_messages(messages)
             started_at = time.perf_counter()
             try:
+                _record_debug_request(
+                    provider=str(vision_cfg.get("provider") or "vision"),
+                    model=str(vision_cfg.get("model") or ""),
+                    purpose="vision",
+                    messages=safe_msgs,
+                    tools=None,
+                    request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
+                )
                 response = await vision_client.chat.completions.create(
                     model=vision_cfg["model"],
                     messages=safe_msgs,
@@ -232,6 +262,11 @@ async def chat(
     try:
         # ── function_calling 模式 ──────────────────────────────────────────
         if mode == "function_calling" and tools:
+            _record_debug_request(
+                provider=mc.provider_kind, model=model, purpose=call_category,
+                messages=messages, tools=tools,
+                request_kwargs={"tool_choice": "auto", **_gen_kwargs},
+            )
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -268,6 +303,11 @@ async def chat(
             if not injected:
                 msgs.insert(0, {"role": "system", "content": tool_desc})
 
+            _record_debug_request(
+                provider=mc.provider_kind, model=model, purpose=call_category,
+                messages=msgs, tools=tools,
+                request_kwargs={"tool_encoding": "xml_fallback", **_gen_kwargs},
+            )
             response = await client.chat.completions.create(
                 model=model,
                 messages=msgs,
@@ -278,6 +318,10 @@ async def chat(
 
         # ── 普通对话（无工具）────────────────────────────────────────────────
         else:
+            _record_debug_request(
+                provider=mc.provider_kind, model=model, purpose=call_category,
+                messages=messages, tools=None, request_kwargs=_gen_kwargs,
+            )
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -392,6 +436,14 @@ async def chat_turn(
 
     started_at = time.perf_counter()
     try:
+        _record_debug_request(
+            provider=mc.provider_kind,
+            model=mc.model,
+            purpose=call_category,
+            messages=prepared,
+            tools=tools,
+            request_kwargs={"tool_choice": "auto", **gen_kwargs},
+        )
         response = await mc.client.chat.completions.create(
             model=mc.model,
             messages=prepared,
@@ -511,6 +563,14 @@ async def chat_stream(
         thinking.build_reasoning_kwargs(mc, call_category=call_category, is_proactive=is_proactive)
     )
 
+    _record_debug_request(
+        provider=mc.provider_kind,
+        model=mc.model,
+        purpose=call_category,
+        messages=messages,
+        tools=None,
+        request_kwargs={"stream": True, **_gen_kwargs},
+    )
     stream = await mc.client.chat.completions.create(
         model=mc.model,
         messages=messages,

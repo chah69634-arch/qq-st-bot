@@ -90,6 +90,13 @@ llm:
   max_tokens: 4000
   frequency_penalty: 0.3
   presence_penalty: 0.4
+# High-sensitivity troubleshooting only.  When enabled, stores the semantic LLM
+# request (messages, tools and generation params) for admin inspection.  Prompt
+# content is retained, but credential-looking fields and image data URLs are
+# redacted.  Keep disabled outside a short diagnostic window.
+llm_debug_requests:
+  enabled: false
+  keep_days: 1
 vision:
   enabled: false  # 纯增值功能(图片识别)，默认关；面板「系统状态」页可开，需自备 api_key
   provider: glm

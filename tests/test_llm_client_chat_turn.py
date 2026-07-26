@@ -116,6 +116,26 @@ async def test_real_tool_calls_bypass_leak_check_even_with_suspicious_content(mo
     assert turn.content == "｜无关噪音｜"
 
 
+@pytest.mark.asyncio
+async def test_chat_turn_records_the_actual_tool_request_when_opt_in_debug_is_enabled(monkeypatch):
+    from core import llm_client
+
+    message = _fake_message("ok", tool_calls=None)
+    fake_mc = _make_fake_model_client(message, finish_reason="stop")
+    captured = {}
+    monkeypatch.setattr(llm_client, "get_model_client", lambda cat, char_id=None: fake_mc)
+    monkeypatch.setattr("core.llm_debug_requests.append", lambda **kwargs: captured.update(kwargs))
+
+    await llm_client.chat_turn(
+        [{"role": "user", "content": "inspect the action"}],
+        tools=[{"type": "function", "function": {"name": "mcp__arcade__play", "parameters": {}}}],
+    )
+
+    assert captured["messages"][-1]["content"] == "inspect the action"
+    assert captured["tools"][0]["function"]["name"] == "mcp__arcade__play"
+    assert captured["request_kwargs"]["tool_choice"] == "auto"
+
+
 class TestLeakDetectorHelper:
     def test_two_or_more_occurrences_flagged(self):
         from core.llm_client import _looks_like_leaked_tool_call_markup as detect
