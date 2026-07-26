@@ -8,7 +8,7 @@ def test_sticker_emotion_uses_local_fallback_when_classifier_is_neutral():
 
     assert _resolve_sticker_emotion("太好了，见到你我真的很开心。", "neutral") == "happy"
     assert _resolve_sticker_emotion("别难过，我会陪着你。", "neutral") == "gentle"
-    assert _resolve_sticker_emotion("普通地说一句晚安。", "neutral") == "neutral"
+    assert _resolve_sticker_emotion("普通地说一句晚安。", "neutral") == "calm"
     assert _resolve_sticker_emotion("普通文本", "sad") == "sad"
 
 

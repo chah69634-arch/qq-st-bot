@@ -46,7 +46,11 @@ def _resolve_sticker_emotion(reply: str, emotion: str) -> str:
         if any(keyword in text for keyword in keywords):
             logger.info("[sticker] classifier neutral; local fallback selected emotion=%s", label)
             return label
-    return "neutral"
+    # `trigger_prob` is the user-facing per-turn frequency control.  Do not
+    # silently turn it into zero merely because the optional classifier cannot
+    # distinguish a calm reply from neutral; the generic calm pack is the
+    # intentional visual fallback for that case.
+    return "calm"
 
 
 def _char_sticker_pack_name(char_id: str) -> str | None:
@@ -157,6 +161,7 @@ async def maybe_send_sticker(
             "gentle": "心疼",
             "surprised": "害羞",
             "angry": "无奈",
+            "calm": "沉默",
         }
         folder_emotion = _EMOTION_MAP.get(emotion, "沉默")
 
