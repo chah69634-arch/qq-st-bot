@@ -121,6 +121,11 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "status.screen.title",
         "status.relay.title",
         "status.tts.title",
+        "status.tts.provider",
+        "status.tts.provider_openai_compatible",
+        "status.tts.provider_status",
+        "status.tts.provider_params",
+        "status.tts.api_url",
         "status.pronoun.title",
     ):
         assert f'data-i18n="{key}"' in status

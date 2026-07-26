@@ -244,13 +244,13 @@
             <input type="checkbox" id="tts-emotion-enabled" class="admin-inline-202"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row admin-inline-117"><input type="checkbox" id="tts-desktop-enabled" class="admin-inline-202"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
         </div>
         <div class="form-row admin-inline-156">
-          <label class="field"><span>TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible">OpenAI-compatible (自建/云端，POST /audio/speech)</option></select></label>
-          <label class="field"><span>Provider status</span><input id="tts-provider-status" readonly></label>
+          <label class="field"><span data-i18n="status.tts.provider">TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv" data-i18n="status.tts.provider_gsv">GPT-SoVITS / GSV</option><option value="openai_compatible" data-i18n="status.tts.provider_openai_compatible">OpenAI-compatible (自建/云端，POST /audio/speech)</option></select></label>
+          <label class="field"><span data-i18n="status.tts.provider_status">Provider status</span><input id="tts-provider-status" readonly></label>
         </div>
-        <label class="field admin-inline-156"><span>Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='GSV: {"api_url":"http://127.0.0.1:9880","ref_audio":"..."}  |  openai_compatible: {"base_url":"https://.../v1","api_key":"...","model":"tts-1","voice":"alloy"}'></textarea></label>
+        <label class="field admin-inline-156"><span data-i18n="status.tts.provider_params">Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='GSV: {"api_url":"http://127.0.0.1:9880","ref_audio":"..."}  |  openai_compatible: {"base_url":"https://.../v1","api_key":"...","model":"tts-1","voice":"alloy"}'></textarea></label>
         <div class="form-row admin-inline-156">
           <label class="field">
-            <span>API URL</span>
+            <span data-i18n="status.tts.api_url">API URL</span>
             <input type="text" id="tts-api-url" placeholder="http://127.0.0.1:9880">
           </label>
           <label class="field">

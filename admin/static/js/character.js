@@ -15,7 +15,7 @@ function _renderTtsProvider(provider) {
 function onTtsProviderChange() {
   const next = document.getElementById('tts-provider').value;
   if (next === _ttsLoadedProvider) return;
-  if (document.getElementById('tts-provider-params').value.trim() && !confirm('切换 Provider 会放弃当前未保存的参数编辑，继续吗？')) {
+  if (document.getElementById('tts-provider-params').value.trim() && !confirm(t('status.tts.switch_discard_confirm', '切换 Provider 会放弃当前未保存的参数编辑，继续吗？'))) {
     document.getElementById('tts-provider').value = _ttsLoadedProvider;
     return;
   }
@@ -36,15 +36,17 @@ async function loadTtsConfig() {
     _ttsLoadedProvider = d.provider || 'gsv';
     _renderTtsProvider(_ttsLoadedProvider);
     const s = d.provider_status || {};
-    document.getElementById('tts-provider-status').value = s.ready ? 'ready' : (s.reason || 'not ready');
+    document.getElementById('tts-provider-status').value = s.ready
+      ? t('status.tts.ready', 'ready')
+      : (s.reason || t('status.tts.not_ready', 'not ready'));
   } catch (e) { toast(t('status.tts.load_error', '读取 TTS 配置失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveTtsConfig() {
   let providerParams;
   try { providerParams = JSON.parse(document.getElementById('tts-provider-params').value || '{}'); }
-  catch (e) { toast('Provider parameters must be valid JSON', 'err'); return; }
+  catch (e) { toast(t('status.tts.invalid_params', 'Provider parameters must be valid JSON'), 'err'); return; }
   const provider = document.getElementById('tts-provider').value;
-  if (provider === 'openai_compatible') { toast('该 TTS Provider 尚未实装，不能保存。', 'err'); return; }
+  if (provider === 'openai_compatible') { toast(t('status.tts.provider_unavailable', '该 TTS Provider 尚未实装，不能保存。'), 'err'); return; }
   providerParams.api_url = document.getElementById('tts-api-url').value.trim();
   providerParams.ref_audio = document.getElementById('tts-ref-audio').value.trim();
   providerParams.prompt_text = document.getElementById('tts-prompt-text').value.trim();
@@ -88,19 +90,19 @@ async function saveStickerConfig() {
 }
 async function testTtsConfig() {
   try {
-    const d = await api('POST', '/tts-config/test', { text: '这是一段 TTS 配置试听。', emotion: 'neutral' });
+    const d = await api('POST', '/tts-config/test', { text: t('status.tts.test_text', '这是一段 TTS 配置试听。'), emotion: 'neutral' });
     const audio = new Audio(`data:${d.mime};base64,${d.audio_b64}`);
     await audio.play();
-    toast(`试听成功 (${d.provider})`, 'ok');
-  } catch (e) { toast(`试听失败: ${e.message}`, 'err'); }
+    toast(t('status.tts.test_success', '试听成功 ({provider})', { provider: d.provider }), 'ok');
+  } catch (e) { toast(t('status.tts.test_failed', '试听失败: {error}', { error: e.message }), 'err'); }
 }
 async function loadTtsCallLog() {
   try {
     const d = await api('GET', '/observability/api-calls?caller=tts&limit=10');
     document.getElementById('tts-call-log').textContent = (d.entries || []).map(x =>
       `${new Date(x.ts * 1000).toLocaleString()} | ${x.provider} | ${x.ok ? 'ok' : 'failed'} | ${x.duration_ms}ms | ${x.output_hint || ''}`
-    ).join('\n') || 'No TTS synthesis records yet.';
-  } catch (e) { toast(`读取合成记录失败: ${e.message}`, 'err'); }
+    ).join('\n') || t('status.tts.records_empty', 'No TTS synthesis records yet.');
+  } catch (e) { toast(t('status.tts.call_log_load_error', '读取合成记录失败: {error}', { error: e.message }), 'err'); }
 }
 
 async function _ensurePronounUidOptions() {
