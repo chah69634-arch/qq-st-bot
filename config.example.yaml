@@ -221,6 +221,13 @@ tts:
   sample_steps: 8
   pause_second: 0.3
   how_to_cut: 按中文句号。切
+  # GSV v2 may lose the start of an internally split sentence.  By default the
+  # adapter segments locally, sends each part with "不切", then joins PCM WAVs.
+  # Newlines (including literal \\n or /n) and 。！？；…… are hard boundaries;
+  # commas/dashes are only used to shorten a segment that exceeds this limit.
+  external_segment_enabled: true
+  segment_max_chars: 42
+  segment_pause_seconds: 0.25
   ref_free: false
   if_freeze: false
   if_sr: false

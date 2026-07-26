@@ -1,8 +1,20 @@
 import pytest
 import sys
+import wave
+from io import BytesIO
 from types import SimpleNamespace
 
 from core.output import voice_adapter
+
+
+def _pcm_wav(*, frames: int = 20, framerate: int = 100, channels: int = 1, sample_width: int = 2) -> bytes:
+    output = BytesIO()
+    with wave.open(output, "wb") as target:
+        target.setnchannels(channels)
+        target.setsampwidth(sample_width)
+        target.setframerate(framerate)
+        target.writeframes(b"\x01" * frames * channels * sample_width)
+    return output.getvalue()
 
 
 def test_legacy_gsv_fields_are_mapped_without_new_provider_block():
@@ -48,6 +60,37 @@ def test_gsv_model_paths_use_explicit_values_or_default_base_models():
     ) == voice_adapter._DEFAULT_SOVITS_MODEL
 
 
+def test_gsv_segments_clean_newline_forms_invalid_characters_and_route_languages():
+    segments = voice_adapter.split_gsv_segments(
+        "第一句。\\nSecond line! /n第三句\u200b",
+        {},
+    )
+
+    assert segments == [
+        ("第一句。", "中文"),
+        ("Second line!", "英文"),
+        ("第三句", "中文"),
+    ]
+
+
+def test_gsv_segments_only_use_comma_or_dash_when_a_sentence_is_too_long():
+    short = voice_adapter.split_gsv_segments("这一句，有停顿——但并不需要被拆开。", {})
+    long = voice_adapter.split_gsv_segments("甲，乙，丙，丁，戊，己，庚，辛，壬，癸。", {"segment_max_chars": 12})
+
+    assert short == [("这一句，有停顿——但并不需要被拆开。", "中文")]
+    assert len(long) > 1
+    assert "，" in long[0][0]
+
+
+def test_pcm_wav_segments_are_joined_with_silence_and_incompatible_audio_is_rejected():
+    joined = voice_adapter._join_pcm_wavs([_pcm_wav(), _pcm_wav()], 0.25)
+
+    assert joined is not None
+    with wave.open(BytesIO(joined), "rb") as source:
+        assert source.getnframes() == 20 + 25 + 20
+    assert voice_adapter._join_pcm_wavs([_pcm_wav(), b"not-a-wav"], 0.25) is None
+
+
 @pytest.mark.asyncio
 async def test_gsv_switches_models_before_synthesis(tmp_path, monkeypatch):
     reference = tmp_path / "reference.wav"
@@ -82,6 +125,39 @@ async def test_gsv_switches_models_before_synthesis(tmp_path, monkeypatch):
     assert calls[0] == {"sovits_path": "custom.pth", "api_name": "/change_sovits_weights"}
     assert calls[1] == {"gpt_path": "custom.ckpt", "api_name": "/change_gpt_weights"}
     assert calls[2]["api_name"] == "/get_tts_wav"
+
+
+@pytest.mark.asyncio
+async def test_gsv_synthesizes_each_language_segment_without_internal_cutting(tmp_path, monkeypatch):
+    reference = tmp_path / "reference.wav"
+    output = tmp_path / "output.wav"
+    reference.write_bytes(b"reference")
+    output.write_bytes(_pcm_wav())
+    calls = []
+
+    class FakeClient:
+        def __init__(self, api_url):
+            assert api_url == "http://gsv-segments"
+
+        def predict(self, **kwargs):
+            calls.append(kwargs)
+            return str(output) if kwargs["api_name"] == "/get_tts_wav" else None
+
+    monkeypatch.setitem(sys.modules, "gradio_client", SimpleNamespace(Client=FakeClient, handle_file=lambda path: path))
+    voice_adapter._GSV_ACTIVE_MODELS.pop("http://gsv-segments", None)
+
+    audio = await voice_adapter.GsvProvider().synthesize(
+        "中文 hello。再见。",
+        "neutral",
+        {"api_url": "http://gsv-segments", "ref_audio": str(reference)},
+    )
+
+    assert audio is not None
+    synthesis = [call for call in calls if call["api_name"] == "/get_tts_wav"]
+    assert [(call["text"], call["text_language"]) for call in synthesis] == [
+        ("中文", "中文"), ("hello.", "英文"), ("再见。", "中文"),
+    ]
+    assert all(call["how_to_cut"] == "不切" for call in synthesis)
 
 
 def test_openai_compatible_without_base_url_not_ready_and_does_not_leak_secret():

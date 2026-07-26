@@ -21,9 +21,12 @@
 
 import asyncio
 import base64
+from io import BytesIO
 import logging
 import re
 import time
+import unicodedata
+import wave
 from pathlib import Path
 from typing import Protocol
 
@@ -41,6 +44,10 @@ _DEFAULT_GPT_MODEL = "不训练直接推v3底模！"
 _DEFAULT_SOVITS_MODEL = "不训练直接推v2ProPlus底模！"
 _GSV_SYNTHESIS_LOCK = asyncio.Lock()
 _GSV_ACTIVE_MODELS: dict[str, tuple[str, str]] = {}
+_GSV_HARD_BOUNDARIES = frozenset("。！？；!?")
+_GSV_SOFT_BOUNDARIES = frozenset("，,、:：—–-")
+_GSV_DEFAULT_SEGMENT_MAX_CHARS = 42
+_GSV_DEFAULT_SEGMENT_PAUSE_SECONDS = 0.25
 
 
 def _resolve_audio_path(path: str) -> str:
@@ -148,6 +155,7 @@ def get_provider_config(cfg: dict | None = None) -> tuple[str, dict]:
             "emotions", "how_to_cut", "top_k", "top_p", "temperature",
             "ref_free", "if_freeze", "sample_steps", "if_sr", "pause_second",
             "gpt_model_path", "sovits_model_path", "gpt_model_fallback", "sovits_model_fallback",
+            "external_segment_enabled", "segment_pause_seconds", "segment_max_chars",
         )
         if key in cfg
     }
@@ -184,6 +192,196 @@ def get_safe_provider_params(cfg: dict | None = None) -> dict:
     return {key: value for key, value in selected.items() if key != "api_key"}
 
 
+def _is_cjk_character(char: str) -> bool:
+    codepoint = ord(char)
+    return (
+        0x3400 <= codepoint <= 0x4DBF
+        or 0x4E00 <= codepoint <= 0x9FFF
+        or 0xF900 <= codepoint <= 0xFAFF
+        or 0x20000 <= codepoint <= 0x2FA1F
+    )
+
+
+def _sanitize_tts_text(text: str) -> str:
+    """Normalize line breaks and discard characters which are unsafe to speak.
+
+    The model output is usually ordinary Unicode, but a few call paths can pass
+    literal escaped newlines or control/format characters through.  Those must
+    never become an empty, malformed GSV request.  Newlines are retained as
+    explicit sentence boundaries; other Unicode ``C*`` categories are ignored.
+    """
+    normalized = str(text or "")
+    normalized = normalized.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
+    normalized = re.sub(r"(?<![A-Za-z0-9])/(?:r/)?n(?![A-Za-z0-9])", "\n", normalized)
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    safe = []
+    for char in normalized:
+        if char == "\n":
+            safe.append(char)
+        elif unicodedata.category(char).startswith("C") or char == "\ufffd":
+            continue
+        else:
+            safe.append(char)
+    return "".join(safe)
+
+
+def _split_sentence_boundaries(text: str) -> list[str]:
+    """Split at hard sentence boundaries and newlines, keeping punctuation."""
+    parts: list[str] = []
+    current: list[str] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "\n":
+            candidate = "".join(current).strip()
+            if candidate:
+                parts.append(candidate)
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        is_ellipsis = char == "…" or (char == "." and (index + 1 == len(text) or text[index + 1].isspace()))
+        if char in _GSV_HARD_BOUNDARIES or is_ellipsis:
+            while index + 1 < len(text) and text[index + 1] in "…!?。":
+                index += 1
+                current.append(text[index])
+            candidate = "".join(current).strip()
+            if candidate:
+                parts.append(candidate)
+            current = []
+        index += 1
+    candidate = "".join(current).strip()
+    if candidate:
+        parts.append(candidate)
+    return parts
+
+
+def _split_long_segment(text: str, max_chars: int) -> list[str]:
+    """Use comma/dash boundaries only when a hard-bounded segment is too long."""
+    if len(text) <= max_chars:
+        return [text]
+    pieces: list[str] = []
+    remainder = text.strip()
+    while len(remainder) > max_chars:
+        boundary = max(
+            (index for index, char in enumerate(remainder[: max_chars + 1]) if char in _GSV_SOFT_BOUNDARIES),
+            default=-1,
+        )
+        cut_at = boundary + 1 if boundary >= 0 else max_chars
+        piece = remainder[:cut_at].strip()
+        if piece:
+            pieces.append(piece)
+        remainder = remainder[cut_at:].lstrip()
+    if remainder:
+        pieces.append(remainder)
+    return pieces
+
+
+def _split_language_runs(text: str) -> list[tuple[str, str]]:
+    """Separate Chinese and Latin speech so GSV receives the correct mode."""
+    runs: list[tuple[str, str]] = []
+    current: list[str] = []
+    current_language: str | None = None
+
+    def flush() -> None:
+        nonlocal current, current_language
+        value = "".join(current).strip()
+        if current_language == "英文":
+            value = value.translate(str.maketrans({
+                "。": ".", "！": "!", "？": "?", "；": ";",
+                "，": ",", "、": ",", "：": ":",
+            }))
+        if value and current_language:
+            runs.append((value, current_language))
+        current = []
+        current_language = None
+
+    pending_neutral: list[str] = []
+    for char in text:
+        language = "中文" if _is_cjk_character(char) else "英文" if char.isascii() and char.isalpha() else None
+        if language is None:
+            if current_language is None:
+                pending_neutral.append(char)
+            else:
+                current.append(char)
+            continue
+        if current_language is None:
+            current_language = language
+            current.extend(pending_neutral)
+            pending_neutral = []
+        elif language != current_language:
+            flush()
+            current_language = language
+        current.append(char)
+    if current_language is not None:
+        current.extend(pending_neutral)
+    flush()
+    return runs
+
+
+def split_gsv_segments(text: str, cfg: dict) -> list[tuple[str, str]]:
+    """Return clean GSV requests as ``(text, text_language)`` pairs.
+
+    GSV's internal multi-sentence splitter can lose the start of a following
+    sentence.  We therefore split here, ask GSV to use ``不切``, and later join
+    the returned WAV files.  Commas/dashes stay within a sentence unless the
+    sentence exceeds the configured safety limit.
+    """
+    cleaned = _sanitize_tts_text(text).strip()
+    if not cleaned:
+        return []
+    if cfg.get("external_segment_enabled", True) is False:
+        return [(cleaned, "中文")]
+    try:
+        max_chars = int(cfg.get("segment_max_chars", _GSV_DEFAULT_SEGMENT_MAX_CHARS))
+    except (TypeError, ValueError):
+        max_chars = _GSV_DEFAULT_SEGMENT_MAX_CHARS
+    max_chars = max(12, min(max_chars, 200))
+    segments: list[tuple[str, str]] = []
+    for sentence in _split_sentence_boundaries(cleaned):
+        for piece in _split_long_segment(sentence, max_chars):
+            segments.extend(_split_language_runs(piece))
+    return segments
+
+
+def _join_pcm_wavs(wavs: list[bytes], pause_seconds: float) -> bytes | None:
+    """Join matching PCM WAV payloads, returning None instead of corrupt audio."""
+    if not wavs:
+        return None
+    if len(wavs) == 1:
+        return wavs[0]
+    try:
+        decoded: list[tuple[wave._wave_params, bytes]] = []
+        for payload in wavs:
+            with wave.open(BytesIO(payload), "rb") as source:
+                params = source.getparams()
+                if params.comptype != "NONE":
+                    raise wave.Error("compressed WAV is not safe to concatenate")
+                decoded.append((params, source.readframes(source.getnframes())))
+        first_params = decoded[0][0]
+        signature = (
+            first_params.nchannels,
+            first_params.sampwidth,
+            first_params.framerate,
+            first_params.comptype,
+        )
+        if any((p.nchannels, p.sampwidth, p.framerate, p.comptype) != signature for p, _ in decoded[1:]):
+            raise wave.Error("GSV WAV parameters differ between segments")
+        pause_frames = int(max(0.0, min(pause_seconds, 1.0)) * first_params.framerate)
+        silence = b"\x00" * pause_frames * first_params.nchannels * first_params.sampwidth
+        output = BytesIO()
+        with wave.open(output, "wb") as target:
+            target.setparams(first_params)
+            for index, (_, frames) in enumerate(decoded):
+                if index:
+                    target.writeframesraw(silence)
+                target.writeframesraw(frames)
+        return output.getvalue()
+    except (EOFError, OSError, wave.Error) as error:
+        logger.warning("[voice_adapter] cannot safely concatenate GSV WAV segments: %s", error)
+        return None
+
+
 class TtsProvider(Protocol):
     async def synthesize(self, text: str, emotion: str, cfg: dict) -> bytes | None:
         """Synthesize an audio payload, returning None when the provider fails."""
@@ -209,6 +407,14 @@ class GsvProvider:
 
         gpt_model = _gsv_model_target(cfg, "gpt_model_path", "gpt_model_fallback", _DEFAULT_GPT_MODEL)
         sovits_model = _gsv_model_target(cfg, "sovits_model_path", "sovits_model_fallback", _DEFAULT_SOVITS_MODEL)
+        segments = split_gsv_segments(text, cfg)
+        if not segments:
+            logger.warning("[voice_adapter] no speakable GSV text remains after sanitization")
+            return None
+        try:
+            pause_seconds = float(cfg.get("segment_pause_seconds", _GSV_DEFAULT_SEGMENT_PAUSE_SECONDS))
+        except (TypeError, ValueError):
+            pause_seconds = _GSV_DEFAULT_SEGMENT_PAUSE_SECONDS
 
         def _sync_call():
             import os
@@ -251,27 +457,35 @@ class GsvProvider:
                     fallback=_DEFAULT_GPT_MODEL,
                 )
                 _GSV_ACTIVE_MODELS[api_url] = (active_gpt, active_sovits)
-            result = client.predict(
-                ref_wav_path=handle_file(ref_audio),
-                prompt_text=prompt_txt,
-                prompt_language="中文",
-                text=text,
-                text_language="中文",
-                how_to_cut=cfg.get("how_to_cut", "凑四句一切"),
-                top_k=int(cfg.get("top_k", 15)),
-                top_p=float(cfg.get("top_p", 1.0)),
-                temperature=float(cfg.get("temperature", 1.0)),
-                ref_free=bool(cfg.get("ref_free", False)),
-                speed=speed,
-                if_freeze=bool(cfg.get("if_freeze", False)),
-                inp_refs=None,
-                sample_steps=int(cfg.get("sample_steps", 8)),
-                if_sr=bool(cfg.get("if_sr", False)),
-                pause_second=float(cfg.get("pause_second", 0.3)),
-                api_name="/get_tts_wav",
-            )
-            with open(result, "rb") as f:
-                return f.read()
+            wavs: list[bytes] = []
+            for segment_text, segment_language in segments:
+                result = client.predict(
+                    ref_wav_path=handle_file(ref_audio),
+                    prompt_text=prompt_txt,
+                    prompt_language=str(cfg.get("prompt_language") or "中文"),
+                    text=segment_text,
+                    text_language=segment_language,
+                    # We have already segmented this request.  Letting GSV cut
+                    # again reintroduces the v2 sentence-initial word loss.
+                    how_to_cut="不切",
+                    top_k=int(cfg.get("top_k", 15)),
+                    top_p=float(cfg.get("top_p", 1.0)),
+                    temperature=float(cfg.get("temperature", 1.0)),
+                    ref_free=bool(cfg.get("ref_free", False)),
+                    speed=speed,
+                    if_freeze=bool(cfg.get("if_freeze", False)),
+                    inp_refs=None,
+                    sample_steps=int(cfg.get("sample_steps", 8)),
+                    if_sr=bool(cfg.get("if_sr", False)),
+                    pause_second=float(cfg.get("pause_second", 0.3)),
+                    api_name="/get_tts_wav",
+                )
+                with open(result, "rb") as source:
+                    wavs.append(source.read())
+            joined = _join_pcm_wavs(wavs, pause_seconds)
+            if joined is None:
+                raise RuntimeError("GSV returned incompatible WAV segments")
+            return joined
 
         async with _GSV_SYNTHESIS_LOCK:
             return await asyncio.get_event_loop().run_in_executor(None, _sync_call)
@@ -356,9 +570,11 @@ def clean_tts_text(text: str) -> str:
     This is deliberately shared by QQ's proactive TTS and HTTP clients so a
     Dream reply never has a different narration rule depending on the channel.
     """
-    cleaned = re.sub(r"（[^）]*）", "", text)
+    cleaned = re.sub(r"（[^）]*）", "", str(text or ""))
     cleaned = re.sub(r"\([^)]*\)", "", cleaned)
-    return cleaned.strip()
+    # Render tags are visual-only and should never become literal spoken words.
+    cleaned = re.sub(r"<[^>\n]{0,80}>", "", cleaned)
+    return _sanitize_tts_text(cleaned).strip()
 
 
 async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None = None) -> bytes | None:
@@ -377,8 +593,14 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
     成功返回 bytes，失败返回 None（已记录详细日志）。
     超时 15 秒。
     """
+    text = clean_tts_text(text)
     provider, provider_cfg = get_provider_config(resolve_tts_config(char_id))
     started_at = time.perf_counter()
+    if not text:
+        from core.api_call_log import append
+        append(caller="tts", purpose="synthesize", provider=provider, model="", duration_ms=0, ok=False, output_hint="empty_text")
+        logger.warning("[voice_adapter] text is empty after TTS sanitization")
+        return None
     adapter = _PROVIDERS.get(provider)
     if adapter is None:
         from core.api_call_log import append
