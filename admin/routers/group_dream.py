@@ -186,7 +186,7 @@ async def group_dream_send(group_id: str, body: dict, _auth=Depends(require_scop
     if not content:
         raise HTTPException(status_code=422, detail="content 不能为空")
 
-    from core.stage.dream_runtime import reserve_round
+    from core.stage.dream_runtime import release_round, reserve_round
 
     round_id = uuid.uuid4().hex
     if not reserve_round(group_id, round_id):
@@ -199,7 +199,12 @@ async def group_dream_send(group_id: str, body: dict, _auth=Depends(require_scop
         except Exception:
             logger.exception("[group_dream_send] dream stage turn failed group=%s round=%s", group_id, round_id)
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    # If the task is cancelled before its coroutine starts (for example during
+    # shutdown), its internal finally block never runs.  The done callback
+    # closes that narrow reservation leak without allowing an older task to
+    # clear a later round's ownership.
+    task.add_done_callback(lambda _task: release_round(group_id, round_id))
     return {"round_id": round_id, "status": "accepted"}
 
 

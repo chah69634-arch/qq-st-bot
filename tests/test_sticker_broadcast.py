@@ -18,6 +18,9 @@ async def test_sticker_keeps_qq_send_and_broadcasts_self_contained_payload(tmp_p
 
     image = tmp_path / "sticker.png"
     image.write_bytes(b"png-bytes")
+    # Delivery contract tests opt in explicitly; they must not depend on a
+    # developer's local sticker feature-switch setting.
+    monkeypatch.setattr(sticker, "get_config", lambda: {"sticker": {"enabled": True, "trigger_prob": 1.0}})
     monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion, char_id=None: str(image))
     monkeypatch.setattr(sticker.random, "random", lambda: 0.0)
 
@@ -57,6 +60,7 @@ async def test_sticker_broadcasts_without_qq_target_for_desktop_reply(tmp_path, 
 
     image = tmp_path / "sticker.png"
     image.write_bytes(b"png-bytes")
+    monkeypatch.setattr(sticker, "get_config", lambda: {"sticker": {"enabled": True, "trigger_prob": 1.0}})
     monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion, char_id=None: str(image))
     monkeypatch.setattr(sticker.random, "random", lambda: 0.0)
     monkeypatch.setattr(

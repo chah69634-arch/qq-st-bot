@@ -99,7 +99,7 @@ def _patch_response_processor(monkeypatch):
 
 def _patch_tool_dispatcher(monkeypatch):
     import core.tool_dispatcher as _td
-    _td._TOOL_REGISTRY = {}
+    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
 

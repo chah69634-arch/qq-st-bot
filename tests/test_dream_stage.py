@@ -9,6 +9,16 @@ ROSTER = ["yexuan", "yexuanJ-5412"]
 GROUP_ID = "dream-g1"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_active_rounds():
+    """The runtime guard is process-global while each test owns its sandbox."""
+    from core.stage import dream_runtime
+
+    dream_runtime._ACTIVE_ROUNDS.clear()
+    yield
+    dream_runtime._ACTIVE_ROUNDS.clear()
+
+
 def _create_reality_group(group_id: str = GROUP_ID, roster=None, **settings_kwargs):
     from core.stage.models import StageSettings
     from core.stage.store import create_stage
@@ -256,6 +266,39 @@ async def test_hanging_round_times_out_resets_state_and_next_round_runs(sandbox,
     state = read_state(GROUP_ID)
     assert state["round_status"] == "idle"
     assert state["last_round_error"] is None
+
+
+@pytest.mark.asyncio
+async def test_cancelled_round_releases_its_guard(sandbox, monkeypatch):
+    """Cancellation is a terminal path, not a permanently busy group."""
+    import core.stage.dream_runtime as runtime
+
+    _create_reality_group()
+    await _enter_group_dream()
+    started = asyncio.Event()
+
+    async def hanging_turn(*args, **kwargs):
+        started.set()
+        await asyncio.Future()
+
+    monkeypatch.setattr(runtime, "run_owner_turn", hanging_turn)
+    task = asyncio.create_task(
+        runtime.run_dream_stage_turn(GROUP_ID, "第一句", fanout=False, round_id="cancelled")
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert runtime.has_active_round(GROUP_ID) is False
+
+
+def test_old_round_release_cannot_clear_new_round_ownership():
+    """An old task's cleanup must never unlock a newly-reserved round."""
+    from core.stage import dream_runtime as runtime
+
+    runtime._ACTIVE_ROUNDS[GROUP_ID] = "new-round"
+    runtime.release_round(GROUP_ID, "old-round")
+    assert runtime._ACTIVE_ROUNDS[GROUP_ID] == "new-round"
 
 
 # ── §3 state / settings shape ──────────────────────────────────────────────────

@@ -51,6 +51,9 @@ REGISTRY: dict[str, PathMeta] = {
     "proactive_ledger":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "wake_delivery_ledger":   PathMeta("canonical", "shared",          "per_user",      "ignore"),
     "api_call_log":           PathMeta("forensic",  "shared",          "global",        "ignore"),
+    # Explicit opt-in prompt/tool-schema snapshots; daily files are pruned by
+    # core.llm_debug_requests and are never runtime truth.
+    "llm_debug_request_log": PathMeta("forensic",  "shared",          "global",        "ignore"),
 
     # ── forensic: 日志 / 观测 / DLQ，业务可丢 ────────────────────────────────
     "error_log":              PathMeta("forensic",  "shared",          "global",        "ignore"),

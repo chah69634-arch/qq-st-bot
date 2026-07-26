@@ -70,7 +70,7 @@ def _patch_env(monkeypatch):
     monkeypatch.setattr(_sm, "notify_owner_turn", lambda uid: None)
     monkeypatch.setattr(_pr, "update_last_message", lambda uid: None)
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
-    _td._TOOL_REGISTRY = {}
+    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
     monkeypatch.setattr(_llm, "chat", AsyncMock(return_value=""))

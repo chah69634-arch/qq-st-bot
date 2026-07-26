@@ -53,11 +53,13 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     # ── persona 级设置：docs/feature-control-surface.md 明确"供桌面客户端使用"，
     #    管理面板不重复做界面 ──────────────────────────────────────────
     ("PATCH", "/character/{char_id}/model-routing"): "角色卡模型路由绑定，persona scope，桌宠客户端消费",
+    ("PATCH", "/character/{char_id}/asset-bindings"): "角色资产绑定（TTS/表情包/Live2D/3D），由 Emerald-client 角色设置消费",
     ("PUT", "/settings/model-routing"): "桌面端切换已有模型路由，persona 级设置（docs/feature-control-surface.md §1）",
     ("PUT", "/chat-mode"): "聊天模式切换，persona 级桌面客户端设置，不在管理面板",
     ("PUT", "/chat-style"): "对话风格切换，persona 级桌面客户端设置，不在管理面板",
     ("PUT", "/chat-multi-message"): "分条发送开关，persona 级桌面客户端设置，不在管理面板",
     ("POST", "/settings/tts-desktop"): "桌面语音播放开关，persona 级设置（docs/feature-control-surface.md §1）",
+    ("POST", "/settings/tts-auto-play"): "分场景自动播放设置，persona 级设置（docs/feature-control-surface.md §1）",
     ("POST", "/tts/synthesize"): "按需合成语音，桌面端 {text,emotion}->{audio_b64,mime} 契约，非管理面板功能",
     ("POST", "/settings/thinking"): "persona 级设置，供桌面客户端使用（docs/feature-control-surface.md §1）",
     ("POST", "/settings/tool-loop"): "persona 级设置，供桌面客户端使用（docs/feature-control-surface.md §1）",
@@ -70,6 +72,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/mobile/push"): "向手机端推送消息，Emerald-mobile backend_client.dart 消费",
     ("POST", "/sensor/push"): "手机传感器数据上报，Emerald-mobile 消费",
     ("POST", "/sensor/realtime"): "桌面端实时传感器快照，Emerald-client sensor 消费",
+    ("POST", "/phone_control/step"): "手机自动化设备侧逐步协议，Emerald-mobile 每步上报并获取下一动作",
     ("PATCH", "/settings/prompt-assets"): "Prompt 资产部分更新，已确认由 Emerald-mobile PATCH 调用",
     ("PATCH", "/system/meta-mode"): "安全/危险模式切换，已确认由 Emerald-mobile 调用",
 
@@ -82,6 +85,9 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/group/{group_id}/dream/send"): "群聊梦境发言，Emerald-mobile backend_client.dart 消费",
     ("POST", "/group/{group_id}/dream/exit"): "群聊梦境硬退出，Emerald-mobile backend_client.dart 消费",
     ("PATCH", "/group/{group_id}/dream/settings"): "改群聊梦境设置，Emerald-mobile 消费（暂无对应 UI）",
+
+    # ── 旧版兼容：管理面板已改用 /dream/presets/{preset} 的独立预设编辑 ────────
+    ("PUT", "/dream/worlds/{world}/preset"): "旧版世界同名预设兼容路由；当前管理面板使用独立 /dream/presets 编辑接口",
 
     # ── 活动类小游戏/阅读：桌宠客户端自带活动窗口 UI，非管理面板 ────────────
     ("POST", "/activity/chess/start"): "国际象棋活动，UI 在 Emerald-client 桌宠活动窗口",

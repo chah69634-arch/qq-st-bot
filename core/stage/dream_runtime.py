@@ -72,6 +72,17 @@ def reserve_round(group_id: str, round_id: str) -> bool:
     return True
 
 
+def release_round(group_id: str, round_id: str) -> None:
+    """Release a reservation only when it is still owned by this round.
+
+    The HTTP endpoint reserves before scheduling its task.  A task cancelled
+    before it begins therefore needs the same ownership-safe cleanup as the
+    normal runtime ``finally`` path.
+    """
+    if _ACTIVE_ROUNDS.get(group_id) == round_id:
+        _ACTIVE_ROUNDS.pop(group_id, None)
+
+
 def _dream_trace_path(group_id: str) -> Path:
     from core.sandbox import get_paths
     return get_paths().dream_group_arbiter_trace(group_id=group_id)
@@ -206,7 +217,7 @@ async def run_dream_stage_turn(
                     await _dws.push_group_round_end(resolved_round_id, group_id, domain="dream")
             except Exception:
                 logger.debug("[dream_runtime] WS group_round_end push failed", exc_info=True)
-        _ACTIVE_ROUNDS.pop(group_id, None)
+        release_round(group_id, resolved_round_id)
 
 
 def _mark_round_finished(group_id: str, round_id: str, *, error: str | None = None) -> None:

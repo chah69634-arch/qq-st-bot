@@ -254,7 +254,7 @@ async def test_handle_message_main_path_intact(sandbox, monkeypatch):
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
 
     import core.tool_dispatcher as _td
-    _td._TOOL_REGISTRY = {}
+    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
     import core.llm_client as _llm

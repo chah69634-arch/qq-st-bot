@@ -96,9 +96,10 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
     assert reply in log_text,            "assistant 行缺失"
     assert "emotion:neutral" in log_text, "assistant 行 emotion 占位字段缺失"
 
-    # mood_state.update 应以 "happy" 为第一参数调用
-    assert mood_calls and mood_calls[0] == "happy", \
-        f"mood_state.update 首参数应为 'happy'，实际: {mood_calls}"
+    # 深夜的 time_sleepiness 允许先写 sleepy；detect_emotion 的结果仍须成为
+    # 本轮最终 mood write，不能把合法前置写入误判为顺序回归。
+    assert mood_calls and mood_calls[-1] == "happy", \
+        f"mood_state.update 最后一笔应为 'happy'，实际: {mood_calls}"
 
     # ── gate 关闭状态：episodic 确定性地尚未完成 ─────────────────────────────
     assert not marker.exists(), "gate 关闭期间 episodic 不应完成"
@@ -171,8 +172,8 @@ async def test_detect_emotion_runs_outside_uid_lock(sandbox, monkeypatch):
     assert day_files, "event_log 今日文件未创建"
     log_text = day_files[0].read_text(encoding="utf-8")
     assert "emotion:neutral" in log_text, f"event_log 应写占位值 neutral，实际:\n{log_text}"
-    assert mood_calls and mood_calls[0] == "happy", (
-        f"detect_emotion 的真实结果应正确写入 mood_state，实际: {mood_calls}"
+    assert mood_calls and mood_calls[-1] == "happy", (
+        f"detect_emotion 的真实结果应写入本轮最终 mood_state，实际: {mood_calls}"
     )
 
     await sq.drain()
@@ -224,8 +225,8 @@ async def test_detect_emotion_timeout_falls_back_to_neutral(sandbox, monkeypatch
     assert "emotion:neutral" in log_text, \
         f"超时降级时应为 emotion:neutral，实际:\n{log_text}"
 
-    # mood_state.update 应以 "neutral" 为第一参数调用
-    assert mood_calls and mood_calls[0] == "neutral", \
-        f"mood_state.update 首参数应为 'neutral'，实际: {mood_calls}"
+    # 同上：sleepy 合法地先于 timeout fallback；最终值必须是 neutral。
+    assert mood_calls and mood_calls[-1] == "neutral", \
+        f"mood_state.update 最后一笔应为 'neutral'，实际: {mood_calls}"
 
     await sq.drain()
