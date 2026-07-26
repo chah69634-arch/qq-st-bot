@@ -256,6 +256,47 @@ class TestHttpHeadersAndProbe:
         assert "mcp__remote__inspect" not in td._TOOL_REGISTRY
 
 
+class TestMcpProxyRouting:
+    def test_loopback_urls_always_bypass_proxy(self, monkeypatch):
+        monkeypatch.setattr("core.config_loader.get_config", lambda: {
+            "proxy": {"enabled": True, "http": "http://proxy.test:8080"},
+        })
+        for url in ("http://localhost:3000/mcp", "http://tool.localhost/mcp", "http://127.0.0.1/mcp", "http://[::1]/mcp"):
+            assert mc.is_local_mcp_url(url) is True
+            assert mc._mcp_proxy_url({"use_proxy": True}, url) is None
+
+    def test_remote_proxy_requires_explicit_opt_in_and_uses_matching_global_url(self, monkeypatch):
+        config = {
+            "proxy": {
+                "enabled": True,
+                "http": "http://http-proxy.test:8080",
+                "https": "http://https-proxy.test:8080",
+            },
+        }
+        monkeypatch.setattr("core.config_loader.get_config", lambda: config)
+        assert mc._mcp_proxy_url({}, "https://remote.test/mcp") is None
+        assert mc._mcp_proxy_url({"use_proxy": True}, "http://remote.test/mcp") == "http://http-proxy.test:8080"
+        assert mc._mcp_proxy_url({"use_proxy": True}, "https://remote.test/mcp") == "http://https-proxy.test:8080"
+
+    def test_proxy_client_never_inherits_environment_settings(self, monkeypatch):
+        import httpx
+
+        calls = {}
+        monkeypatch.setattr("core.config_loader.get_config", lambda: {
+            "proxy": {"enabled": True, "https": "http://proxy.test:8080"},
+        })
+        monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: calls.setdefault("kwargs", kwargs))
+
+        client = mc._mcp_http_client_factory({"use_proxy": True}, "https://remote.test/mcp")(
+            headers={"X-Test": "yes"},
+        )
+
+        assert client is calls["kwargs"]
+        assert calls["kwargs"]["proxy"] == "http://proxy.test:8080"
+        assert calls["kwargs"]["trust_env"] is False
+        assert calls["kwargs"]["follow_redirects"] is True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # transport: stdio / SSE / Streamable HTTP，以及旧 http alias
 # ─────────────────────────────────────────────────────────────────────────────
@@ -292,8 +333,8 @@ class TestOpenTransport:
         calls = {}
         closed: list[str] = []
 
-        def _sse_client(url, *, headers):
-            calls.update(url=url, headers=headers)
+        def _sse_client(url, *, headers, httpx_client_factory):
+            calls.update(url=url, headers=headers, httpx_client_factory=httpx_client_factory)
             return _fake_transport_context(("sse-read", "sse-write"), closed, "sse")
 
         monkeypatch.setattr(sse_module, "sse_client", _sse_client)
@@ -302,25 +343,31 @@ class TestOpenTransport:
             assert await mc._open_transport(stack, {
                 "transport": "sse", "url": "https://example.test/sse", "headers": {"X-Test": "yes"},
             }) == ("sse-read", "sse-write")
-        assert calls == {"url": "https://example.test/sse", "headers": {"X-Test": "yes"}}
+        assert calls["url"] == "https://example.test/sse"
+        assert calls["headers"] == {"X-Test": "yes"}
+        assert callable(calls["httpx_client_factory"])
         assert closed == ["sse"]
 
     async def test_streamable_http_opens_current_sdk_client_inside_exit_stack(self, monkeypatch):
         import mcp.client.streamable_http as http_module
-        import mcp.shared._httpx_utils as http_utils
-
         calls = {}
         closed: list[str] = []
 
-        def _http_client_factory(*, headers):
-            calls["factory_headers"] = headers
-            return _fake_transport_context("http-client", closed, "http-client")
+        def _mcp_client_factory(server_cfg, url):
+            calls["server_cfg"] = server_cfg
+            calls["factory_url"] = url
+
+            def _http_client_factory(*, headers):
+                calls["factory_headers"] = headers
+                return _fake_transport_context("http-client", closed, "http-client")
+
+            return _http_client_factory
 
         def _streamable_http_client(url, *, http_client):
             calls.update(url=url, http_client=http_client)
             return _fake_transport_context(("http-read", "http-write", lambda: None), closed, "streamable-http")
 
-        monkeypatch.setattr(http_utils, "create_mcp_http_client", _http_client_factory)
+        monkeypatch.setattr(mc, "_mcp_http_client_factory", _mcp_client_factory)
         monkeypatch.setattr(http_module, "streamable_http_client", _streamable_http_client, raising=False)
 
         async with AsyncExitStack() as stack:
@@ -328,6 +375,8 @@ class TestOpenTransport:
                 "transport": "streamable-http", "url": "https://example.test/mcp", "headers": {"X-Test": "yes"},
             }) == ("http-read", "http-write")
         assert calls == {
+            "server_cfg": {"transport": "streamable-http", "url": "https://example.test/mcp", "headers": {"X-Test": "yes"}},
+            "factory_url": "https://example.test/mcp",
             "factory_headers": {"X-Test": "yes"},
             "url": "https://example.test/mcp",
             "http_client": "http-client",
@@ -336,19 +385,22 @@ class TestOpenTransport:
 
     async def test_legacy_http_alias_uses_streamable_http_client(self, monkeypatch):
         import mcp.client.streamable_http as http_module
-        import mcp.shared._httpx_utils as http_utils
-
         calls = []
 
-        def _http_client_factory(*, headers):
-            calls.append(("factory", headers))
-            return _fake_transport_context("http-client")
+        def _mcp_client_factory(server_cfg, url):
+            calls.append(("route", server_cfg, url))
+
+            def _http_client_factory(*, headers):
+                calls.append(("factory", headers))
+                return _fake_transport_context("http-client")
+
+            return _http_client_factory
 
         def _streamable_http_client(url, *, http_client):
             calls.append(("transport", url, http_client))
             return _fake_transport_context(("http-read", "http-write", lambda: None))
 
-        monkeypatch.setattr(http_utils, "create_mcp_http_client", _http_client_factory)
+        monkeypatch.setattr(mc, "_mcp_http_client_factory", _mcp_client_factory)
         monkeypatch.setattr(http_module, "streamable_http_client", _streamable_http_client, raising=False)
 
         async with AsyncExitStack() as stack:
@@ -356,6 +408,7 @@ class TestOpenTransport:
                 "transport": "http", "url": "https://example.test/mcp",
             }) == ("http-read", "http-write")
         assert calls == [
+            ("route", {"transport": "http", "url": "https://example.test/mcp"}, "https://example.test/mcp"),
             ("factory", None),
             ("transport", "https://example.test/mcp", "http-client"),
         ]

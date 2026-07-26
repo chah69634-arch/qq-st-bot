@@ -38,6 +38,7 @@ def _draft(**overrides):
 
 def test_remote_transport_validation_defaults_to_streamable_http_and_accepts_sse():
     assert mod._validate_draft(_draft())["transport"] == "streamable-http"
+    assert mod._validate_draft(_draft())["use_proxy"] is False
     assert mod._validate_draft(_draft(transport="sse"))["transport"] == "sse"
 
 
@@ -128,11 +129,13 @@ def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeyp
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
     monkeypatch.setattr(mcp_client, "server_runtime", lambda name: {"connected": False, "tools": []})
     result = asyncio.run(mod.update_mcp_server(
-        "cedar_toy", mod.McpServerUpdate(allow_tools=["toy_status"]), _auth=None,
+        "cedar_toy", mod.McpServerUpdate(allow_tools=["toy_status"], use_proxy=True), _auth=None,
     ))
     assert result["server"]["allow_tools"] == ["toy_status"]
+    assert result["server"]["use_proxy"] is True
     assert calls == ["cedar_toy"]
     assert "重启" not in result["message"]
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]["use_proxy"] is True
 
 
 def test_delete_server_removes_config_and_syncs_its_runtime(tmp_path, monkeypatch):

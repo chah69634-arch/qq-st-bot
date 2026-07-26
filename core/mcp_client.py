@@ -25,12 +25,14 @@ sync_mcp_servers 现在都只是把信号丢进对应 server 的队列（_send_c
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import os
 import re
 import time
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +261,73 @@ def _transport_url(server_cfg: dict, transport: str) -> str:
     return url.strip()
 
 
+def is_local_mcp_url(url: str) -> bool:
+    """Whether an HTTP MCP endpoint is loopback-local and must bypass proxies."""
+    host = urlparse(url).hostname
+    if not host:
+        return False
+    host = host.rstrip(".").lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_unspecified
+
+
+def _mcp_proxy_url(server_cfg: dict, url: str) -> str | None:
+    """Resolve an explicitly opted-in remote MCP proxy; never inherit env proxies."""
+    if is_local_mcp_url(url) or not server_cfg.get("use_proxy", False):
+        return None
+
+    from core.config_loader import get_config
+
+    proxy_cfg = get_config().get("proxy", {}) or {}
+    if not proxy_cfg.get("enabled", False):
+        raise ValueError("MCP server 已启用代理，但全局 proxy.enabled=false")
+    proxy_key = "https" if urlparse(url).scheme == "https" else "http"
+    proxy_url = proxy_cfg.get(proxy_key)
+    if not isinstance(proxy_url, str) or not proxy_url.strip():
+        raise ValueError(f"MCP server 已启用代理，但全局 proxy.{proxy_key} 未配置")
+    return proxy_url.strip()
+
+
+def _create_mcp_http_client(
+    *, headers: dict[str, str] | None = None, timeout=None, auth=None, proxy_url: str | None = None,
+):
+    """Create an MCP-compatible HTTPX client without ambient environment proxies."""
+    import httpx
+    from mcp.shared._httpx_utils import MCP_DEFAULT_SSE_READ_TIMEOUT, MCP_DEFAULT_TIMEOUT
+
+    if timeout is None:
+        timeout = httpx.Timeout(MCP_DEFAULT_TIMEOUT, read=MCP_DEFAULT_SSE_READ_TIMEOUT)
+    kwargs = {
+        "follow_redirects": True,
+        "timeout": timeout,
+        "trust_env": False,
+    }
+    if headers is not None:
+        kwargs["headers"] = headers
+    if auth is not None:
+        kwargs["auth"] = auth
+    if proxy_url is not None:
+        kwargs["proxy"] = proxy_url
+    return httpx.AsyncClient(**kwargs)
+
+
+def _mcp_http_client_factory(server_cfg: dict, url: str):
+    """Return the SDK factory shape used by both SSE and Streamable HTTP clients."""
+    proxy_url = _mcp_proxy_url(server_cfg, url)
+
+    def _factory(headers=None, timeout=None, auth=None):
+        return _create_mcp_http_client(
+            headers=headers, timeout=timeout, auth=auth, proxy_url=proxy_url,
+        )
+
+    return _factory
+
+
 async def _open_stdio_transport(stack: AsyncExitStack, server_cfg: dict):
     from mcp import StdioServerParameters
     from mcp.client.stdio import stdio_client
@@ -275,7 +344,13 @@ async def _open_sse_transport(stack: AsyncExitStack, server_cfg: dict):
 
     url = _transport_url(server_cfg, "sse")
     headers = _expand_headers(server_cfg.get("headers"))
-    return await stack.enter_async_context(sse_client(url, headers=headers))
+    return await stack.enter_async_context(
+        sse_client(
+            url,
+            headers=headers,
+            httpx_client_factory=_mcp_http_client_factory(server_cfg, url),
+        )
+    )
 
 
 async def _open_streamable_http_transport(stack: AsyncExitStack, server_cfg: dict):
@@ -283,15 +358,14 @@ async def _open_streamable_http_transport(stack: AsyncExitStack, server_cfg: dic
 
     url = _transport_url(server_cfg, "streamable-http")
     headers = _expand_headers(server_cfg.get("headers"))
+    http_client_factory = _mcp_http_client_factory(server_cfg, url)
 
     # Current MCP SDKs expose streamable_http_client(), whose headers belong on
     # a caller-owned HTTP client.  Keep the older helper as a fallback for the
     # project's declared mcp>=1.9 compatibility range.
     current_client = getattr(streamable_http, "streamable_http_client", None)
     if current_client is not None:
-        from mcp.shared._httpx_utils import create_mcp_http_client
-
-        http_client = await stack.enter_async_context(create_mcp_http_client(headers=headers))
+        http_client = await stack.enter_async_context(http_client_factory(headers=headers))
         read, write, _get_session_id = await stack.enter_async_context(
             current_client(url, http_client=http_client)
         )
@@ -299,7 +373,7 @@ async def _open_streamable_http_transport(stack: AsyncExitStack, server_cfg: dic
 
     legacy_client = streamable_http.streamablehttp_client
     read, write, _get_session_id = await stack.enter_async_context(
-        legacy_client(url, headers=headers)
+        legacy_client(url, headers=headers, httpx_client_factory=http_client_factory)
     )
     return read, write
 

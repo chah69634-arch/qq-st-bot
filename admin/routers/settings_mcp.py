@@ -23,6 +23,7 @@ class McpServerDraft(BaseModel):
     name: str
     url: str
     transport: Literal["sse", "streamable-http", "http"] = "streamable-http"
+    use_proxy: bool = False
     headers: dict[str, str] = Field(default_factory=dict)
     allow_tools: list[str] = Field(default_factory=list)
     enabled: bool = True
@@ -38,6 +39,7 @@ class McpServerUpdate(BaseModel):
     allow_tools: Optional[list[str]] = None
     headers: Optional[dict[str, str]] = None
     tool_timeout_s: Optional[float] = None
+    use_proxy: Optional[bool] = None
 
 
 def _validate_draft(draft: McpServerDraft) -> dict:
@@ -59,6 +61,7 @@ def _validate_draft(draft: McpServerDraft) -> dict:
     return {
         "name": name,
         "transport": draft.transport,
+        "use_proxy": bool(draft.use_proxy),
         "url": draft.url.strip(),
         "headers": dict(draft.headers),
         "allow_tools": list(dict.fromkeys(draft.allow_tools)),
@@ -94,13 +97,15 @@ def _safe_headers(headers: object) -> dict[str, str]:
 
 
 def _server_view(server_cfg: dict) -> dict:
-    from core.mcp_client import server_runtime
+    from core.mcp_client import is_local_mcp_url, server_runtime
 
     name = str(server_cfg.get("name") or "")
     return {
         "name": name,
         "transport": server_cfg.get("transport", "stdio"),
         "url": server_cfg.get("url", ""),
+        "use_proxy": bool(server_cfg.get("use_proxy", False)),
+        "is_local_url": is_local_mcp_url(str(server_cfg.get("url") or "")),
         "headers": _safe_headers(server_cfg.get("headers")),
         "enabled": bool(server_cfg.get("enabled", True)),
         "tool_timeout_s": float(server_cfg.get("tool_timeout_s", 30)),
@@ -186,7 +191,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin"))):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
-    if all(value is None for value in (body.enabled, body.allow_tools, body.headers, body.tool_timeout_s)):
+    if all(value is None for value in (body.enabled, body.allow_tools, body.headers, body.tool_timeout_s, body.use_proxy)):
         raise HTTPException(status_code=422, detail="没有可更新字段")
     full_cfg = _read_config()
     servers = full_cfg.setdefault("mcp_servers", {}).setdefault("servers", [])
@@ -203,6 +208,8 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         server["headers"] = dict(body.headers)
     if body.tool_timeout_s is not None:
         server["tool_timeout_s"] = max(1, min(300, float(body.tool_timeout_s)))
+    if body.use_proxy is not None:
+        server["use_proxy"] = bool(body.use_proxy)
     _write_config(full_cfg)
     from core import config_loader, mcp_client
     config_loader.reload_config()

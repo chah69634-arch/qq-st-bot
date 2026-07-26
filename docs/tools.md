@@ -177,6 +177,7 @@ mcp_servers:
       command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "D:/some/dir"]
       # sse / streamable-http 时用: url: https://your-mcp-server.example/mcp
       # headers: {Authorization: "Bearer ${MCP_SERVER_TOKEN}"}  # 可选；stdio 忽略
+      use_proxy: false              # 远程 server 设 true 才使用全局 proxy；loopback 始终直连
       enabled: true                 # 单 server 开关（默认 true）
       tool_timeout_s: 30
       allow_tools: []              # 空 = 全部；非空 = 白名单
@@ -191,6 +192,10 @@ mcp_servers:
   不注册工具也不写配置；删除会移除配置、关闭该 server 的 owner 并摘除动态工具。保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
   `headers` 的 `${ENV_VAR}` 会在连接时展开，缺失环境变量即连接失败；管理面仅显示环境变量
   占位符或“已配置”，不回显字面 token。
+- **代理**：MCP HTTP client 一律 `trust_env=False`，不会继承 `HTTP_PROXY` / `HTTPS_PROXY`。
+  `localhost`、`.localhost`、IPv4/IPv6 loopback 与未指定地址强制直连；远程 URL 只有配置
+  `use_proxy: true`（或管理面勾选）才使用全局 `proxy.http` / `proxy.https`，且全局代理未启用或
+  未配置时连接会明确失败。
 - **工具注册**：转成 `_TOOL_REGISTRY` 动态条目，命名 `mcp__{server}__{tool}`，
   `category="mcp"`，description/inputSchema 直接映射为 OpenAI function schema。与静态注册表
   同名冲突时 MCP 侧让位（记 warning，不覆盖）。

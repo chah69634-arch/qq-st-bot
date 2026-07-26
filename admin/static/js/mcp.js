@@ -12,6 +12,7 @@ function _mcpDraftFromForm() {
     name: document.getElementById('mcp-import-name').value.trim(),
     url: document.getElementById('mcp-import-url').value.trim(),
     transport: document.getElementById('mcp-import-transport').value,
+    use_proxy: document.getElementById('mcp-import-use-proxy').checked,
     headers,
     enabled: document.getElementById('mcp-import-enabled').checked,
     tool_timeout_s: Number(document.getElementById('mcp-import-timeout').value || 30),
@@ -90,7 +91,10 @@ function _renderMcpServer(server) {
   const actionArgs = escapeHtml(JSON.stringify([server.name]));
   const saveLabel = escapeHtml(t('mcp.save_server', '保存 server 设置'));
   const deleteLabel = escapeHtml(t('mcp.delete_server', '删除 server'));
-  return `<section class="card" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><h3>${escapeHtml(server.name)} ${status}</h3><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">不勾选任何工具 = 保持“全部允许”的兼容语义；建议显式勾选最小白名单。工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></section>`;
+  const proxyControl = server.is_local_url
+    ? `<span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.proxy_direct', '本地地址：始终直连'))}</span>`
+    : `<label class="checkbox-row" style="margin-top:8px"><input type="checkbox" id="mcp-server-use-proxy-${escapeHtml(server.name)}" ${server.use_proxy ? 'checked' : ''}><span>${escapeHtml(t('mcp.proxy_label', '远程 MCP 使用全局代理'))}</span></label>`;
+  return `<section class="card" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><h3>${escapeHtml(server.name)} ${status}</h3><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">不勾选任何工具 = 保持“全部允许”的兼容语义；建议显式勾选最小白名单。工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></section>`;
 }
 
 async function _loadMcpRecentCalls(servers) {
@@ -139,7 +143,10 @@ async function importMcpServer() {
 async function saveMcpServer(name) {
   const enabled = document.getElementById(`mcp-server-enabled-${name}`).checked;
   const allow_tools = [...document.querySelectorAll(`[data-mcp-server="${name}"]:checked`)].map(el => el.value);
-  try { await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { enabled, allow_tools }); toast(`${name} 已热重载`, 'ok'); loadMcpPage(); }
+  const proxyControl = document.getElementById(`mcp-server-use-proxy-${name}`);
+  const body = { enabled, allow_tools };
+  if (proxyControl) body.use_proxy = proxyControl.checked;
+  try { await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, body); toast(`${name} 已热重载`, 'ok'); loadMcpPage(); }
   catch (e) { toast(e.message, 'err'); }
 }
 

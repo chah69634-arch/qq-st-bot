@@ -16,7 +16,8 @@
           <label class="field"><span>transport</span><select id="mcp-import-transport"><option value="streamable-http">streamable-http</option><option value="sse">sse</option></select></label>
         </div>
         <div class="form-row col-1"><label class="field"><span data-i18n="mcp.headers_label">headers（JSON，可选；建议 ${ENV_VAR}）</span><textarea id="mcp-import-headers" rows="3" placeholder='{"Authorization":"Bearer ${MCP_TOKEN}"}'></textarea></label></div>
-        <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="300" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label></div>
+        <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="300" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-use-proxy" type="checkbox"><span data-i18n="mcp.proxy_label">远程 MCP 使用全局代理</span></label></div>
+        <p class="admin-inline-144" data-i18n="mcp.proxy_notice">localhost、.localhost 与 loopback 地址始终直连，不读取环境代理；远程 MCP 仅在勾选后使用全局 proxy 配置。</p>
         <div class="admin-inline-041"><button class="btn btn-ghost" data-action="testMcpImport" data-i18n="mcp.test_import">测试连接并发现工具</button><button class="btn btn-primary" id="mcp-import-save" data-action="importMcpServer" disabled data-i18n="mcp.confirm_import">确认导入</button></div>
         <div id="mcp-import-result" class="admin-inline-133"></div>
       </div>
