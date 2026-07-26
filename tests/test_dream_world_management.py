@@ -89,7 +89,7 @@ def test_create_world_rejects_unsafe_names(sandbox, bad_name):
 # ③ 重命名：文件夹 + 同名预设 + world_layer 同步
 # ═══════════════════════════════════════════════════════════════════════════
 
-def test_rename_world_syncs_preset_and_settings(sandbox):
+def test_rename_world_keeps_independent_preset_and_syncs_settings(sandbox):
     from admin.routers.dream import create_dream_world, rename_dream_world, put_dream_preset, dream_settings_patch
     from core.dream.dream_settings import load as load_settings
 
@@ -106,10 +106,10 @@ def test_rename_world_syncs_preset_and_settings(sandbox):
 
     assert not (sandbox.dream_worlds_dir() / "rename_src").exists()
     assert (sandbox.dream_worlds_dir() / "rename_dst").exists()
-    assert not (sandbox.dream_presets_dir() / "rename_src.md").exists()
-    new_preset = sandbox.dream_presets_dir() / "rename_dst.md"
-    assert new_preset.exists()
-    assert new_preset.read_text(encoding="utf-8") == "hello preset"
+    old_preset = sandbox.dream_presets_dir() / "rename_src.md"
+    assert old_preset.exists()
+    assert old_preset.read_text(encoding="utf-8") == "hello preset"
+    assert not (sandbox.dream_presets_dir() / "rename_dst.md").exists()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -184,7 +184,7 @@ def test_rename_world_blocked_while_dream_active(sandbox):
 # ⑥ 删除：文件夹 + 同名预设 + world_layer 重置为 _default
 # ═══════════════════════════════════════════════════════════════════════════
 
-def test_delete_world_cleans_up_preset_and_resets_settings(sandbox):
+def test_delete_world_keeps_independent_preset_and_resets_settings(sandbox):
     from admin.routers.dream import create_dream_world, delete_dream_world, put_dream_preset, dream_settings_patch
     from core.dream.dream_settings import load as load_settings
 
@@ -200,7 +200,51 @@ def test_delete_world_cleans_up_preset_and_resets_settings(sandbox):
         assert settings["world_layer"] == "_default"
 
     assert not (sandbox.dream_worlds_dir() / "delete_me").exists()
-    assert not (sandbox.dream_presets_dir() / "delete_me.md").exists()
+    preset = sandbox.dream_presets_dir() / "delete_me.md"
+    assert preset.exists()
+    assert preset.read_text(encoding="utf-8") == "will be orphaned"
+
+
+def test_standalone_preset_can_be_created_edited_and_selected_without_world(sandbox):
+    from admin.routers.dream import (
+        create_standalone_dream_preset,
+        delete_standalone_dream_preset,
+        dream_settings_patch,
+        get_standalone_dream_preset,
+        put_standalone_dream_preset,
+    )
+
+    with _as(_UID):
+        created = _run(create_standalone_dream_preset({"id": "unbound_preset", "content": "first"}))
+        assert created["ok"] is True
+        assert created["id"] == "unbound_preset"
+
+        assert _run(get_standalone_dream_preset("unbound_preset"))["content"] == "first"
+
+        _run(put_standalone_dream_preset("unbound_preset", {"content": "edited"}))
+        assert _run(get_standalone_dream_preset("unbound_preset"))["content"] == "edited"
+
+        settings = _run(dream_settings_patch({"jailbreak_presets": ["unbound_preset"]}))
+        assert settings["settings"]["jailbreak_presets"] == ["unbound_preset"]
+
+        with pytest.raises(HTTPException) as exc:
+            _run(delete_standalone_dream_preset("unbound_preset"))
+        assert exc.value.status_code == 409
+
+        _run(dream_settings_patch({"jailbreak_presets": ["default"]}))
+        assert _run(delete_standalone_dream_preset("unbound_preset"))["deleted"] == "unbound_preset"
+
+    assert not (sandbox.dream_presets_dir() / "unbound_preset.md").exists()
+
+
+@pytest.mark.parametrize("preset_id", ["", "..", "with/slash", "中文"])
+def test_standalone_preset_rejects_unsafe_id(sandbox, preset_id):
+    from admin.routers.dream import create_standalone_dream_preset
+
+    with _as(_UID):
+        with pytest.raises(HTTPException) as exc:
+            _run(create_standalone_dream_preset({"id": preset_id, "content": "x"}))
+    assert exc.value.status_code == 422
 
 
 @pytest.mark.parametrize("reserved", ["_default", "reality_derived"])

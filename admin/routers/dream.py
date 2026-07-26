@@ -441,6 +441,94 @@ async def list_dream_presets(_auth=Depends(require_scopes("activity"))):
     return {"presets": presets}
 
 
+def _preset_asset_path(preset: str) -> Path:
+    """Resolve a standalone dream-preset id to its authored asset path.
+
+    Asset registry ids are the public contract (including mapped legacy file
+    names).  New assets use the same safe ASCII id convention as
+    ``jailbreak_presets`` in dream settings.
+    """
+    if not isinstance(preset, str) or not _SAFE_PRESET_RE.match(preset):
+        raise HTTPException(status_code=422, detail=f"预设 id 不合法: {preset!r}")
+
+    from core.asset_registry import get_registry
+    from core.sandbox import get_paths
+
+    try:
+        return get_registry().resolve(preset, "dream_preset").path()
+    except ValueError:
+        return get_paths().dream_presets_dir() / f"{preset}.md"
+
+
+def _reload_dream_preset_registry() -> None:
+    """Make authoring changes visible to the next dream without a restart."""
+    from core.asset_registry import reload_registry
+    reload_registry()
+
+
+@router.get("/dream/presets/{preset}", summary="读取独立梦境破限预设")
+async def get_standalone_dream_preset(
+    preset: str,
+    _auth=Depends(require_scopes("activity")),
+):
+    path = _preset_asset_path(preset)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
+    return {"id": preset, "content": path.read_text(encoding="utf-8")}
+
+
+@router.post("/dream/presets", summary="新建独立梦境破限预设")
+async def create_standalone_dream_preset(
+    body: dict,
+    _auth=Depends(require_scopes("activity")),
+):
+    preset = body.get("id")
+    content = body.get("content", "")
+    if not isinstance(content, str):
+        raise HTTPException(status_code=422, detail="content 必须为字符串")
+    path = _preset_asset_path(preset)
+    if path.exists():
+        raise HTTPException(status_code=409, detail=f"预设 {preset} 已存在")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    _reload_dream_preset_registry()
+    return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
+
+
+@router.put("/dream/presets/{preset}", summary="编辑独立梦境破限预设")
+async def put_standalone_dream_preset(
+    preset: str,
+    body: dict,
+    _auth=Depends(require_scopes("activity")),
+):
+    content = body.get("content")
+    if not isinstance(content, str):
+        raise HTTPException(status_code=422, detail="content 必须为字符串")
+    path = _preset_asset_path(preset)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
+    path.write_text(content, encoding="utf-8")
+    return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
+
+
+@router.delete("/dream/presets/{preset}", summary="删除独立梦境破限预设")
+async def delete_standalone_dream_preset(
+    preset: str,
+    _auth=Depends(require_scopes("activity")),
+):
+    path = _preset_asset_path(preset)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
+
+    from core.dream.dream_settings import load as _load_settings
+    if preset in (_load_settings(_owner_uid()).get("jailbreak_presets") or []):
+        raise HTTPException(status_code=409, detail="该预设正在下一场梦的选用列表中，请先取消选用")
+
+    path.unlink()
+    _reload_dream_preset_registry()
+    return {"ok": True, "deleted": preset}
+
+
 @router.get("/dream/stats", summary="梦境次数统计（只读，有效梦 > N 轮）")
 async def dream_stats_get(_auth=Depends(require_scopes("activity"))):
     from core.pipeline_registry import get as _get_pipeline
@@ -658,10 +746,10 @@ async def create_dream_world(body: dict, _auth=Depends(require_scopes("activity"
 
 @router.put("/dream/worlds/{world}/rename", summary="重命名梦境世界文件夹")
 async def rename_dream_world(world: str, body: dict, _auth=Depends(require_scopes("activity"))):
-    """重命名世界文件夹，并同步随世界名走的引用：
+    """重命名世界文件夹，并同步世界选择引用：
 
-    - characters/dream_presets/{world}.md（若存在，按约定与世界同名）一并改名；
     - dream_settings.world_layer 若正指向旧名，改写为新名。
+    - 独立破限预设绝不随世界移动；早期同名文件也保留为独立资产。
     - anchor_weights.json 是全局字符→权重表，不含世界名字符串，核实后确认无需同步。
     """
     _validate_world_name(world)
@@ -682,12 +770,6 @@ async def rename_dream_world(world: str, body: dict, _auth=Depends(require_scope
 
     src.rename(dst)
 
-    old_preset = _preset_path(world)
-    if old_preset.exists():
-        new_preset = _preset_path(new_name)
-        new_preset.parent.mkdir(parents=True, exist_ok=True)
-        old_preset.rename(new_preset)
-
     _reset_world_layer_setting_if(world, new_name)
 
     return {"ok": True, "world": new_name}
@@ -699,7 +781,7 @@ async def delete_dream_world(world: str, _auth=Depends(require_scopes("activity"
 
     - _default / reality_derived 拒删。
     - 正在被进行中的梦引用时拒绝。
-    - 同名破限预设文件一并删除（避免遗留孤儿文件）。
+    - 独立破限预设不会随世界删除（即使它恰好同名）。
     - 若为当前 dream_settings.world_layer，重置为 _default。
     """
     _validate_world_name(world)  # 已在此拒绝 _default / reality_derived
@@ -713,10 +795,6 @@ async def delete_dream_world(world: str, _auth=Depends(require_scopes("activity"
 
     import shutil as _shutil
     _shutil.rmtree(target)
-
-    preset = _preset_path(world)
-    if preset.exists():
-        preset.unlink()
 
     _reset_world_layer_setting_if(world, "_default")
 
@@ -820,7 +898,7 @@ async def delete_dream_lore_entry(world: str, index: int, _auth=Depends(require_
     return {"ok": True, "remaining": len(entries)}
 
 
-@router.get("/dream/worlds/{world}/preset", summary="读取梦境世界预设文本")
+@router.get("/dream/worlds/{world}/preset", summary="读取旧版同名梦境预设（兼容）")
 async def get_dream_preset(world: str, _auth=Depends(require_scopes("activity"))):
     p = _preset_path(world)
     if not p.exists():
@@ -828,12 +906,13 @@ async def get_dream_preset(world: str, _auth=Depends(require_scopes("activity"))
     return {"world": world, "content": p.read_text(encoding="utf-8")}
 
 
-@router.put("/dream/worlds/{world}/preset", summary="保存梦境世界预设文本")
+@router.put("/dream/worlds/{world}/preset", summary="保存旧版同名梦境预设（兼容）")
 async def put_dream_preset(world: str, body: dict, _auth=Depends(require_scopes("activity"))):
     content = body.get("content", "")
     p = _preset_path(world)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(str(content), encoding="utf-8")
+    _reload_dream_preset_registry()
     return {"ok": True, "world": world, "bytes": len(content.encode("utf-8"))}
 
 

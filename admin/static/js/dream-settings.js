@@ -4,11 +4,12 @@ let _dreamLoreEditIdx  = -1;
 let _dreamAuthoringMode = 'sandbox';
 let _dreamScenarios = [];
 let _dreamScenarioEditingId = null;
+let _dreamCurrentPreset = '';
 
 async function loadDreamSettings() {
   document.getElementById('dream-authoring-mode-select').value = _dreamAuthoringMode;
   onDreamAuthoringModeChange();
-  await loadDreamWorlds();
+  await Promise.all([loadDreamWorlds(), loadStandaloneDreamPresets()]);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -38,7 +39,7 @@ async function loadDreamWorlds() {
     if (prev && d.worlds.includes(prev)) {
       sel.value = prev;
     }
-    if (sel.value) onDreamWorldChange();
+    onDreamWorldChange();
   } catch(e) {
     toast('加载世界列表失败: ' + e.message, 'err');
   }
@@ -74,7 +75,7 @@ async function renameDreamWorld() {
 async function deleteDreamWorld() {
   const world = _dreamCurrentWorld;
   if (!world) { toast('请先选择世界', 'warn'); return; }
-  if (!confirm(`确认删除世界「${world}」？世界书与预设将一并删除，此操作不可撤销。`)) return;
+  if (!confirm(t('dynamic.dream.delete_world_confirm', 'Delete world “{name}”? Its lorebook will be deleted. Independent presets are kept.', { name: world }))) return;
   try {
     await api('DELETE', `/dream/worlds/${encodeURIComponent(world)}`);
     toast(`世界 ${world} 已删除`, 'ok');
@@ -88,13 +89,10 @@ function onDreamWorldChange() {
   _dreamCurrentWorld = world;
   if (!world) {
     document.getElementById('dream-lore-card').style.display = 'none';
-    document.getElementById('dream-preset-card').style.display = 'none';
     return;
   }
   document.getElementById('dream-lore-card').style.display = '';
-  document.getElementById('dream-preset-card').style.display = '';
   loadDreamLore();
-  loadDreamPreset();
 }
 
 async function loadDreamLore() {
@@ -134,24 +132,110 @@ function renderDreamLore() {
   </table></div>`;
 }
 
-async function loadDreamPreset() {
-  if (!_dreamCurrentWorld) return;
+async function loadStandaloneDreamPresets() {
+  const select = document.getElementById('dream-preset-select');
+  const text = document.getElementById('dream-preset-text');
   try {
-    const d = await api('GET', `/dream/worlds/${encodeURIComponent(_dreamCurrentWorld)}/preset`);
-    document.getElementById('dream-preset-text').value = d.content || '';
+    const [assets, settings] = await Promise.all([
+      api('GET', '/dream/presets'),
+      api('GET', '/dream/settings'),
+    ]);
+    const selected = new Set(settings.jailbreak_presets || []);
+    const previous = _dreamCurrentPreset || select.value;
+    select.innerHTML = '';
+    (assets.presets || []).forEach(preset => {
+      const option = document.createElement('option');
+      option.value = preset.id;
+      option.textContent = preset.label === preset.id ? preset.id : `${preset.label} (${preset.id})`;
+      option.selected = selected.has(preset.id);
+      select.appendChild(option);
+    });
+    _dreamCurrentPreset = previous && [...select.options].some(option => option.value === previous)
+      ? previous
+      : [...select.selectedOptions][0]?.value || select.options[0]?.value || '';
+    if (_dreamCurrentPreset) {
+      await loadStandaloneDreamPresetContent();
+    } else {
+      text.value = '';
+    }
   } catch(e) {
-    toast('加载预设失败: ' + e.message, 'err');
+    toast(t('dynamic.dream.presets_load_failed', 'Failed to load presets: {error}', { error: e.message }), 'err');
   }
 }
 
-async function saveDreamPreset() {
-  if (!_dreamCurrentWorld) return;
+async function onStandaloneDreamPresetChange() {
+  _dreamCurrentPreset = document.getElementById('dream-preset-select').value;
+  await loadStandaloneDreamPresetContent();
+}
+
+async function loadStandaloneDreamPresetContent() {
+  if (!_dreamCurrentPreset) return;
+  try {
+    const d = await api('GET', `/dream/presets/${encodeURIComponent(_dreamCurrentPreset)}`);
+    document.getElementById('dream-preset-text').value = d.content || '';
+  } catch(e) {
+    toast(t('dynamic.dream.presets_load_failed', 'Failed to load presets: {error}', { error: e.message }), 'err');
+  }
+}
+
+async function saveStandaloneDreamPreset() {
+  if (!_dreamCurrentPreset) {
+    toast(t('dynamic.dream.select_preset', 'Select a preset first'), 'warn');
+    return;
+  }
   const content = document.getElementById('dream-preset-text').value;
   try {
-    await api('PUT', `/dream/worlds/${encodeURIComponent(_dreamCurrentWorld)}/preset`, { content });
-    toast('预设已保存', 'ok');
+    await api('PUT', `/dream/presets/${encodeURIComponent(_dreamCurrentPreset)}`, { content });
+    toast(t('dynamic.dream.preset_saved', 'Preset saved'), 'ok');
   } catch(e) {
-    toast('保存失败: ' + e.message, 'err');
+    toast(t('common.operation_failed', 'Operation failed: {error}', { error: e.message }), 'err');
+  }
+}
+
+async function createStandaloneDreamPreset() {
+  const id = prompt(t('dynamic.dream.new_preset_id', 'New preset ID (letters, numbers, _ and - only):'));
+  if (!id) return;
+  try {
+    await api('POST', '/dream/presets', { id: id.trim(), content: '' });
+    _dreamCurrentPreset = id.trim();
+    await loadStandaloneDreamPresets();
+    const option = [...document.getElementById('dream-preset-select').options]
+      .find(item => item.value === _dreamCurrentPreset);
+    if (option) option.selected = true;
+    toast(t('dynamic.dream.preset_created', 'Preset created. Save the selection to use it in the next dream.'), 'ok');
+  } catch(e) {
+    toast(t('common.create_failed', 'Create failed: {error}', { error: e.message }), 'err');
+  }
+}
+
+async function saveStandaloneDreamPresetSelection() {
+  const presets = [...document.getElementById('dream-preset-select').selectedOptions]
+    .map(option => option.value);
+  if (!presets.length) {
+    toast(t('dynamic.dream.select_one_preset', 'Select at least one preset'), 'warn');
+    return;
+  }
+  try {
+    await api('PATCH', '/dream/settings', { jailbreak_presets: presets });
+    toast(t('dynamic.dream.preset_selection_saved', 'Preset selection saved for the next dream'), 'ok');
+  } catch(e) {
+    toast(t('common.operation_failed', 'Operation failed: {error}', { error: e.message }), 'err');
+  }
+}
+
+async function deleteStandaloneDreamPreset() {
+  if (!_dreamCurrentPreset) {
+    toast(t('dynamic.dream.select_preset', 'Select a preset first'), 'warn');
+    return;
+  }
+  if (!confirm(t('dynamic.dream.delete_preset_confirm', 'Delete preset “{id}”? This cannot be undone.', { id: _dreamCurrentPreset }))) return;
+  try {
+    await api('DELETE', `/dream/presets/${encodeURIComponent(_dreamCurrentPreset)}`);
+    _dreamCurrentPreset = '';
+    await loadStandaloneDreamPresets();
+    toast(t('dynamic.dream.preset_deleted', 'Preset deleted'), 'ok');
+  } catch(e) {
+    toast(t('common.delete_failed', 'Delete failed: {error}', { error: e.message }), 'err');
   }
 }
 

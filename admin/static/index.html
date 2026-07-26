@@ -796,7 +796,7 @@
                     onchange="onDreamWorldChange()">
               <option value="">-- 选择世界 --</option>
             </select>
-            <span style="font-size:12px;color:var(--muted)">切换世界后自动加载对应世界书与预设；_default / reality_derived 为保留世界，不可改名/删除</span>
+            <span data-i18n="dream.world.hint" style="font-size:12px;color:var(--muted)">Switching worlds loads its lorebook. _default / reality_derived are reserved and cannot be renamed or deleted.</span>
           </div>
         </div>
 
@@ -812,14 +812,28 @@
           <div id="dream-lore-list"><div class="loading">加载中…</div></div>
         </div>
 
-        <!-- 预设文本 -->
-        <div class="card" id="dream-preset-card" style="display:none">
+        <!-- 独立破限预设：可与世界书同时选用，也可单独生效。 -->
+        <div class="card" id="dream-preset-card">
           <div class="card-header">
-            <h3>破限预设</h3>
-            <button class="btn btn-primary btn-sm" onclick="saveDreamPreset()">保存</button>
+            <h3 data-i18n="dream.preset.independent_title">Independent Jailbreak Presets</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" data-i18n="common.refresh" onclick="loadStandaloneDreamPresets()">Refresh</button>
+              <button class="btn btn-primary btn-sm" data-i18n="common.create" onclick="createStandaloneDreamPreset()">Create</button>
+              <button class="btn btn-danger btn-sm" data-i18n="common.delete" onclick="deleteStandaloneDreamPreset()">Delete</button>
+            </div>
           </div>
-          <textarea id="dream-preset-text" placeholder="此世界的破限预设 Markdown…"
+          <p data-i18n="dream.preset.independent_hint" style="margin:0 0 10px;font-size:12px;color:var(--muted)">Presets are independent assets. Select one or more for the next dream; a world and its lorebook are optional.</p>
+          <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap">
+            <select id="dream-preset-select" multiple size="5" onchange="onStandaloneDreamPresetChange()"
+                    aria-label="Dream jailbreak presets"
+                    style="min-width:260px;flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)"></select>
+            <button class="btn btn-ghost btn-sm" data-i18n="dream.preset.save_selection" onclick="saveStandaloneDreamPresetSelection()">Save selected presets</button>
+          </div>
+          <textarea id="dream-preset-text" data-i18n-placeholder="dream.preset.placeholder" placeholder="Jailbreak preset Markdown…"
                     style="width:100%;min-height:240px;font-family:var(--mono);font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;box-sizing:border-box;resize:vertical"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px">
+            <button class="btn btn-primary btn-sm" data-i18n="dream.preset.save_content" onclick="saveStandaloneDreamPreset()">Save content</button>
+          </div>
         </div>
       </div>
 
