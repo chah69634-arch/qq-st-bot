@@ -187,8 +187,8 @@ mcp_servers:
   server 或主流程。进程退出时 `main.py` 的 `finally` 块调 `shutdown_mcp_servers()` 清理全部
   session。
 - **管理面**（Brief 110）：admin token 可在 MCP 页测试 Streamable HTTP URL（`initialize +
-  list_tools`）、导入 server、切换总/单 server 开关和勾选 `allow_tools` 白名单。导入前的测试
-  不注册工具也不写配置；保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
+  list_tools`）、导入或删除 server、切换总/单 server 开关和勾选 `allow_tools` 白名单。导入前的测试
+  不注册工具也不写配置；删除会移除配置、关闭该 server 的 owner 并摘除动态工具。保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
   `headers` 的 `${ENV_VAR}` 会在连接时展开，缺失环境变量即连接失败；管理面仅显示环境变量
   占位符或“已配置”，不回显字面 token。
 - **工具注册**：转成 `_TOOL_REGISTRY` 动态条目，命名 `mcp__{server}__{tool}`，

@@ -30,9 +30,9 @@ TTS provider 由管理面（admin token）经 `GET/PUT /tts-config` 管理：`tt
 表情包由管理面（admin token）经 `GET/PUT /sticker-config` 管理：`sticker.enabled` 是总开关，`sticker.trigger_prob` 是 0–1 的每轮独立触发概率。缺失该配置块时保持兼容行为（启用、0.06）；关闭时不会发送或广播表情包。TTS 的概率单独掷骰，不会抢占或缩减表情包的配置概率。GET 返回当前有效值，兼作该落盘配置的只读观测面；若已命中概率但目标情绪目录无图，服务端会记录目录路径以便排查。
 
 MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /settings/mcp/test`、
-`POST /settings/mcp/import` 和 `PATCH /settings/mcp/{name}` 管理。URL 导入必须先完成
+`POST /settings/mcp/import`、`PATCH /settings/mcp/{name}` 和 `DELETE /settings/mcp/{name}` 管理。URL 导入必须先完成
 `initialize + list_tools` 测试才写入配置；HTTP headers 支持 `${ENV_VAR}` 展开，管理面不回显
-字面 header 值。总开关同步所有 session，单 server 的启停/白名单只重载该 server；工具调用以
+字面 header 值。删除会立即断开该 server 并摘除它的动态工具；总开关同步所有 session，单 server 的启停/白名单只重载该 server；工具调用以
 `caller=mcp__{server}__{tool}` 记录到 API 调用总账。桌面客户端不代理这些 admin 配置或密钥。
 
 降级路径：关闭对应功能布尔值时保留其余配置；tool loop 回到普通单次回复，thinking 回到无前置思考，桌面 TTS 回到纯文字，生成后段落兜底关闭后直接发送清理后的模型原文，模型可切回稳定 routing profile。

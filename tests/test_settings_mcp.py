@@ -119,3 +119,32 @@ def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeyp
     assert result["server"]["allow_tools"] == ["toy_status"]
     assert calls == ["cedar_toy"]
     assert "重启" not in result["message"]
+
+
+def test_delete_server_removes_config_and_syncs_its_runtime(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n    - name: keep_me\n      transport: http\n      url: https://example.test/keep\n")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    calls = []
+
+    async def sync():
+        calls.append("sync")
+
+    monkeypatch.setattr(mcp_client, "sync_mcp_servers", sync)
+    result = asyncio.run(mod.delete_mcp_server("cedar_toy", _auth=None))
+
+    assert result == {"message": "MCP server 已删除并断开", "deleted": "cedar_toy"}
+    assert calls == ["sync"]
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert [item["name"] for item in cfg["mcp_servers"]["servers"]] == ["keep_me"]
+
+
+def test_delete_missing_server_returns_not_found(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers: []\n")
+    _patch_config(monkeypatch, path)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(mod.delete_mcp_server("missing", _auth=None))
+
+    assert exc.value.status_code == 404

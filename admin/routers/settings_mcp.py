@@ -202,3 +202,24 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
     # Brief 115 根治：同上，走信号队列热重载，由 server 专属常驻 task 自己关闭/重连。
     await mcp_client.reload_server_from_config(name)
     return {"message": "MCP server 配置已更新并热重载", "server": _server_view(server)}
+
+
+@router.delete("/settings/mcp/{name}", summary="删除一个 MCP server 并断开其运行态")
+async def delete_mcp_server(name: str, _auth=Depends(require_scopes("admin"))):
+    if not _NAME_RE.fullmatch(name):
+        raise HTTPException(status_code=422, detail="非法 server name")
+    full_cfg = _read_config()
+    mcp_cfg = full_cfg.setdefault("mcp_servers", {})
+    servers = mcp_cfg.setdefault("servers", [])
+    remaining = [item for item in servers if not isinstance(item, dict) or item.get("name") != name]
+    if len(remaining) == len(servers):
+        raise HTTPException(status_code=404, detail="MCP server 不存在")
+    mcp_cfg["servers"] = remaining
+    _write_config(full_cfg)
+
+    from core import config_loader, mcp_client
+
+    config_loader.reload_config()
+    # sync 会向已被删除的 server owner 发 shutdown，摘除动态工具并关闭连接。
+    await mcp_client.sync_mcp_servers()
+    return {"message": "MCP server 已删除并断开", "deleted": name}

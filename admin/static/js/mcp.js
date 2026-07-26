@@ -37,6 +37,7 @@ async function loadMcpPage() {
     serversEl.innerHTML = (data.servers || []).length
       ? (data.servers || []).map(_renderMcpServer).join('')
       : '<div class="empty">尚未配置 MCP server。先填写 URL 并测试连接。</div>';
+    bindPageActions(serversEl);
     await _loadMcpRecentCalls(data.servers || []);
   } catch (e) { serversEl.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
@@ -54,7 +55,10 @@ function _renderMcpServer(server) {
     const prefix = String(tool.name || '').split('_')[0] || '其他'; (out[prefix] ||= []).push(tool); return out;
   }, {})).map(([prefix, entries]) => `<div style="margin-top:9px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong>${entries.map(tool => `<label class="checkbox-row" style="margin-top:5px"><input type="checkbox" data-mcp-server="${escapeHtml(server.name)}" value="${escapeHtml(tool.name)}" ${allow.has(tool.name) ? 'checked' : ''}><span><code>${escapeHtml(tool.name)}</code>${tool.description ? ` — ${escapeHtml(tool.description)}` : ''}<small id="mcp-call-${escapeHtml(server.name)}-${escapeHtml(tool.name)}" style="display:block;color:var(--muted)">调用记录加载中…</small></span></label>`).join('')}</div>`).join('');
   const exposureWarn = exposedCount > 20 ? `<p style="font-size:12px;color:var(--danger);margin:8px 0">⚠ 当前会暴露 ${exposedCount} 个工具，超过单次暴露 ≤20 的安全红线；请勾选最小白名单。</p>` : '';
-  return `<section class="card" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><h3>${escapeHtml(server.name)} ${status}</h3><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">不勾选任何工具 = 保持“全部允许”的兼容语义；建议显式勾选最小白名单。工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveMcpServer('${server.name}')">保存 server 设置</button></section>`;
+  const actionArgs = escapeHtml(JSON.stringify([server.name]));
+  const saveLabel = escapeHtml(t('mcp.save_server', '保存 server 设置'));
+  const deleteLabel = escapeHtml(t('mcp.delete_server', '删除 server'));
+  return `<section class="card" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><h3>${escapeHtml(server.name)} ${status}</h3><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">不勾选任何工具 = 保持“全部允许”的兼容语义；建议显式勾选最小白名单。工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></section>`;
 }
 
 async function _loadMcpRecentCalls(servers) {
@@ -105,6 +109,16 @@ async function saveMcpServer(name) {
   const allow_tools = [...document.querySelectorAll(`[data-mcp-server="${name}"]:checked`)].map(el => el.value);
   try { await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { enabled, allow_tools }); toast(`${name} 已热重载`, 'ok'); loadMcpPage(); }
   catch (e) { toast(e.message, 'err'); }
+}
+
+async function deleteMcpServer(name) {
+  const question = t('mcp.delete_confirm', '确定删除 MCP server “{name}”吗？这会立即断开连接并移除它的工具。', { name });
+  if (!confirm(question)) return;
+  try {
+    await api('DELETE', `/settings/mcp/${encodeURIComponent(name)}`);
+    toast(t('mcp.delete_success', 'MCP server “{name}”已删除', { name }), 'ok');
+    loadMcpPage();
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 // ══════════════════════════════════════════════════════════
