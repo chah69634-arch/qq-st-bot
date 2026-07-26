@@ -10,7 +10,9 @@ STATIC = Path(__file__).parents[1] / "admin" / "static"
 def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css">' in index
+    assert re.search(
+        r'<link rel="stylesheet" href="/static/style\.css\?v=[^"]+">', index
+    )
     assert "<style>" not in index
     assert '<script src="/static/i18n.js"></script>' in index
     scripts = re.findall(r'<script src="/static/js/([^"]+)"></script>', index)
