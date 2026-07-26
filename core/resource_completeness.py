@@ -145,7 +145,7 @@ def _check_desktop_voice_bar() -> CheckResult:
         id="desktop_voice_bar",
         label="桌宠手动语音条",
         status="ok",
-        detail="桌面端可显示语音条，点击后按需调用 /tts/synthesize；自动播放另见已知缺口",
+        detail="桌面端可显示语音条，点击后按需调用 /tts/synthesize；自动播放由场景开关控制",
     )
 
 
@@ -269,18 +269,6 @@ _CHECKS: list[tuple[str, str, Any]] = [
 # 与上面的自动检查不同——这些不是"开关没开"，是"压根没这条路"，程序本身查不出来，
 # 只能靠人工记录，随实现推进及时从这里摘除（否则会一直误报"还没做"）。
 _KNOWN_GAPS: list[KnownGap] = [
-    KnownGap(
-        id="mobile_tts_delivery",
-        label="移动端 TTS 语音投递",
-        detail="后端已提供 mobile 场景的按需合成与 voice_available 标记；但移动端尚未消费该标记、请求音频并渲染/播放。",
-        source="cc-tasks/125",
-    ),
-    KnownGap(
-        id="desktop_tts_auto_play",
-        label="桌宠 TTS 自动播放设置与消费",
-        detail="桌面端已有独立的手动语音条设置与按需播放；后端也保存五场景 auto_play 状态，但前端尚未提供场景开关或在聊天/梦境/视频/桌宠消息到达时自动合成播放。",
-        source="cc-tasks/124",
-    ),
     KnownGap(
         id="asset_binding_frontend_consumption",
         label="角色资产绑定(Live2D/3D)的前端消费",

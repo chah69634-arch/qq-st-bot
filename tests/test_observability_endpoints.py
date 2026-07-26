@@ -122,7 +122,8 @@ def test_resource_completeness_observes_tts_and_desktop_voice_bar(monkeypatch):
 
     gaps = {item["id"]: item for item in _rc.run_all_checks()["known_gaps"]}
     assert "desktop_voice_bar_decouple" not in gaps
-    assert "desktop_tts_auto_play" in gaps
+    assert "desktop_tts_auto_play" not in gaps
+    assert "mobile_tts_delivery" not in gaps
 
 
 def test_api_contract_check_requires_auth_and_returns_shape(sandbox, monkeypatch):

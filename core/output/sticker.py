@@ -23,6 +23,32 @@ _TRIGGER_PROB = 0.06
 _STICKER_EXTS = (".jpg", ".jpeg", ".png", ".gif")
 
 
+def _resolve_sticker_emotion(reply: str, emotion: str) -> str:
+    """Keep the model classification when available, with a narrow local fallback.
+
+    Sticker delivery must not disappear merely because the optional lightweight
+    classifier returns ``neutral`` for clearly emotional Chinese copy.  This is
+    intentionally a conservative fallback: ambiguous text stays neutral.
+    """
+    normalized = (emotion or "").strip().lower()
+    if normalized and normalized != "neutral":
+        return normalized
+
+    text = reply.lower()
+    keyword_groups = (
+        ("happy", ("开心", "高兴", "太好了", "好耶", "喜欢", "笑", "幸福", "快乐")),
+        ("gentle", ("陪着", "陪你", "抱抱", "别难过", "没关系", "放心", "心疼", "温柔")),
+        ("sad", ("难过", "伤心", "委屈", "遗憾", "想哭", "失落")),
+        ("angry", ("生气", "恼火", "讨厌", "过分", "气死")),
+        ("surprised", ("真的吗", "居然", "竟然", "吓", "惊讶", "意外")),
+    )
+    for label, keywords in keyword_groups:
+        if any(keyword in text for keyword in keywords):
+            logger.info("[sticker] classifier neutral; local fallback selected emotion=%s", label)
+            return label
+    return "neutral"
+
+
 def _char_sticker_pack_name(char_id: str) -> str | None:
     """角色卡 presence_ext.sticker_pack（角色资产路由：与 presence_ext.model_routing /
     tts_preset 同构）。fail-soft：加载失败/字段缺失 → None（只用通用表情包池）。
@@ -117,8 +143,10 @@ async def maybe_send_sticker(
             return
         trigger_prob = sticker_cfg.get("trigger_prob", _TRIGGER_PROB)
 
+        emotion = _resolve_sticker_emotion(reply, emotion)
         # neutral或无情绪直接跳过
         if not emotion or emotion == "neutral":
+            logger.info("[sticker] skipped: no actionable emotion")
             return
         if random.random() >= trigger_prob:
             return
