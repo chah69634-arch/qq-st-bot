@@ -178,6 +178,15 @@ POLICY_TABLE: dict[str, TriggerPolicy] = {
         active_window_behavior="drop",
         mark_on_drop=False,
     ),
+    # Level-triggered Garden state hint.  The durable Wake Bridge record owns
+    # retry/cooldown; do not put this reason into the trigger-name-only defer
+    # queue when an active owner conversation blocks it.
+    "garden_wake_hint": TriggerPolicy(
+        trigger_id="garden_wake_hint",
+        priority="normal",
+        active_window_behavior="drop",
+        mark_on_drop=False,
+    ),
     "dream_exit": TriggerPolicy(
         trigger_id="dream_exit",
         priority="normal",

@@ -1,4 +1,4 @@
-"""Authenticated HTTP ingress for normalized, untrusted forum events."""
+"""Authenticated HTTP ingress for normalized external Wake Bridge stimuli."""
 
 from __future__ import annotations
 
@@ -47,3 +47,14 @@ async def receive_forum_events(
             continue
         results.append((await bridge.submit_mapping(item)).to_dict())
     return {"results": results, "count": len(results)}
+
+
+@router.post("/integrations/garden/wake", summary="接收 Galatea Garden level wake hint")
+async def receive_garden_wake(
+    body: dict[str, Any],
+    _auth=Depends(require_scopes("integration.write")),
+):
+    """Durably receive a Garden state hint; scheduler tick performs any wake later."""
+    from core.wake_bridge import WakeBridge
+
+    return (await WakeBridge().submit_garden_mapping(body)).to_dict()
