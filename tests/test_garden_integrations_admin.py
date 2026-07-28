@@ -47,6 +47,11 @@ def test_status_redacts_machine_secret_and_event_identity(monkeypatch):
         "expired_count": 3,
         "consecutive_failures": 4,
         "last_success_at": 99.0,
+        "last_reason": "game_turn_required",
+        "last_disposition": "global_gap_filtered",
+        "last_attempt_at": 98.0,
+        "last_next_attempt_at": 101.0,
+        "last_time_sensitive_lane": True,
         "external_id": "forbidden-id",
         "message": "forbidden message",
         "raw_hash": "forbidden-hash",
@@ -56,6 +61,8 @@ def test_status_redacts_machine_secret_and_event_identity(monkeypatch):
 
     serialized = repr(integrations.garden_status())
     assert "configured" in serialized
+    assert "game_turn_required" in serialized
+    assert "global_gap_filtered" in serialized
     for forbidden in (secret, "forbidden-id", "forbidden message", "forbidden-hash", "forbidden-cursor"):
         assert forbidden not in serialized
 

@@ -49,6 +49,9 @@ async function loadGardenIntegrations() {
       <tr><td>uid / char_id</td><td>${escapeHtml(state.uid || '—')} / ${escapeHtml(state.char_id || '—')}</td></tr>
       <tr><td>last wake received</td><td>${_giFmtTime(state.last_wake_received)}</td></tr>
       <tr><td>last successful drain</td><td>${_giFmtTime(state.last_successful_drain)}</td></tr>
+      <tr><td>last reason / lane</td><td>${escapeHtml(state.last_reason || '—')} / ${state.last_reason ? (state.time_sensitive_lane ? 'time_sensitive_turn' : 'ordinary') : '—'}</td></tr>
+      <tr><td>last disposition</td><td>${escapeHtml(state.last_disposition || '—')}</td></tr>
+      <tr><td>last attempt / next attempt</td><td>${_giFmtTime(state.last_attempt_at)} / ${_giFmtTime(state.last_next_attempt_at)}</td></tr>
       <tr><td>pending / processing / expired</td><td>${Number(state.pending_count || 0)} / ${Number(state.processing_count || 0)} / ${Number(state.expired_count || 0)}</td></tr>
       <tr><td>consecutive failures</td><td>${Number(state.consecutive_failures || 0)}</td></tr>
       <tr><td>current backoff until</td><td>${_giFmtTime(state.current_backoff_until)}</td></tr>

@@ -59,6 +59,9 @@ class TriggerProposal:
     topic_source: str
     requires_state: list
     bypass_state_machine: bool = False
+    # Narrow opt-in for externally timed turns. This lane may bypass ordinary
+    # conversation/ledger delays, but deliberately remains subject to DND.
+    time_sensitive_external_turn: bool = False
     execute: Optional[ExecuteFn] = None
     char_id: str | None = None
 
@@ -198,7 +201,11 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
 
     state_allowed = [
         p for p in proposals
-        if p.bypass_state_machine or _state_value(state) in {_state_value(s) for s in p.requires_state}
+        if p.bypass_state_machine
+        # A timely external turn may interleave with an owner conversation, but
+        # does not generally bypass other scheduler states such as RESTLESS.
+        or (p.time_sensitive_external_turn and _state_value(state) == TriggerState.CHATTING.value)
+        or _state_value(state) in {_state_value(s) for s in p.requires_state}
     ]
     if not state_allowed:
         return None, "state_filtered", candidates
@@ -216,6 +223,7 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
         aw_allowed = [
             p for p in state_allowed
             if _policy_active_window_behavior(p.trigger_name) == "exempt"
+            or p.time_sensitive_external_turn
             or p.trigger_name in force_send_names
         ]
         if not aw_allowed:
@@ -249,7 +257,7 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     ledger_allowed = []
     ledger_reasons: set[str] = set()
     for p in cooldown_allowed:
-        priority = "emergency" if _policy_ledger_exempt(p.trigger_name) else "normal"
+        priority = "emergency" if (p.time_sensitive_external_turn or _policy_ledger_exempt(p.trigger_name)) else "normal"
         allowed, reason = _ledger_can_send(p.trigger_name, priority=priority)
         if allowed:
             ledger_allowed.append(p)
@@ -306,11 +314,15 @@ def _serialize_candidate(
     force_send_names: frozenset[str] | None = None,
 ) -> dict:
     required = [_state_value(s) for s in proposal.requires_state]
-    state_allowed = proposal.bypass_state_machine or _state_value(state) in set(required)
+    state_allowed = (
+        proposal.bypass_state_machine
+        or (proposal.time_sensitive_external_turn and _state_value(state) == TriggerState.CHATTING.value)
+        or _state_value(state) in set(required)
+    )
     cooldown_ready = _proposal_cooldown_ready(proposal)
     aw_behavior = _policy_active_window_behavior(proposal.trigger_name)
     _force_send = proposal.trigger_name in (force_send_names or frozenset())
-    aw_blocked = user_active and aw_behavior != "exempt" and not _force_send
+    aw_blocked = user_active and aw_behavior != "exempt" and not proposal.time_sensitive_external_turn and not _force_send
     dnd_blocked = dnd_active and not _policy_is_emergency(proposal.trigger_name)
     # Defer queue observability: include current deferred age if tracked.
     deferred_age_secs = None
@@ -330,6 +342,7 @@ def _serialize_candidate(
         "topic_source": proposal.topic_source,
         "requires_state": required,
         "bypass_state_machine": proposal.bypass_state_machine,
+        "time_sensitive_external_turn": proposal.time_sensitive_external_turn,
         "state_allowed": state_allowed,
         "cooldown_ready": cooldown_ready,
         "aw_behavior": aw_behavior,

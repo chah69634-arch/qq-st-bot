@@ -38,6 +38,7 @@ MAX_GARDEN_REASON_CHARS = 128
 MAX_GARDEN_MESSAGE_CHARS = 4096
 GARDEN_HINT_TTL_SECONDS = 24 * 3600
 GARDEN_HINT_COOLDOWN_SECONDS = 2 * 60
+GARDEN_TIME_SENSITIVE_TURN_REASON = "game_turn_required"
 _PROVIDER_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _state_lock = asyncio.Lock()
@@ -147,6 +148,15 @@ class GardenWakeHint:
         return hashlib.sha256(self.reason.encode("utf-8")).hexdigest()[:16]
 
     @property
+    def time_sensitive_external_turn(self) -> bool:
+        """Only a Garden turn request qualifies for the narrow timely-turn lane."""
+        return self.reason == GARDEN_TIME_SENSITIVE_TURN_REASON
+
+    @property
+    def policy_lane(self) -> str:
+        return "time_sensitive_turn" if self.time_sensitive_external_turn else "ordinary"
+
+    @property
     def perceive_event_id(self) -> str:
         # Reason is the stable level key.  It intentionally has no fabricated
         # notification id or timestamp-derived identity.
@@ -176,6 +186,17 @@ class _Scope:
     uid: str
     char_id: str
     provider: str
+
+
+def _log_garden_event(hint: GardenWakeHint, *, event: str, disposition: str) -> None:
+    """Log only fixed Garden routing fields; never render external content or secrets."""
+    logger.info(
+        "[wake_bridge] garden event=%s reason=%s policy_lane=%s disposition=%s",
+        event,
+        hint.reason,
+        hint.policy_lane,
+        disposition,
+    )
 
 
 class FakeForumSource:
@@ -249,7 +270,9 @@ class WakeBridge:
             outcome = await self._receive_garden_hint(hint)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
             logger.warning("[wake_bridge] garden receipt failed reason=%s", type(exc).__name__)
+            _log_garden_event(hint, event="ingress_received", disposition="failed")
             return WakeBridgeResult(status="source_error", provider=GARDEN_PROVIDER, reason="durable receipt unavailable")
+        _log_garden_event(hint, event="ingress_received", disposition=outcome)
         return WakeBridgeResult(
             status=outcome,
             provider=GARDEN_PROVIDER,
@@ -389,6 +412,7 @@ class WakeBridge:
             # only handles corrupted local state and remains observable.
             await self._settle(scope, record_key, claim_token, status=EXPIRED, disposition="invalid_garden_record")
             return WakeBridgeResult(status="expired", provider=GARDEN_PROVIDER, reason="invalid durable garden hint")
+        _log_garden_event(hint, event="drain_started", disposition="processing")
         try:
             from core.scheduler.execution import is_live_mode
             from core.scheduler.gating import decide_and_execute_event
@@ -401,23 +425,33 @@ class WakeBridge:
         except Exception:
             logger.exception("[wake_bridge] temporary garden execution failure reason_hash=%s", hint.reason_hash)
             await self._settle_pending(scope, record_key, claim_token, "temporary_execution_error")
+            _log_garden_event(hint, event="drain_finished", disposition="failed")
             return WakeBridgeResult(status="source_error", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="temporary execution failure")
 
         if picked is None:
             await self._settle_pending(scope, record_key, claim_token, reason)
+            _log_garden_event(hint, event="gate", disposition=reason)
+            _log_garden_event(hint, event="drain_finished", disposition="deferred")
             return WakeBridgeResult(status="gated", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason=reason)
+        _log_garden_event(hint, event="gate", disposition=reason)
         perceive_status = str(outcome.get("perceive_status") or "")
         if perceive_status == "blocked_dream":
             await self._settle_pending(scope, record_key, claim_token, "blocked_dream")
+            _log_garden_event(hint, event="gate", disposition="blocked_dream")
+            _log_garden_event(hint, event="drain_finished", disposition="deferred")
             return WakeBridgeResult(status="blocked_dream", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="dream guard rejected reality stimulus")
         if perceive_status == "duplicate":
             await self._settle_pending(scope, record_key, claim_token, "perceive_duplicate")
+            _log_garden_event(hint, event="gate", disposition="perceive_duplicate")
+            _log_garden_event(hint, event="drain_finished", disposition="deferred")
             return WakeBridgeResult(status="gated", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="perceive-event retry window")
         sent = bool(getattr(execution_result, "sent", False) or outcome.get("sent"))
         if sent:
             await self._settle(scope, record_key, claim_token, status=CONSUMED, disposition="sent")
+            _log_garden_event(hint, event="drain_finished", disposition="consumed")
             return WakeBridgeResult(status="accepted", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="consumed", sent=True)
         await self._settle_pending(scope, record_key, claim_token, "no_reply_or_execution_blocked")
+        _log_garden_event(hint, event="drain_finished", disposition="deferred")
         return WakeBridgeResult(status="gated", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="no successful assistant turn")
 
     def _proposal(self, stimulus: ExternalStimulus, outcome: dict[str, Any]):
@@ -471,6 +505,7 @@ class WakeBridge:
 
         async def execute(*, dry_run: bool):
             from core.scheduler.execution import execute_prompt
+            _log_garden_event(hint, event="pipeline_entered", disposition="accepted")
             return await execute_prompt(
                 trigger_name="garden_wake_hint",
                 prompt_factory=lambda: _garden_prompt_for(hint),
@@ -503,6 +538,7 @@ class WakeBridge:
             urgency=0.55,
             topic_source="galatea_garden",
             requires_state=[TriggerState.QUIET],
+            time_sensitive_external_turn=hint.time_sensitive_external_turn,
             execute=execute,
             char_id=hint.char_id,
         )
@@ -560,6 +596,7 @@ class WakeBridge:
                 "kind": "garden_hint",
                 "provider": GARDEN_PROVIDER,
                 "reason": hint.reason,
+                "time_sensitive_external_turn": hint.time_sensitive_external_turn,
                 "stable_event_key": key,
                 "received_at": now,
                 "source_received_at": hint.received_at,
@@ -947,7 +984,8 @@ def query_state(*, uid: str = "", char_id: str = "", provider: str = "") -> list
                 pending_times: list[float] = []
                 pending_next_attempts: list[float] = []
                 received_times: list[float] = []
-                for record in state["events"].values():
+                records = list(state["events"].values())
+                for record in records:
                     status = str(record.get("status") or REJECTED)
                     counts[status] = counts.get(status, 0) + 1
                     received_at = float(record.get("last_seen_at") or record.get("received_at") or 0)
@@ -958,6 +996,23 @@ def query_state(*, uid: str = "", char_id: str = "", provider: str = "") -> list
                         next_attempt_at = float(record.get("next_attempt_at") or 0)
                         if next_attempt_at:
                             pending_next_attempts.append(next_attempt_at)
+                latest_record = max(
+                    records,
+                    key=lambda record: float(
+                        record.get("last_seen_at")
+                        or record.get("last_attempt_at")
+                        or record.get("received_at")
+                        or 0
+                    ),
+                    default={},
+                )
+                latest_reason = ""
+                if scope.provider == GARDEN_PROVIDER:
+                    latest_reason = _clean_text(latest_record.get("reason"), MAX_GARDEN_REASON_CHARS)
+                latest_lane = bool(latest_record.get("time_sensitive_external_turn")) or (
+                    scope.provider == GARDEN_PROVIDER
+                    and latest_reason == GARDEN_TIME_SENSITIVE_TURN_REASON
+                )
                 entries.append({
                     "char_id": scope.char_id,
                     "uid": scope.uid,
@@ -973,6 +1028,11 @@ def query_state(*, uid: str = "", char_id: str = "", provider: str = "") -> list
                     # They intentionally reveal neither event identity nor content.
                     "last_received_at": max(received_times) if received_times else None,
                     "next_attempt_at": min(pending_next_attempts) if pending_next_attempts else None,
+                    "last_reason": latest_reason or None,
+                    "last_disposition": _clean_text(latest_record.get("last_disposition"), 128) or None,
+                    "last_attempt_at": latest_record.get("last_attempt_at") or None,
+                    "last_next_attempt_at": latest_record.get("next_attempt_at") or None,
+                    "last_time_sensitive_lane": latest_lane,
                     "consecutive_failures": int(state.get("consecutive_failures") or 0),
                     "last_success_at": state.get("last_success_at"),
                     "last_error_at": state.get("last_error_at"),

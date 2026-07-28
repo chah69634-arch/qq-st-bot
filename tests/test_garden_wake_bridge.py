@@ -92,10 +92,10 @@ def test_same_pending_reason_coalesces_without_resetting_message_or_attempts(gar
     from core.wake_bridge import WakeBridge
 
     bridge = WakeBridge()
-    assert _run(bridge.submit_garden_mapping(_garden())).status == "pending"
+    assert _run(bridge.submit_garden_mapping(_garden(reason="game_turn_required"))).status == "pending"
     path, state = _state(sandbox)
     original = dict(_record(state))
-    assert _run(bridge.submit_garden_mapping(_garden(message="a newer message"))).status == "coalesced"
+    assert _run(bridge.submit_garden_mapping(_garden(reason="game_turn_required", message="a newer message"))).status == "coalesced"
     record = _record(json.loads(path.read_text(encoding="utf-8")))
     assert record["message"] == original["message"]
     assert record["attempts"] == original["attempts"]
@@ -108,11 +108,11 @@ def test_consumed_reason_can_reenter_pending_but_respects_cooldown(garden_env, s
 
     bridge = WakeBridge()
     calls = _allow_execute(monkeypatch)
-    assert _run(bridge.submit_garden_mapping(_garden())).status == "pending"
+    assert _run(bridge.submit_garden_mapping(_garden(reason="game_turn_required"))).status == "pending"
     assert _run(bridge.drain_due())[0].status == "accepted"
     first = _record(_state(sandbox)[1])
     assert first["status"] == CONSUMED
-    assert _run(bridge.submit_garden_mapping(_garden(message="later level wake"))).status == "pending"
+    assert _run(bridge.submit_garden_mapping(_garden(reason="game_turn_required", message="later level wake"))).status == "pending"
     second = _record(_state(sandbox)[1])
     assert second["status"] == PENDING
     assert second["next_attempt_at"] >= first["cooldown_until"]
@@ -169,7 +169,9 @@ def test_garden_hint_uses_existing_proposal_perceive_path_not_history(garden_env
     observed = query_state(uid="owner-1", char_id="char-a", provider="galatea_garden")
     serialized = json.dumps(observed, ensure_ascii=False)
     assert _garden()["message"] not in serialized
-    assert "reason" not in serialized
+    assert observed[0]["last_reason"] == "game_turn_required"
+    assert observed[0]["last_time_sensitive_lane"] is True
+    assert observed[0]["last_disposition"] == "sent"
 
 
 def test_garden_endpoint_requires_integration_scope():
@@ -190,3 +192,103 @@ def test_garden_hint_has_no_direct_mcp_or_llm_call():
     assert "execute_prompt" in source
     assert "mcp_client" not in source
     assert "run_llm(" not in source
+
+
+def test_garden_turn_logs_only_safe_policy_fields(garden_env, sandbox, monkeypatch, caplog):
+    from core.wake_bridge import WakeBridge
+
+    _allow_execute(monkeypatch)
+    caplog.set_level("INFO", logger="core.wake_bridge")
+    bridge = WakeBridge()
+    assert _run(bridge.submit_garden_mapping(_garden(reason="game_turn_required"))).status == "pending"
+    assert _run(bridge.drain_due())[0].status == "accepted"
+
+    rendered = "\n".join(caplog.messages)
+    assert "event=ingress_received reason=game_turn_required policy_lane=time_sensitive_turn disposition=pending" in rendered
+    assert "event=drain_started reason=game_turn_required policy_lane=time_sensitive_turn disposition=processing" in rendered
+    assert "event=gate reason=game_turn_required policy_lane=time_sensitive_turn disposition=picked_highest_urgency" in rendered
+    assert "event=pipeline_entered reason=game_turn_required policy_lane=time_sensitive_turn disposition=accepted" in rendered
+    assert "event=drain_finished reason=game_turn_required policy_lane=time_sensitive_turn disposition=consumed" in rendered
+    assert _garden()["message"] not in rendered
+
+
+def _garden_proposal(reason="game_turn_required"):
+    from core.wake_bridge import GardenWakeHint, WakeBridge
+
+    hint = GardenWakeHint(
+        reason=reason,
+        message="Garden requires attention.",
+        uid="owner-1",
+        char_id="char-a",
+        received_at=time.time(),
+    )
+    return WakeBridge()._garden_proposal(hint, {})
+
+
+def _patch_time_sensitive_gate(monkeypatch, *, user_active=False, dnd_active=False, state=None, ledger_reason="gap_not_elapsed"):
+    from core.scheduler import gating
+    from core.scheduler.state_machine import TriggerState
+    import core.scheduler.loop as loop
+    import core.scheduler.proactive_ledger as ledger
+    import core.scheduler.triggers.dnd as dnd
+
+    calls = []
+    monkeypatch.setattr(loop, "_user_active_recently", lambda: user_active)
+    monkeypatch.setattr(dnd, "is_dnd", lambda uid: dnd_active)
+    monkeypatch.setattr(gating, "get_current_state", lambda uid: state or TriggerState.CHATTING)
+    monkeypatch.setattr(gating, "is_trigger_ready", lambda *args, **kwargs: True)
+
+    def can_send(trigger_name, *, priority):
+        calls.append((trigger_name, priority))
+        return (priority == "emergency", "emergency_exempt" if priority == "emergency" else ledger_reason)
+
+    monkeypatch.setattr(ledger, "can_send", can_send)
+    return calls
+
+
+@pytest.mark.parametrize("ledger_reason", ["gap_not_elapsed", "daily_budget_exceeded"])
+def test_game_turn_time_sensitive_lane_bypasses_ordinary_ledger(garden_env, monkeypatch, ledger_reason):
+    from core.scheduler.gating import _decide
+
+    calls = _patch_time_sensitive_gate(monkeypatch, state=None, ledger_reason=ledger_reason)
+    picked, reason, _ = _decide("owner-1", [_garden_proposal()])
+
+    assert picked is not None and reason == "picked_highest_urgency"
+    assert picked.time_sensitive_external_turn is True
+    assert calls == [("garden_wake_hint", "emergency")]
+
+
+def test_game_turn_bypasses_owner_active_and_chatting_state_but_not_dnd(garden_env, monkeypatch):
+    from core.scheduler.gating import _decide
+
+    calls = _patch_time_sensitive_gate(monkeypatch, user_active=True, state=None)
+    picked, reason, _ = _decide("owner-1", [_garden_proposal()])
+    assert picked is not None and reason == "picked_highest_urgency"
+    assert calls == [("garden_wake_hint", "emergency")]
+
+    _patch_time_sensitive_gate(monkeypatch, user_active=True, dnd_active=True, state=None)
+    picked, reason, _ = _decide("owner-1", [_garden_proposal()])
+    assert picked is None and reason == "dnd_filtered"
+
+
+@pytest.mark.parametrize("reason", ["notification_available", "manual_test"])
+def test_ordinary_garden_reasons_do_not_use_time_sensitive_lane(garden_env, monkeypatch, reason):
+    from core.scheduler.gating import _decide
+    from core.scheduler.state_machine import TriggerState
+
+    calls = _patch_time_sensitive_gate(monkeypatch, state=TriggerState.QUIET)
+    picked, gate_reason, _ = _decide("owner-1", [_garden_proposal(reason)])
+
+    assert picked is None and gate_reason == "global_gap_filtered"
+    assert calls == [("garden_wake_hint", "normal")]
+
+
+@pytest.mark.parametrize("dream_guard_case", ["active", "uncertain"])
+def test_game_turn_dream_guard_outcomes_remain_pending(garden_env, sandbox, monkeypatch, dream_guard_case):
+    from core.wake_bridge import PENDING, WakeBridge
+
+    _allow_execute(monkeypatch, perceive_status="blocked_dream", sent=False)
+    bridge = WakeBridge()
+    assert _run(bridge.submit_garden_mapping(_garden(reason="game_turn_required"))).status == PENDING
+    assert _run(bridge.drain_due())[0].status == "blocked_dream"
+    assert _record(_state(sandbox)[1])["last_disposition"] == "blocked_dream"

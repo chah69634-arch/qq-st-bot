@@ -55,7 +55,7 @@ drain 会先在原子状态写入中把记录标为 `processing`，增加 attemp
 
 `POST /integrations/forum/events` 接收单条标准化对象或 `{ "events": [...] }`（最多 20 条），需要 `integration.write`。鉴权在接收前发生；uid 必须为配置 owner，char_id 必须为当前 active character。
 
-`GET /observability/wake-bridge` 需要既有 `state.read`。它可以按 uid、char_id、provider 筛选，并仅返回 scope 与聚合指标：`pending_count`、`processing_count`、`consumed_count`、`expired_count`、`rejected_count`、`oldest_pending_at`、`consecutive_failures`、`last_success_at`、`last_error_at`（以及不泄露值的 `has_cursor`）。日志同样只记录 provider 和 hash，不记录正文、secret 或原始请求体。
+`GET /observability/wake-bridge` 需要既有 `state.read`。它可以按 uid、char_id、provider 筛选，并仅返回 scope 与聚合指标：`pending_count`、`processing_count`、`consumed_count`、`expired_count`、`rejected_count`、`oldest_pending_at`、`consecutive_failures`、`last_success_at`、`last_error_at`（以及不泄露值的 `has_cursor`）。Garden scope 另可返回受限 reason、最近 disposition、last/next attempt 与 time-sensitive lane，仍不返回正文、secret、外部 ID、hash 或原始请求体。
 
 ## Galatea Garden level-triggered wake
 
@@ -75,6 +75,12 @@ Garden wake 不是论坛消息，也没有可永久去重的 notification/post i
 * `consumed`（以及过期后的新 level）收到新的 wake 会重新成为 `pending`；若仍在短 cooldown 内，先保持 pending 到可尝试时间；
 * 成功发送 assistant turn 才会 `consumed`；Dream、owner active、DND、预算、间隔、perceive 去重窗口和暂时错误均回到 `pending`；TTL 到期为 `expired`；
 * Garden hint 不使用 forum receipt/cursor，也不进入按 trigger name 的进程内 defer queue。
+
+`reason=game_turn_required` 是唯一的 time-sensitive external turn：它在 `TriggerProposal` 上标记
+`time_sensitive_external_turn=true`，因此可越过 owner-conversation (`CHATTING`) / owner-active 与
+ProactiveLedger 的全局间隔和日预算。它**不**是 emergency：DND 仍会拦截；随后仍必须经过
+Dream Guard、perceive_event、conversation lock、LLM 和 turn_sink。其他 Garden reason（包括
+`notification_available` 与 `manual_test`）一律保持 ordinary lane。
 
 `POST /integrations/garden/wake` 使用 `integration.write`。它只接受 provider 固定为 `galatea_garden` 的受限字段：`reason`（最多 128）、`message`（最多 4096）、`received_at`、`uid` 和 `char_id`；额外字段被拒绝。uid/char_id 仍须通过配置 owner 和 active character 的后端校验。
 
@@ -116,6 +122,11 @@ node .\dist\cli.js run
 machine token、当前 owner/character、收件箱聚合计数、时间戳与 scheduler 运行状态。它不返回 token
 明文、cursor、external ID、stable key/hash、message 或原始 HTTP 负载。machine token 属于独立上游
 bridge，PresenceKit 不会持久化它；该字段仅检查 PresenceKit 当前进程环境，不能推断邻居进程的凭证状态。
+
+状态与 observability 会脱敏显示最近 Garden hint 的 `reason`、`last_disposition`、last/next attempt
+时间和是否进入 time-sensitive lane。Wake Bridge 日志使用固定字段
+`event` / `reason` / `policy_lane` / `disposition` 记录 ingress、drain、gate、pipeline 和 terminal
+结果；绝不记录 message、token、请求体、外部 ID 或 MCP 返回正文。
 
 页面的「发送测试唤醒」调用 `POST /integrations/garden/test-wake`（`admin`）。它只组装
 `reason=manual_test` 的低信任 hint，然后复用正式 `POST /integrations/garden/wake` 的提交逻辑。
