@@ -70,6 +70,10 @@ _COOLDOWNS: dict[str, int] = {
     "presence_nag":          2 * 3600,   # 存在感弹窗：2小时最多一次
     "dream_exit":           60 * 60,     # 出梦主动开口：一梦一次，1小时冷却兜底
     "letter_writer":         7 * 24 * 3600,  # 真实邮件：7天最多一封
+    # Wake Bridge delegates frequency to the shared ProactiveLedger.  A provider
+    # event has stable source dedupe, so it must not inherit the unknown-trigger
+    # one-hour per-name cooldown as a second, hidden throttle.
+    "external_forum_message": 0,
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
@@ -342,6 +346,9 @@ async def _pipeline_send(
     kind: str = "scheduled",   # stimulus kind — must be in _TRIGGER_OUTLET_ALLOWED_KINDS
     char_id: str | None = None,
     recall_policy: str = "seed",   # C: "seed" | "anchored" | "none" — see fetch_context()
+    perceive_event=None,
+    pipeline_outcome: dict | None = None,
+    write_trigger_stub: bool = True,
 ) -> Optional[str]:
     """LOW-TRUST STIMULUS / TRIGGER-ONLY REALITY REPLY outlet.
 
@@ -390,7 +397,7 @@ async def _pipeline_send(
         resolved_char_id = char_id or _active_char_id_or_none()
 
         from core.perceive_event import PerceiveEvent, receive_perceive_event, PerceiveStatus
-        pe_event = PerceiveEvent(
+        pe_event = perceive_event or PerceiveEvent(
             source="scheduler",
             uid=oid,
             channel="system",
@@ -399,6 +406,10 @@ async def _pipeline_send(
             payload={"trigger_name": trigger_name},
         )
         pe_result = await receive_perceive_event(pe_event)
+        if pipeline_outcome is not None:
+            pipeline_outcome["perceive_status"] = pe_result.status.value
+            pipeline_outcome["event_id"] = pe_result.event_id
+            pipeline_outcome["dedupe_key"] = pe_result.dedupe_key
         if pe_result.status != PerceiveStatus.ACCEPTED:
             logger.info(
                 "[scheduler._pipeline_send] gate=%s trigger=%s uid=%s char_id=%s "
@@ -421,11 +432,18 @@ async def _pipeline_send(
             "dedupe_key": pe_result.dedupe_key,
             "gate_result": pe_result.status,
             "dream_guard_status": "ALLOW",
-            "source": "scheduler",
+            "source": pe_event.source,
             "kind": "stimulus",
             "trust": pe_event.trust,
             "did_generate_reply": True,
         }
+        _external_audit = pe_event.payload.get("wake_bridge_audit")
+        if isinstance(_external_audit, dict):
+            _audit_extras.update({
+                key: str(_external_audit[key])[:128]
+                for key in ("provider", "external_id_hash", "raw_hash")
+                if _external_audit.get(key)
+            })
 
         from core.scheduler.triggers.birthday import _is_birthday_period
         if _is_birthday_period():
@@ -488,13 +506,15 @@ async def _pipeline_send(
                 # 在 assistant 回复落盘前写一条最低权重的 user stub，
                 # 让后续轮次的 LLM 有上下文锚点（"角色上次是因为 X 主动说话的"）。
                 # _source="trigger_stub" 使 _score_turn_group 对其评 0 分，远场不占位。
-                try:
-                    from core.memory import short_term as _st_stub
-                    _stub_char = _frozen_scope.character_id if _frozen_scope else "yexuan"
-                    _stub_content = f"[触发: {trigger_name}]" if trigger_name else "[系统触发]"
-                    _st_stub.append(oid, "user", _stub_content, char_id=_stub_char, source="trigger_stub")
-                except Exception as _stub_err:
-                    logger.warning("[scheduler._pipeline_send] stub write failed: %s", _stub_err)
+                if write_trigger_stub:
+                    try:
+                        from core.memory import short_term as _st_stub
+                        _stub_char = _frozen_scope.character_id if _frozen_scope else None
+                        if _stub_char:
+                            _stub_content = f"[触发: {trigger_name}]" if trigger_name else "[系统触发]"
+                            _st_stub.append(oid, "user", _stub_content, char_id=_stub_char, source="trigger_stub")
+                    except Exception as _stub_err:
+                        logger.warning("[scheduler._pipeline_send] stub write failed: %s", _stub_err)
 
                 turn_result = None
                 if record_turn:
@@ -530,9 +550,13 @@ async def _pipeline_send(
                         "[scheduler._pipeline_send] fanout 部分失败: %s",
                         turn_result.fanout_failures,
                     )
+                if pipeline_outcome is not None:
+                    pipeline_outcome["sent"] = True
                 return reply
             else:
                 logger.warning("[scheduler._pipeline_send] LLM 返回空内容")
+                if pipeline_outcome is not None:
+                    pipeline_outcome["sent"] = False
     except Exception as e:
         log_error("scheduler._pipeline_send", e)
     return None

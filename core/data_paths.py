@@ -221,6 +221,17 @@ class DataPaths:
     def wake_delivery_ledger(self, user_id: str | int) -> Path:
         return self._p("wake_delivery", f"{safe_user_id(user_id)}.json")
 
+    def wake_bridge_root(self) -> Path:
+        """Root for Wake Bridge source checkpoints; callers must still scope children."""
+        return self._p("runtime", "wake_bridge")
+
+    def wake_bridge_state(self, user_id: str | int, *, char_id: str, provider: str) -> Path:
+        """Persistent external-stimulus dedupe/cursor state, scoped by char, owner and provider."""
+        return (
+            self.wake_bridge_root() / safe_user_id(char_id) / safe_user_id(user_id)
+            / f"{safe_user_id(provider)}.json"
+        )
+
     # ── 记忆根目录 ─────────────────────────────────────────────────────────────
     def character_growth(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         # legacy/dead registered artifact（core/memory/path_resolver.py LEGACY_ARTIFACTS）；

@@ -9,6 +9,7 @@ SCOPES: frozenset[str] = frozenset({
     "state.read",
     "memory.read",
     "sensor.write",
+    "integration.write",
     "activity",
     "persona",
     "hardware",
@@ -26,6 +27,7 @@ PROFILES: dict[str, frozenset[str]] = {
     }),
     "sensor": frozenset({"sensor.write"}),
     "watch": frozenset({"sensor.write"}),
+    "integration": frozenset({"integration.write"}),
     "device": frozenset({"ws.device"}),
     "panel": frozenset({"admin"}),
 }

@@ -14,15 +14,16 @@
 
 ## Scope 表
 
-10 个 scope，`admin` 蕴含全部（`"admin" in token.scopes` 时任意 `require_scopes(...)` 直接通过）。
+11 个 scope，`admin` 蕴含全部（`"admin" in token.scopes` 时任意 `require_scopes(...)` 直接通过）。
 
 | scope | 语义 | 典型端点 |
 |---|---|---|
 | `admin` | 全权：settings 写、系统运维、token 管理、记忆写删 | `/system/reload`、`PUT /llm-params`、`/users/*` |
 | `chat` | owner 对话回合 + 通道生命周期 + 上传/转写 | `/desktop/chat`、`/mobile/*`、`/desktop/wake\|activate`、`/upload/ingest`、`/transcribe`、`/group/*` |
-| `state.read` | 低敏状态只读 | `/mood/state`、`/activity/current`、`/garden/state`、`/sensor/realtime`、`/watch/status`、`GET /status` |
+| `state.read` | 低敏状态只读 | `/mood/state`、`/activity/current`、`/garden/state`、`/sensor/realtime`、`/watch/status`、`GET /status`、`/observability/wake-bridge` |
 | `memory.read` | 高敏内容只读 | `/diary/*`、`/chat-log/*`、`/history`、`/memory/*`（GET）、`/debug/user-hidden-state`、provenance/observe、relations（GET） |
 | `sensor.write` | 感知数据写入，以及仅服务于写入前 fail-closed 预检的低敏开关读取 | `POST /sensor/push`、`POST /watch/event`、`GET /perception/visual/config` |
+| `integration.write` | 外部只读来源的标准化 stimulus ingress | `POST /integrations/forum/events` |
 | `activity` | 活动/梦境 overlay 全生命周期 | `/dream/*`、`/activity/reading\|gomoku\|chess\|dream_seed/*` |
 | `persona` | 人设/世界/呈现配置读写 | `/settings/prompt-assets`、`/jailbreak-entries`、`/lorebook`、character 卡、`/chat-mode\|chat-style\|chat-multi-message`、头像 |
 | `hardware` | 实体硬件控制 + 危险模式开关 | `/hardware/*`、`GET\|PATCH /system/meta-mode` |
@@ -37,6 +38,7 @@
 | `mobile` | chat, state.read, memory.read, activity, persona, sensor.write | 手机 Flutter 端（yexuan_memery，同为 owner 胖客户端；刻意不含 hardware/admin——手机是最易丢失的设备，丢机不泄危险模式与 settings 写权） |
 | `sensor` | sensor.write | 独立 sensor writer（按需手工签发；桌面内嵌 sensor 不使用） |
 | `watch` | sensor.write | Watch |
+| `integration` | integration.write | 外部论坛/来源 adapter（只允许提交标准化事件） |
 | `device` | ws.device | ESP32 具身硬件 |
 | `panel` | admin | 管理面板网页 |
 

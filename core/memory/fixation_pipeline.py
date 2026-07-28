@@ -491,6 +491,9 @@ def _write_trigger_audit_log(
     dream_guard_status: str = "",
     gate_result: str = "",
     did_generate_reply: bool = True,
+    provider: str = "",
+    external_id_hash: str = "",
+    raw_hash: str = "",
 ) -> None:
     """Write trigger turn metadata to trigger_audit.jsonl (per-uid, under event_log dir).
 
@@ -532,6 +535,12 @@ def _write_trigger_audit_log(
             record["dream_guard_status"] = dream_guard_status
         if gate_result:
             record["gate_result"] = gate_result
+        if provider:
+            record["provider"] = provider
+        if external_id_hash:
+            record["external_id_hash"] = external_id_hash
+        if raw_hash:
+            record["raw_hash"] = raw_hash
         audit_path = get_paths()._p("event_log") / _suid(uid) / "trigger_audit.jsonl"
         audit_path.parent.mkdir(parents=True, exist_ok=True)
         safe_append_jsonl(audit_path, record)

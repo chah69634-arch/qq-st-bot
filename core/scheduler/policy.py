@@ -168,6 +168,15 @@ POLICY_TABLE: dict[str, TriggerPolicy] = {
         mark_on_drop=False,
         cross_marks=["morning_greeting"],
     ),
+    # One-shot, low-trust external evidence: never interrupt an active owner
+    # conversation.  Source-level persistent dedupe consumes it after this
+    # conservative gate, while the shared ledger remains the only rate budget.
+    "external_forum_message": TriggerPolicy(
+        trigger_id="external_forum_message",
+        priority="normal",
+        active_window_behavior="drop",
+        mark_on_drop=False,
+    ),
     "dream_exit": TriggerPolicy(
         trigger_id="dream_exit",
         priority="normal",

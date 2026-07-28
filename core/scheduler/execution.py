@@ -71,6 +71,9 @@ async def execute_prompt(
     behavior_factory: Optional[BehaviorFactory] = None,
     fanout="all",
     recall_policy: str = "seed",   # C: "seed" | "anchored" | "none" — see pipeline.fetch_context()
+    perceive_event=None,
+    pipeline_outcome: dict | None = None,
+    write_trigger_stub: bool = True,
 ) -> ExecuteResult:
     """Execute a scheduler prompt, or log what would happen in dry-run mode."""
 
@@ -106,6 +109,9 @@ async def execute_prompt(
         behavior_factory=behavior_factory,
         fanout=fanout,
         recall_policy=recall_policy,
+        perceive_event=perceive_event,
+        pipeline_outcome=pipeline_outcome,
+        write_trigger_stub=write_trigger_stub,
     )
     if not sent_text:
         blocked = ExecuteResult(

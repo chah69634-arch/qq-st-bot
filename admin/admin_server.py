@@ -51,7 +51,7 @@ from admin.routers import (
     hidden_state_debug, hardware, observe,
     group, group_dream, relationship_facts,
     transcribe, provenance,
-    auth_tokens, coplay, perception, spend, growth, observability,
+    auth_tokens, coplay, perception, spend, growth, observability, wake_bridge,
     phone_control,
 )
 
@@ -111,6 +111,7 @@ app.include_router(perception.router,           prefix="", tags=["视觉感知"]
 app.include_router(spend.router,                prefix="", tags=["支出台账"])
 app.include_router(growth.router,               prefix="", tags=["成长观测"])
 app.include_router(observability.router,        prefix="", tags=["观测"])
+app.include_router(wake_bridge.router,          prefix="", tags=["外部集成"])
 
 # ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────
 from fastapi import WebSocket as _WebSocket

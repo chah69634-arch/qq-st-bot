@@ -16,7 +16,7 @@
 
 ## 核心运行时
 
-- [channels.md](channels.md)、[scheduler.md](scheduler.md)、[tools.md](tools.md)、[assistant-turn-sink.md](assistant-turn-sink.md)
+- [channels.md](channels.md)、[scheduler.md](scheduler.md)、[tools.md](tools.md)、[assistant-turn-sink.md](assistant-turn-sink.md)、[wake-bridge.md](wake-bridge.md)
 - [prompt-layers.md](prompt-layers.md)、[model-presets.md](model-presets.md)
 - [memory.md](memory.md)、[vector-store.md](vector-store.md)、[data-taxonomy.md](data-taxonomy.md)、[c1-root-asset-inventory.md](c1-root-asset-inventory.md)
 - [interaction-event-model.md](interaction-event-model.md)、[stage.md](stage.md)、[dream.md](dream.md)
