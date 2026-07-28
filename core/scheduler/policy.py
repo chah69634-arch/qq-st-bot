@@ -169,8 +169,9 @@ POLICY_TABLE: dict[str, TriggerPolicy] = {
         cross_marks=["morning_greeting"],
     ),
     # One-shot, low-trust external evidence: never interrupt an active owner
-    # conversation.  Source-level persistent dedupe consumes it after this
-    # conservative gate, while the shared ledger remains the only rate budget.
+    # conversation.  Wake Bridge P0.5 retains the per-event durable inbox item
+    # when this gate drops the proposal and retries it later; it deliberately
+    # does not use the trigger-name-only in-memory defer queue.
     "external_forum_message": TriggerPolicy(
         trigger_id="external_forum_message",
         priority="normal",

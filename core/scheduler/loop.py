@@ -964,6 +964,20 @@ async def _loop():
 
                     await run_shadow_tick(oid)
 
+                # Wake Bridge owns durable receipt/disposition state, but its
+                # eligible records must still re-enter through this scheduler
+                # tick rather than starting a competing worker loop.
+                try:
+                    from core.wake_bridge import WakeBridge
+
+                    await WakeBridge().drain_due()
+                except Exception as exc:
+                    logger.error(
+                        "[scheduler] wake bridge drain raised %s: %s",
+                        type(exc).__name__, exc,
+                        exc_info=exc,
+                    )
+
                 _trigger_names = [
                     "morning", "night", "random_message", "weather",
                     "reminders", "period", "diary_reminder", "diary_inject",
