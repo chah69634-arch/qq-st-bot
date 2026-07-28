@@ -46,6 +46,7 @@
     <div class="nav-group" id="navgroup-ops">
       <a class="active" data-page="status" data-action="goto" data-action-args='["status"]'><span class="icon">📊</span><span data-i18n="nav.status">系统状态</span></a>
       <a data-page="scheduler" data-action="goto" data-action-args='["scheduler"]'><span class="icon">⏰</span><span data-i18n="nav.scheduler">调度器</span></a>
+      <a data-page="integrations" data-action="goto" data-action-args='["integrations"]'><span class="icon">🔌</span><span>外部唤醒</span></a>
       <a data-page="users"     data-action="goto" data-action-args='["users"]'>    <span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
       <a data-page="logs"      data-action="goto" data-action-args='["logs"]'>     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
       <a data-page="auth-tokens" data-action="goto" data-action-args='["auth-tokens"]'><span class="icon">🔑</span><span data-i18n="nav.auth_tokens">Token</span></a>
@@ -160,6 +161,9 @@
 
     <!-- ── Token 管理（Brief 22） ── -->
     <div class="page" id="page-auth-tokens" data-page-fragment="auth-tokens"></div>
+
+    <!-- 外部唤醒 / Integrations -->
+    <div class="page" id="page-integrations" data-page-fragment="integrations"></div>
 
     <!-- ── 模型路由 ── -->
     <div class="page" id="page-model-routing" data-page-fragment="model-routing"></div>
@@ -528,6 +532,7 @@
 <script src="/static/js/relationship.js"></script>
 <script src="/static/js/character.js"></script>
 <script src="/static/js/scheduler.js?v=admin-ui-scheduler-1"></script>
+<script src="/static/js/integrations.js?v=admin-ui-integrations-1"></script>
 <script src="/static/js/observability.js"></script>
 <script src="/static/js/dream-settings.js"></script>
 <script src="/static/js/provenance-vector.js"></script>

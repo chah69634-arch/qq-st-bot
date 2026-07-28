@@ -116,6 +116,7 @@ async function goto(page) {
     lorebook:        () => { loadLorebook(); loadJbEntries(); },
     'dream-settings': loadDreamSettings,
     scheduler:       loadScheduler,
+    integrations:    loadGardenIntegrations,
     'observe-mood':    loadObserveMood,
     'observe-dream':   loadObserveDream,
     'observe-memory':  () => {},

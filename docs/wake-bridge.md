@@ -108,3 +108,17 @@ npm run build
 node .\dist\cli.js check
 node .\dist\cli.js run
 ```
+
+### 管理面板（可选）
+
+管理面「外部唤醒 / Integrations」通过 `GET /integrations/garden/status`
+（`state.read`）显示 Garden 的脱敏状态：本端 integration token 是否已配置、后端进程是否观测到
+machine token、当前 owner/character、收件箱聚合计数、时间戳与 scheduler 运行状态。它不返回 token
+明文、cursor、external ID、stable key/hash、message 或原始 HTTP 负载。machine token 属于独立上游
+bridge，PresenceKit 不会持久化它；该字段仅检查 PresenceKit 当前进程环境，不能推断邻居进程的凭证状态。
+
+页面的「发送测试唤醒」调用 `POST /integrations/garden/test-wake`（`admin`）。它只组装
+`reason=manual_test` 的低信任 hint，然后复用正式 `POST /integrations/garden/wake` 的提交逻辑。
+该操作不 inline drain，不直接调用 LLM、turn sink 或 MCP；owner active、DND、Dream Guard、预算和
+cooldown 仍然会使记录保持 `pending`。PowerShell 模板只使用路径占位符和当前后端地址；integration token
+只会在创建/轮换时显示一次，之后仅显示已配置状态。

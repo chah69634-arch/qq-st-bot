@@ -945,11 +945,19 @@ def query_state(*, uid: str = "", char_id: str = "", provider: str = "") -> list
                 state = WakeBridge._load_state_sync(scope)
                 counts = {status: 0 for status in (PENDING, PROCESSING, CONSUMED, EXPIRED, REJECTED)}
                 pending_times: list[float] = []
+                pending_next_attempts: list[float] = []
+                received_times: list[float] = []
                 for record in state["events"].values():
                     status = str(record.get("status") or REJECTED)
                     counts[status] = counts.get(status, 0) + 1
+                    received_at = float(record.get("last_seen_at") or record.get("received_at") or 0)
+                    if received_at:
+                        received_times.append(received_at)
                     if status == PENDING:
                         pending_times.append(float(record.get("received_at") or 0))
+                        next_attempt_at = float(record.get("next_attempt_at") or 0)
+                        if next_attempt_at:
+                            pending_next_attempts.append(next_attempt_at)
                 entries.append({
                     "char_id": scope.char_id,
                     "uid": scope.uid,
@@ -961,6 +969,10 @@ def query_state(*, uid: str = "", char_id: str = "", provider: str = "") -> list
                     "expired_count": counts[EXPIRED],
                     "rejected_count": counts[REJECTED],
                     "oldest_pending_at": min(pending_times) if pending_times else None,
+                    # Timing-only aggregates used by the admin integration page.
+                    # They intentionally reveal neither event identity nor content.
+                    "last_received_at": max(received_times) if received_times else None,
+                    "next_attempt_at": min(pending_next_attempts) if pending_next_attempts else None,
                     "consecutive_failures": int(state.get("consecutive_failures") or 0),
                     "last_success_at": state.get("last_success_at"),
                     "last_error_at": state.get("last_error_at"),
