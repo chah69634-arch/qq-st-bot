@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 MAX_INPUT_BYTES = 12 * 1024
 MAX_REASON_CHARS = 128
@@ -27,6 +27,16 @@ EXIT_TERMINAL = 2
 
 class InjectorInputError(ValueError):
     """Malformed upstream envelope or protected local configuration."""
+
+
+def _report_error(category: str) -> None:
+    """Emit a fixed, non-sensitive diagnostic for the bridge supervisor."""
+    sys.stderr.write(f"garden injector: {category}\n")
+
+
+def _local_opener(request: Request, *, timeout: int):
+    """Open PresenceKit's local endpoint without inheriting environment proxies."""
+    return build_opener(ProxyHandler({})).open(request, timeout=timeout)
 
 
 def _read_envelope(stream) -> dict[str, str | int]:
@@ -95,7 +105,7 @@ def deliver(
     envelope: Mapping[str, str | int],
     *,
     environ: Mapping[str, str] | None = None,
-    opener: Callable[..., Any] = urlopen,
+    opener: Callable[..., Any] | None = None,
 ) -> int:
     """Return the upstream bridge-compatible outcome code without logging secrets."""
     base_url, token, uid, char_id = _local_config(environ or os.environ)
@@ -110,21 +120,48 @@ def deliver(
         },
     )
     try:
-        with opener(request, timeout=10) as response:
-            status_code = int(getattr(response, "status", response.getcode()))
+        with (opener or _local_opener)(request, timeout=10) as response:
+            raw_status = getattr(response, "status", None)
+            status_code = int(response.getcode() if raw_status is None else raw_status)
             response_body = response.read(16 * 1024)
     except HTTPError as exc:
-        return EXIT_TERMINAL if exc.code in {401, 403} or 400 <= exc.code < 500 else EXIT_TEMPORARY
-    except (URLError, TimeoutError, OSError):
+        if exc.code == 401:
+            _report_error("http_401")
+            return EXIT_TERMINAL
+        if exc.code == 403:
+            _report_error("http_403")
+            return EXIT_TERMINAL
+        if 400 <= exc.code < 500:
+            _report_error("http_4xx")
+            return EXIT_TERMINAL
+        _report_error("http_5xx" if exc.code >= 500 else "invalid_response")
+        return EXIT_TEMPORARY
+    except TimeoutError:
+        _report_error("timeout")
+        return EXIT_TEMPORARY
+    except URLError as exc:
+        _report_error("timeout" if isinstance(exc.reason, TimeoutError) else "connection_error")
+        return EXIT_TEMPORARY
+    except OSError:
+        _report_error("connection_error")
+        return EXIT_TEMPORARY
+    except (AttributeError, TypeError, ValueError):
+        _report_error("invalid_response")
         return EXIT_TEMPORARY
     if not 200 <= status_code < 300:
-        return EXIT_TEMPORARY if status_code >= 500 else EXIT_TERMINAL
+        if 400 <= status_code < 500:
+            _report_error("http_401" if status_code == 401 else "http_403" if status_code == 403 else "http_4xx")
+            return EXIT_TERMINAL
+        _report_error("http_5xx" if status_code >= 500 else "invalid_response")
+        return EXIT_TEMPORARY
     try:
         result = json.loads(response_body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (AttributeError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        _report_error("invalid_response")
         return EXIT_TEMPORARY
     if isinstance(result, dict) and str(result.get("status") or "") in SUCCESS_STATUSES:
         return EXIT_SUCCESS
+    _report_error("invalid_response")
     return EXIT_TERMINAL if isinstance(result, dict) and result.get("status") == "malformed" else EXIT_TEMPORARY
 
 

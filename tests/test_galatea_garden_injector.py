@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -112,6 +114,58 @@ def test_network_and_server_errors_are_retryable():
     assert inject.deliver(_envelope(), environ=_environment(), opener=server) == inject.EXIT_TEMPORARY
 
 
+def test_default_local_request_ignores_environment_proxies(monkeypatch):
+    received = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append(self.path)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"accepted"}')
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("NO_PROXY", "")
+    try:
+        environment = _environment(PRESENCE_BASE_URL=f"http://127.0.0.1:{server.server_port}")
+        assert inject.deliver(_envelope(), environ=environment) == inject.EXIT_SUCCESS
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+    assert received == ["/integrations/garden/wake"]
+
+
+@pytest.mark.parametrize(("failure", "expected"), [
+    (HTTPError("http://127.0.0.1", 401, "failure", hdrs=None, fp=None), "http_401"),
+    (HTTPError("http://127.0.0.1", 403, "failure", hdrs=None, fp=None), "http_403"),
+    (HTTPError("http://127.0.0.1", 502, "failure", hdrs=None, fp=None), "http_5xx"),
+    (URLError("offline"), "connection_error"),
+    (TimeoutError(), "timeout"),
+])
+def test_delivery_errors_are_safe_and_categorized(failure, expected, capsys):
+    message = "message-that-must-not-reach-stderr"
+    token = _environment()["PRESENCE_INTEGRATION_TOKEN"]
+
+    def opener(*args, **kwargs):
+        raise failure
+
+    expected_code = inject.EXIT_TERMINAL if expected in {"http_401", "http_403"} else inject.EXIT_TEMPORARY
+    assert inject.deliver(_envelope(message=message), environ=_environment(), opener=opener) == expected_code
+    stderr = capsys.readouterr().err
+    assert f"garden injector: {expected}" in stderr
+    assert token not in stderr
+    assert message not in stderr
+
+
 def test_malformed_response_is_not_acknowledged_and_logs_no_secret(monkeypatch, capsys):
     def opener(*args, **kwargs):
         return _Response({"status": "malformed"})
@@ -124,5 +178,6 @@ def test_malformed_response_is_not_acknowledged_and_logs_no_secret(monkeypatch, 
     monkeypatch.setattr(inject.sys, "stdin", _BadStream())
     assert inject.main() == inject.EXIT_TERMINAL
     stderr = capsys.readouterr().err
+    assert "garden injector: invalid_response" in stderr
     assert "test-token-not-for-logs" not in stderr
     assert _envelope()["message"] not in stderr
