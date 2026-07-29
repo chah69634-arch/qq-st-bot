@@ -1,5 +1,9 @@
 # docs/system-readiness.md — 系统可承载性盘点
 
+> **Status: Historical / Snapshot.** 本文不代表当前实现 authority。当前事实以代码、
+> `docs/v1-release-contract.md`、`docs/known-issues.md`、`docs/data-taxonomy.md` 和
+> `docs/docs-truth-census.md` 的导航结论为准；本文仅保留历史盘点上下文。
+
 > 只读盘点记录。目标是标出当前主干上哪些模块适合继续承载、哪些只适合小心维护，以及最小补强点。本文不提出新功能，不替代 `ARCHITECTURE.md`。
 >
 > **快照日期：2026-06 前后，仅存档参考。** 文中 F10/F11/B11/D2 等编号事项此后已陆续

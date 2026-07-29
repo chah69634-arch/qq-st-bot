@@ -13,6 +13,7 @@
 - [desktop-client-protocol.md](desktop-client-protocol.md)：桌面 v0.1 协议权威入口（正文位于 PresenceKit-desktop）。
 - [dev-environment.md](dev-environment.md)：Windows 沙箱开发与验证。
 - [known-issues.md](known-issues.md)：当前问题、观察项和技术债。
+- [docs-truth-census.md](docs-truth-census.md)：三仓文档导航清单与漂移分类；它不是代码实现 authority。
 
 ## 核心运行时
 
