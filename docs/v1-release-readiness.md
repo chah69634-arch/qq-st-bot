@@ -11,6 +11,7 @@
 | Blocking | Android production signing | `android/app/build.gradle.kts` falls back to debug signing when `android/key.properties` is absent | Keystore custody/runbook, signed APK verification, and upgrade from prior signed build |
 | Blocking | Android token security and migration | `BackendSecurityPolicy.kt` reads admin/relay tokens from `SharedPreferences`; mobile architecture says Keystore is not integrated | Encrypted/Keystore store, one-time migration, rollback/reauth behavior, no plaintext residue test |
 | Blocking | Backend update transaction and data recovery | `scripts/update_release.py` rolls back copied program files, but dependency sync happens after replacement; data compatibility is not a release transaction | Backup manifest, schema/version inventory, upgrade failure recovery, documented rollback/restore drill |
+| Blocking | Authored-root migration recovery evidence | C1.3 provides a read-only authored-root manifest only; it neither copies assets nor creates a completion marker | Reviewed per-install dry-run, backup manifest, manual diverged decisions, and an upgrade/rollback exercise protecting private authored roots |
 | Blocking | Data schema/version policy | Versions exist only per artifact (for example hidden state/perception/wake bridge); no release-wide data schema ledger | Version matrix, forward migration, downgrade policy, and fresh data/create/restore tests |
 | Blocking for reliable background claim | Relay real-device recovery | Queue has 24h / 500 cap (`channels/mobile.py`); relay publisher retries/logs but has no operator alert | Real-device matrix: background, Doze, process kill, reboot, relay loss/reconnect; TTL/cap eviction and alert evidence |
 | Blocking | Path B observation and deletion decision | Path B remains in `core/pipeline.py`; Path C is optional and default-off | Metrics/log review window, zero-required-use or bounded exceptions, approved removal criteria and rollback plan |
@@ -39,6 +40,9 @@ separate versioned implementation changes `BackendClient.sendChat()`.
    contract; run backend, desktop, and mobile CI/build checks.
 2. Exercise fresh install then normal upgrade on isolated data copies. Verify backup,
    restart, auth, character-card migration fallback, chat, and mobile queue recovery.
+   Before any authored-root apply, retain the C1.3 dry-run manifest and protect
+   `userdata/`, legacy private `characters/`/`content/characters/`, and
+   `assets/stickers/`; keep public `defaults/` and `examples/` in release.
 3. Exercise downgrade only against a documented compatible case; verify refusal and
    manual restore path for incompatible schemas.
 4. Complete Android signed-install and relay device matrix before describing
