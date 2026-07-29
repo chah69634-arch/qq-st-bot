@@ -1,5 +1,6 @@
 let _mcpImport = null;
-const _mcpCollapsedServers = new Set();
+// 展开状态只在当前页面会话中保留；未被明确展开的 server 默认收起。
+const _mcpExpandedServers = new Set();
 
 function _mcpDraftFromForm() {
   let headers = {};
@@ -115,7 +116,7 @@ function _renderMcpServer(server) {
   }, {})).map(([prefix, entries]) => `<div style="margin-top:9px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong>${entries.map(tool => `<label class="checkbox-row" style="margin-top:5px"><input type="checkbox" data-mcp-server="${escapeHtml(server.name)}" value="${escapeHtml(tool.name)}" ${allow.has(tool.name) ? 'checked' : ''}><span><code>${escapeHtml(tool.name)}</code>${tool.description ? ` — ${escapeHtml(tool.description)}` : ''}<small id="mcp-call-${escapeHtml(server.name)}-${escapeHtml(tool.name)}" style="display:block;color:var(--muted)">调用记录加载中…</small></span></label>`).join('')}</div>`).join('');
   const exposureWarn = exposedCount > 20 ? `<p style="font-size:12px;color:var(--danger);margin:8px 0">⚠ 当前会暴露 ${exposedCount} 个工具，超过单次暴露 ≤20 的安全红线；请勾选最小白名单。</p>` : '';
   const actionArgs = escapeHtml(JSON.stringify([server.name]));
-  const collapsed = _mcpCollapsedServers.has(server.name);
+  const collapsed = !_mcpExpandedServers.has(server.name);
   const collapseArgs = escapeHtml(JSON.stringify([server.name]));
   const saveLabel = escapeHtml(t('mcp.save_server', '保存 server 设置'));
   const deleteLabel = escapeHtml(t('mcp.delete_server', '删除 server'));
@@ -130,7 +131,7 @@ function _renderMcpServer(server) {
 }
 
 function toggleMcpServerCollapsed(name) {
-  _mcpCollapsedServers.has(name) ? _mcpCollapsedServers.delete(name) : _mcpCollapsedServers.add(name);
+  _mcpExpandedServers.has(name) ? _mcpExpandedServers.delete(name) : _mcpExpandedServers.add(name);
   loadMcpPage();
 }
 

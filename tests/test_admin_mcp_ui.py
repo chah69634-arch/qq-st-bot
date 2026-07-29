@@ -37,3 +37,10 @@ def test_mcp_management_page_exposes_import_whitelist_and_call_observation():
         "超过单次暴露 ≤20 的安全红线",
     ):
         assert marker in source
+
+
+def test_mcp_servers_start_collapsed_without_persisting_ui_state():
+    source = read_admin_client_source()
+    assert "const _mcpExpandedServers = new Set();" in source
+    assert "const collapsed = !_mcpExpandedServers.has(server.name);" in source
+    assert "_mcpExpandedServers.has(name) ? _mcpExpandedServers.delete(name) : _mcpExpandedServers.add(name);" in source
