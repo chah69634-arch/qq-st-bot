@@ -194,19 +194,18 @@ def _build_event_log_blob(char_name: str, entries: list[dict]) -> str:
 
 # ── pipeline / 角色卡准备 ────────────────────────────────────────────────
 #
-# character_loader.load() 经 core.asset_registry 解析 id → 真实仓库根目录下的
-# characters/*.json（相对 cwd）。core.config_loader 同样以 cwd 相对路径读
-# config.yaml —— 两者都不吃 DataPaths 沙盒重定向，所以这里不 chdir、不搭临时
-# characters/ 树，而是直接在真实 characters/ 目录里落一个一次性测试角色卡文件，
-# 用完立刻删除（与 tests/conftest.py 的 character_b_registered fixture 同一手法）。
-# core.asset_registry._registry 由 tests/conftest.py 的 autouse reset_asset_registry
-# 在每个测试前后置空，重新 get_registry() 会重新扫描到这个文件。
+# Test callers chdir into ``tmp_path``.  The registry then sees this fixture
+# under the canonical userdata root, never under the repository's legacy
+# ``characters/`` root.  The card is still removed after each case so the
+# temporary authored root contains no generated files at teardown.
 #
 # char_id 必须每次测试唯一（而非固定常量）：`pytest -n auto` 下多个 worker
 # 并发跑不同 case，共享同一个真实文件名会互相覆盖/提前删除。
 
 def _char_file(char_id: str) -> Path:
-    return Path("characters") / f"{char_id}.json"
+    from core.sandbox import get_paths
+
+    return get_paths().character_card_write_path(char_id)
 
 
 def new_test_char_id() -> str:
@@ -216,7 +215,9 @@ def new_test_char_id() -> str:
 
 def install_test_character(char_id: str, char_name: str = TEST_CHAR_NAME) -> None:
     import json
-    _char_file(char_id).write_text(
+    path = _char_file(char_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps({"name": char_name, "description": "memeval fixture character", "world_book": []}),
         encoding="utf-8",
     )

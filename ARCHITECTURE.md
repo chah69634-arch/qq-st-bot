@@ -182,10 +182,11 @@ post_process ──写──→ data/ 目录各文件
 > 所有累积型路径的 `for_read` 降级读分支已删除；旧型目录已归档至 `data/_legacy_retired/`。
 > event_log union 读（30 天窗口内 legacy 天文件）保留至窗口过期后再清理。
 
-`userdata/` 与 `data/` 分离：前者是 Git 忽略的用户私有 authored 资产根（贴纸、角色卡、角色
-reality/dream 素材），通过 `DataPaths` / `AssetRegistry` 访问并保留旧安装路径的只读 fallback；
-后者才是受 `get_paths()` 管理、会在测试模式偏移的运行时状态沙盒。完整分类见
-`docs/data-taxonomy.md`。
+`bundled/`、`userdata/` 与 `data/` 分离：`bundled/` 是发行内置、只读且可随更新替换的公共
+卡片、seed、模板与 examples；`userdata/` 是 Git 忽略的用户私有 authored 资产根（贴纸、角色卡、
+角色 reality/dream 素材）；`data/` 才是受 `get_paths()` 管理、会在测试模式偏移的运行时状态
+沙盒。读取按 userdata → bundled → legacy compatibility，所有业务 writer 仍只写 userdata/data。
+完整分类见 `docs/data-taxonomy.md`。
 
 ```
 data/
@@ -278,20 +279,21 @@ pipeline = pipeline_registry.get()
 
 ---
 
-## 目录职责：data/ vs characters/reality/
+## 目录职责：bundled/ vs userdata/ vs data/
 
 | 目录 | 用途 | 示例 |
 |---|---|---|
-| `data/` | **运行时数据**，由程序运行中写入，不应手工编辑 | 聊天历史、情绪状态、计划队列等 |
-| `characters/reality/` | **现实 Chat authored prompt assets**，手工维护，可版本审计 | `lorebook.yaml`、`jailbreak_entries.json` |
-| `characters/dream_worlds/`、`characters/dream_presets/` | Dream 世界包 authored assets，独立体系 | Dream lorebook、presets |
+| `bundled/` | **发行内置公共资产**，只读、可替换 | 默认角色、Reality/Dream seed、模板、示例 |
+| `userdata/` | **用户私有 authored 资产**，按需创建、更新保护 | 角色卡、Reality/Dream override、贴纸 |
+| `data/` | **运行时数据**，由程序运行中写入 | 聊天历史、情绪状态、计划队列等 |
 
 ### 现实 Chat Authored Assets
 
-现实 Chat 的两个 authored prompt assets 存放于 `characters/reality/`，**不再从 `data/` 读取**：
+现实 Chat 的两个 authored prompt assets 写入 `userdata/characters/reality/`，**不再从 `data/` 读取**；
+缺失时由 `bundled/seeds/reality/` 播种，旧 `characters/reality/` 仅兼容读取：
 
 ```
-characters/reality/
+userdata/characters/reality/
 ├── lorebook.yaml            ← 现实世界书（admin 面板读写）
 └── jailbreak_entries.json   ← 破限预设条目（admin 面板读写）
 ```

@@ -108,6 +108,23 @@ def test_apply_release_keeps_private_paths_and_backs_up_replaced_program_files(t
     assert (backup / "main.py").read_text(encoding="utf-8") == "old program"
 
 
+def test_bundled_update_removes_only_known_public_legacy_files(tmp_path):
+    install = tmp_path / "PresenceKit"
+    install.mkdir()
+    (install / "characters").mkdir()
+    (install / "characters" / "default.json").write_text("old default", encoding="utf-8")
+    (install / "characters" / "private.json").write_text("keep me", encoding="utf-8")
+    source = tmp_path / "staged-release"
+    (source / "bundled").mkdir(parents=True)
+    (source / "bundled" / "marker.txt").write_text("bundled", encoding="utf-8")
+
+    backup = updater.apply_release(install, source, "v1.0.0")
+
+    assert not (install / "characters" / "default.json").exists()
+    assert (install / "characters" / "private.json").read_text(encoding="utf-8") == "keep me"
+    assert (backup / "characters" / "default.json").read_text(encoding="utf-8") == "old default"
+
+
 def test_offline_release_rehearsal_updates_program_but_keeps_private_files(tmp_path, monkeypatch):
     install = tmp_path / "PresenceKit"
     install.mkdir()

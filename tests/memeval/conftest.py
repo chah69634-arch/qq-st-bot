@@ -1,11 +1,9 @@
 """
 tests/memeval/conftest.py — memeval 专用 fixture
 
-复用 tests/conftest.py 的 sandbox 隔离（DataPaths._base 重定向到 tmp_path）。
-character_loader / config_loader 都以 cwd 相对路径解析（不吃 DataPaths 沙盒），
-所以这里不 chdir，改为在真实 characters/ 目录落一个一次性测试角色卡，
-用完即删（见 engine.install_test_character，做法与 tests/conftest.py 的
-character_b_registered fixture 一致）。
+复用 tests/conftest.py 的 sandbox 隔离，并将当前工作目录切到 ``tmp_path``。
+这样 asset registry 只会扫描临时 ``userdata/``，不会在仓库根 ``characters/``
+写任何 generated fixture。
 """
 
 from pathlib import Path
@@ -17,10 +15,21 @@ from tests.memeval import engine
 
 @pytest.fixture
 def case_env(tmp_path, monkeypatch, sandbox):
-    """铺一次性测试角色卡（id 每次唯一，`-n auto` 并发 worker 不共享文件名）。
+    """在临时 userdata 下铺一次性角色卡（并发 worker 不共享文件名）。
 
     产出 char_id 字符串，供 engine.run_case(..., char_id=case_env) 使用。
     """
+    monkeypatch.chdir(tmp_path)
+    # config_loader deliberately resolves config.yaml from cwd.  Keep that
+    # read-only dependency pointed at the repository configuration while all
+    # generated authored files stay inside tmp_path.
+    import core.config_loader as config_loader
+    monkeypatch.setattr(config_loader, "_CONFIG_PATH", Path(__file__).parents[2] / "config.yaml")
+    monkeypatch.setattr(config_loader, "_config", None)
+    monkeypatch.setattr(config_loader, "_config_mtime", None)
+    import core.data_paths as data_paths
+    repo_root = Path(__file__).parents[2]
+    monkeypatch.setattr(data_paths.DataPaths, "bundled_root", lambda _self: repo_root / "bundled")
     char_id = engine.new_test_char_id()
     engine.install_test_character(char_id)
     try:

@@ -38,9 +38,10 @@ SHA-256 and are not decoded.
 
 `userdata` wins the same logical file or package. A legacy-only resource is a
 copy candidate only in the future migration plan; a diverged resource always
-requires manual review. `characters/default*`, postcard templates,
-`content/characters/default`, `defaults/`, and `examples/` remain public
-seed/template material and are never migration candidates.
+requires manual review. `bundled/` is release-owned public seed/template
+material and is never a migration candidate. The old `characters/`, `content/`,
+`defaults/`, and `examples/` paths remain compatibility-only readers for one
+release cycle; private legacy assets are never removed by this dry-run.
 
 ## Dream packages
 
@@ -70,6 +71,6 @@ work order requires all of the following:
    this dry-run intentionally does not create one.
 4. Upgrade and recovery exercises that protect `userdata/`, legacy private
    `characters/`, `content/characters/`, and `assets/stickers/` roots while
-   retaining release-owned `defaults/` and `examples/`.
+   retaining release-owned `bundled/` assets.
 5. A rollback path that restores the backup and keeps legacy readers available
    until the manifest evidence is accepted.

@@ -26,6 +26,18 @@ def _production_paths(tmp_path, monkeypatch) -> DataPaths:
     return paths
 
 
+def _seed_bundled_dream_template(tmp_path: Path) -> None:
+    template = tmp_path / "bundled" / "seeds" / "dream" / "worlds" / "_default"
+    template.mkdir(parents=True, exist_ok=True)
+    for name, content in {
+        "ruleset.md": "rules\n",
+        "mes_example.md": "example\n",
+        "vocab.json": "[]\n",
+        "lorebook.yaml": "[]\n",
+    }.items():
+        (template / name).write_text(content, encoding="utf-8")
+
+
 class _BodyRequest:
     def __init__(self, content: bytes):
         self._content = content
@@ -107,6 +119,7 @@ def test_legacy_dream_world_edit_materializes_package_and_delete_fails_loud(tmp_
 
 def test_legacy_dream_preset_edit_materializes_userdata_and_new_world_never_creates_legacy(tmp_path, monkeypatch):
     _production_paths(tmp_path, monkeypatch)
+    _seed_bundled_dream_template(tmp_path)
     legacy_preset = tmp_path / "characters" / "dream_presets" / "legacy_preset.md"
     legacy_preset.parent.mkdir(parents=True)
     legacy_preset.write_text("legacy", encoding="utf-8")

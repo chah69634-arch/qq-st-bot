@@ -1,6 +1,8 @@
 # PresenceKit Authored Asset Root Truth Audit
 
 审计日期：2026-07-29
+
+> **Snapshot / pre-consolidation.** 本文记录 C1.4 前的旧 root 审计证据，路径与数量不再描述当前发布布局。当前真值是 `bundled/`（发行内置、只读、可替换）、`userdata/`（用户私有、可写、更新保护）与 `data/`（运行时、可写、按数据策略保护）；旧 root 仅在兼容/迁移语境出现。
 范围：`characters/`、`content/`、`defaults/`、`userdata/`、`examples/`，以及所有会决定这五类资产读写、播种、fallback、迁移和发行行为的当前代码。
 边界：本单只读；没有删除、移动、复制、重命名文件，没有启动服务或真实 pipeline，也没有读取用户私有正文。报告只记录相对路径、类别、大小和 SHA-256。
 

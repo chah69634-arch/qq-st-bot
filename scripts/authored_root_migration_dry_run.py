@@ -333,7 +333,9 @@ def _scan_worlds(
 
 
 def _seed_records(repo_root: Path, userdata_root: Path, legacy_root: Path) -> list[dict[str, Any]]:
+    bundled_root = repo_root / "bundled"
     roots = [
+        bundled_root,
         repo_root / "characters" / "default.json", repo_root / "characters" / "default_author_notes.json",
         repo_root / "characters" / "dream_postcards" / "templates", repo_root / "content" / "characters" / "default",
         repo_root / "defaults", repo_root / "examples",
@@ -342,10 +344,16 @@ def _seed_records(repo_root: Path, userdata_root: Path, legacy_root: Path) -> li
     for root in roots:
         entries = [root] if root.is_file() else _files(root)
         for path in entries:
+            is_bundled = path.is_relative_to(bundled_root) if bundled_root.exists() else False
             record = _base_record(category="public_seed", logical_id=path.name, key=_path_alias(path, repo_root=repo_root, userdata_root=userdata_root, legacy_root=legacy_root),
-                                  canonical=None, legacy=path, canonical_kind="not-applicable", legacy_kind="public-seed",
+                                  canonical=path if is_bundled else None, legacy=None if is_bundled else path,
+                                  canonical_kind="bundled" if is_bundled else "not-applicable", legacy_kind="public-seed",
                                   repo_root=repo_root, userdata_root=userdata_root, legacy_root=legacy_root)
-            record.update(status="expected-public-seed", recommended_action="keep-in-release", reason="tracked-public-seed-or-template")
+            record.update(
+                status="expected-bundled-seed" if is_bundled else "expected-public-seed",
+                recommended_action="keep-in-release",
+                reason="packaged-public-seed-or-template" if is_bundled else "legacy-public-seed-or-template",
+            )
             records.append(record)
     fixture_root = repo_root / "characters"
     for path in _files(fixture_root, (".json",), recursive=False):

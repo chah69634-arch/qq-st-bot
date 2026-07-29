@@ -20,19 +20,19 @@ _ROOT = Path(__file__).parent.parent
 # ── Files that must exist (tracked in git) ────────────────────────────────────
 
 TRACKED_JSON = [
-    "defaults/jailbreak_entries.json",
-    "examples/character_template.json",
+    "bundled/seeds/reality/jailbreak_entries.json",
+    "bundled/templates/character_template.json",
 ]
 
 TRACKED_YAML = [
-    "defaults/lorebook.yaml",
-    "defaults/relations.yaml",
-    "defaults/blacklist.yaml",
+    "bundled/seeds/reality/lorebook.yaml",
+    "bundled/seeds/reality/relations.yaml",
+    "bundled/seeds/reality/blacklist.yaml",
 ]
 
 TRACKED_TEXT = [
-    "defaults/dream_worlds/_default/ruleset.md",
-    "defaults/dream_worlds/_default/mes_example.md",
+    "bundled/seeds/dream/worlds/_default/ruleset.md",
+    "bundled/seeds/dream/worlds/_default/mes_example.md",
 ]
 
 
@@ -66,7 +66,7 @@ def test_tracked_text_exists_and_nonempty(rel: str):
 
 def test_jailbreak_entries_schema():
     """Public jailbreak seed must have an 'entries' list."""
-    path = _ROOT / "defaults/jailbreak_entries.json"
+    path = _ROOT / "bundled/seeds/reality/jailbreak_entries.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     assert "entries" in data, "jailbreak_entries.json must have top-level 'entries' key"
     assert isinstance(data["entries"], list)
@@ -74,39 +74,19 @@ def test_jailbreak_entries_schema():
 
 def test_lorebook_schema():
     """Public lorebook seed must have an 'entries' list."""
-    path = _ROOT / "defaults/lorebook.yaml"
+    path = _ROOT / "bundled/seeds/reality/lorebook.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     assert "entries" in data, "lorebook.yaml must have top-level 'entries' key"
     assert isinstance(data["entries"], list)
 
 
 def test_character_template_has_name_field():
-    """examples/character_template.json must have a 'name' field."""
-    path = _ROOT / "examples/character_template.json"
-    assert path.exists(), "character_template.json missing from examples/"
+    """The bundled character template must have a 'name' field."""
+    path = _ROOT / "bundled/templates/character_template.json"
+    assert path.exists(), "character_template.json missing from bundled/templates/"
     data = json.loads(path.read_text(encoding="utf-8"))
     assert "name" in data, "character_template.json must have a 'name' field"
 
 
-def test_no_template_files_in_characters_root():
-    """characters/ root must not contain template/example scaffold files.
-    Legitimate authored data files (author_notes pool etc.) are allowed.
-    Template/example files must live in docs/templates/ instead.
-    """
-    chars_dir = _ROOT / "characters"
-    if not chars_dir.exists():
-        return
-    bad = [
-        p.name for p in chars_dir.iterdir()
-        if p.is_file()
-        and p.suffix.lower() in (".json", ".txt", ".md")
-        and (
-            "template" in p.stem.lower()
-            or ".example." in p.name.lower()
-            or p.stem.lower().endswith("_template")
-        )
-    ]
-    assert not bad, (
-        f"Template/example scaffold files found in characters/ root "
-        f"(move to examples/ instead): {bad}"
-    )
+def test_legacy_public_roots_are_absent_from_a_clean_checkout():
+    assert not any((_ROOT / root).exists() for root in ("characters", "content", "defaults", "examples"))

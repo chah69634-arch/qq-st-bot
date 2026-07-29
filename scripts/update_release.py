@@ -28,6 +28,28 @@ PROTECTED_ROOTS = frozenset({"data", "userdata", ".venv"})
 PROTECTED_FILES = frozenset({"config.yaml", "secrets.local.yaml"})
 PROTECTED_PATHS = frozenset({PurePosixPath("tools/uv.exe")})
 
+# C1.4 only removes these former release-owned files.  It never recursively
+# removes a legacy root: an old installation may contain unknown private files.
+SUPERSEDED_PUBLIC_ASSETS = frozenset({
+    PurePosixPath("characters/default.json"),
+    PurePosixPath("characters/default_author_notes.json"),
+    *(PurePosixPath(f"characters/dream_postcards/templates/{name}.md") for name in (
+        "diary_fragment", "note", "postcard", "sms", "untitled",
+    )),
+    *(PurePosixPath(f"content/characters/default/{name}.yaml") for name in ("activity_pool", "traits")),
+    *(PurePosixPath(f"defaults/{name}") for name in (
+        "blacklist.yaml", "jailbreak_entries.json", "lorebook.yaml", "relations.yaml",
+    )),
+    *(PurePosixPath(f"defaults/dream_worlds/_default/{name}") for name in (
+        "lorebook.yaml", "mes_example.md", "ruleset.md", "vocab.json",
+    )),
+    PurePosixPath("examples/character_template.json"),
+    *(PurePosixPath(f"examples/{name}") for name in (
+        "activity_pool.example.yaml", "assistant.example.json", "benwo.example.json",
+        "jailbreak_preset.example.json", "traits.example.yaml",
+    )),
+})
+
 
 class UpdateError(RuntimeError):
     """A user-actionable update failure; the current installation is retained."""
@@ -216,6 +238,42 @@ def _rollback_program_files(installation: Path, backup: Path, replaced: list[tup
             target.unlink()
 
 
+def _cleanup_superseded_public_assets(
+    source: Path, installation: Path, backup: Path, replaced: list[tuple[Path, bool]],
+) -> None:
+    """Remove only known old public files after a bundled-root update.
+
+    Empty directories are removed opportunistically with ``rmdir``; a private
+    or ignored file makes that operation a no-op, so unknown legacy assets are
+    never deleted or traversed recursively.
+    """
+    if not (source / "bundled").is_dir():
+        return
+    parent_dirs: set[Path] = set()
+    for relative in SUPERSEDED_PUBLIC_ASSETS:
+        target = installation.joinpath(*relative.parts)
+        if not target.is_file():
+            continue
+        backup_target = backup.joinpath(*relative.parts)
+        backup_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target, backup_target)
+        target.unlink()
+        replaced.append((target, True))
+        for parent in target.parents:
+            try:
+                parent.relative_to(installation)
+            except ValueError:
+                break
+            parent_dirs.add(parent)
+    for directory in sorted(parent_dirs, key=lambda item: len(item.parts), reverse=True):
+        if directory == installation:
+            continue
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+
+
 def _prune_old_backups(root: Path, keep: Path) -> None:
     for candidate in root.glob("_update_backup_*"):
         if candidate != keep and candidate.is_dir():
@@ -232,6 +290,7 @@ def apply_release(installation: Path, source: Path, old_version: str) -> Path:
     replaced: list[tuple[Path, bool]] = []
     try:
         replaced = _copy_program_files(source, installation, backup)
+        _cleanup_superseded_public_assets(source, installation, backup, replaced)
     except Exception:
         _rollback_program_files(installation, backup, replaced)
         raise

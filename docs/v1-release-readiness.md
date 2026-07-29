@@ -42,7 +42,8 @@ separate versioned implementation changes `BackendClient.sendChat()`.
    restart, auth, character-card migration fallback, chat, and mobile queue recovery.
    Before any authored-root apply, retain the C1.3 dry-run manifest and protect
    `userdata/`, legacy private `characters/`/`content/characters/`, and
-   `assets/stickers/`; keep public `defaults/` and `examples/` in release.
+   `assets/stickers/`; keep public `bundled/` in release. An updater may remove
+   only the known replaced legacy public files and must retain unknown legacy files.
 3. Exercise downgrade only against a documented compatible case; verify refusal and
    manual restore path for incompatible schemas.
 4. Complete Android signed-install and relay device matrix before describing

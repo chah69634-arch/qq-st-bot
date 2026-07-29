@@ -84,7 +84,7 @@ python scripts/build_release.py --version vX.Y.Z
 `data/`、`config.yaml`、secrets，但同一文件的本地改动仍可能让 `git pull` 冲突。
 
 解压的 Release 包会启动内置的版本更新器：从 GitHub Releases 列出可选版本（默认最新，也可选旧版本），
-下载 zip 与 `.sha256` 后先校验，再只覆盖程序文件。`data/`、`userdata/`、`config.yaml`、
+下载 zip 与 `.sha256` 后先校验，再只覆盖程序文件。`bundled/` 属于可替换的程序文件；`data/`、`userdata/`、`config.yaml`、
 `secrets.local.yaml`、`.venv/` 和随包的 `tools/uv.exe` 始终保留；替换的程序文件会备份到
 `_update_backup_<旧版本>/`，成功后只保留最近一份。跨版本降级会要求再次输入 `Y`，因为本地 data
 格式可能不兼容。

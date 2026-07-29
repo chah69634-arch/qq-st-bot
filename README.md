@@ -178,7 +178,7 @@ Fill in the required fields per the comments in `config.example.yaml`: your LLM 
 
 For `owner_id`, use your QQ number if you have one — using a different id here means connecting QQ later will start a separate memory thread that won't merge with the desktop-pet memories. Leaving it empty makes the proactive-message scheduler silently skip all triggers.
 
-Create character cards in `userdata/characters/cards/`; the loader supports `.json`, `.txt`, and `.md` and retains a read-only fallback for legacy `characters/` installations. Other private authored assets belong below `userdata/characters/` (for example `authored/{char_id}/`, `reality/`, and `dream/`); see `docs/data-taxonomy.md`. The tracked `examples/character_template.json` is a format example, and the repo ships a neutral `default` card for first-run use.
+Create character cards in `userdata/characters/cards/`; the loader supports `.json`, `.txt`, and `.md` and retains a read-only fallback for legacy `characters/` installations. Other private authored assets belong below `userdata/characters/` (for example `authored/{char_id}/`, `reality/`, and `dream/`); see `docs/data-taxonomy.md`. Release-owned read-only seeds, templates, and examples live under `bundled/`, including `bundled/templates/character_template.json` and the neutral first-run `default` card.
 
 **Initialize auth** (before the first run)
 
@@ -260,7 +260,7 @@ python tests/run_eval.py
 
 - Personal/learning use only.
 - Bring your own LLM API key (DeepSeek is recommended if you're in mainland China — direct connect, no proxy needed).
-- Bring your own character card; see `userdata/characters/cards/` for the live location and `examples/character_template.json` for the format. This project ships no copyrighted character material.
+- Bring your own character card; see `userdata/characters/cards/` for the live location and `bundled/templates/character_template.json` for the format. This project ships no copyrighted character material.
 - The project uses "他" (a male original character) as its example persona. The display name is configurable via `character.name` in `config.yaml`; some defaults, compatibility paths, and older docs still say `yexuan` internally — this doesn't affect functionality, and will be unified in a later version.
 
 ---

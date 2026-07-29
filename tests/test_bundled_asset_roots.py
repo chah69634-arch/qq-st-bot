@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from pathlib import Path
 
 from core.data_paths import DataPaths
@@ -61,6 +62,14 @@ def test_fresh_layout_reads_packaged_default_and_seeds_without_legacy_roots(tmp_
     assert json.loads(test_paths.jailbreak_entries().read_text(encoding="utf-8")) == {"entries": []}
     assert test_paths.relations().read_text(encoding="utf-8") == "default: {}\n"
     assert test_paths.blacklist().read_text(encoding="utf-8") == "[]\n"
+
+    from admin.routers.character import new_character
+
+    created = asyncio.run(new_character({"id": "fresh_character", "name": "Fresh"}, auth="test"))
+    assert created["id"] == "fresh_character"
+    assert json.loads(
+        (tmp_path / "userdata/characters/cards/fresh_character.json").read_text(encoding="utf-8")
+    )["name"] == "Fresh"
 
 
 def test_userdata_overrides_bundled_and_legacy_remains_final_fallback(tmp_path, monkeypatch):

@@ -118,7 +118,7 @@
 | Path B 守卫（意图反射去重） | `core/pipeline.py` → `_parse_and_execute_intent()` guards (a/b/c/d) + `_INTENT_LAST_ACTION` c2 幂等；guard (d) 为 `loop_executed=True` 时短路 |
 | tool loop 多步工具执行器（Path C，function_calling 模型专用） | `core/tool_dispatcher.py` → `tool_loop_active(uid)`；`core/pipeline.py` → `run_agentic_loop()`；全局 `config.tool_loop.enabled` 默认关，活跃角色卡可用 `presence_ext.tool_loop: "on"|"off"` 覆盖；设置接口 `admin/routers/settings_tool_loop.py` |
 | MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4，只接工具不接 resources/prompts/记忆库，默认关） | `core/mcp_client.py`（`init_mcp_servers()` / `shutdown_mcp_servers()`）；配置 `config.mcp_servers`；工具只经 tool loop 暴露 |
-| per-char 兼容钩子（Brief 29 · "本我"模式：注入过滤/路由/发言闸门/工具暴露面） | 角色卡 `presence_ext` 块 → `core/character_loader.py`（解析 + `is_proactive_disabled()`）；消费点分别在 `core/prompt_ablation.py` / `core/model_registry.py` / `core/scheduler/gating.py`+`execution.py` / `core/pipeline.py::run_agentic_loop()`；示例卡 `examples/benwo.example.json`（`characters/` 根目录不放模板/示例文件，见 `tests/test_authored_assets.py`） |
+| per-char 兼容钩子（Brief 29 · "本我"模式：注入过滤/路由/发言闸门/工具暴露面） | 角色卡 `presence_ext` 块 → `core/character_loader.py`（解析 + `is_proactive_disabled()`）；消费点分别在 `core/prompt_ablation.py` / `core/model_registry.py` / `core/scheduler/gating.py`+`execution.py` / `core/pipeline.py::run_agentic_loop()`；示例卡 `bundled/examples/benwo.example.json`（发行内置模板/示例统一位于 `bundled/`） |
 | speaker-aware history + 风格脱敏 | `core/memory/short_term.py` → `speaker_id` / `_group_turns()` / `_sanitize_assistant_message()` |
 
 ---

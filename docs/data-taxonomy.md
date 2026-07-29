@@ -123,10 +123,9 @@ userdata/
     └── dream/{worlds,presets}/
 ```
 
-访问必须经 `DataPaths` 或 `AssetRegistry`。读取优先 `userdata/`，仅在旧安装目录仍存在且主路径缺失时回退到
-`assets/stickers/`、`characters/` 和 `content/characters/`；新建角色、梦境世界及其他可写资产写入
-`userdata/`。`defaults/`、`examples/`、默认角色卡和梦境世界模板仍是随仓库发布的公共种子，不迁入
-`userdata/`。
+访问必须经 `DataPaths` 或 `AssetRegistry`。读取优先 `userdata/`，再读发行内置的 `bundled/`，仅在旧安装目录仍存在且前两层缺失时回退到 `assets/stickers/`、`characters/` 和 `content/characters/`。新建角色、梦境世界及其他可写资产只写 `userdata/`。
+
+`bundled/` 是随发行替换的只读公共资产根：`characters/default/` 放默认卡和配套静态资产，`seeds/reality/` 与 `seeds/dream/worlds/_default/` 放播种源，`templates/` 放角色卡与明信片模板，`examples/` 放格式示例。它不属于用户 authored 内容，也不属于 `data/` 运行时状态。
 
 ### Reality memory
 
