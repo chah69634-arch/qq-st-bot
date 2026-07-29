@@ -27,6 +27,8 @@ ASSET_RE = re.compile(r"^PresenceKit-(.+)-win64-setup\.zip$")
 PROTECTED_ROOTS = frozenset({"data", "userdata", ".venv"})
 PROTECTED_FILES = frozenset({"config.yaml", "config.local.yaml", "secrets.local.yaml"})
 PROTECTED_PATHS = frozenset({PurePosixPath("tools/uv.exe")})
+BACKUP_MANIFEST_NAME = "_update_backup_manifest.json"
+BACKUP_MANIFEST_SCHEMA_VERSION = 1
 
 V1_BASELINE_VERSION = "v1.0.0"
 SUPPORTED_DATA_LAYOUT_SCHEMA_VERSION = 1
@@ -306,7 +308,73 @@ def _prune_old_backups(root: Path, keep: Path) -> None:
             shutil.rmtree(candidate)
 
 
-def _create_installation_backup(installation: Path, backup: Path) -> None:
+def _write_backup_manifest(backup: Path, source_version: str) -> None:
+    """Record the complete restorable program snapshot before replacement.
+
+    Private roots are intentionally absent: restore never writes them, and
+    hashing a virtualenv would make every update unnecessarily expensive.
+    """
+    files: dict[str, str] = {}
+    for candidate in sorted(backup.rglob("*")):
+        if not candidate.is_file():
+            continue
+        relative = candidate.relative_to(backup)
+        if relative.name == BACKUP_MANIFEST_NAME or is_protected_relative_path(relative):
+            continue
+        files[relative.as_posix()] = sha256_file(candidate)
+    payload = {
+        "schema_version": BACKUP_MANIFEST_SCHEMA_VERSION,
+        "source_version": source_version,
+        "files": files,
+    }
+    manifest = backup / BACKUP_MANIFEST_NAME
+    temporary = manifest.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, manifest)
+
+
+def _validate_backup_manifest(backup: Path) -> None:
+    """Refuse an incomplete or tampered updater backup before restore writes."""
+    manifest = backup / BACKUP_MANIFEST_NAME
+    if not manifest.is_file():
+        raise UpdateError("升级前备份缺少完整性 manifest，拒绝恢复以免覆盖当前安装。")
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        files = payload["files"]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise UpdateError("升级前备份 manifest 无法读取，拒绝恢复以免覆盖当前安装。") from exc
+    if payload.get("schema_version") != BACKUP_MANIFEST_SCHEMA_VERSION or not isinstance(files, dict):
+        raise UpdateError("升级前备份 manifest 格式不受支持，拒绝恢复以免覆盖当前安装。")
+
+    expected: set[str] = set()
+    for name, expected_digest in files.items():
+        relative = PurePosixPath(name) if isinstance(name, str) else PurePosixPath()
+        if (
+            not relative.parts
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or is_protected_relative_path(Path(*relative.parts))
+            or not isinstance(expected_digest, str)
+            or not re.fullmatch(r"[a-fA-F0-9]{64}", expected_digest)
+        ):
+            raise UpdateError("升级前备份 manifest 包含无效条目，拒绝恢复以免覆盖当前安装。")
+        candidate = backup.joinpath(*relative.parts)
+        if not candidate.is_file() or sha256_file(candidate).lower() != expected_digest.lower():
+            raise UpdateError("升级前备份不完整或已损坏，拒绝恢复以免覆盖当前安装。")
+        expected.add(relative.as_posix())
+
+    actual = {
+        candidate.relative_to(backup).as_posix()
+        for candidate in backup.rglob("*")
+        if candidate.is_file()
+        and candidate.name != BACKUP_MANIFEST_NAME
+        and not is_protected_relative_path(candidate.relative_to(backup))
+    }
+    if actual != expected:
+        raise UpdateError("升级前备份内容与 manifest 不一致，拒绝恢复以免覆盖当前安装。")
+
+
+def _create_installation_backup(installation: Path, backup: Path, source_version: str) -> None:
     """Create a complete pre-update snapshot before changing any installation file."""
     try:
         backup.mkdir(parents=True)
@@ -324,6 +392,7 @@ def _create_installation_backup(installation: Path, backup: Path) -> None:
             elif candidate.is_file():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(candidate, destination)
+        _write_backup_manifest(backup, source_version)
     except Exception as exc:
         shutil.rmtree(backup, ignore_errors=True)
         raise UpdateError(f"升级前备份失败，当前安装未开始更新：{exc}") from exc
@@ -342,7 +411,7 @@ def apply_release(
         backup = _backup_path(installation, old_version)
         if backup.exists():
             shutil.rmtree(backup)
-        _create_installation_backup(installation, backup)
+        _create_installation_backup(installation, backup, old_version)
     replaced: list[tuple[Path, bool]] = []
     try:
         replaced = _copy_program_files(source, installation, backup)
@@ -368,12 +437,15 @@ def restore_installation_from_backup(installation: Path, backup: Path) -> None:
         raise UpdateError("恢复目标不是 updater 创建的升级前备份。")
     if not resolved_backup.is_dir():
         raise UpdateError("指定的升级前备份不存在。")
+    _validate_backup_manifest(resolved_backup)
 
     for candidate in sorted(resolved_installation.rglob("*"), key=lambda item: len(item.parts), reverse=True):
         relative = candidate.relative_to(resolved_installation)
         if relative.parts and relative.parts[0].startswith("_update_backup_"):
             continue
         if relative.parts and relative.parts[0] == "_update_tmp":
+            continue
+        if relative.as_posix() == BACKUP_MANIFEST_NAME:
             continue
         # Updates never touch protected local state.  Skipping it on restore is
         # both contract-symmetric and necessary on Windows: this command is

@@ -109,6 +109,7 @@ def test_apply_release_keeps_private_paths_and_backs_up_replaced_program_files(t
     assert (install / "data" / "state.json").read_text(encoding="utf-8") == "private state"
     assert (install / "userdata" / "card.json").read_text(encoding="utf-8") == "private card"
     assert (backup / "main.py").read_text(encoding="utf-8") == "old program"
+    assert (backup / updater.BACKUP_MANIFEST_NAME).is_file()
 
 
 def test_bundled_update_replaces_release_assets_without_touching_legacy_files(tmp_path):
@@ -180,12 +181,30 @@ def test_restore_keeps_protected_virtualenv_and_private_state(tmp_path):
     (backup / ".venv" / "Scripts" / "python.exe").write_text("old python", encoding="utf-8")
     (backup / "data").mkdir()
     (backup / "data" / "state.json").write_text("old private state", encoding="utf-8")
+    updater._write_backup_manifest(backup, "v1.0.0")
 
     updater.restore_installation_from_backup(install, backup)
 
     assert (install / "main.py").read_text(encoding="utf-8") == "source program"
     assert (install / ".venv" / "Scripts" / "python.exe").read_text(encoding="utf-8") == "running python"
     assert (install / "data" / "state.json").read_text(encoding="utf-8") == "private state"
+
+
+def test_restore_rejects_incomplete_backup_before_touching_program_files(tmp_path):
+    install = tmp_path / "PresenceKit"
+    install.mkdir()
+    (install / "main.py").write_text("target program", encoding="utf-8")
+    backup = install / "_update_backup_v1.0.0"
+    backup.mkdir()
+    source = backup / "main.py"
+    source.write_text("source program", encoding="utf-8")
+    updater._write_backup_manifest(backup, "v1.0.0")
+    source.unlink()
+
+    with pytest.raises(updater.UpdateError, match="不完整"):
+        updater.restore_installation_from_backup(install, backup)
+
+    assert (install / "main.py").read_text(encoding="utf-8") == "target program"
 
 
 def test_offline_release_rehearsal_updates_program_but_keeps_private_files(tmp_path, monkeypatch):
