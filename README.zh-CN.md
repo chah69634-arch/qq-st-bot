@@ -163,6 +163,12 @@ pip install -r requirements.txt
 按红色标记填完必填①基础聊天模型、必填② `owner_id` 即可开始聊天（详见下方「配置」）。
 后续更新用 `AA更新.bat`（`git pull` + 重装依赖）。
 
+> **PresenceKit v1.0.0 是第一个受支持的更新基线。Preview v0.x 安装必须通过备份和全新安装迁移。**
+> 先备份 `data/`、`userdata/`、`config.yaml`、可选的 `config.local.yaml` 与
+> `secrets.local.yaml`，再把 v1 安装到新目录并只复制这些受保护内容。不要复制 preview 的
+> `characters/`、`content/`、`defaults/`、`examples/`、`core/`、`scripts/` 或 `.venv/`。
+> 详见 [后端升级与恢复](docs/backend-upgrade-recovery.md)。
+
 **配置**
 
 ```bash

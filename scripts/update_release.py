@@ -24,38 +24,12 @@ from typing import Any
 
 RELEASES_URL = "https://api.github.com/repos/cicikat/PresenceKit/releases?per_page=100"
 ASSET_RE = re.compile(r"^PresenceKit-(.+)-win64-setup\.zip$")
-PROTECTED_ROOTS = frozenset({"data", "userdata", ".venv", "_presencekit_upgrade"})
+PROTECTED_ROOTS = frozenset({"data", "userdata", ".venv"})
 PROTECTED_FILES = frozenset({"config.yaml", "config.local.yaml", "secrets.local.yaml"})
 PROTECTED_PATHS = frozenset({PurePosixPath("tools/uv.exe")})
 
-# This is intentionally a single, release-specific bridge rather than a
-# general migration framework.  v0.2.2 is the only pre-v1 installation layout
-# that the public updater accepts directly.
-V0_2_2_VERSION = "v0.2.2"
-V1_0_0_VERSION = "v1.0.0"
-V0_2_2_TO_V1_MARKER = PurePosixPath("_presencekit_upgrade/v0.2.2_to_v1_bridge_completed")
-
-# C1.4 only removes these former release-owned files.  It never recursively
-# removes a legacy root: an old installation may contain unknown private files.
-SUPERSEDED_PUBLIC_ASSETS = frozenset({
-    PurePosixPath("characters/default.json"),
-    PurePosixPath("characters/default_author_notes.json"),
-    *(PurePosixPath(f"characters/dream_postcards/templates/{name}.md") for name in (
-        "diary_fragment", "note", "postcard", "sms", "untitled",
-    )),
-    *(PurePosixPath(f"content/characters/default/{name}.yaml") for name in ("activity_pool", "traits")),
-    *(PurePosixPath(f"defaults/{name}") for name in (
-        "blacklist.yaml", "jailbreak_entries.json", "lorebook.yaml", "relations.yaml",
-    )),
-    *(PurePosixPath(f"defaults/dream_worlds/_default/{name}") for name in (
-        "lorebook.yaml", "mes_example.md", "ruleset.md", "vocab.json",
-    )),
-    PurePosixPath("examples/character_template.json"),
-    *(PurePosixPath(f"examples/{name}") for name in (
-        "activity_pool.example.yaml", "assistant.example.json", "benwo.example.json",
-        "jailbreak_preset.example.json", "traits.example.yaml",
-    )),
-})
+V1_BASELINE_VERSION = "v1.0.0"
+SUPPORTED_DATA_LAYOUT_SCHEMA_VERSION = 1
 
 
 class UpdateError(RuntimeError):
@@ -96,67 +70,47 @@ def _version_key(value: str) -> tuple[int, ...] | None:
     return tuple(int(part) for part in match.group(1).split(".")) if match else None
 
 
-def _version_at_least(value: str, floor: str) -> bool:
-    value_key, floor_key = _version_key(value), _version_key(floor)
-    if value_key is None or floor_key is None:
-        return False
-    width = max(len(value_key), len(floor_key))
-    return value_key + (0,) * (width - len(value_key)) >= floor_key + (0,) * (width - len(floor_key))
-
-
-def bridge_marker_path(root: Path) -> Path:
-    return root.joinpath(*V0_2_2_TO_V1_MARKER.parts)
-
-
 def _backup_path(root: Path, version: str) -> Path:
     safe_version = re.sub(r"[^A-Za-z0-9._-]+", "_", version) or "unknown"
     return root / f"_update_backup_{safe_version}"
 
 
-def _backup_is_v0_2_2(root: Path) -> bool:
-    backup_version = current_version(_backup_path(root, V0_2_2_VERSION))
-    return backup_version == V0_2_2_VERSION
-
-
-def select_update_mode(installation: Path, source_version: str, target_version: str) -> str:
-    """Select the sole supported pre-v1 bridge or a normal v1 forward update."""
-    if source_version == V0_2_2_VERSION:
-        if target_version != V1_0_0_VERSION:
-            raise UpdateError(
-                "v0.2.2 只支持直接升级到 v1.0.0；请下载 v1.0.0 release，"
-                "或先完成该升级后再继续 v1 forward update。"
-            )
-        return "v0.2.2_to_v1"
-
-    # A failed bridge has already copied the v1 program files, but deliberately
-    # has no completion marker.  Its full v0.2.2 backup is the only retry
-    # signal; it is not a version-agnostic migration registry.
-    if (
-        _version_at_least(source_version, V1_0_0_VERSION)
-        and target_version == V1_0_0_VERSION
-        and not bridge_marker_path(installation).is_file()
-        and _backup_is_v0_2_2(installation)
-    ):
-        return "v0.2.2_to_v1_retry"
-
-    if (
-        _version_at_least(source_version, V1_0_0_VERSION)
-        and target_version == V1_0_0_VERSION
-        and bridge_marker_path(installation).is_file()
-        and _backup_is_v0_2_2(installation)
-    ):
-        return "v0.2.2_to_v1_repeat"
-
-    if not _version_at_least(source_version, V1_0_0_VERSION):
+def _read_source_layout_schema(installation: Path) -> int:
+    marker = installation / "data" / "layout_version.json"
+    if not marker.is_file():
         raise UpdateError(
-            "无法识别为受支持的升级来源。仅支持 v0.2.2 直接升级到 v1.0.0；"
-            "更早版本请先升级到 v0.2.2，或从人工备份恢复。"
+            "当前安装缺少 data/layout_version.json，无法确认 v1 数据布局；"
+            "请按升级恢复文档备份后全新安装或恢复备份。"
         )
-    if not _version_at_least(target_version, V1_0_0_VERSION):
-        raise UpdateError("v1 不支持 downgrade；请从升级前备份人工恢复。")
-    if is_downgrade(source_version, target_version):
-        raise UpdateError("v1 不支持 downgrade；请从升级前备份人工恢复。")
-    return "v1_forward"
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise UpdateError("无法读取 data/layout_version.json；请恢复备份或按文档手动迁移。") from exc
+    if not isinstance(payload, dict) or payload.get("product_baseline") != "v1":
+        raise UpdateError("当前数据不是受支持的 v1 baseline；请按文档手动迁移或恢复备份。")
+    schema = payload.get("data_layout_schema_version")
+    if not isinstance(schema, int):
+        raise UpdateError("data/layout_version.json 缺少有效 schema；请恢复备份或按文档手动迁移。")
+    return schema
+
+
+def validate_v1_update(installation: Path, source_version: str, target_version: str) -> None:
+    """Fail before writes unless this is a compatible v1 forward update."""
+    source_key, target_key = _version_key(source_version), _version_key(target_version)
+    if source_key is None:
+        raise UpdateError("无法识别当前安装版本；仅支持 v1+ 连续更新。请备份后全新安装或恢复备份。")
+    if source_key < _version_key(V1_BASELINE_VERSION):
+        raise UpdateError("v0.x 为 preview，自动升级不受支持；请备份后全新安装 v1。")
+    if target_key is None or target_key < _version_key(V1_BASELINE_VERSION):
+        raise UpdateError("v1 不支持更新到 pre-v1 版本；请恢复升级前备份。")
+    if target_key < source_key:
+        raise UpdateError("v1 不支持 downgrade；请恢复升级前备份。")
+
+    schema = _read_source_layout_schema(installation)
+    if schema > SUPPORTED_DATA_LAYOUT_SCHEMA_VERSION:
+        raise UpdateError("当前数据 schema 高于此程序支持范围；请使用匹配版本或恢复备份。")
+    if schema != SUPPORTED_DATA_LAYOUT_SCHEMA_VERSION:
+        raise UpdateError("当前数据 schema 不在此程序支持范围；请按文档手动迁移或恢复备份。")
 
 
 def _read_proxy_config(root: Path) -> dict[str, str]:
@@ -319,39 +273,6 @@ def _rollback_program_files(installation: Path, backup: Path, replaced: list[tup
             target.unlink()
 
 
-def _cleanup_superseded_public_assets(
-    source: Path, installation: Path, backup: Path, replaced: list[tuple[Path, bool]],
-) -> None:
-    """Remove only known old public files after a bundled-root update.
-
-    Empty directories are removed opportunistically with ``rmdir``; a private
-    or ignored file makes that operation a no-op, so unknown legacy assets are
-    never deleted or traversed recursively.
-    """
-    if not (source / "bundled").is_dir():
-        return
-    parent_dirs: set[Path] = set()
-    for relative in SUPERSEDED_PUBLIC_ASSETS:
-        target = installation.joinpath(*relative.parts)
-        if not target.is_file():
-            continue
-        target.unlink()
-        replaced.append((target, True))
-        for parent in target.parents:
-            try:
-                parent.relative_to(installation)
-            except ValueError:
-                break
-            parent_dirs.add(parent)
-    for directory in sorted(parent_dirs, key=lambda item: len(item.parts), reverse=True):
-        if directory == installation:
-            continue
-        try:
-            directory.rmdir()
-        except OSError:
-            pass
-
-
 def _prune_old_backups(root: Path, keep: Path) -> None:
     for candidate in root.glob("_update_backup_*"):
         if candidate != keep and candidate.is_dir():
@@ -383,61 +304,26 @@ def _create_installation_backup(installation: Path, backup: Path) -> None:
 
 def apply_release(
     installation: Path, source: Path, old_version: str, *, reuse_existing_backup: bool = False,
-    backup_version: str | None = None,
 ) -> Path:
     """Overlay verified program files and retain one restorable pre-update backup."""
-    backup = _backup_path(installation, backup_version or old_version)
-    if not reuse_existing_backup:
+    existing_backups = sorted(path for path in installation.glob("_update_backup_*") if path.is_dir())
+    if reuse_existing_backup and existing_backups:
+        # A same-version retry must not turn the already-successful update into
+        # a new snapshot of itself. The updater retains one backup by contract.
+        backup = existing_backups[-1]
+    else:
+        backup = _backup_path(installation, old_version)
         if backup.exists():
             shutil.rmtree(backup)
         _create_installation_backup(installation, backup)
-    elif not backup.is_dir():
-        raise UpdateError("未找到可供 bridge 重试的 v0.2.2 升级前备份。")
     replaced: list[tuple[Path, bool]] = []
     try:
         replaced = _copy_program_files(source, installation, backup)
-        _cleanup_superseded_public_assets(source, installation, backup, replaced)
     except Exception as exc:
         _rollback_program_files(installation, backup, replaced)
         raise UpdateError(f"程序文件复制失败，已恢复本次已替换的程序文件：{exc}") from exc
     _prune_old_backups(installation, backup)
     return backup
-
-
-def run_existing_v1_migration_bootstrap(installation: Path) -> None:
-    """Run the existing read-compatibility bootstrap without starting the service.
-
-    v1 has no release-wide data rewrite to execute here: `core.migration.for_read`
-    is the existing compatibility layer and runtime bootstraps remain normal
-    startup responsibilities.  The bridge verifies that this released layout can
-    resolve the v1 bundled default before its completion marker is written.
-    """
-    bundled_card = installation / "bundled" / "characters" / "default" / "card.json"
-    legacy_card = installation / "characters" / "default.json"
-    if not bundled_card.is_file():
-        raise UpdateError("v1 release 缺少 bundled 默认资产，bridge 未完成。")
-    from core.migration import for_read
-
-    if for_read(bundled_card, legacy_card) != bundled_card:
-        raise UpdateError("v1 bundled 默认资产无法通过既有兼容读取校验，bridge 未完成。")
-
-
-def _write_bridge_marker(installation: Path) -> None:
-    marker = bridge_marker_path(installation)
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    temporary = marker.with_suffix(".new")
-    temporary.write_text("v0.2.2_to_v1_bridge_completed\n", encoding="utf-8")
-    os.replace(temporary, marker)
-
-
-def run_v0_2_2_to_v1_bridge(installation: Path) -> None:
-    """Complete the single supported v0.2.2-to-v1 bridge, once and idempotently."""
-    if bridge_marker_path(installation).is_file():
-        return
-    if not (installation / "bundled").is_dir():
-        raise UpdateError("v1 release 未提供 bundled/，bridge 未完成。")
-    run_existing_v1_migration_bootstrap(installation)
-    _write_bridge_marker(installation)
 
 
 def restore_installation_from_backup(installation: Path, backup: Path) -> None:
@@ -487,14 +373,6 @@ def _service_is_running() -> bool:
         # A missing legacy WMIC should not make an update unsafe by pretending
         # success.  The batch entry performs the same check before Python starts.
         return False
-
-
-def is_downgrade(current: str, target: str) -> bool:
-    current_key, target_key = _version_key(current), _version_key(target)
-    if current_key is None or target_key is None:
-        return False
-    width = max(len(current_key), len(target_key))
-    return target_key + (0,) * (width - len(target_key)) < current_key + (0,) * (width - len(current_key))
 
 
 def sync_dependencies(root: Path) -> None:
@@ -549,18 +427,8 @@ def update(root: Path, args: argparse.Namespace) -> None:
 
     verify_sha256(archive, checksum)
     source = extract_release(archive, stage / "package")
-    mode = select_update_mode(root, old, target)
-    backup = apply_release(
-        root,
-        source,
-        old,
-        reuse_existing_backup=mode in {"v0.2.2_to_v1_retry", "v0.2.2_to_v1_repeat"},
-        backup_version=V0_2_2_VERSION if mode in {"v0.2.2_to_v1_retry", "v0.2.2_to_v1_repeat"} else None,
-    )
-    if mode.startswith("v0.2.2_to_v1"):
-        # Do this after program files are in place.  If it fails, the marker is
-        # absent and the preserved v0.2.2 snapshot makes a later retry explicit.
-        run_v0_2_2_to_v1_bridge(root)
+    validate_v1_update(root, old, target)
+    backup = apply_release(root, source, old, reuse_existing_backup=old == target)
     if not args.skip_sync:
         sync_dependencies(root)
     shutil.rmtree(stage)

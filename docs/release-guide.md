@@ -93,31 +93,41 @@ python scripts/build_release.py --version vX.Y.Z
 同步失败不会回滚已替换的程序文件，应先保留终端错误再处理网络或环境问题。GitHub 访问失败时，更新器
 会明确提示并保留手动下载 release zip、仅覆盖程序文件的路径；它使用 `config.yaml` 里启用的代理配置。
 
-### v0.2.2 → v1.0.0 一次性升级桥
+### v1 更新基线与 preview 迁移
 
-v1 是长期兼容基线。解压版后端更新器只验证并支持一个 pre-v1 直接升级来源：
-`v0.2.2 → v1.0.0`。更早的 v0.x 版本不会猜测旧布局；请先升级到 v0.2.2，或使用
-人工备份恢复。v1 之后的布局变更必须提供连续的 forward migration。
+> **PresenceKit v1.0.0 is the first supported update baseline. Preview v0.x
+> installations must migrate through backup and fresh installation.**
 
-升级前，updater 会先在安装目录创建完整的
-`_update_backup_v0.2.2/` 快照，再替换程序文件并引入 `bundled/`。它只清理已知的旧
-公开 assets；`userdata/`、`data/`、`config.yaml`、`config.local.yaml`、`secrets.local.yaml`、本地环境和未知
-legacy private files 都保留。bridge 成功后才会写入受保护的安装级 marker
-`_presencekit_upgrade/v0.2.2_to_v1_bridge_completed`。该 marker 只表示这一次 bridge
-完成，不是通用 migration engine。
+v0.x 是 preview / beta，不支持自动升级或数据连续性承诺。升级到 v1 时先停止服务，独立备份
+`data/`、`userdata/`、`config.yaml`、`config.local.yaml`（如有）和 `secrets.local.yaml`（如有），
+然后在**新空目录**安装 v1 并复制这些受保护内容。不要复制旧程序资产或环境：
+`characters/`、`content/`、`defaults/`、`examples/`、`core/`、`scripts/`、`.venv/`。
 
-v1 不支持 downgrade。升级失败或需要回退时，停止服务后从升级前备份人工恢复：
+如需保留 legacy authored fallback，先运行只读的 C1.3 检查：
 
 ```bash
-python scripts/update_release.py --restore-backup _update_backup_v0.2.2
+python scripts/authored_root_migration_dry_run.py --fail-on-diverged --fail-on-invalid
 ```
 
-这会把安装恢复为该升级前快照；请先保存升级后才新增、且不希望丢失的本地文件。程序复制失败会
-fail-loud 并恢复已替换的程序文件；bridge migration 失败不会写 marker，可在保留的 v0.2.2
-备份存在时安全重试。依赖同步失败不会自动回滚已更新的程序或依赖，必须查看终端错误后重试或走上述
-人工恢复路线。
+出现 `legacy-only`、`diverged`、`invalid`、`incomplete` 或 `unresolved` 时必须人工处理，
+不得由 updater 猜测或覆盖。首次成功启动 v1 会创建
+`data/layout_version.json`，记录 v1 baseline、数据 schema 与首次初始化的 v1 版本；它不是通用
+migration engine。
 
-自动 fixture 只证明隔离的假数据演练通过，不能替代发布前对真实安装副本的手动恢复演练。
+从 v1.0.0 开始，解压版 updater 只接受 `VERSION >= v1.0.0`、支持范围内的
+`data/layout_version.json` schema，以及 non-downgrade target。preview、未知安装、缺失/无效
+marker、未来 schema 和 downgrade 都会在替换程序前 fail-loud，并提示手动迁移或恢复备份。
+正常 v1+ 更新会创建 `_update_backup_<旧版本>/` 完整快照，替换程序与 `bundled/`，但不会覆盖
+`data/`、`userdata/`、配置、secrets、`.venv/` 或 `tools/uv.exe`。
+
+v1 不支持 downgrade。需恢复时停止服务并运行：
+
+```bash
+python scripts/update_release.py --restore-backup _update_backup_<旧版本>
+```
+
+请先保存升级后新增、且不希望丢失的文件。依赖同步失败不会自动回滚程序或依赖；修复后重试，或走上述
+恢复路线。
 
 ## 3. desktop（Emerald-client / PresenceKit-desktop）：CI 出安装器，会挂 Draft
 

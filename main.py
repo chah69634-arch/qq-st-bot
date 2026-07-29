@@ -169,6 +169,18 @@ def _init_modules():
     from core.memory.pending_perception import cleanup_stale as _cleanup_stale
     _cleanup_stale()
 
+    # v1 is the first supported compatibility baseline.  Do this only after
+    # configuration, auth, character loading, and Pipeline initialization have
+    # succeeded, so a copied preview data directory is marked only by a viable
+    # v1 startup; no data rewrite or legacy-asset migration happens here.
+    from core.layout_baseline import LayoutBaselineError, ensure_v1_layout_baseline
+    try:
+        if ensure_v1_layout_baseline():
+            logger.info("[startup] 已创建 v1 data/layout_version.json baseline marker")
+    except LayoutBaselineError as exc:
+        logger.critical("[startup] v1 data layout baseline 无法确认: %s", exc)
+        sys.exit(1)
+
     logger.info("模块初始化完成")
 
 

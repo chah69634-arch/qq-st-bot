@@ -25,6 +25,7 @@ _LAYOUT_DREAM = "v1"
 
 ```text
 data/
+├── layout_version.json                  # v1 baseline + data layout schema; no user content
 ├── runtime/
 │   ├── channel_queue.json
 │   ├── mobile_queue.json
@@ -101,6 +102,11 @@ data/
 
 测试模式把上述相对路径整体偏移到 `data/test_sandbox/{session_id}/`。`sandbox.init_paths()`
 还会更新 `config.yaml` 的 `data_prefix`，供旧桌宠文件轮询兼容。
+
+`layout_version.json` 是 v1 安装/数据基线标记，不是事件总线或通用 migration 框架。它只记录
+`product_baseline: "v1"`、`data_layout_schema_version` 和 `first_initialized_version`，由首次成功
+v1 startup 原子创建。v1+ updater 仅接受自己支持的 marker schema；缺失、无效或更高 schema
+必须 fail-loud，交由备份恢复或人工迁移处理。
 
 ## 路径边界
 

@@ -123,6 +123,10 @@ class DataPaths:
         """
         return self._base
 
+    def layout_version(self) -> Path:
+        """data/layout_version.json — v1 installation/data compatibility baseline."""
+        return self._p("layout_version.json")
+
     # ── User-authored assets (never part of the runtime data sandbox) ───────
     # ``data/`` is canonical runtime state and deliberately remains separate.
     # These accessors centralize the C1 migration from several root-level
