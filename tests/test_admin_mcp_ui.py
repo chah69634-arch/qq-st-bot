@@ -39,8 +39,10 @@ def test_mcp_management_page_exposes_import_whitelist_and_call_observation():
         assert marker in source
 
 
-def test_mcp_servers_start_collapsed_without_persisting_ui_state():
+def test_mcp_servers_start_collapsed_and_persist_ui_state():
     source = read_admin_client_source()
-    assert "const _mcpExpandedServers = new Set();" in source
+    assert "const MCP_EXPANDED_SERVERS_STORAGE_KEY = 'qq_admin_mcp_expanded_servers_v1';" in source
+    assert "const _mcpExpandedServers = _loadMcpExpandedServers();" in source
     assert "const collapsed = !_mcpExpandedServers.has(server.name);" in source
     assert "_mcpExpandedServers.has(name) ? _mcpExpandedServers.delete(name) : _mcpExpandedServers.add(name);" in source
+    assert "_persistMcpExpandedServers();" in source

@@ -1,6 +1,23 @@
 let _mcpImport = null;
-// 展开状态只在当前页面会话中保留；未被明确展开的 server 默认收起。
-const _mcpExpandedServers = new Set();
+const MCP_EXPANDED_SERVERS_STORAGE_KEY = 'qq_admin_mcp_expanded_servers_v1';
+
+function _loadMcpExpandedServers() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MCP_EXPANDED_SERVERS_STORAGE_KEY) || '[]');
+    return new Set(Array.isArray(saved) ? saved.filter(name => typeof name === 'string') : []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function _persistMcpExpandedServers() {
+  try {
+    localStorage.setItem(MCP_EXPANDED_SERVERS_STORAGE_KEY, JSON.stringify([..._mcpExpandedServers]));
+  } catch (_) { /* 私密模式或受限存储时仍保持默认收起。 */ }
+}
+
+// 没有已保存状态的 server 默认收起。
+const _mcpExpandedServers = _loadMcpExpandedServers();
 
 function _mcpDraftFromForm() {
   let headers = {};
@@ -132,6 +149,7 @@ function _renderMcpServer(server) {
 
 function toggleMcpServerCollapsed(name) {
   _mcpExpandedServers.has(name) ? _mcpExpandedServers.delete(name) : _mcpExpandedServers.add(name);
+  _persistMcpExpandedServers();
   loadMcpPage();
 }
 
