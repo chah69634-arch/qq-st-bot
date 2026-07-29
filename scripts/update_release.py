@@ -375,6 +375,12 @@ def restore_installation_from_backup(installation: Path, backup: Path) -> None:
             continue
         if relative.parts and relative.parts[0] == "_update_tmp":
             continue
+        # Updates never touch protected local state.  Skipping it on restore is
+        # both contract-symmetric and necessary on Windows: this command is
+        # normally running from .venv\Scripts\python.exe, which cannot delete
+        # its own executable while it is open.
+        if is_protected_relative_path(relative):
+            continue
         if candidate.is_file():
             candidate.unlink()
         elif candidate.is_dir():
@@ -384,6 +390,8 @@ def restore_installation_from_backup(installation: Path, backup: Path) -> None:
                 pass
     for candidate in sorted(resolved_backup.rglob("*")):
         relative = candidate.relative_to(resolved_backup)
+        if is_protected_relative_path(relative):
+            continue
         destination = resolved_installation / relative
         if candidate.is_dir():
             destination.mkdir(parents=True, exist_ok=True)

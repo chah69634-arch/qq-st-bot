@@ -165,6 +165,29 @@ def test_copy_failure_keeps_complete_backup_and_rolls_back_replaced_files(tmp_pa
     assert (install / "_update_backup_v1.0.0" / "main.py").read_text(encoding="utf-8") == "old program"
 
 
+def test_restore_keeps_protected_virtualenv_and_private_state(tmp_path):
+    install = tmp_path / "PresenceKit"
+    install.mkdir()
+    (install / "main.py").write_text("target program", encoding="utf-8")
+    (install / ".venv" / "Scripts").mkdir(parents=True)
+    (install / ".venv" / "Scripts" / "python.exe").write_text("running python", encoding="utf-8")
+    (install / "data").mkdir()
+    (install / "data" / "state.json").write_text("private state", encoding="utf-8")
+    backup = install / "_update_backup_v1.0.0"
+    backup.mkdir()
+    (backup / "main.py").write_text("source program", encoding="utf-8")
+    (backup / ".venv" / "Scripts").mkdir(parents=True)
+    (backup / ".venv" / "Scripts" / "python.exe").write_text("old python", encoding="utf-8")
+    (backup / "data").mkdir()
+    (backup / "data" / "state.json").write_text("old private state", encoding="utf-8")
+
+    updater.restore_installation_from_backup(install, backup)
+
+    assert (install / "main.py").read_text(encoding="utf-8") == "source program"
+    assert (install / ".venv" / "Scripts" / "python.exe").read_text(encoding="utf-8") == "running python"
+    assert (install / "data" / "state.json").read_text(encoding="utf-8") == "private state"
+
+
 def test_offline_release_rehearsal_updates_program_but_keeps_private_files(tmp_path, monkeypatch):
     install = tmp_path / "PresenceKit"
     install.mkdir()
