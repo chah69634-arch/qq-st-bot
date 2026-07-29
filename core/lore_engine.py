@@ -113,14 +113,18 @@ class LoreEngine:
             return
 
         enabled_lorebooks: list = assets.get("enabled_lorebooks", [])
-        lorebooks_dir = paths.lorebooks_dir()
         total_loaded = 0
 
         for stem in enabled_lorebooks:
-            file_path = lorebooks_dir / f"{stem}.yaml"
-            if not file_path.exists():
-                logger.warning(f"[lore_engine] lorebook 文件不存在，跳过: {file_path}")
+            from core.authored_asset_resolver import resolve_layered_file
+            user_dir, legacy_dir = paths.lorebook_read_dirs()
+            resolved = resolve_layered_file(
+                user_dir, legacy_dir, f"{stem}.yaml", logical_asset="reality_lorebook"
+            )
+            if resolved is None:
+                logger.warning("[lore_engine] logical_asset=reality_lorebook logical_id=%s missing", stem)
                 continue
+            file_path = resolved.path
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f) or {}
@@ -136,9 +140,16 @@ class LoreEngine:
             if _ensure_lore_ids(raw_entries, file_path):
                 try:
                     data["entries"] = raw_entries
-                    with open(file_path, "w", encoding="utf-8") as _wf:
+                    write_path = paths.reality_lorebook_write_dir() / f"{stem}.yaml"
+                    write_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(write_path, "w", encoding="utf-8") as _wf:
                         yaml.dump(data, _wf, allow_unicode=True, default_flow_style=False, sort_keys=False)
-                    logger.info(f"[lore_engine] {stem}.yaml: 补发缺失 id 并回写")
+                    logger.info(
+                        "[authored-writer] kind=reality_lorebook logical_id=%s "
+                        "effective_read_source=%s canonical_write_target=user",
+                        stem,
+                        resolved.source,
+                    )
                 except Exception as _we:
                     log_error(f"lore_engine.ensure_ids.{stem}", _we)
 

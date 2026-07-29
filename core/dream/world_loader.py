@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.authored_asset_resolver import LayeredAsset, resolve_layered_directories
 from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
@@ -41,16 +42,33 @@ def _worlds_base() -> Path:
     return get_paths().dream_worlds_dir()
 
 
+def _world_layers() -> tuple[Path, Path | None]:
+    """Return layered roots, retaining the test seam that patches _worlds_base()."""
+    paths = get_paths()
+    current = _worlds_base()
+    selected = paths.dream_worlds_dir()
+    if current != selected:
+        return current, None
+    return paths.dream_world_read_dirs()
+
+
+def resolve_dream_worlds() -> list[LayeredAsset]:
+    user_dir, legacy_dir = _world_layers()
+    return resolve_layered_directories(
+        user_dir,
+        legacy_dir,
+        logical_asset="dream_world",
+    )
+
+
+def resolve_dream_world(world_id: str) -> LayeredAsset | None:
+    return next((item for item in resolve_dream_worlds() if item.logical_id == world_id), None)
+
+
 def discover_worlds() -> list[str]:
     """Return sorted list of available world_ids by scanning characters/dream_worlds/."""
-    try:
-        return sorted(
-            d.name
-            for d in _worlds_base().iterdir()
-            if d.is_dir() and not d.name.startswith("_")
-        )
-    except Exception:
-        return [_FALLBACK_WORLD]
+    worlds = [item.logical_id for item in resolve_dream_worlds() if not item.logical_id.startswith("_")]
+    return worlds or [_FALLBACK_WORLD]
 
 
 @dataclass
@@ -67,16 +85,17 @@ def load_world(world_id: str) -> WorldPackage:
     Falls back to reality_derived if world directory does not exist.
     Falls back to _default/ for missing or empty ruleset, mes_example, vocab.
     """
-    worlds_base = _worlds_base()
-    base = worlds_base / world_id
-    if not base.is_dir():
+    item = resolve_dream_world(world_id)
+    if item is None:
         logger.warning(
             f"[world_loader] unknown world_id={world_id!r}, "
             f"falling back to {_FALLBACK_WORLD}"
         )
         world_id = _FALLBACK_WORLD
-        base = worlds_base / world_id
-    default_base = worlds_base / _DEFAULT_DIR
+        item = resolve_dream_world(world_id)
+    base = item.path if item is not None else _worlds_base() / world_id
+    default_item = resolve_dream_world(_DEFAULT_DIR)
+    default_base = default_item.path if default_item is not None else base.parent / _DEFAULT_DIR
 
     ruleset = _read_text_or_none(base / "ruleset.md")
     if ruleset is None:
@@ -188,10 +207,11 @@ def load_dream_lore_entries(world_id: str) -> list[dict[str, Any]]:
     Reads characters/dream_worlds/{world_id}/lorebook.yaml.
     Returns empty list when file missing or empty.
     """
-    worlds_base = _worlds_base()
-    if not (worlds_base / world_id).is_dir():
+    item = resolve_dream_world(world_id)
+    if item is None:
         world_id = _FALLBACK_WORLD
-    path = worlds_base / world_id / "lorebook.yaml"
+        item = resolve_dream_world(world_id)
+    path = (item.path if item is not None else _worlds_base() / world_id) / "lorebook.yaml"
     try:
         import yaml  # type: ignore
         data = yaml.safe_load(path.read_text(encoding="utf-8"))

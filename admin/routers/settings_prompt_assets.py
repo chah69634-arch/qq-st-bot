@@ -78,11 +78,13 @@ def _character_ui_dict(entry) -> dict:
 
 
 def _load_world_cards() -> list[dict]:
+    from core.dream.world_loader import resolve_dream_world
+
     result = []
-    worlds_base = get_paths().dream_worlds_dir()
     for wid in discover_worlds():
         label = wid
-        meta_path = worlds_base / wid / "meta.json"
+        item = resolve_dream_world(wid)
+        meta_path = (item.path / "meta.json") if item is not None else Path("__missing__")
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             label = meta.get("label", wid)

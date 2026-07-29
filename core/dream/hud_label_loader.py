@@ -20,6 +20,12 @@ def _worlds_base() -> Path:
     return get_paths().dream_worlds_dir()
 
 
+def _world_path(world_id: str) -> Path:
+    from core.dream.world_loader import resolve_dream_world
+    item = resolve_dream_world(world_id)
+    return item.path if item is not None else _worlds_base() / world_id
+
+
 # Process-lifetime cache: world_id → {axis: {"low": str, "mid": str, "high": str}}
 _label_cache: dict[str, dict[str, dict[str, str]]] = {}
 
@@ -35,7 +41,7 @@ def load_hud_labels(world_id: str) -> dict[str, dict[str, str]]:
         return {}
     if world_id in _label_cache:
         return _label_cache[world_id]
-    path = _worlds_base() / world_id / "hud_labels.yaml"
+    path = _world_path(world_id) / "hud_labels.yaml"
     result = _try_load_yaml(path, world_id)
     _label_cache[world_id] = result
     return result

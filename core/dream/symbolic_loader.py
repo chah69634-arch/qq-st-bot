@@ -22,8 +22,23 @@ def _worlds_base() -> Path:
     return get_paths().dream_worlds_dir()
 
 
+def _world_path(world_id: str) -> Path:
+    from core.dream.world_loader import resolve_dream_world
+    item = resolve_dream_world(world_id)
+    return item.path if item is not None else _worlds_base() / world_id
+
+
 def _anchor_weights_path() -> Path:
-    return _worlds_base() / "anchor_weights.json"
+    from core.authored_asset_resolver import resolve_layered_file
+    paths = get_paths()
+    user_dir, legacy_dir = paths.dream_world_read_dirs()
+    item = resolve_layered_file(
+        user_dir,
+        legacy_dir,
+        "anchor_weights.json",
+        logical_asset="dream_anchor_weights",
+    )
+    return item.path if item is not None else _worlds_base() / "anchor_weights.json"
 
 
 # Per-world profile cache: world_id → {symbol: {"weight": float, "tags": list[str]}}
@@ -49,7 +64,7 @@ def load_symbolic_profile(world_id: str) -> dict[str, dict]:
     if world_id in _profile_cache:
         return _profile_cache[world_id]
 
-    path = _worlds_base() / world_id / "symbolic_profile.yaml"
+    path = _world_path(world_id) / "symbolic_profile.yaml"
     profile = _try_load_yaml(path, world_id)
     if profile is not None:
         logger.debug(

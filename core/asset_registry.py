@@ -25,6 +25,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.authored_asset_resolver import resolve_layered_files
+
 logger = logging.getLogger(__name__)
 
 _LEGACY_CHARACTERS_DIR = Path("characters")
@@ -51,6 +53,13 @@ _DREAM_PRESET_ID_MAP: dict[str, tuple[str, str]] = {
     "触手巢穴": ("tentacle",      "触手巢穴"),
     "感官": ("ganguan",      "感官"),
 }
+
+
+def _dream_preset_logical_id(stem: str) -> str:
+    if _ASCII_ID_RE.fullmatch(stem):
+        return stem
+    mapped = _DREAM_PRESET_ID_MAP.get(stem)
+    return mapped[0] if mapped is not None else stem
 
 
 @dataclass(frozen=True)
@@ -88,11 +97,6 @@ class AssetEntry:
 def _paths():
     from core.sandbox import get_paths
     return get_paths()
-
-
-def _asset_dir(*, user: Path, legacy: Path) -> Path:
-    """Prefer the migrated user-owned directory, retaining legacy discovery."""
-    return user if user.exists() else legacy
 
 
 # ── Per-kind scanners ─────────────────────────────────────────────────────────
@@ -158,14 +162,15 @@ def _scan_characters() -> list[AssetEntry]:
 
 def _scan_lorebooks() -> list[AssetEntry]:
     paths = _paths()
-    root = _asset_dir(
-        user=paths.user_reality_dir() / "lorebooks",
-        legacy=_LOREBOOKS_DIR,
-    )
-    if not root.exists():
-        return []
     result = []
-    for p in sorted(root.glob("*.yaml")):
+    for item in resolve_layered_files(
+        paths.user_reality_dir() / "lorebooks",
+        _LOREBOOKS_DIR,
+        logical_asset="reality_lorebook",
+        suffixes=(".yaml",),
+        logical_id=lambda relative: relative.stem,
+    ):
+        p = item.path
         stem_lower = p.stem.lower()
         hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)
         result.append(AssetEntry(id=p.stem, label=p.stem, filename=p.name,
@@ -175,14 +180,15 @@ def _scan_lorebooks() -> list[AssetEntry]:
 
 def _scan_jailbreaks() -> list[AssetEntry]:
     paths = _paths()
-    root = _asset_dir(
-        user=paths.user_reality_dir() / "jailbreaks",
-        legacy=_JAILBREAKS_DIR,
-    )
-    if not root.exists():
-        return []
     result = []
-    for p in sorted(root.glob("*.json")):
+    for item in resolve_layered_files(
+        paths.user_reality_dir() / "jailbreaks",
+        _JAILBREAKS_DIR,
+        logical_asset="reality_jailbreak",
+        suffixes=(".json",),
+        logical_id=lambda relative: relative.stem,
+    ):
+        p = item.path
         stem_lower = p.stem.lower()
         hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)
         result.append(AssetEntry(id=p.stem, label=p.stem, filename=p.name,
@@ -192,15 +198,16 @@ def _scan_jailbreaks() -> list[AssetEntry]:
 
 def _scan_dream_presets() -> list[AssetEntry]:
     paths = _paths()
-    root = _asset_dir(
-        user=paths.user_dream_presets_dir(),
-        legacy=_DREAM_PRESETS_DIR,
-    )
-    if not root.exists():
-        return []
     result = []
     seen_ids: set[str] = set()
-    for p in sorted(root.glob("*.md")):
+    for item in resolve_layered_files(
+        paths.user_dream_presets_dir(),
+        _DREAM_PRESETS_DIR,
+        logical_asset="dream_preset",
+        suffixes=(".md",),
+        logical_id=lambda relative: _dream_preset_logical_id(relative.stem),
+    ):
+        p = item.path
         stem = p.stem
         is_ascii = bool(_ASCII_ID_RE.fullmatch(stem))
 

@@ -61,17 +61,8 @@ def _valid_world_layer_values() -> frozenset[str]:
     模块级裸 Path("characters/dream_worlds")，不随 sandbox 测试夹具重定向，
     生产模式下两者指向同一目录、行为等价，但测试夹具下会读到不一致的目录。
     """
-    from core.sandbox import get_paths
-    worlds_dir = get_paths().dream_worlds_dir()
-    discovered: frozenset[str] = frozenset()
-    try:
-        if worlds_dir.exists():
-            discovered = frozenset(
-                d.name for d in worlds_dir.iterdir()
-                if d.is_dir() and not d.name.startswith("_")
-            )
-    except Exception:
-        discovered = frozenset()
+    from core.dream.world_loader import discover_worlds
+    discovered = frozenset(discover_worlds())
     return _VALID_WORLD_LAYER_BUILTIN | discovered | {"_default"}
 
 _PATCH_ALLOWED = frozenset({
@@ -458,7 +449,12 @@ def _preset_asset_path(preset: str) -> Path:
     try:
         return get_registry().resolve(preset, "dream_preset").path()
     except ValueError:
-        return get_paths().dream_presets_dir() / f"{preset}.md"
+        from core.authored_asset_resolver import resolve_layered_file
+        user_dir, legacy_dir = get_paths().dream_preset_read_dirs()
+        item = resolve_layered_file(
+            user_dir, legacy_dir, f"{preset}.md", logical_asset="dream_preset"
+        )
+        return item.path if item is not None else get_paths().dream_preset_write_path(preset)
 
 
 def _preset_write_path(preset: str) -> Path:
@@ -667,11 +663,11 @@ def _validate_world_name(world: str, *, allow_reserved: bool = False) -> None:
 
 def _world_dir(world: str):
     """Resolve a Dream world package for reading (legacy fallback preserved)."""
-    from core.sandbox import get_paths
     if not _SAFE_WORLD_RE.match(world) or world in (".", ".."):
         raise HTTPException(status_code=422, detail=f"世界名称不合法: {world!r}")
-    p = get_paths().dream_worlds_dir() / world
-    return p
+    from core.dream.world_loader import resolve_dream_world
+    item = resolve_dream_world(world)
+    return item.path if item is not None else get_paths().dream_worlds_dir() / world
 
 
 def _world_write_dir(world: str) -> Path:
@@ -694,10 +690,12 @@ def _materialize_world_for_write(world: str) -> Path:
 
 def _preset_path(world: str):
     """Resolve the legacy-compatible world-named preset for reading."""
-    from core.sandbox import get_paths
     if not _SAFE_WORLD_RE.match(world) or world in (".", ".."):
         raise HTTPException(status_code=422, detail=f"世界名称不合法: {world!r}")
-    return get_paths().dream_presets_dir() / f"{world}.md"
+    from core.authored_asset_resolver import resolve_layered_file
+    user_dir, legacy_dir = get_paths().dream_preset_read_dirs()
+    item = resolve_layered_file(user_dir, legacy_dir, f"{world}.md", logical_asset="dream_preset")
+    return item.path if item is not None else get_paths().dream_preset_write_path(world)
 
 
 def _dream_active_referencing_world(world: str) -> bool:
@@ -738,15 +736,8 @@ def _ensure_default_world_template_seeded() -> Path:
 
 @router.get("/dream/worlds", summary="列出梦境世界目录")
 async def list_dream_worlds(_auth=Depends(require_scopes("activity"))):
-    from core.sandbox import get_paths
-    worlds_dir = get_paths().dream_worlds_dir()
-    if not worlds_dir.exists():
-        return {"worlds": []}
-    worlds = sorted(
-        d.name for d in worlds_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_")
-    )
-    return {"worlds": worlds}
+    from core.dream.world_loader import discover_worlds
+    return {"worlds": discover_worlds()}
 
 
 @router.post("/dream/worlds", summary="新建梦境世界（建文件夹 + 最小骨架）")
@@ -839,12 +830,11 @@ async def delete_dream_world(world: str, _auth=Depends(require_scopes("activity"
             raise HTTPException(status_code=409, detail="legacy fallback Dream 世界为只读，不能删除")
         raise HTTPException(status_code=404, detail=f"世界 {world} 不存在")
 
-    if _dream_active_referencing_world(world):
-        raise HTTPException(status_code=409, detail="该世界正被进行中的梦境使用，梦醒后再删除")
-
     canonical = _world_write_dir(world)
     if target != canonical:
         raise HTTPException(status_code=409, detail="legacy fallback Dream 世界为只读，不能删除")
+    if _dream_active_referencing_world(world):
+        raise HTTPException(status_code=409, detail="该世界正被进行中的梦境使用，梦醒后再删除")
     import shutil as _shutil
     _shutil.rmtree(target)
 

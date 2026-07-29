@@ -30,11 +30,19 @@ def sample_style(
     """
     from core.sandbox import get_paths
 
-    samples_dir: Path = get_paths().letter_samples_dir(char_id=char_id)
-    if not samples_dir.is_dir():
-        return [], []
+    from core.authored_asset_resolver import resolve_layered_files
 
-    all_files = sorted(samples_dir.glob(f"*{_SAMPLE_EXTENSION}"))
+    user_dir, legacy_dir = get_paths().letter_samples_read_dirs(char_id=char_id)
+    all_files = [
+        item.path
+        for item in resolve_layered_files(
+            user_dir,
+            legacy_dir,
+            logical_asset="letter_sample",
+            suffixes=(_SAMPLE_EXTENSION,),
+            recursive=True,
+        )
+    ]
     if not all_files:
         return [], []
 
@@ -58,11 +66,19 @@ def sample_reference(char_id: str) -> str:
     """Return a random knowledge snippet (one paragraph), or empty string."""
     from core.sandbox import get_paths
 
-    knowledge_dir: Path = get_paths().letter_knowledge_dir(char_id=char_id)
-    if not knowledge_dir.is_dir():
-        return ""
+    from core.authored_asset_resolver import resolve_layered_files
 
-    all_files = sorted(knowledge_dir.glob(f"*{_KNOWLEDGE_EXTENSION}"))
+    user_dir, legacy_dir = get_paths().letter_knowledge_read_dirs(char_id=char_id)
+    all_files = [
+        item.path
+        for item in resolve_layered_files(
+            user_dir,
+            legacy_dir,
+            logical_asset="letter_knowledge",
+            suffixes=(_KNOWLEDGE_EXTENSION,),
+            recursive=True,
+        )
+    ]
     if not all_files:
         return ""
 

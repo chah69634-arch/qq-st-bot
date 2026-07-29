@@ -20,6 +20,12 @@ def _worlds_base() -> Path:
     return get_paths().dream_worlds_dir()
 
 
+def _world_path(world_id: str) -> Path:
+    from core.dream.world_loader import resolve_dream_world
+    item = resolve_dream_world(world_id)
+    return item.path if item is not None else _worlds_base() / world_id
+
+
 # Process-lifetime cache: world_id → {scene_key: str}
 _scene_cache: dict[str, dict[str, str]] = {}
 
@@ -42,7 +48,7 @@ def load_scene_labels(world_id: str) -> dict[str, str]:
         return {}
     if world_id in _scene_cache:
         return _scene_cache[world_id]
-    path = _worlds_base() / world_id / "scene_labels.yaml"
+    path = _world_path(world_id) / "scene_labels.yaml"
     result = _try_load_yaml(path, world_id)
     _scene_cache[world_id] = result
     return result

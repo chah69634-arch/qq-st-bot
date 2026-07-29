@@ -752,8 +752,13 @@ def _load_preset_text(preset_name: str) -> tuple[str, str]:
             entry = get_registry().resolve(name, "dream_preset")
             return entry.path()
         except Exception:
+            from core.authored_asset_resolver import resolve_layered_file
             from core.sandbox import get_paths
-            return get_paths().dream_presets_dir() / f"{name}.md"
+            user_dir, legacy_dir = get_paths().dream_preset_read_dirs()
+            item = resolve_layered_file(
+                user_dir, legacy_dir, f"{name}.md", logical_asset="dream_preset"
+            )
+            return item.path if item is not None else get_paths().dream_preset_write_path(name)
 
     def _read(name: str) -> str | None:
         p = _resolve_path(name)

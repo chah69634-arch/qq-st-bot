@@ -299,13 +299,16 @@ def _load_jailbreak(layer: int | None = None) -> str:
         assets = json.loads(assets_path.read_text(encoding="utf-8"))
         enabled_jailbreaks: list = assets.get("enabled_jailbreaks", [])
 
-        jailbreaks_dir = paths.jailbreaks_dir()
-
         for stem in enabled_jailbreaks:
-            file_path = jailbreaks_dir / f"{stem}.json"
-            if not file_path.exists():
-                logger.warning(f"[prompt_builder] jailbreak 文件不存在，跳过: {file_path}")
+            from core.authored_asset_resolver import resolve_layered_file
+            user_dir, legacy_dir = paths.jailbreak_read_dirs()
+            resolved = resolve_layered_file(
+                user_dir, legacy_dir, f"{stem}.json", logical_asset="reality_jailbreak"
+            )
+            if resolved is None:
+                logger.warning("[prompt_builder] logical_asset=reality_jailbreak logical_id=%s missing", stem)
                 continue
+            file_path = resolved.path
             try:
                 data = json.loads(file_path.read_text(encoding="utf-8"))
             except Exception as e:

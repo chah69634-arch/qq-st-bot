@@ -188,8 +188,20 @@ class DataPaths:
         return Path("content") / "characters" / safe_user_id(char_id)
 
     def authored_character_dir(self, *, char_id: str) -> Path:
+        """Compatibility single-directory resolver.
+
+        Resource-level consumers must use ``authored_character_dirs`` so an
+        empty or partial userdata directory cannot shadow legacy files.
+        """
         primary = self.user_authored_character_dir(char_id=char_id)
         return primary if primary.exists() else self.legacy_authored_character_dir(char_id=char_id)
+
+    def authored_character_dirs(self, *, char_id: str) -> tuple[Path, Path | None]:
+        """Return (user, legacy) read layers for one character's authored files."""
+        return (
+            self.user_authored_character_dir(char_id=char_id),
+            self.legacy_authored_character_dir(char_id=char_id),
+        )
 
     def user_reality_dir(self) -> Path:
         return self.userdata_root() / "characters" / "reality"
@@ -549,6 +561,11 @@ class DataPaths:
         primary = self.user_reality_dir() / "lorebooks"
         return primary if primary.exists() else self.legacy_reality_dir() / "lorebooks"
 
+    def lorebook_read_dirs(self) -> tuple[Path, Path | None]:
+        if self.mode == "test":
+            return self._base / "reality" / "lorebooks", None
+        return self.user_reality_dir() / "lorebooks", self.legacy_reality_dir() / "lorebooks"
+
     def dream_worlds_dir(self) -> Path:
         """characters/dream_worlds/ 目录（authored，不走 data/ 沙盒偏移）"""
         if self.mode == "test":
@@ -556,12 +573,22 @@ class DataPaths:
         primary = self.user_dream_worlds_dir()
         return primary if primary.exists() else self.legacy_dream_worlds_dir()
 
+    def dream_world_read_dirs(self) -> tuple[Path, Path | None]:
+        if self.mode == "test":
+            return self._base / "dream_worlds", None
+        return self.user_dream_worlds_dir(), self.legacy_dream_worlds_dir()
+
     def dream_presets_dir(self) -> Path:
         """characters/dream_presets/ 目录（authored，不走 data/ 沙盒偏移）"""
         if self.mode == "test":
             return self._base / "dream_presets"
         primary = self.user_dream_presets_dir()
         return primary if primary.exists() else self.legacy_dream_presets_dir()
+
+    def dream_preset_read_dirs(self) -> tuple[Path, Path | None]:
+        if self.mode == "test":
+            return self._base / "dream_presets", None
+        return self.user_dream_presets_dir(), self.legacy_dream_presets_dir()
 
     def dream_scenarios_dir(self) -> Path:
         """data/dream/scenarios/ 目录（authored content，剧本 YAML，不走 data/ 沙盒偏移）。
@@ -593,6 +620,11 @@ class DataPaths:
             return self._base / "reality" / "jailbreaks"
         primary = self.user_reality_dir() / "jailbreaks"
         return primary if primary.exists() else self.legacy_reality_dir() / "jailbreaks"
+
+    def jailbreak_read_dirs(self) -> tuple[Path, Path | None]:
+        if self.mode == "test":
+            return self._base / "reality" / "jailbreaks", None
+        return self.user_reality_dir() / "jailbreaks", self.legacy_reality_dir() / "jailbreaks"
 
     # ── authored reality prompt assets（characters/reality/，不走 data/ 沙盒偏移）
     def jailbreak_entries(self) -> Path:
@@ -702,10 +734,18 @@ class DataPaths:
         primary = self.user_authored_character_dir(char_id=char_id) / "letter_samples"
         return primary if primary.exists() else self.legacy_authored_character_dir(char_id=char_id) / "letter_samples"
 
+    def letter_samples_read_dirs(self, *, char_id: str = _DEFAULT_CHAR_ID) -> tuple[Path, Path]:
+        user, legacy = self.authored_character_dirs(char_id=char_id)
+        return user / "letter_samples", legacy / "letter_samples"
+
     def letter_knowledge_dir(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """知识库目录（静态内容）: content/characters/{char_id}/knowledge/"""
         primary = self.user_authored_character_dir(char_id=char_id) / "knowledge"
         return primary if primary.exists() else self.legacy_authored_character_dir(char_id=char_id) / "knowledge"
+
+    def letter_knowledge_read_dirs(self, *, char_id: str = _DEFAULT_CHAR_ID) -> tuple[Path, Path]:
+        user, legacy = self.authored_character_dirs(char_id=char_id)
+        return user / "knowledge", legacy / "knowledge"
 
     def stream_collapse_signal(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """ACT-2：流式路径反坍缩一次性降级信号，下一轮 build_prompt 读到后立即消费清除。"""
