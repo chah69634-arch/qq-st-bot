@@ -93,6 +93,32 @@ python scripts/build_release.py --version vX.Y.Z
 同步失败不会回滚已替换的程序文件，应先保留终端错误再处理网络或环境问题。GitHub 访问失败时，更新器
 会明确提示并保留手动下载 release zip、仅覆盖程序文件的路径；它使用 `config.yaml` 里启用的代理配置。
 
+### v0.2.2 → v1.0.0 一次性升级桥
+
+v1 是长期兼容基线。解压版后端更新器只验证并支持一个 pre-v1 直接升级来源：
+`v0.2.2 → v1.0.0`。更早的 v0.x 版本不会猜测旧布局；请先升级到 v0.2.2，或使用
+人工备份恢复。v1 之后的布局变更必须提供连续的 forward migration。
+
+升级前，updater 会先在安装目录创建完整的
+`_update_backup_v0.2.2/` 快照，再替换程序文件并引入 `bundled/`。它只清理已知的旧
+公开 assets；`userdata/`、`data/`、`config.yaml`、`config.local.yaml`、`secrets.local.yaml`、本地环境和未知
+legacy private files 都保留。bridge 成功后才会写入受保护的安装级 marker
+`_presencekit_upgrade/v0.2.2_to_v1_bridge_completed`。该 marker 只表示这一次 bridge
+完成，不是通用 migration engine。
+
+v1 不支持 downgrade。升级失败或需要回退时，停止服务后从升级前备份人工恢复：
+
+```bash
+python scripts/update_release.py --restore-backup _update_backup_v0.2.2
+```
+
+这会把安装恢复为该升级前快照；请先保存升级后才新增、且不希望丢失的本地文件。程序复制失败会
+fail-loud 并恢复已替换的程序文件；bridge migration 失败不会写 marker，可在保留的 v0.2.2
+备份存在时安全重试。依赖同步失败不会自动回滚已更新的程序或依赖，必须查看终端错误后重试或走上述
+人工恢复路线。
+
+自动 fixture 只证明隔离的假数据演练通过，不能替代发布前对真实安装副本的手动恢复演练。
+
 ## 3. desktop（Emerald-client / PresenceKit-desktop）：CI 出安装器，会挂 Draft
 
 **产物**：`PresenceKit-desktop_X.Y.Z_x64-setup.exe`（NSIS 安装器）+

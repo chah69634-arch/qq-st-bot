@@ -20,6 +20,26 @@
 | Non-blocking | Future WS v1/envelope/EventBus | Not implemented (`docs/protocol-v0.md`, `docs/interaction-event-model.md`) | None: explicitly post-v1 |
 | Non-blocking | Live2D, 3D, MCP, hardware, Garden, Activity expansion | Out of preflight scope | Feature-specific work orders only |
 
+## v0.2.2 → v1 bridge evidence
+
+v1 is the long-term compatibility baseline. The updater supports exactly one
+direct pre-v1 source: `v0.2.2 → v1.0.0`. It refuses older or unrecognised
+sources with an instruction to first reach v0.2.2 or use a manual backup
+restore. It does not implement downgrade. All v1-and-later layout changes must
+ship a continuous forward migration.
+
+The isolated fixture covers fresh v1 install; the v0.2.2 public layout;
+preservation SHA-256 checks for `userdata/`, `data/`, `config.yaml`,
+`config.local.yaml`, and `secrets.local.yaml`; known-public cleanup; unknown legacy-private retention;
+idempotence; a forced bridge failure followed by retry; and explicit restoration
+from `_update_backup_v0.2.2/`. The completion marker is only
+`v0.2.2_to_v1_bridge_completed`; it is not a general migration engine.
+
+This evidence is necessary but not sufficient for release approval: automated
+fixtures do not replace a real installation-copy upgrade and restore rehearsal.
+Dependency-sync failure still has no automatic rollback guarantee; the formal
+recovery route is the pre-upgrade backup.
+
 ## Required compatibility matrix
 
 Record exact build hashes and fixture result for each release candidate.

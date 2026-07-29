@@ -23,6 +23,7 @@ def test_release_package_protected_paths_are_never_overwritten():
         "data/runtime/state.json",
         "userdata/characters/cards/custom.json",
         "config.yaml",
+        "config.local.yaml",
         "secrets.local.yaml",
         ".venv/Scripts/python.exe",
         "tools/uv.exe",
