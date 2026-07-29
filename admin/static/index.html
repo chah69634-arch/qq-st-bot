@@ -51,10 +51,14 @@
       <a data-page="relationship-facts" data-action="goto" data-action-args='["relationship-facts"]'><span class="icon">📌</span><span data-i18n="nav.relationship_facts">关系事实</span></a>
     </div>
 
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["external-tools"]'><span class="nav-caret" id="caret-external-tools">▾</span><span data-i18n="nav.group.external_tools">🛰 外部工具</span></div>
-    <div class="nav-group" id="navgroup-external-tools">
-      <a data-page="integrations" data-action="goto" data-action-args='["integrations"]'><span class="icon">📬</span><span data-i18n="nav.integrations">Garden 论坛唤醒</span></a>
-      <a data-page="mcp" data-action="goto" data-action-args='["mcp"]'><span class="icon">🔗</span><span data-i18n="nav.mcp">MCP 工具</span></a>
+    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["observe"]'><span class="nav-caret" id="caret-observe">▾</span><span data-i18n="nav.group.observation">🔍 观测</span></div>
+    <div class="nav-group" id="navgroup-observe">
+      <a data-page="observe-prompt"  data-action="goto" data-action-args='["observe-prompt"]'> <span class="icon">🗂️</span><span data-i18n="nav.prompt_layers">Prompt 层检视</span></a>
+      <a data-page="observe-tools"   data-action="goto" data-action-args='["observe-tools"]'>  <span class="icon">🛠️</span><span data-i18n="nav.tool_observability">工具观测</span></a>
+      <a data-page="observe-dream-prompt" data-action="goto" data-action-args='["observe-dream-prompt"]'><span class="icon">💭</span><span data-i18n="nav.dream_prompt">梦境 Prompt</span></a>
+      <a data-page="observe-trigger-catalog" data-action="goto" data-action-args='["observe-trigger-catalog"]'><span class="icon">📡</span><span data-i18n="nav.trigger_catalog">触发器目录</span></a>
+      <a data-page="observe-provenance" data-action="goto" data-action-args='["observe-provenance"]'><span class="icon">🧾</span><span data-i18n="nav.provenance">印象溯源</span></a>
+      <a data-page="observe-api-contract" data-action="goto" data-action-args='["observe-api-contract"]'><span class="icon">🔗</span><span data-i18n="nav.api_contract">API 契约检查</span></a>
     </div>
 
     <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["presence"]'><span class="nav-caret" id="caret-presence">▾</span><span data-i18n="nav.group.presence">✨ 存在</span></div>
@@ -69,6 +73,12 @@
       <a data-page="observe-vector" data-action="goto" data-action-args='["observe-vector"]'><span class="icon">🧬</span><span data-i18n="nav.vector_store">向量库</span></a>
     </div>
 
+    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["external-tools"]'><span class="nav-caret" id="caret-external-tools">▾</span><span data-i18n="nav.group.external_tools">🛰 外部工具</span></div>
+    <div class="nav-group" id="navgroup-external-tools">
+      <a data-page="integrations" data-action="goto" data-action-args='["integrations"]'><span class="icon">📬</span><span data-i18n="nav.integrations">Garden 论坛唤醒</span></a>
+      <a data-page="mcp" data-action="goto" data-action-args='["mcp"]'><span class="icon">🔗</span><span data-i18n="nav.mcp">MCP 工具</span></a>
+    </div>
+
     <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["state"]'><span class="nav-caret" id="caret-state">▾</span><span data-i18n="nav.group.internal_state">🔬 内部状态</span></div>
     <div class="nav-group" id="navgroup-state">
       <a data-page="observe-mood"    data-action="goto" data-action-args='["observe-mood"]'>   <span class="icon">🌸</span><span data-i18n="nav.mood">情绪·花园</span></a>
@@ -79,16 +89,6 @@
       <a data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime">运行时内部态</span></a>
       <a data-page="users"     data-action="goto" data-action-args='["users"]'>    <span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
       <a data-page="logs"      data-action="goto" data-action-args='["logs"]'>     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
-    </div>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["observe"]'><span class="nav-caret" id="caret-observe">▾</span><span data-i18n="nav.group.observation">🔍 观测</span></div>
-    <div class="nav-group" id="navgroup-observe">
-      <a data-page="observe-prompt"  data-action="goto" data-action-args='["observe-prompt"]'> <span class="icon">🗂️</span><span data-i18n="nav.prompt_layers">Prompt 层检视</span></a>
-      <a data-page="observe-tools"   data-action="goto" data-action-args='["observe-tools"]'>  <span class="icon">🛠️</span><span data-i18n="nav.tool_observability">工具观测</span></a>
-      <a data-page="observe-dream-prompt" data-action="goto" data-action-args='["observe-dream-prompt"]'><span class="icon">💭</span><span data-i18n="nav.dream_prompt">梦境 Prompt</span></a>
-      <a data-page="observe-trigger-catalog" data-action="goto" data-action-args='["observe-trigger-catalog"]'><span class="icon">📡</span><span data-i18n="nav.trigger_catalog">触发器目录</span></a>
-      <a data-page="observe-provenance" data-action="goto" data-action-args='["observe-provenance"]'><span class="icon">🧾</span><span data-i18n="nav.provenance">印象溯源</span></a>
-      <a data-page="observe-api-contract" data-action="goto" data-action-args='["observe-api-contract"]'><span class="icon">🔗</span><span data-i18n="nav.api_contract">API 契约检查</span></a>
     </div>
 
     <div class="nav-bottom">
