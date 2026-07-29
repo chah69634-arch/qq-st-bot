@@ -136,6 +136,7 @@ REGISTRY: dict[str, PathMeta] = {
     "bundled_default_character_card": PathMeta("canonical", "character_inner", "per_char", "track"),
     "bundled_reality_seed_dir":   PathMeta("canonical", "reality",         "global",   "track"),
     "bundled_dream_seed_dir":     PathMeta("canonical", "dream",           "global",   "track"),
+    "bundled_dream_preset_seed_dir": PathMeta("canonical", "dream",        "global",   "track"),
     "bundled_templates_dir":      PathMeta("canonical", "shared",          "global",   "track"),
     "bundled_examples_dir":       PathMeta("canonical", "shared",          "global",   "track"),
     "userdata_root":              PathMeta("authored", "shared",          "global",   "ignore-but-authored"),

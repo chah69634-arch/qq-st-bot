@@ -241,7 +241,12 @@ def _scan_dream_presets() -> list[AssetEntry]:
     paths = _paths()
     result = []
     seen_ids: set[str] = set()
-    user_dir, fallback_dir = paths.dream_preset_read_dirs()
+    # Keep the legacy relative-root seam for tests that build a fake authored
+    # tree without replacing the process-wide sandbox singleton.
+    if paths.mode == "test":
+        user_dir, fallback_dir = paths.user_dream_presets_dir(), _DREAM_PRESETS_DIR
+    else:
+        user_dir, fallback_dir = paths.dream_preset_read_dirs()
     for item in resolve_layered_files(
         user_dir,
         fallback_dir,
