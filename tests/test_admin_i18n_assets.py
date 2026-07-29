@@ -102,6 +102,8 @@ def test_all_navigation_links_use_semantic_i18n_keys():
     assert 'id="admin-language-select"' in index
     assert 'id="auth-language-select"' in index
     assert index.count("data-language-select") == 2
+    assert 'data-action-args=\'["presence"]\'' in index
+    assert 'data-page="observe-probe"' not in index
 
 
 def test_status_page_and_feature_flags_use_semantic_i18n_keys():

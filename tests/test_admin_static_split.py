@@ -14,7 +14,7 @@ def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
         r'<link rel="stylesheet" href="/static/style\.css\?v=[^"]+">', index
     )
     assert "<style>" not in index
-    assert '<script src="/static/i18n.js"></script>' in index
+    assert re.search(r'<script src="/static/i18n\.js(?:\?[^" ]*)?"></script>', index)
     scripts = re.findall(r'<script src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
     assert scripts[0] == "core.js"
     assert len(scripts) >= 2
@@ -27,7 +27,7 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     fragments = sorted(PAGES.glob("*.html"))
 
-    assert len(fragments) == 34
+    assert len(fragments) == 33
     for fragment in fragments:
         page = fragment.stem
         assert f'id="page-{page}" data-page-fragment="{page}"' in index
@@ -35,7 +35,7 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
 
     source = read_admin_client_source()
     assert "async function loadPageFragment(page)" in source
-    assert "fetch(`/static/pages/${encodeURIComponent(page)}.html`)" in source
+    assert "fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`)" in source
     assert "window.AdminI18n?.applyI18n(container)" in source
 
 

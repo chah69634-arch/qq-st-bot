@@ -15,7 +15,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-external-tools-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-existence-1';
 
 function _actionArgs(element) {
   const raw = element.dataset.actionArgs;
@@ -131,7 +131,6 @@ async function goto(page) {
     'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
     'observe-prompt':  () => { loadObservePromptUidList(); loadPromptAblation(); loadOutputSegmentEnforce(); },
     'observe-tools':   () => loadObserveToolUidList(),
-    'observe-probe':   () => loadObserveProbeUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
     'observe-trigger-catalog': () => loadTriggerCatalog(),
     'observe-vector':          () => loadVector(),

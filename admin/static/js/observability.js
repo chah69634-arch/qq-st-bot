@@ -563,7 +563,24 @@ async function loadObservePrompt() {
     document.getElementById('obs-prompt-bar-hard').style.left = '100%';
 
     // ── 层级列表 ──
-    const layers = snap.layers || [];
+    // One logical layer can consist of several message records (notably
+    // mes_example/history). Show it once, preserving order and separating the
+    // original records with newlines in the expanded view.
+    const groupedLayers = new Map();
+    (snap.layers || []).forEach(lyr => {
+      const key = lyr.layer || '?';
+      const group = groupedLayers.get(key);
+      if (group) {
+        group.position_end = lyr.position;
+        group.chars += lyr.chars || 0;
+        group.est_tokens += lyr.est_tokens || 0;
+        group.pruned = group.pruned && !!lyr.pruned;
+        group.content = [group.content, lyr.content].filter(Boolean).join('\n\n');
+      } else {
+        groupedLayers.set(key, {...lyr, position_end: lyr.position});
+      }
+    });
+    const layers = [...groupedLayers.values()];
     const totalChars = layers.reduce((s,l) => s + (l.chars||0), 0) || 1;
 
     function _provBadge(prov) {
@@ -617,7 +634,7 @@ async function loadObservePrompt() {
       return `
         <div class="card" style="margin-bottom:8px;opacity:${lyr.pruned?'0.5':'1'}">
           <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer" onclick="togglePromptLayer('${contentId}')">
-            <span style="font-size:11px;color:var(--muted);width:24px;text-align:right">${lyr.position}</span>
+            <span style="font-size:11px;color:var(--muted);width:34px;text-align:right">${lyr.position_end !== lyr.position ? `${lyr.position}–${lyr.position_end}` : lyr.position}</span>
             <span style="font-weight:600;font-size:13px;flex:1">${escapeHtml(lyr.layer||'?')}${prunedBadge}${_provBadge(prov)}</span>
             <span style="font-size:12px;color:var(--muted)">${(lyr.chars||0).toLocaleString()} 字 / ~${Math.round(lyr.est_tokens||0)} tok</span>
             <span style="font-size:12px;color:var(--muted);width:42px;text-align:right">${pct2}%</span>
@@ -940,10 +957,11 @@ function exportSnapshotMd(kind) {
 async function loadObserveToolUidList() {
   const listEl = document.getElementById('obs-tools-uid-list');
   try {
-    const d = await api('GET', '/observability/tool-traces');
+    const category = document.getElementById('obs-tools-category').value;
+    const d = await api('GET', category === 'probe' ? '/observe/probe' : '/observability/tool-traces');
     const uids = d.uids || [];
     listEl.innerHTML = uids.length
-      ? t('observe.tools.uid_list', '有执行痕迹的 uid：') + uids.map(uid =>
+      ? (category === 'probe' ? '有探针快照的 uid：' : t('observe.tools.uid_list', '有执行痕迹的 uid：')) + uids.map(uid =>
         `<a href="#" style="margin-left:8px;color:var(--accent)" onclick="document.getElementById('obs-tools-uid').value='${escapeHtml(uid)}';loadObserveTools();return false">${escapeHtml(uid)}</a>`
       ).join('')
       : t('observe.tools.empty_uid', '暂无工具执行痕迹。');
@@ -977,6 +995,10 @@ async function loadObserveTools() {
   const el = document.getElementById('obs-tools-content');
   if (!uid) { el.innerHTML = `<div class="empty">${escapeHtml(t('observe.tools.need_uid', '请输入 uid 后查看。'))}</div>`; return; }
   el.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
+  if (category === 'probe') {
+    await loadObserveProbe(el, uid);
+    return;
+  }
   try {
     const query = new URLSearchParams({ limit });
     if (category) query.set('category', category);
@@ -999,27 +1021,9 @@ async function loadObserveTools() {
 //  探针观测（observe-probe）
 // ══════════════════════════════════════════════════════════
 
-async function loadObserveProbeUidList() {
-  const listEl = document.getElementById('obs-probe-uid-list');
-  try {
-    const d = await api('GET', '/observe/probe');
-    const uids = d.uids || [];
-    if (!uids.length) {
-      listEl.textContent = '暂无快照（QQ 收到一条消息后刷新）';
-    } else {
-      listEl.innerHTML = '有快照的 uid：' + uids.map(u =>
-        `<a href="#" style="margin-left:8px;color:var(--accent)" onclick="document.getElementById('obs-probe-uid').value='${escapeHtml(u)}';loadObserveProbe();return false">${escapeHtml(u)}</a>`
-      ).join('');
-    }
-  } catch(e) {
-    listEl.textContent = '加载失败：' + e.message;
-  }
-}
-
-async function loadObserveProbe() {
-  const uid = (document.getElementById('obs-probe-uid').value || '').trim();
-  const n   = parseInt(document.getElementById('obs-probe-n').value || '0', 10);
-  const el  = document.getElementById('obs-probe-content');
+async function loadObserveProbe(el = document.getElementById('obs-probe-content'), uidOverride = '') {
+  const uid = uidOverride || (document.getElementById('obs-probe-uid')?.value || '').trim();
+  const n   = uidOverride ? 0 : parseInt(document.getElementById('obs-probe-n')?.value || '0', 10);
   if (!uid) { el.innerHTML = '<div style="color:var(--muted)">请输入 uid 后点击「查看」</div>'; return; }
   el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
   try {
