@@ -128,6 +128,13 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── authored: 手工维护的静态配置 ──────────────────────────────────────────
     # C1 user-owned authored root plus legacy fallback readers.
+    "bundled_root":               PathMeta("canonical", "shared",          "global",   "track"),
+    "bundled_default_character_dir": PathMeta("canonical", "character_inner", "per_char", "track"),
+    "bundled_default_character_card": PathMeta("canonical", "character_inner", "per_char", "track"),
+    "bundled_reality_seed_dir":   PathMeta("canonical", "reality",         "global",   "track"),
+    "bundled_dream_seed_dir":     PathMeta("canonical", "dream",           "global",   "track"),
+    "bundled_templates_dir":      PathMeta("canonical", "shared",          "global",   "track"),
+    "bundled_examples_dir":       PathMeta("canonical", "shared",          "global",   "track"),
     "userdata_root":              PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "user_stickers_dir":          PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "legacy_stickers_dir":        PathMeta("authored", "shared",          "global",   "ignore-but-authored"),

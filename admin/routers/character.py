@@ -40,6 +40,10 @@ def _safe_path(name: str) -> Path:
     primary = (CHARACTERS_DIR / name).resolve()
     if primary.exists():
         return primary
+    if name == "default.json":
+        bundled = get_paths().bundled_default_character_card().resolve()
+        if bundled.is_file():
+            return bundled
     legacy = (get_paths().legacy_character_cards_dir() / name).resolve()
     legacy_base = get_paths().legacy_character_cards_dir().resolve()
     if legacy.exists() and legacy.is_relative_to(legacy_base):
@@ -58,7 +62,11 @@ def _write_path(name: str) -> Path:
 
 
 def _card_source(path: Path, canonical: Path) -> str:
-    return "user" if path == canonical else "legacy"
+    if path == canonical:
+        return "user"
+    if path == get_paths().bundled_default_character_card():
+        return "bundled"
+    return "legacy"
 
 
 def _log_card_write(*, read_path: Path, canonical: Path, operation: str) -> None:
@@ -234,7 +242,9 @@ async def new_character(body: Dict[str, Any], auth=Depends(require_scopes("perso
     if read_path.exists():
         raise HTTPException(status_code=409, detail=f"角色卡 {raw_id} 已存在")
 
-    template_path = Path("examples") / "character_template.json"
+    paths = get_paths()
+    bundled_template = paths.bundled_templates_dir() / "character_template.json"
+    template_path = bundled_template if bundled_template.exists() else Path("examples") / "character_template.json"
     try:
         template = json.loads(template_path.read_text(encoding="utf-8"))
     except Exception as e:

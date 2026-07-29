@@ -12,7 +12,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
-_DEFAULTS_ROOT = Path(__file__).parent.parent / "defaults"
+_BUNDLED_ROOT = Path("bundled")
 _USERDATA_ROOT = Path("userdata")
 _SAFE_USER_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -130,6 +130,29 @@ class DataPaths:
     def userdata_root(self) -> Path:
         return _USERDATA_ROOT
 
+    # ── Packaged public assets (read-only; never a writer target) ──────────
+    def bundled_root(self) -> Path:
+        """Root for release-owned public assets shipped with the program."""
+        return _BUNDLED_ROOT
+
+    def bundled_default_character_dir(self) -> Path:
+        return self.bundled_root() / "characters" / "default"
+
+    def bundled_default_character_card(self) -> Path:
+        return self.bundled_default_character_dir() / "card.json"
+
+    def bundled_reality_seed_dir(self) -> Path:
+        return self.bundled_root() / "seeds" / "reality"
+
+    def bundled_dream_seed_dir(self) -> Path:
+        return self.bundled_root() / "seeds" / "dream"
+
+    def bundled_templates_dir(self) -> Path:
+        return self.bundled_root() / "templates"
+
+    def bundled_examples_dir(self) -> Path:
+        return self.bundled_root() / "examples"
+
     def user_stickers_dir(self) -> Path:
         return self.userdata_root() / "assets" / "stickers"
 
@@ -177,9 +200,13 @@ class DataPaths:
     def legacy_character_cards_dir(self) -> Path:
         return Path("characters")
 
-    def character_card_dirs(self) -> tuple[Path, Path]:
-        """Private cards first, then the legacy root (for default/fallback)."""
-        return self.user_character_cards_dir(), self.legacy_character_cards_dir()
+    def character_card_dirs(self) -> tuple[Path, Path, Path]:
+        """Card read layers: user-authored, packaged public, then legacy."""
+        return (
+            self.user_character_cards_dir(),
+            self.bundled_default_character_dir(),
+            self.legacy_character_cards_dir(),
+        )
 
     def user_authored_character_dir(self, *, char_id: str) -> Path:
         return self.userdata_root() / "characters" / "authored" / safe_user_id(char_id)
@@ -404,10 +431,18 @@ class DataPaths:
     def activity_pool(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         primary = self.user_authored_character_dir(char_id=char_id) / "activity_pool.yaml"
         legacy = self.legacy_authored_character_dir(char_id=char_id) / "activity_pool.yaml"
+        bundled = self.bundled_default_character_dir() / "activity_pool.yaml"
+        legacy_default = self.legacy_authored_character_dir(char_id="default") / "activity_pool.yaml"
         if primary.exists():
             return primary
+        if char_id == "default" and bundled.exists():
+            return bundled
         if legacy.exists():
             return legacy
+        if bundled.exists():
+            return bundled
+        if legacy_default.exists():
+            return legacy_default
         return Path("data/yexuan_inner/activity_pool.yaml")
 
     def activity_state(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
@@ -479,18 +514,29 @@ class DataPaths:
         primary = self.user_authored_character_dir(char_id=char_id) / "author_notes.json"
         new = self.legacy_authored_character_dir(char_id=char_id) / f"{char_id}_author_notes.json"
         legacy = Path(f"characters/{char_id}_author_notes.json")
+        bundled = self.bundled_default_character_dir() / "author_notes.json"
+        legacy_default = Path("characters/default_author_notes.json")
         if primary.exists():
             return primary
+        if char_id == "default" and bundled.exists():
+            return bundled
         if new.exists():
             return new
         if legacy.exists():
             return legacy
-        return Path("characters/default_author_notes.json")
+        if bundled.exists():
+            return bundled
+        return legacy_default
 
-    def _seed_if_missing(self, runtime_path: Path, defaults_name: str) -> Path:
-        """运行时文件不存在时从 defaults/ 复制种子，然后返回运行时路径。"""
+    def _bundled_seed(self, name: str) -> Path:
+        """Prefer the packaged canonical seed, retaining one legacy read period."""
+        bundled = self.bundled_reality_seed_dir() / name
+        return bundled if bundled.exists() else Path("defaults") / name
+
+    def _seed_if_missing(self, runtime_path: Path, seed_name: str) -> Path:
+        """Seed missing runtime state from bundled public assets, then return it."""
         if not runtime_path.exists():
-            src = _DEFAULTS_ROOT / defaults_name
+            src = self._bundled_seed(seed_name)
             if src.exists():
                 runtime_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, runtime_path)
@@ -605,14 +651,9 @@ class DataPaths:
         return Path("data") / "dream" / "scenarios"
 
     def default_dream_world_template_dir(self) -> Path:
-        """defaults/dream_worlds/_default/ —— tracked 中性世界模板源。
-
-        characters/dream_worlds/ 整体在 .gitignore 内（用户数据），fresh
-        clone/release 包里不存在任何世界文件，包括 _default/。新建世界端点
-        必须从这里（随仓库发布、始终存在）复制骨架，而不是从可能缺失的
-        characters/dream_worlds/_default/ 复制。
-        """
-        return _DEFAULTS_ROOT / "dream_worlds" / "_default"
+        """Read-only packaged Dream world seed, with legacy fallback."""
+        bundled = self.bundled_dream_seed_dir() / "worlds" / "_default"
+        return bundled if bundled.exists() else Path("defaults") / "dream_worlds" / "_default"
 
     def jailbreaks_dir(self) -> Path:
         """characters/reality/jailbreaks/ 目录（authored，不走 data/ 沙盒偏移）"""
@@ -636,7 +677,7 @@ class DataPaths:
         """
         p = self._reality_p("jailbreak_entries.json")
         if not p.exists():
-            src = _DEFAULTS_ROOT / "jailbreak_entries.json"
+            src = self._bundled_seed("jailbreak_entries.json")
             if src.exists():
                 p.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, p)
@@ -659,7 +700,7 @@ class DataPaths:
         """
         p = self._reality_p("lorebook.yaml")
         if not p.exists():
-            src = _DEFAULTS_ROOT / "lorebook.yaml"
+            src = self._bundled_seed("lorebook.yaml")
             if src.exists():
                 p.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, p)
@@ -684,9 +725,19 @@ class DataPaths:
     def yexuan_traits(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         primary = self.user_authored_character_dir(char_id=char_id) / "traits.yaml"
         legacy = self.legacy_authored_character_dir(char_id=char_id) / "traits.yaml"
+        bundled = self.bundled_default_character_dir() / "traits.yaml"
+        legacy_default = self.legacy_authored_character_dir(char_id="default") / "traits.yaml"
         if primary.exists():
             return primary
-        return legacy if legacy.exists() else Path("data/yexuan_traits.yaml")
+        if char_id == "default" and bundled.exists():
+            return bundled
+        if legacy.exists():
+            return legacy
+        if bundled.exists():
+            return bundled
+        if legacy_default.exists():
+            return legacy_default
+        return Path("data/yexuan_traits.yaml")
 
     def jailbreak_presets_dir(self) -> Path:
         new = Path("content/jailbreak_presets")

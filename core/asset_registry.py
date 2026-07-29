@@ -127,12 +127,53 @@ def _avatar_info_for(char_id: str) -> tuple[str | None, bool]:
     return (None, False)
 
 def _scan_characters() -> list[AssetEntry]:
-    # Scan legacy first so a migrated/private card with the same id wins.
+    # Scan legacy first, then the packaged public default, then user overrides.
     result: dict[str, AssetEntry] = {}
     paths = _paths()
-    for root in reversed((paths.user_character_cards_dir(), _CHARACTERS_DIR)):
+    for root in (_CHARACTERS_DIR,):
         if not root.exists():
             continue
+        for p in sorted(root.glob("*.json")):
+            stem_lower = p.stem.lower()
+            hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)
+            label = p.stem
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                label = data.get("name") or p.stem
+            except Exception:
+                pass
+            avatar_url, has_runtime = _avatar_info_for(p.stem)
+            result[p.stem] = AssetEntry(id=p.stem, label=label, filename=p.name,
+                                        kind="character", hidden=hidden,
+                                        avatar_url=avatar_url,
+                                        has_runtime_avatar=has_runtime,
+                                        source_path=p)
+        for ext in ("*.txt", "*.md"):
+            for p in sorted(root.glob(ext)):
+                stem_lower = p.stem.lower()
+                hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)
+                avatar_url, has_runtime = _avatar_info_for(p.stem)
+                result[p.stem] = AssetEntry(id=p.stem, label=p.stem, filename=p.name,
+                                            kind="character", hidden=hidden,
+                                            avatar_url=avatar_url,
+                                            has_runtime_avatar=has_runtime,
+                                            source_path=p)
+    bundled_card = paths.bundled_default_character_card()
+    if bundled_card.is_file():
+        label = "default"
+        try:
+            data = json.loads(bundled_card.read_text(encoding="utf-8"))
+            label = data.get("name") or label
+        except Exception:
+            pass
+        avatar_url, has_runtime = _avatar_info_for("default")
+        result["default"] = AssetEntry(
+            id="default", label=label, filename="default.json", kind="character",
+            hidden=False, avatar_url=avatar_url, has_runtime_avatar=has_runtime,
+            source_path=bundled_card,
+        )
+    root = paths.user_character_cards_dir()
+    if root.exists():
         for p in sorted(root.glob("*.json")):
             stem_lower = p.stem.lower()
             hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)

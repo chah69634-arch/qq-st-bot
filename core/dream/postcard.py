@@ -97,7 +97,10 @@ async def generate_postcard(uid: str, dream_id: str, exit_type: str, *, char_id:
         logger.warning("[postcard] generation failed uid=%s dream=%s: %s", uid, dream_id, exc)
 
 def _template_text(template_id: str) -> str:
-    path = Path("characters") / "dream_postcards" / "templates" / f"{template_id}.md"
+    from core.sandbox import get_paths
+
+    bundled = get_paths().bundled_templates_dir() / "dream_postcards" / f"{template_id}.md"
+    path = bundled if bundled.exists() else Path("characters") / "dream_postcards" / "templates" / f"{template_id}.md"
     return path.read_text(encoding="utf-8") if path.exists() else "写一封克制的梦后短笺，以角色第一人称写给用户。"
 
 async def deliver_due_postcards(*, char_id: str = DEFAULT_CHAR_ID, today: date | None = None) -> int:

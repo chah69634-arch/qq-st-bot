@@ -44,15 +44,11 @@ def _load_pool(char_id: str = _DEFAULT_CHAR_ID) -> list:
     try:
         paths = get_paths()
         pool_path = paths.activity_pool(char_id=char_id)
-        if char_id != _DEFAULT_CHAR_ID:
-            own_pool = Path(f"userdata/characters/authored/{char_id}/activity_pool.yaml")
-            if not own_pool.exists():
-                own_pool = Path(f"content/characters/{char_id}/activity_pool.yaml")
-            if not own_pool.exists():
-                logger.debug(
-                    f"[activity] {char_id} 无独立 activity_pool.yaml，fallback 读默认角色池"
-                )
-                pool_path = paths.activity_pool(char_id=_DEFAULT_CHAR_ID)
+        if char_id != _DEFAULT_CHAR_ID and not pool_path.exists():
+            # Keep the C1.2 per-resource fallback without reintroducing a
+            # hard-coded legacy root.  In a fresh bundle the default packaged
+            # pool already exists, so this branch is only for older layouts.
+            pool_path = paths.activity_pool(char_id=_DEFAULT_CHAR_ID)
         with open(pool_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return data.get("activities", [])
