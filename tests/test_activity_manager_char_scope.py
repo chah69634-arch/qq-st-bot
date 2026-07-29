@@ -94,12 +94,12 @@ def test_load_pool_uses_own_file_when_present(tmp_path, monkeypatch):
 
 
 def test_load_pool_fallback_logs_debug_when_own_pool_missing(tmp_path, monkeypatch, caplog):
+    own_pool = tmp_path / "character_b_pool.yaml"
     default_pool = tmp_path / "default_pool.yaml"
     default_pool.write_text("activities:\n  - id: d1\n    text: 在发呆\n    arcs: [afternoon]\n", encoding="utf-8")
 
-    fake_paths = _FakePaths({"character_b": default_pool})
+    fake_paths = _FakePaths({"character_b": own_pool, am._DEFAULT_CHAR_ID: default_pool})
     monkeypatch.setattr(am, "get_paths", lambda: fake_paths)
-    monkeypatch.setattr(am.Path, "exists", lambda self: False)  # 角色自己的池不存在
 
     import logging
     with caplog.at_level(logging.DEBUG, logger="core.activity_manager"):

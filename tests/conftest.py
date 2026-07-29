@@ -118,22 +118,21 @@ def reset_proactive_ledger():
 
 
 @pytest.fixture
-def character_b_registered():
-    """Register a real 'character_b' character card in the repo's characters/ dir.
+def character_b_registered(tmp_path, monkeypatch):
+    """Register a test card in the canonical userdata read layer.
 
-    asset_registry._scan_characters() globs the real characters/*.json on disk
-    (not the sandboxed data/ dir), so tests that resolve active_character='character_b'
-    through admin.routers.garden._active_char_id() / core.tools.garden_tools._active_char_id()
-    need an actual characters/character_b.json to exist, or resolve() raises ValueError.
-    reset_asset_registry (autouse) already nulls out the singleton before/after each test,
-    so this only needs to create/remove the file.
+    The asset resolver reads userdata first, then bundled assets and finally the
+    legacy characters/ directory.  Keep this fixture in its isolated userdata
+    root so it proves the current contract without recreating a legacy root.
     """
-    p = Path("characters") / "character_b.json"
+    import core.data_paths as data_paths
+    from core.sandbox import get_paths
+
+    monkeypatch.setattr(data_paths, "_USERDATA_ROOT", tmp_path / "userdata")
+    p = get_paths().character_card_write_path("character_b")
+    p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text('{"name": "Character B"}', encoding="utf-8")
-    try:
-        yield
-    finally:
-        p.unlink(missing_ok=True)
+    yield
 
 
 @pytest.fixture(autouse=True)

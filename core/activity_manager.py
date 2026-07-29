@@ -49,6 +49,11 @@ def _load_pool(char_id: str = _DEFAULT_CHAR_ID) -> list:
             # hard-coded legacy root.  In a fresh bundle the default packaged
             # pool already exists, so this branch is only for older layouts.
             pool_path = paths.activity_pool(char_id=_DEFAULT_CHAR_ID)
+            logger.debug(
+                "[activity] activity pool for %s is missing; falling back to default pool %s",
+                char_id,
+                pool_path,
+            )
         with open(pool_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return data.get("activities", [])

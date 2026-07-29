@@ -78,8 +78,8 @@ def test_author_notes_pool_userdata_primary(dp):
     assert dp.author_notes_pool() == dp.author_notes_pool(char_id="yexuan")
 
 
-def test_yexuan_traits_legacy(dp):
-    assert dp.yexuan_traits(char_id="yexuan") == Path("data/yexuan_traits.yaml")
+def test_traits_resolve_to_bundled_default(dp):
+    assert dp.yexuan_traits(char_id="yexuan") == Path("bundled/characters/default/traits.yaml")
     assert dp.yexuan_traits() == dp.yexuan_traits(char_id="yexuan")
 
 

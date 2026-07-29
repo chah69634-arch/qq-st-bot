@@ -13,6 +13,15 @@ import pytest
 from tests.memeval import engine
 
 
+def _production_data_entries(root: Path) -> set[Path]:
+    """Snapshot production data without xdist's shared test-only namespace."""
+    return {
+        path
+        for path in root.rglob("*")
+        if path.relative_to(root).parts[:1] != ("test_sandbox",)
+    }
+
+
 @pytest.fixture
 def case_env(tmp_path, monkeypatch, sandbox):
     """在临时 userdata 下铺一次性角色卡（并发 worker 不共享文件名）。
@@ -44,10 +53,12 @@ def _production_data_untouched():
 
     sandbox fixture 已把 DataPaths._base 重定向到 tmp_path，这里是防御性复核——
     万一某个调用路径绕过了 DataPaths 直接拼裸路径，这个断言能第一时间抓到。
+    ``data/test_sandbox`` 是其他 xdist worker 的测试隔离区，不属于生产 runtime，
+    不能作为本用例的跨 worker 污染证据。
     """
     root = Path(__file__).parent.parent.parent / "data"
-    before = set(root.rglob("*")) if root.exists() else set()
+    before = _production_data_entries(root) if root.exists() else set()
     yield
-    after = set(root.rglob("*")) if root.exists() else set()
+    after = _production_data_entries(root) if root.exists() else set()
     new_files = after - before
     assert not new_files, f"memeval 用例污染了生产 data/ 目录，新增文件：{new_files}"

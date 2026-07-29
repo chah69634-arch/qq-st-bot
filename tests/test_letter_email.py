@@ -269,13 +269,18 @@ def test_mail_sender_uses_proxy_socket(monkeypatch):
 
 # ── letter_reference helpers ──────────────────────────────────────────────────
 
+def _fake_letter_paths(samples_dir: Path, knowledge_dir: Path, sent_path: Path):
+    return SimpleNamespace(
+        letter_samples_read_dirs=lambda *, char_id: (samples_dir, None),
+        letter_knowledge_read_dirs=lambda *, char_id: (knowledge_dir, None),
+        sent_letters=lambda uid, *, char_id: sent_path,
+    )
+
 def test_sample_style_returns_empty_when_dir_absent(monkeypatch, tmp_path):
     from core.mail import letter_reference
 
-    fake_paths = SimpleNamespace(
-        letter_samples_dir=lambda *, char_id: tmp_path / "nonexistent",
-        letter_knowledge_dir=lambda *, char_id: tmp_path / "nonexistent_k",
-        sent_letters=lambda uid, *, char_id: tmp_path / "sent.json",
+    fake_paths = _fake_letter_paths(
+        tmp_path / "nonexistent", tmp_path / "nonexistent_k", tmp_path / "sent.json"
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
@@ -293,11 +298,7 @@ def test_sample_style_picks_from_available_files(monkeypatch, tmp_path):
     (samples_dir / "b.txt").write_text("信件B内容", encoding="utf-8")
     (samples_dir / "c.txt").write_text("信件C内容", encoding="utf-8")
 
-    fake_paths = SimpleNamespace(
-        letter_samples_dir=lambda *, char_id: samples_dir,
-        letter_knowledge_dir=lambda *, char_id: tmp_path / "knowledge",
-        sent_letters=lambda uid, *, char_id: tmp_path / "sent.json",
-    )
+    fake_paths = _fake_letter_paths(samples_dir, tmp_path / "knowledge", tmp_path / "sent.json")
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
     texts, names = letter_reference.sample_style("yexuan", n=2)
@@ -314,11 +315,7 @@ def test_sample_style_avoids_recently_used(monkeypatch, tmp_path):
     (samples_dir / "b.txt").write_text("信件B", encoding="utf-8")
     (samples_dir / "c.txt").write_text("信件C", encoding="utf-8")
 
-    fake_paths = SimpleNamespace(
-        letter_samples_dir=lambda *, char_id: samples_dir,
-        letter_knowledge_dir=lambda *, char_id: tmp_path / "knowledge",
-        sent_letters=lambda uid, *, char_id: tmp_path / "sent.json",
-    )
+    fake_paths = _fake_letter_paths(samples_dir, tmp_path / "knowledge", tmp_path / "sent.json")
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
     texts, names = letter_reference.sample_style("yexuan", n=1, exclude_names=["a.txt", "b.txt"])
@@ -328,10 +325,8 @@ def test_sample_style_avoids_recently_used(monkeypatch, tmp_path):
 def test_sample_reference_returns_empty_when_dir_absent(monkeypatch, tmp_path):
     from core.mail import letter_reference
 
-    fake_paths = SimpleNamespace(
-        letter_samples_dir=lambda *, char_id: tmp_path / "nonexistent",
-        letter_knowledge_dir=lambda *, char_id: tmp_path / "nonexistent_k",
-        sent_letters=lambda uid, *, char_id: tmp_path / "sent.json",
+    fake_paths = _fake_letter_paths(
+        tmp_path / "nonexistent", tmp_path / "nonexistent_k", tmp_path / "sent.json"
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
@@ -345,11 +340,7 @@ def test_sample_reference_returns_paragraph(monkeypatch, tmp_path):
     k_dir.mkdir()
     (k_dir / "notes.md").write_text("第一段文字内容。\n\n第二段文字内容。", encoding="utf-8")
 
-    fake_paths = SimpleNamespace(
-        letter_samples_dir=lambda *, char_id: tmp_path / "samples",
-        letter_knowledge_dir=lambda *, char_id: k_dir,
-        sent_letters=lambda uid, *, char_id: tmp_path / "sent.json",
-    )
+    fake_paths = _fake_letter_paths(tmp_path / "samples", k_dir, tmp_path / "sent.json")
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
     ref = letter_reference.sample_reference("yexuan")
@@ -359,10 +350,8 @@ def test_sample_reference_returns_paragraph(monkeypatch, tmp_path):
 def test_append_and_load_sent_letters(monkeypatch, tmp_path):
     from core.mail import letter_reference
 
-    fake_paths = SimpleNamespace(
-        letter_samples_dir=lambda *, char_id: tmp_path / "samples",
-        letter_knowledge_dir=lambda *, char_id: tmp_path / "knowledge",
-        sent_letters=lambda uid, *, char_id: tmp_path / "sent.json",
+    fake_paths = _fake_letter_paths(
+        tmp_path / "samples", tmp_path / "knowledge", tmp_path / "sent.json"
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
@@ -377,10 +366,8 @@ def test_append_and_load_sent_letters(monkeypatch, tmp_path):
 def test_load_sent_letters_returns_empty_when_file_absent(monkeypatch, tmp_path):
     from core.mail import letter_reference
 
-    fake_paths = SimpleNamespace(
-        letter_samples_dir=lambda *, char_id: tmp_path / "samples",
-        letter_knowledge_dir=lambda *, char_id: tmp_path / "knowledge",
-        sent_letters=lambda uid, *, char_id: tmp_path / "nonexistent.json",
+    fake_paths = _fake_letter_paths(
+        tmp_path / "samples", tmp_path / "knowledge", tmp_path / "nonexistent.json"
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
