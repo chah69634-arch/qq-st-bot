@@ -151,6 +151,9 @@ class DataPaths:
     def bundled_dream_seed_dir(self) -> Path:
         return self.bundled_root() / "seeds" / "dream"
 
+    def bundled_dream_preset_seed_dir(self) -> Path:
+        return self.bundled_dream_seed_dir() / "presets"
+
     def bundled_templates_dir(self) -> Path:
         return self.bundled_root() / "templates"
 
@@ -617,28 +620,38 @@ class DataPaths:
         return self.user_reality_dir() / "lorebooks", self.legacy_reality_dir() / "lorebooks"
 
     def dream_worlds_dir(self) -> Path:
-        """characters/dream_worlds/ 目录（authored，不走 data/ 沙盒偏移）"""
+        """Dream world read root, with packaged seed on a fresh v1 install."""
         if self.mode == "test":
             return self._base / "dream_worlds"
         primary = self.user_dream_worlds_dir()
-        return primary if primary.exists() else self.legacy_dream_worlds_dir()
+        if primary.exists():
+            return primary
+        legacy = self.legacy_dream_worlds_dir()
+        return legacy if legacy.exists() else self.bundled_dream_seed_dir() / "worlds"
 
     def dream_world_read_dirs(self) -> tuple[Path, Path | None]:
         if self.mode == "test":
             return self._base / "dream_worlds", None
-        return self.user_dream_worlds_dir(), self.legacy_dream_worlds_dir()
+        legacy = self.legacy_dream_worlds_dir()
+        fallback = legacy if legacy.exists() else self.bundled_dream_seed_dir() / "worlds"
+        return self.user_dream_worlds_dir(), fallback
 
     def dream_presets_dir(self) -> Path:
-        """characters/dream_presets/ 目录（authored，不走 data/ 沙盒偏移）"""
+        """Dream preset read root, with packaged seed on a fresh v1 install."""
         if self.mode == "test":
             return self._base / "dream_presets"
         primary = self.user_dream_presets_dir()
-        return primary if primary.exists() else self.legacy_dream_presets_dir()
+        if primary.exists():
+            return primary
+        legacy = self.legacy_dream_presets_dir()
+        return legacy if legacy.exists() else self.bundled_dream_preset_seed_dir()
 
     def dream_preset_read_dirs(self) -> tuple[Path, Path | None]:
         if self.mode == "test":
             return self._base / "dream_presets", None
-        return self.user_dream_presets_dir(), self.legacy_dream_presets_dir()
+        legacy = self.legacy_dream_presets_dir()
+        fallback = legacy if legacy.exists() else self.bundled_dream_preset_seed_dir()
+        return self.user_dream_presets_dir(), fallback
 
     def dream_scenarios_dir(self) -> Path:
         """data/dream/scenarios/ 目录（authored content，剧本 YAML，不走 data/ 沙盒偏移）。

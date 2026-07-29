@@ -241,9 +241,10 @@ def _scan_dream_presets() -> list[AssetEntry]:
     paths = _paths()
     result = []
     seen_ids: set[str] = set()
+    user_dir, fallback_dir = paths.dream_preset_read_dirs()
     for item in resolve_layered_files(
-        paths.user_dream_presets_dir(),
-        _DREAM_PRESETS_DIR,
+        user_dir,
+        fallback_dir,
         logical_asset="dream_preset",
         suffixes=(".md",),
         logical_id=lambda relative: _dream_preset_logical_id(relative.stem),

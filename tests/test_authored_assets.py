@@ -33,6 +33,7 @@ TRACKED_YAML = [
 TRACKED_TEXT = [
     "bundled/seeds/dream/worlds/_default/ruleset.md",
     "bundled/seeds/dream/worlds/_default/mes_example.md",
+    "bundled/seeds/dream/presets/default.md",
 ]
 
 

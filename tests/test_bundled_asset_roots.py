@@ -34,6 +34,9 @@ def _seed_bundled(tmp_path: Path) -> None:
     _write(tmp_path / "bundled/seeds/reality/relations.yaml", "default: {}\n")
     _write(tmp_path / "bundled/seeds/reality/blacklist.yaml", "[]\n")
     _write(tmp_path / "bundled/seeds/dream/worlds/_default/ruleset.md", "bundled rules\n")
+    _write(tmp_path / "bundled/seeds/dream/worlds/_default/mes_example.md", "bundled dream example\n")
+    _write(tmp_path / "bundled/seeds/dream/worlds/_default/vocab.json", "[]\n")
+    _write(tmp_path / "bundled/seeds/dream/presets/default.md", "bundled dream preset\n")
     _write(tmp_path / "bundled/templates/dream_postcards/note.md", "bundled postcard\n")
     _write(tmp_path / "bundled/templates/character_template.json", '{"name": "template"}\n')
 
@@ -47,13 +50,22 @@ def test_fresh_layout_reads_packaged_default_and_seeds_without_legacy_roots(tmp_
     assert paths.yexuan_traits(char_id="default") == Path("bundled/characters/default/traits.yaml")
     assert paths.author_notes_pool(char_id="default") == Path("bundled/characters/default/author_notes.json")
     assert paths.default_dream_world_template_dir() == Path("bundled/seeds/dream/worlds/_default")
+    assert paths.dream_worlds_dir() == Path("bundled/seeds/dream/worlds")
+    assert paths.dream_presets_dir() == Path("bundled/seeds/dream/presets")
 
     from core.asset_registry import AssetRegistry
+    from core.dream.dream_pipeline import _load_preset_text
     from core.dream.postcard import _template_text
+    from core.dream.world_loader import load_world
 
     default = AssetRegistry().resolve("default", "character")
     assert default.path() == Path("bundled/characters/default/card.json")
     assert default.label == "Bundled default"
+    assert AssetRegistry().resolve("default", "dream_preset").path() == Path(
+        "bundled/seeds/dream/presets/default.md"
+    )
+    assert load_world("reality_derived").ruleset == "bundled rules"
+    assert _load_preset_text("default") == ("bundled dream preset", "")
     assert _template_text("note") == "bundled postcard\n"
 
     test_paths = DataPaths(mode="test", test_session_id="bundled_seed")
