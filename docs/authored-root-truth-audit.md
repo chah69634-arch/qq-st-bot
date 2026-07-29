@@ -1,7 +1,7 @@
 # PresenceKit Authored Asset Root Truth Audit
 
 审计日期：2026-07-29
-范围：`characters/`、`content/`、`defaults/`、`userdata/`，以及所有会决定这四类资产读写、播种、fallback、迁移和发行行为的当前代码。
+范围：`characters/`、`content/`、`defaults/`、`userdata/`、`examples/`，以及所有会决定这五类资产读写、播种、fallback、迁移和发行行为的当前代码。
 边界：本单只读；没有删除、移动、复制、重命名文件，没有启动服务或真实 pipeline，也没有读取用户私有正文。报告只记录相对路径、类别、大小和 SHA-256。
 
 ## 结论先行
@@ -14,8 +14,9 @@
 | `defaults/` | **seed-required** | Git 跟踪的公共 seed/default，供现实资产和 Dream 世界骨架播种 | 不能删；fresh clone、新建 Dream 世界和冷启动依赖 |
 | `characters/` | **unresolved-do-not-touch** | Git 跟踪的公开 default 角色卡、作者注池、Dream postcard 模板；同时仍是旧安装兼容读源，另有测试/导入写入 | 不能按“旧 root”整目录删除 |
 | `content/` | **seed-required** | Git 跟踪的 `default` 角色配套 activity/traits；另保留旧 authored character 的 fallback API | 不能删；`default` 角色和相关测试/冷启动会失效 |
+| `examples/` | **seed-required** | Git 跟踪的公开格式示例与角色卡模板；`character_template.json` 仍被 admin 新建角色流程读取 | 不能删；新建角色、示例契约测试和文档会失效 |
 
-当前 snapshot 中没有发现旧私有 `characters/reality/`、`characters/dream_worlds/`、`characters/dream_presets/` 或 `content/characters/yexuan/` 数据。它们的“旧私有数据是否完整迁入 userdata”只能在有旧安装备份/迁移清单时证明；当前仓库没有 migration marker，也没有按资产生成的迁移报告。
+当前 snapshot 中没有发现旧私有 `characters/reality/`、`characters/dream_worlds/`、`characters/dream_presets/` 或 `content/characters/yexuan/` 数据。`examples/` 也没有与四个 authored root 的同内容副本。它们的“旧私有数据是否完整迁入 userdata”只能在有旧安装备份/迁移清单时证明；当前仓库没有 migration marker，也没有按资产生成的迁移报告。
 
 最重要的代码风险不是当前四目录库存，而是 fallback 的粒度不一致：角色卡按文件/id 合并，userdata 同 id 胜出；lorebook、jailbreak、Dream world/preset 多数按“目录存在即选目录”的 first-match，空的 userdata 目录也会静默遮蔽旧目录。若旧安装只完成了目录创建而没有完成文件迁移，功能可能出现缺资源而不读 legacy 的情况。
 
@@ -102,6 +103,20 @@ userdata/
 
 类型：`.ckpt` 1、`.jpg` 8、`.json` 23、`.md` 26、`.mp3` 1、`.mp4` 4、`.png` 16、`.pth` 1、`.txt` 5、`.yaml` 27。无空目录、零字节文件或 README-only 目录。该 root 明确含用户私有 authored 内容；报告不复制其正文、模型权重内容或私密文件内容。`_default`/世界骨架中存在 seed copy，其他 Dream/world、reality、卡片、贴纸、voice/model 文件属于用户 authored 或本机部署资产；未发现名为 runtime 的子树。
 
+`examples/`
+
+```text
+examples/
+├── activity_pool.example.yaml
+├── assistant.example.json
+├── benwo.example.json
+├── character_template.json
+├── jailbreak_preset.example.json
+└── traits.example.yaml
+```
+
+6 个文件、8,614 B，全部 Git tracked；类型为 `.yaml` 2、`.json` 4，最近修改时间为 2026-07-25 07:31:04（本地时间）。无子目录、空目录、零字节文件或 README-only 目录。全部是公开示例/模板，不含用户私有 authored 内容、defaults、generated 或 runtime 数据；未发现与其他四 root 完全相同的 SHA-256 文件。
+
 ### 2.3 “是否重新创建”的初步结论
 
 | root/子树 | 启动自动创建 | 其他创建来源 |
@@ -111,6 +126,7 @@ userdata/
 | `content/` | 否 | Git/release 提供；当前业务代码只读/fallback |
 | `defaults/` | 否 | Git/release 提供；作为 seed source 被读取 |
 | `userdata/` | 整体不在普通启动中预建 | admin 角色卡、Dream world/preset、现实 prompt 资产等写入点按需 `mkdir`; release updater 保护不覆盖 |
+| `examples/` | 否 | Git/release 提供；admin 新建角色读取模板，其他文件主要供文档/测试/人工参考 |
 
 发行包由 `git archive HEAD` 生成，只含 tracked 文件；因此 `userdata/` 和被 ignore 的旧私有 root 不会进入发行包。更新器把 `data/`、`userdata/`、`.venv/` 与本地配置列为 protected，更新不会覆盖 `userdata/`，也不会把 ignored legacy 私有文件重新解包回来。
 
@@ -136,6 +152,7 @@ userdata/
 | `jailbreak_presets_dir()` | `content/jailbreak_presets`、`data/jailbreak_presets` | check/read path | legacy/dead accessor；非当前 Dream preset registry 路径 | fallback to data | 否/待清理 |
 | `core/migration.for_read()` | 任意新/旧路径 pair | read/check | 新文件非空且可解析，否则旧文件 | 计数、记录 fallback，不复制/移动 | 被少量兼容调用方使用；不是 C1 copy migration |
 | `core/asset_registry.py` compatibility constants/`AssetEntry.path()` | `characters` legacy subtrees | read fallback/direct path | 兼容构造；scanner 实际用 DataPaths | unknown asset id `ValueError` | 是，部分仅扩展/测试兼容 |
+| `admin/routers/character.py` `create_character()` | `examples/character_template.json` | read | public template source；不是 authored asset fallback | 模板不存在则 `HTTPException(500)` | 是 |
 
 ### 3.2 角色、现实 prompt、Dream、admin 与输出
 
@@ -157,6 +174,8 @@ userdata/
 | `core/output/sticker._pick_sticker()` | 读 userdata sticker pack/common pool，目录不存在才 legacy `assets/stickers` | 主链 reader；不读四 root 中的 `characters/content/defaults` |
 | `core/output/voice_adapter` | 读 config 的 `tts.ref_audio`、model paths，项目内相对路径锚到 repo root；当前 config/example 指向 userdata | 主链 reader；无四 root fallback，仅扩展名/同 stem 音频 fallback |
 | `core/model_registry`、`admin/routers/settings_llm.py` | 读 config `model_presets` / per-character routing | 主链 reader；没有 `defaults/` 或 `characters/` preset directory reader |
+| `tests/test_assistant_example.py`、`tests/test_authored_assets.py` | 读 `examples/*.json` 及模板 | test fixture/contract；不是生产 authored reader | 测试失败或契约不成立 |
+| `docs/*`、`README*`、`docs/c1-root-asset-inventory.md` | 引用 `examples/` 路径和职责 | docs/example；不构成生产读写 | 不影响运行时 |
 
 ### 3.3 脚本、测试、文档与 dead/archive
 
@@ -263,11 +282,24 @@ scenario 不属于四个 root。当前 canonical 路径是 `data/dream/scenarios
 | character card | userdata cards + legacy characters 合并，same id userdata wins | scanner-level merge；admin normally user, legacy existing-file caveat |
 | Dream preset | userdata preset dir > legacy preset dir；requested > default.md | directory first-match；不读 defaults preset |
 
+### 4.8 Examples
+
+`examples/` 不是 runtime authored asset resolver 的候选 root，也不参与 userdata/legacy/defaults 的优先级竞争。唯一确认的主运行链读取是：
+
+```text
+admin create-character:
+1. examples/character_template.json
+2. 写入 userdata/characters/cards/{char_id}.json
+```
+
+`assistant.example.json` 由测试读取；`benwo.example.json` 由文档/示例引用；`activity_pool.example.yaml`、`traits.example.yaml`、`jailbreak_preset.example.json` 是公开格式参考。它们不会自动复制到 userdata，也不会作为生产 fallback 被 loader 扫描。
+
 ## 5. 重复与冲突审计
 
 ### 5.1 路径集合
 
 - 四个 root 之间没有相同的 root-relative path collision。
+- `examples/` 与其他四个 root 没有相同相对路径，也没有 SHA-256 exact duplicate；同名示例只是格式参考，不是迁移副本。
 - `characters/` 的 4 个 `memeval_*.json` 是同内容 generated test fixtures，不是四 root 迁移副本；它们均被 `.gitignore` 忽略但当前尚在磁盘。
 - 当前旧私有 legacy 子树不存在，因此没有发现“legacy 私有文件仍在、userdata 对应文件缺失”的当前条目。
 
@@ -309,15 +341,15 @@ scenario 不属于四个 root。当前 canonical 路径是 `data/dream/scenarios
 
 ### 6.1 来源判定
 
-| 来源 | `characters` | `content` | `defaults` | `userdata` |
-|---|---|---|---|---|
-| Git 仓库本身 | 7 tracked public/default/template files | 2 tracked default files | 8 tracked seed files | 否，0 tracked |
-| startup/bootstrap | 不创建 tracked root；legacy Dream 子树可被 admin seed helper 按需创建 | 否 | 否 | 普通启动不整体创建；写入点按需创建 |
-| migration code | 无 C1 copy/move routine；只保留 fallback readers | 同左 | seed source | canonical target only by normal writers |
-| admin settings/CRUD | character legacy existing-file caveat；Dream/reality selected-dir writer | 无当前 writer | 只读 seed source | 角色卡/Dream/现实 authored 主要 writer |
-| updater/release | release 从 tracked Git archive；不打包 ignored private roots | tracked package | tracked package | protected，不覆盖 |
-| tests | `characters/*.json` fixture/test residue；临时 Dream legacy trees | temp fixtures/contract | existence/loadability contract | canonical target assertions/真实 world read fixture |
-| 历史遗留但当前无人创建 | `characters/default*` 不是历史垃圾；legacy private subtrees当前不存在 | `content/default` 仍有职责 | 仍在主链 | 不是历史遗留，是当前主根 |
+| 来源 | `characters` | `content` | `defaults` | `userdata` | `examples` |
+|---|---|---|---|---|---|
+| Git 仓库本身 | 7 tracked public/default/template files | 2 tracked default files | 8 tracked seed files | 否，0 tracked | 6 tracked public examples/templates |
+| startup/bootstrap | 不创建 tracked root；legacy Dream 子树可被 admin seed helper 按需创建 | 否 | 否 | 普通启动不整体创建；写入点按需创建 | 否 |
+| migration code | 无 C1 copy/move routine；只保留 fallback readers | 同左 | seed source | canonical target only by normal writers | 无迁移角色 |
+| admin settings/CRUD | character legacy existing-file caveat；Dream/reality selected-dir writer | 无当前 writer | 只读 seed source | 角色卡/Dream/现实 authored 主要 writer | 只读 `character_template.json` |
+| updater/release | release 从 tracked Git archive；不打包 ignored private roots | tracked package | tracked package | protected，不覆盖 | tracked package |
+| tests | `characters/*.json` fixture/test residue；临时 Dream legacy trees | temp fixtures/contract | existence/loadability contract | canonical target assertions/真实 world read fixture | example/contract tests |
+| 历史遗留但当前无人创建 | `characters/default*` 不是历史垃圾；legacy private subtrees当前不存在 | `content/default` 仍有职责 | 仍在主链 | 不是历史遗留，是当前主根 | 不是历史遗留；由 Git 保留，`character_template` 仍在主链 |
 
 ### 6.2 迁移 marker、版本和 dry-run
 
@@ -345,6 +377,7 @@ scenario 不属于四个 root。当前 canonical 路径是 `data/dream/scenarios
 | `defaults/` | 无业务 writer | `_reality_p` seed、`jailbreak_entries()`、`lorebook()`、Dream default template、tracked asset tests | 不创建自己 | public seed source | 与 userdata 有 exact seed copy、diverged override | **不安全；fresh clone/新建 world/冷启动受损** |
 | `characters/` | `scripts/import_st_card.py` 默认 writer；admin 旧文件 fallback writer；tests writer；Dream legacy seed helper可建子树 | registry/loader legacy scan、author notes fallback、postcard direct reader、legacy reality/Dream fallback | 不普通启动创建；Dream helper在缺 user root 时可创建 legacy Dream subtree | public default + compatibility source | tracked public files + generated test residue；当前无 legacy private subtrees | **整 root 不安全；子树需分层评估** |
 | `content/` | 当前无明确生产 writer；测试 fixture可能写 temp | `activity_pool`/traits/author notes/letters/knowledge fallback；`default` activity 配套 | 否 | public default + migration fallback source | 与 userdata 同 basename但多为不同角色/不同逻辑；无当前 yexuan legacy data | **root 不应删；default 配套仍需保留** |
+| `examples/` | 无业务 writer；Git/release source | `admin/routers/character.py` 读取 `character_template.json`；测试/文档读取其他示例 | 不创建、不 seed | public example/template source；无用户迁移角色 | 与其他 root 无相对路径或 SHA-256 exact duplicate | **不能删；新建角色和契约测试受损** |
 
 ### 7.1 当前绝对不能删的目录
 
@@ -352,6 +385,7 @@ scenario 不属于四个 root。当前 canonical 路径是 `data/dream/scenarios
 - `defaults/`：受 `DataPaths` 和 Dream world admin seed 直接读取。
 - `characters/`：至少 `default.json`、`default_author_notes.json`、`dream_postcards/templates/` 是 tracked/current readers；不能把“私有 legacy 子树当前为空”扩大成“根目录可删”。
 - `content/`：`content/characters/default/` 是随仓库发布的 default 角色配套；删除后 default 角色的 activity pool 读取、fresh clone 语义和 authored asset contract 会改变。
+- `examples/`：`character_template.json` 仍被 admin 新建角色读取，其余文件由测试/文档/人工参考使用；不能与已迁移的私有 legacy 子树混为一谈。
 
 ## 8. 后续建议（只提出，不执行）
 
@@ -361,7 +395,7 @@ scenario 不属于四个 root。当前 canonical 路径是 `data/dream/scenarios
 
 **C. 加一次性迁移后只读**：增加 authored-root migration manifest/schema version、dry-run/report、逐文件 SHA-256 对账和冲突策略；迁移顺序必须是 userdata 缺失才复制，冲突不覆盖用户文件，完成后 marker 才允许 legacy read-only fallback。必须覆盖 cards、authored char dirs、reality、Dream worlds/presets、stickers，以及 config 中 TTS/model paths。
 
-**F. 发行包中保留，但运行时不使用**：对 `characters/`/`content/` 中确实是公开 seed/template 的文件保留；把 legacy private subtree 从新发行包排除，更新器继续保护 userdata。`characters/default*` 与 postcard templates 不能随 legacy private subtree 一起删。
+**F. 发行包中保留，但运行时不使用**：对 `characters/`/`content/` 中确实是公开 seed/template 的文件保留；`examples/` 全部作为公开格式示例保留，其中 `character_template.json` 仍是运行时模板 source；把 legacy private subtree 从新发行包排除，更新器继续保护 userdata。`characters/default*` 与 postcard templates 不能随 legacy private subtree 一起删。
 
 **D/E 暂不建议直接做**：当前没有 per-install 完成标记，也没有可靠的冲突/备份证明。若未来要归档或删除旧私有子树，前置条件必须包括：
 
