@@ -85,7 +85,7 @@ PresenceKit（本仓，后端）
 - 图片识别（GLM / Gemini / OpenAI Vision）
 - TTS 语音合成（GPT-SoVITS，情绪联动参考音频切换）
 - 表情包发送（情绪联动，与 TTS 互斥）
-- 工具调用：天气查询、备忘录提醒、网页搜索（DuckDuckGo）、桌面控制；memory 类工具已注册但尚未接入正式主 LLM 自动调用
+- 工具调用：天气查询、备忘录提醒、网页搜索（DuckDuckGo）、桌面控制和 memory 工具。角色/全局 tool loop 开启时，function-calling 主循环会按允许的 registry 分类（包括 memory）暴露工具；关闭时仍走 legacy probe/Path B 路径。
 - 桌面意图解析：角色说"我去把游戏关掉"→ 真的执行窗口最小化
 - QQ / 桌宠 / 手机轮询三通道；桌宠主动下行优先 WebSocket，失败时降级到文件队列
 - 桌宠 WebSocket 支持叙事分段 `message_segments` 视图，原始回复仍是记忆链路的 source of truth
@@ -175,7 +175,7 @@ cp config.example.yaml config.yaml
 `owner_id` 建议直接填你的 QQ 号——若这里用了别的 id，之后接 QQ 时会按 QQ 号另起一套记忆，
 与桌宠期记忆不互通；留空会导致主动触发调度器静默跳过。
 
-在 `characters/` 目录放入角色卡文件；当前 loader 支持 `.json`、`.txt` 和 `.md`，可参考 `examples/character_template.json`。仓库自带一份中性的 `default` 角色卡,开箱即可用。
+在 `userdata/characters/cards/` 创建角色卡；loader 支持 `.json`、`.txt` 和 `.md`，并保留对旧 `characters/` 安装的只读 fallback。其他私有 authored 资产位于 `userdata/characters/` 下（例如 `authored/{char_id}/`、`reality/`、`dream/`），详见 `docs/data-taxonomy.md`。`examples/character_template.json` 是格式示例；仓库自带中性的 `default` 角色卡用于首次启动。
 
 **初始化鉴权**（首次运行前）
 
@@ -249,6 +249,8 @@ python tests/run_eval.py
 | [docs/token-rotation.md](docs/token-rotation.md) | 首次配置、各设备 token 轮换命令、401/403/429 排障 |
 | [docs/fresh-clone-testing.md](docs/fresh-clone-testing.md) | 全新 clone 后如何正确测试（避免连上旧后端进程/旧数据） |
 | [docs/known-issues.md](docs/known-issues.md) | 当前技术债与已核对修复项 |
+| [docs/v1-release-contract.md](docs/v1-release-contract.md) | v1 产品契约：支持面、数据归属与降级边界 |
+| [docs/v1-release-readiness.md](docs/v1-release-readiness.md) | v1 发布阻塞项、兼容矩阵与验证计划 |
 
 ---
 
@@ -256,7 +258,7 @@ python tests/run_eval.py
 
 - 仅供个人学习使用
 - 需自备 LLM API Key（推荐 DeepSeek，国内直连）
-- 角色卡需自行准备，`characters/` 目录有格式示例；仓库自带的 `default` 角色卡不含任何真人隐私信息
+- 角色卡需自行准备，live 位置为 `userdata/characters/cards/`，格式见 `examples/character_template.json`；仓库自带的 `default` 角色卡不含任何真人隐私信息
 - 本项目不包含任何角色版权素材
 - 部分默认值、兼容路径和历史文档里仍保留 `yexuan` 命名，v0.2 起计划逐步统一，不影响当前功能
 

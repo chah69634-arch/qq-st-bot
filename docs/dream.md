@@ -348,7 +348,7 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 ```
 
 - `DREAM_LOCKED`：**预留 enum，未实现**。MVP 不做系统级软退锁，"挽留"只走 RP 叙事。
-- 现实窗锁定：`DREAM_ACTIVE / DREAM_CLOSING` 时 `/desktop/chat`、`/mobile/chat` 和 QQ owner
+- 现实窗锁定：`DREAM_ACTIVE / DREAM_CLOSING` 时共用的 `/desktop/chat` 和 QQ owner
   消息都会被**后端硬拒绝**现实回合（安全网，挡 stale client / 第二设备 / 竞态）；QQ
   拒绝路径不进入现实 pipeline，也不写 runtime / memory。沉浸连续性靠 UI 把用户锁在
   梦境窗实现，不靠端点 reroute。

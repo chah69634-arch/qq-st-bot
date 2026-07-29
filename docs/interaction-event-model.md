@@ -1,7 +1,7 @@
 # docs/interaction-event-model.md — Interaction / Event Envelope Model
 
-> 状态：v0.1 概念设计文档（internal soak prep）。
-> 本文描述三维 envelope 设计意图和 v0.1 实现边界。代码以源码为准；本文在设计意图与代码不一致时保留历史语义并在 DELTA 段注明差异。
+> 状态：历史设计说明，已于 v0.2.2 preflight 复核。
+> 本文记录三维 envelope 的词汇和现有边界，不是已发布的统一协议，也不是 v1 实现计划。代码为准；未实现设计保留在本文仅为历史/后续评估，不能作为客户端或后端的实现依据。
 
 ---
 
@@ -25,8 +25,8 @@ realm 在入梦时由 `dream_state.status` 决定，是系统级属性，**不�
 |---|---|---|
 | `message` | 用户发送的文字/图片消息 | ✅ 已实现 |
 | `stimulus` | 系统主动触发（定时器、传感器、desktop wake） | ✅ 已实现（代码名 `trigger`） |
-| `tool` | 工具调用结果回注 | 🚫 v0.2+，当前不作为独立 kind 处理 |
-| `activity` | 活动会话生命周期事件 | 🚫 v0.2+ |
+| `tool` | 工具调用结果回注 | 未实现为独立 kind |
+| `activity` | 活动会话生命周期事件 | 未实现为统一 event kind |
 
 **v0.1 LLM 回复出口只产生 `message` 和 `stimulus` 两种 kind。** 任何 LLM 生成的结果通过 turn_sink 广播，不再以 event 形式回注系统。
 
@@ -37,7 +37,7 @@ realm 在入梦时由 `dream_state.status` 决定，是系统级属性，**不�
 | `oneshot` | 单次独立事件，不维持 session 状态 |
 | `session` | 有明确开始/结束的会话（入梦/退梦、ActivitySession） |
 
-v0.1 所有进入 reality pipeline 的事件均为 `oneshot`。dream 作为整体是一个 `session`，但 dream 内部每轮 dream_turn 也是 `oneshot`。P2 Stage 是显式创建/关闭、由入口驱动的独立 `session`；它不经 `perceive_event`，也尚未接入 reality/dream pipeline。ActivitySession 为 v0.2+。
+当前 reality pipeline 的既有入口均按 `oneshot` 处理。dream 作为整体是一个 `session`，但 dream 内部每轮 dream_turn 也是 `oneshot`。Stage 是显式创建/关闭、由入口驱动的独立 `session`；它不经 `perceive_event`，也未接入统一 reality/dream event pipeline。ActivitySession 不在本模型的已实现范围。
 
 ---
 
@@ -82,7 +82,7 @@ Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排�
 | 代码 / 文件名 / 函数名 | `trigger`（v0.1 保持不变） |
 | 日志 / audit `kind` | `stimulus` |
 
-代码层 `trigger` 对应概念层 `stimulus`：系统主动发起的、非用户直接输入的单次事件。v0.2 再考虑重命名代码面；本次不改变调用路径或 gate 语义。
+代码层 `trigger` 对应概念层 `stimulus`：系统主动发起的、非用户直接输入的单次事件。重命名代码面未排期；不得因此改变调用路径或 gate 语义。
 
 ### 3.3 关键约束（v0.1 不变量）
 
@@ -133,9 +133,9 @@ Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排�
 
 ---
 
-## 五、v0.2+ 预留（当前不实现）
+## 五、Historical / deferred design (not a v1 commitment)
 
-以下内容**不在 v0.1 范围内**，在此列出以防止提前实现：
+以下内容尚未实现，也不因产品发布称为 v1 而自动进入范围。在另行批准并完成跨仓兼容设计前，禁止据此创建统一 dispatcher 或替换现有入口：
 
 - `EventEnvelope` dataclass（统一封包，目前各入口各自 PerceiveEvent / TriggerProposal）
 - dispatch router（按 kind 路由到不同处理器）
@@ -158,4 +158,4 @@ Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排�
 | `docs/dream.md` | Dream realm 的完整规格（pipeline / prompt / 隔离合同） |
 | `docs/trigger-decision-layer.md` | Stimulus 决策层设计（gating / propose / state machine） |
 | `docs/scheduler.md` | 调度器触发器（stimulus 的主要生产者之一） |
-| `docs/tools.md` | Tool 系统（kind=tool 的 v0.2+ 预留形态） |
+| `docs/tools.md` | Tool 系统（独立 `kind=tool` 仍是 deferred design） |

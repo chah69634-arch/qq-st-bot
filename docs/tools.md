@@ -22,7 +22,7 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
               → 只判断 info + desktop 类
               → execute(origin="user_live") → 结果写入 tool_result → prompt 层10
 
-  /desktop/chat 或 /mobile/chat → trusted_user_text（body 原始字段，media 端点在拼接前捕获）
+  /desktop/chat（desktop 与 mobile 前台共用） → trusted_user_text（body 原始字段，media 端点在拼接前捕获）
                                → get_probe_prompt + function schema
                                → execute(origin="user_live")
                                → 工具结果包装成"刚刚执行了操作..."提示 → prompt 层10

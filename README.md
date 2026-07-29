@@ -86,7 +86,7 @@ The backend is the single source of truth: long-term memory, emotional state, th
 - Image recognition (GLM / Gemini / OpenAI Vision)
 - TTS speech synthesis (GPT-SoVITS, reference audio switches with emotion)
 - Sticker sending (emotion-linked, mutually exclusive with TTS)
-- Tool calls: weather lookup, reminders, web search (DuckDuckGo), desktop control; memory-category tools are registered but not yet wired into automatic main-LLM tool calling
+- Tool calls: weather lookup, reminders, web search (DuckDuckGo), desktop control, and memory tools. When the per-character/global tool-loop switch is enabled, the function-calling main loop exposes the allowed registry categories (including memory); when it is off, the legacy probe/Path B paths remain in use.
 - Desktop intent parsing: the character saying "let me close that game for you" actually minimizes the window
 - Three channels — QQ, desktop pet, mobile polling — with WebSocket preferred for proactive desktop pushes and a file-queue fallback
 - The desktop WebSocket supports a segmented `message_segments` narrative view; the raw reply remains the source of truth for memory
@@ -178,7 +178,7 @@ Fill in the required fields per the comments in `config.example.yaml`: your LLM 
 
 For `owner_id`, use your QQ number if you have one — using a different id here means connecting QQ later will start a separate memory thread that won't merge with the desktop-pet memories. Leaving it empty makes the proactive-message scheduler silently skip all triggers.
 
-Drop character card files into `characters/`; the loader currently supports `.json`, `.txt`, and `.md` — see `examples/character_template.json`. The repo ships a neutral `default` character card that works out of the box.
+Create character cards in `userdata/characters/cards/`; the loader supports `.json`, `.txt`, and `.md` and retains a read-only fallback for legacy `characters/` installations. Other private authored assets belong below `userdata/characters/` (for example `authored/{char_id}/`, `reality/`, and `dream/`); see `docs/data-taxonomy.md`. The tracked `examples/character_template.json` is a format example, and the repo ships a neutral `default` card for first-run use.
 
 **Initialize auth** (before the first run)
 
@@ -251,6 +251,8 @@ python tests/run_eval.py
 | [docs/token-rotation.md](docs/token-rotation.md) | First-time setup, per-device token rotation commands, 401/403/429 troubleshooting |
 | [docs/fresh-clone-testing.md](docs/fresh-clone-testing.md) | How to correctly test a fresh clone (avoid connecting to a stale backend process/data) |
 | [docs/known-issues.md](docs/known-issues.md) | Current tech debt and verified fixes |
+| [docs/v1-release-contract.md](docs/v1-release-contract.md) | v1 product contract: supported surfaces, exclusions, ownership, and fallbacks |
+| [docs/v1-release-readiness.md](docs/v1-release-readiness.md) | Evidence-based v1 release blockers, compatibility matrix, and validation plan |
 
 ---
 
@@ -258,7 +260,7 @@ python tests/run_eval.py
 
 - Personal/learning use only.
 - Bring your own LLM API key (DeepSeek is recommended if you're in mainland China — direct connect, no proxy needed).
-- Bring your own character card; see `characters/` for the format. This project ships no copyrighted character material.
+- Bring your own character card; see `userdata/characters/cards/` for the live location and `examples/character_template.json` for the format. This project ships no copyrighted character material.
 - The project uses "他" (a male original character) as its example persona. The display name is configurable via `character.name` in `config.yaml`; some defaults, compatibility paths, and older docs still say `yexuan` internally — this doesn't affect functionality, and will be unified in a later version.
 
 ---

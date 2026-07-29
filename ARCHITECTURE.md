@@ -9,7 +9,7 @@
 ```
 QQ 消息 → main.py → message_queue
 桌宠消息 → admin/routers/chat.py（POST /desktop/chat）
-手机消息 → admin/routers/mobile.py（POST /mobile/chat）
+手机前台消息 → admin/routers/chat.py（POST /desktop/chat，与桌面共用 owner-chat 入口）
 文件上传 → POST /upload/ingest → media_processor → 拼入用户消息
 调度器主动消息 → core/scheduler/loop.py
          ├─ state_machine：观测 owner turn / sensor tick，维护 CHATTING / QUIET / RESTLESS
@@ -58,7 +58,7 @@ Intiface / Buttplug 硬件是 reality-side actuator：只有 owner 私聊中的�
 不进入 scheduler、trigger 或 Dream pipeline。`core/hardware/buttplug_client.py` 通过
 `aiohttp` 的无代理 WebSocket 连接本机 Intiface Central，并维护进程内设备发现状态。
 
-手机端用户输入走 `POST /mobile/chat`，桌宠输入走 `POST /desktop/chat`。这两个 owner 入口共享
+手机端与桌宠用户输入均走 `POST /desktop/chat`。该共用 owner 入口通过
 `core/conversation_gate.py` 的 per-user conversation lock，保证同一用户多端输入按顺序完成
 `fetch_context → run_llm → critical post_process`。记忆文件自身仍由 `core/memory/locks.py`
 里的 `uid_lock` 保护。
@@ -139,7 +139,7 @@ get_tags()（build_prompt 内计算；部分入口可显式传入复用）
 探针在 pipeline 之前处理，目的是先判断本轮是否需要调用工具：
 
 - 使用极简 system prompt（`get_probe_prompt()`），不带角色卡
-- QQ 入口有关键词快速路径；`/desktop/chat` 和 `/mobile/chat` 走 LLM probe，不走关键词快速路径
+- QQ 入口有关键词快速路径；共用的 `/desktop/chat` owner-chat 入口走 LLM probe，不走关键词快速路径
 - 只判断 info + desktop 两类工具
 - memory 类工具不走探针，靠 LLM 在正式对话中自主调用
 - QQ 入口（`main.py`）和 owner HTTP 入口（`admin/routers/chat.py`）共用同一个 `get_probe_prompt()` 函数

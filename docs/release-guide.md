@@ -137,16 +137,18 @@ npm run tauri build
 # 产物在 src-tauri/target/release/bundle/nsis/
 ```
 
-## 4. mobile（Emerald-client / PresenceKit-mobile）：本仓无 CI，手动构建 + 手动发布
+## 4. mobile（Emerald-mobile / PresenceKit-mobile）：CI 校验 + 手动签名发布
 
-**产物**：`PresenceKit-mobile-vX.Y.Z.apk` + `.sha256`。这仓目前没有
-release workflow（Android 签名密钥需要走 GitHub Secrets，v0.1 阶段拍板
-暂不上 CI，见下方签名说明），全流程本机走完：
+**产物**：`PresenceKit-mobile-vX.Y.Z.apk` + `.sha256`。本仓有
+`.github/workflows/ci.yml`：main/PR 上运行 `flutter pub get`、`flutter gen-l10n`、
+`flutter analyze`、`flutter test`；它不构建、签名或发布 APK。没有 release workflow，
+因此正式签名与 GitHub Release 仍须在受控发布环境手动完成：
 
 1. 改版本号：`pubspec.yaml` 里的 `version: X.Y.Z+buildNumber`
    （`+` 后面是 Android versionCode，日常 patch 一般不用动，除非同一
    版本号内需要发第二个 build）。
-2. 提交、push 到 `main`。
+2. 提交、push 到 `main`，等待 mobile CI 绿灯；CI 只是 Dart/Flutter 校验，不能证明
+   Android 正式签名、安装升级或真机 relay 恢复。
 3. 本机构建：
 
    ```bash
@@ -159,9 +161,8 @@ release workflow（Android 签名密钥需要走 GitHub Secrets，v0.1 阶段拍
    仓库里只有 `key.properties.example`）。
    - 有正式 keystore：按 `key.properties.example` 在本机建一份
      `android/key.properties`（不要提交），构建脚本会自动检测并用正式签名。
-   - 没有正式 keystore（目前状态）：Gradle 配置会 fallback 到 **debug 签名**，
-     构建能过，但安装/更新时系统会提示签名信息，Release Notes 里要**明确
-     写清楚**，别让用户以为是篡改包。
+   - 没有正式 keystore：Gradle 会 fallback 到 **debug 签名**，仅可用于本地/内测验证；
+     **不得作为 v1 正式分发 APK 发布**。先完成签名密钥保管、复现构建和升级签名验证。
 5. 打包资产 + 校验和，创建 Release（这仓没有 tag 触发的自动化，`gh release
    create` 是唯一入口）：
 
@@ -193,7 +194,7 @@ release workflow（Android 签名密钥需要走 GitHub Secrets，v0.1 阶段拍
 
 - 要点 1
 - 要点 2
-- （有已知限制/注意事项单独一行加粗标出，比如未签名 exe / debug 签名 apk）
+- （有已知限制/注意事项单独一行加粗标出，比如未签名 exe；debug 签名 APK 不得作为 v1 发行资产）
 
 配套版本：desktop [vX.Y.Z](.../PresenceKit-desktop/releases/tag/vX.Y.Z) ·
 backend [vX.Y.Z](.../PresenceKit/releases/tag/vX.Y.Z) ·

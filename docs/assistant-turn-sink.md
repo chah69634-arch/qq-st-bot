@@ -12,7 +12,7 @@
 
 | 入口 | 写 event_log | 写 short_term | broadcast | 备注 |
 |---|---|---|---|---|
-| `/desktop/chat`、`/mobile/chat` | ✓ user+assistant | ✓ user+assistant | ✓ 全 channel | 基线，conversation_gate 串行，post_process 关键块 await |
+| `/desktop/chat`（desktop 与 mobile 前台共用） | ✓ user+assistant | ✓ user+assistant | ✓ 全 channel | 基线，conversation_gate 串行，post_process 关键块 await |
 | 普通 scheduler 触发器（morning_greeting / period_reminder / birthday / festival / timenode / topic_followup / reminders / diary_reminder / hr_high / hr_critical / garden_bloom 等） | ✓ assistant only | ✓ assistant only | ✓ 全 channel | 弱于基线：无 probe、无 conversation_gate、post_process 不 await |
 | **sensor_aware** | ✓ assistant only（异步、不 await） | ✓ assistant only（异步、不 await） | ✗ **直推 desktop_ws，跳过 broadcast** | 漏 mobile、漏 QQ、离线 fallback 失效 |
 | **sleep_end**（`admin/routers/watch.py:_flush_sleep_buffer`） | ✓ 但**写成 user+assistant**（污染 user 行） | 同左 | ✓ broadcast | 没传 `trigger_name`，被当成 owner turn；同时绕过 `watch.py:on_watch_event` |
@@ -33,12 +33,12 @@ Phase 1 必须达成：
    - `data/runtime/memory/{char_id}/{uid}/event_log/{date}.md`
    - `data/runtime/memory/{char_id}/{uid}/history.json`（short-term）
    - 所有目标 channel 的下行（按 fanout 策略）
-2. `/desktop/chat`、`/mobile/chat` 对客户端的可观察行为**完全不变**（字段、时序、behavior 都一致）
+2. 共用 `/desktop/chat` 对 desktop/mobile 前台客户端的可观察行为**完全不变**（字段、时序、behavior 都一致）
 3. 所有触发器写入语义统一：`trigger_name` 非空、assistant only；source 在 sink 内部保留，落盘仍编码到 `trigger_name`
 
 Phase 1 不破坏：
 
-- `/desktop/chat`、`/mobile/chat`、`POST /sensor/realtime`、`POST /watch/*` 这些外部接口
+- `/desktop/chat`、`POST /sensor/realtime`、`POST /watch/*` 这些外部接口
 - `channels.registry.broadcast()` 的现有契约
 - `capture_turn()` 的现有签名（仅可能在调用方向上微调）
 
@@ -62,7 +62,7 @@ from enum import Enum
 from typing import Optional, Sequence, Union
 
 class TurnSource(str, Enum):
-    USER_CHAT = "user_chat"   # /desktop/chat、/mobile/chat
+    USER_CHAT = "user_chat"   # /desktop/chat（desktop/mobile 前台共用）
     TRIGGER   = "trigger"     # 普通 scheduler 触发器
     SENSOR    = "sensor"      # sensor_aware（trigger 子类，单独打标便于追踪）
     WATCH     = "watch"       # 手表事件（hr_high / hr_critical / sleep_end）
@@ -227,7 +227,7 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
 ### 6.2 回归测试
 
 - `/desktop/chat` 发一条 → memory 与 channel 行为**与改造前字节一致**
-- `/mobile/chat` 同上
+- mobile 前台通过 `/desktop/chat` 同上
 - sensor_aware 触发 → **预期差异**：多了 `data/runtime/mobile_queue.json` 条目（按开放问题 #1 决议可能也加 QQ）
 - sleep_end 触发 → **预期差异**：`data/runtime/memory/{char_id}/{uid}/history.json` 的 user 行不再被括号 prompt 污染
 
