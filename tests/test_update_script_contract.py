@@ -182,12 +182,14 @@ def test_restore_keeps_protected_virtualenv_and_private_state(tmp_path):
     (backup / "data").mkdir()
     (backup / "data" / "state.json").write_text("old private state", encoding="utf-8")
     updater._write_backup_manifest(backup, "v1.0.0")
+    (install / "_update_tmp" / "package").mkdir(parents=True)
 
     updater.restore_installation_from_backup(install, backup)
 
     assert (install / "main.py").read_text(encoding="utf-8") == "source program"
     assert (install / ".venv" / "Scripts" / "python.exe").read_text(encoding="utf-8") == "running python"
     assert (install / "data" / "state.json").read_text(encoding="utf-8") == "private state"
+    assert not (install / "_update_tmp").exists()
 
 
 def test_restore_rejects_incomplete_backup_before_touching_program_files(tmp_path):
@@ -242,3 +244,51 @@ def test_offline_release_rehearsal_updates_program_but_keeps_private_files(tmp_p
     assert (install / "main.py").read_text(encoding="utf-8") == "new"
     assert (install / "config.yaml").read_text(encoding="utf-8") == "private"
     assert (install / "data" / "history.json").read_text(encoding="utf-8") == "keep"
+
+
+def test_offline_rejections_do_not_create_staging_before_validation(tmp_path, monkeypatch):
+    install = tmp_path / "PresenceKit"
+    install.mkdir()
+    (install / "VERSION").write_text("v0.9.9\n", encoding="utf-8")
+    archive = tmp_path / "PresenceKit-v1.0.0-win64-setup.zip"
+    archive.write_bytes(b"not inspected when source baseline is unsupported")
+    checksum = archive.with_suffix(archive.suffix + ".sha256")
+    checksum.write_text(f"{updater.sha256_file(archive)}  {archive.name}\n", encoding="utf-8")
+    monkeypatch.setattr(updater, "_service_is_running", lambda: False)
+
+    with pytest.raises(updater.UpdateError, match="v0"):
+        updater.update(
+            install,
+            SimpleNamespace(
+                source_zip=str(archive), sha256_file=str(checksum), target_version="v1.0.0",
+                yes=True, skip_sync=True,
+            ),
+        )
+
+    assert not (install / "_update_tmp").exists()
+
+
+def test_offline_sha_failure_does_not_create_staging(tmp_path, monkeypatch):
+    install = tmp_path / "PresenceKit"
+    install.mkdir()
+    (install / "VERSION").write_text("v1.0.0\n", encoding="utf-8")
+    (install / "data").mkdir()
+    (install / "data" / "layout_version.json").write_text(
+        '{"product_baseline":"v1","data_layout_schema_version":1}', encoding="utf-8",
+    )
+    archive = tmp_path / "PresenceKit-v1.0.1-win64-setup.zip"
+    archive.write_bytes(b"corrupt payload")
+    checksum = archive.with_suffix(archive.suffix + ".sha256")
+    checksum.write_text("0" * 64 + f"  {archive.name}\n", encoding="utf-8")
+    monkeypatch.setattr(updater, "_service_is_running", lambda: False)
+
+    with pytest.raises(updater.UpdateError, match="SHA256"):
+        updater.update(
+            install,
+            SimpleNamespace(
+                source_zip=str(archive), sha256_file=str(checksum), target_version="v1.0.1",
+                yes=True, skip_sync=True,
+            ),
+        )
+
+    assert not (install / "_update_tmp").exists()

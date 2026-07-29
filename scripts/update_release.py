@@ -438,6 +438,9 @@ def restore_installation_from_backup(installation: Path, backup: Path) -> None:
     if not resolved_backup.is_dir():
         raise UpdateError("指定的升级前备份不存在。")
     _validate_backup_manifest(resolved_backup)
+    # A failed update deliberately retains its verified staging area for
+    # diagnosis.  A deliberate restore is also an explicit safe-cleanup point.
+    shutil.rmtree(resolved_installation / "_update_tmp", ignore_errors=True)
 
     for candidate in sorted(resolved_installation.rglob("*"), key=lambda item: len(item.parts), reverse=True):
         relative = candidate.relative_to(resolved_installation)
@@ -514,30 +517,38 @@ def update(root: Path, args: argparse.Namespace) -> None:
     if _service_is_running():
         raise UpdateError("检测到 PresenceKit 服务仍在运行。请先停止服务后再更新。")
     old = current_version(root)
-    stage = root / "_update_tmp"
-    if stage.exists():
-        shutil.rmtree(stage)
-    stage.mkdir()
     if args.source_zip:
         archive = Path(args.source_zip).resolve()
         checksum = Path(args.sha256_file).resolve() if args.sha256_file else archive.with_suffix(archive.suffix + ".sha256")
         target = args.target_version or "本地测试包"
         if not archive.is_file() or not checksum.is_file():
             raise UpdateError("本地测试包或其 .sha256 文件不存在。")
+        # Local rehearsal inputs can be validated completely before an
+        # installation-local staging directory is created.
+        validate_v1_update(root, old, target)
+        verify_sha256(archive, checksum)
     else:
         release = choose_release(fetch_releases(root), args.yes)
         target = str(release.get("tag_name") or "所选版本")
+        validate_v1_update(root, old, target)
         zip_asset, checksum_asset = _release_assets(release)
-        archive = stage / str(zip_asset["name"])
-        checksum = stage / str(checksum_asset["name"])
-        opener = _opener(root)
-        print(f"当前版本：{old} → 目标版本：{target}")
-        download(str(zip_asset["browser_download_url"]), archive, opener)
-        download(str(checksum_asset["browser_download_url"]), checksum, opener)
-
-    verify_sha256(archive, checksum)
-    source = extract_release(archive, stage / "package")
-    validate_v1_update(root, old, target)
+    stage = root / "_update_tmp"
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir()
+    try:
+        if not args.source_zip:
+            archive = stage / str(zip_asset["name"])
+            checksum = stage / str(checksum_asset["name"])
+            opener = _opener(root)
+            print(f"当前版本：{old} → 目标版本：{target}")
+            download(str(zip_asset["browser_download_url"]), archive, opener)
+            download(str(checksum_asset["browser_download_url"]), checksum, opener)
+            verify_sha256(archive, checksum)
+        source = extract_release(archive, stage / "package")
+    except Exception:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
     backup = apply_release(root, source, old, reuse_existing_backup=old == target)
     if not args.skip_sync:
         sync_dependencies(root)
