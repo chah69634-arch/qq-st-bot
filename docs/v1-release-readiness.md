@@ -35,10 +35,21 @@ idempotence; a forced bridge failure followed by retry; and explicit restoration
 from `_update_backup_v0.2.2/`. The completion marker is only
 `v0.2.2_to_v1_bridge_completed`; it is not a general migration engine.
 
-This evidence is necessary but not sufficient for release approval: automated
-fixtures do not replace a real installation-copy upgrade and restore rehearsal.
-Dependency-sync failure still has no automatic rollback guarantee; the formal
-recovery route is the pre-upgrade backup.
+Fixture rehearsal passed on 2026-07-29 (`tests/test_v0_2_2_to_v1_upgrade_bridge.py`:
+10 passed), but the real-copy upgrade acceptance **failed before execution**;
+real-copy restore consequently **did not run**. The inspected source/target was
+`v0.2.2` to `v1.0.0` through bridge commit
+`3e7e5b573af4e1b339f3edd5b9efcb454538c2c9`. A real v0.2.2 installation runs
+its own pre-bridge updater, which has none of the bridge selection, cleanup,
+bootstrap, or marker operations. The v1 updater containing them is copied only
+after that old updater has already made its decisions. The fixture imports the
+current updater directly, so it does not establish the real installed-updater
+path. No implementation change was authorized in this acceptance work order.
+
+This evidence is necessary but not sufficient for release approval: the
+real-copy upgrade/restore blocker remains open. Dependency-sync failure still
+has no automatic rollback guarantee; the formal recovery route is the
+pre-upgrade backup once a functioning bridge is shipped.
 
 ## Required compatibility matrix
 

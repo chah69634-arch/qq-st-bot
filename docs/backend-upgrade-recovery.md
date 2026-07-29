@@ -69,3 +69,24 @@ credentials. It verifies fresh v1 installation, bridge preservation, public
 cleanup, retry/idempotence, forced failure, and restore behavior. It does not
 replace a release-candidate rehearsal on a copied real installation; that
 manual exercise remains required before public v1 approval.
+
+## 2026-07-29 real-copy acceptance result
+
+- Fixture rehearsal: **passed** (`tests/test_v0_2_2_to_v1_upgrade_bridge.py`,
+  10 passed).
+- Real-copy upgrade: **failed before execution**.
+- Real-copy restore: **not run**, because no valid bridge-produced upgrade
+  result exists to restore.
+- Source/target under review: `v0.2.2` to `v1.0.0` through bridge commit
+  `3e7e5b573af4e1b339f3edd5b9efcb454538c2c9`.
+
+The acceptance gate found that an actual `v0.2.2` installation runs its own
+pre-bridge `scripts/update_release.py`. That released updater has no bridge
+mode selection, known-public cleanup, compatibility bootstrap, or completion
+marker write. Those operations exist only in the v1 updater that would be
+copied later in the same update, so they cannot implement the documented
+bridge when the documented command is invoked from a real v0.2.2 install.
+The fixture imports the current updater directly and therefore does not cover
+this installed-updater path. No implementation change was made in this
+acceptance work order; the v0.2.2-to-v1 real-copy/restore blocker remains
+open.
