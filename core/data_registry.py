@@ -51,6 +51,8 @@ REGISTRY: dict[str, PathMeta] = {
     "proactive_recent":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "proactive_ledger":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "wake_delivery_ledger":   PathMeta("canonical", "shared",          "per_user",      "ignore"),
+    "wake_bridge_root":       PathMeta("canonical", "shared",          "global",        "ignore"),
+    "wake_bridge_state":      PathMeta("canonical", "shared",          "per_char_user", "ignore"),
     "api_call_log":           PathMeta("forensic",  "shared",          "global",        "ignore"),
     # Explicit opt-in prompt/tool-schema snapshots; daily files are pruned by
     # core.llm_debug_requests and are never runtime truth.
@@ -143,16 +145,25 @@ REGISTRY: dict[str, PathMeta] = {
     "sticker_packs_root":         PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "sticker_pack_dir":           PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "user_character_cards_dir":   PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
+    "character_card_write_path":  PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
+    "character_card_write_file":  PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "legacy_character_cards_dir": PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "character_card_dirs":        PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "user_authored_character_dir": PathMeta("authored", "character_inner", "per_char", "ignore-but-authored"),
     "legacy_authored_character_dir": PathMeta("authored", "character_inner", "per_char", "ignore-but-authored"),
     "authored_character_dir":     PathMeta("authored", "character_inner", "per_char", "ignore-but-authored"),
+    "authored_character_dirs":    PathMeta("authored", "character_inner", "per_char", "ignore-but-authored"),
     "user_reality_dir":           PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
+    "reality_lorebook_write_path": PathMeta("authored", "shared",         "global",   "ignore-but-authored"),
+    "reality_lorebook_write_dir": PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
+    "reality_jailbreak_write_path": PathMeta("authored", "shared",        "global",   "ignore-but-authored"),
+    "reality_jailbreak_write_dir": PathMeta("authored", "shared",         "global",   "ignore-but-authored"),
     "legacy_reality_dir":         PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "user_dream_worlds_dir":      PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
+    "dream_world_write_dir":      PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
     "legacy_dream_worlds_dir":    PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
     "user_dream_presets_dir":     PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
+    "dream_preset_write_path":    PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
     "legacy_dream_presets_dir":   PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
     # activity_pool.yaml 私人手写活动池；target: userdata/characters/authored/{char_id}/activity_pool.yaml
     "activity_pool":          PathMeta("authored",  "character_inner", "per_char",      "ignore-but-authored"),
@@ -215,7 +226,9 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── authored: lorebooks / jailbreaks (userdata/characters/reality/，不走 data/) ─
     "lorebooks_dir":          PathMeta("authored",  "shared",          "global",        "ignore-but-authored"),
+    "lorebook_read_dirs":     PathMeta("authored",  "shared",          "global",        "ignore-but-authored"),
     "jailbreaks_dir":         PathMeta("authored",  "shared",          "global",        "ignore-but-authored"),
+    "jailbreak_read_dirs":    PathMeta("authored",  "shared",          "global",        "ignore-but-authored"),
 
     # ── dream: HUD state ────────────────────────────────────────────────────────
     "dream_hud_state_path":   PathMeta("runtime",   "dream",           "per_user",      "ignore"),
@@ -242,7 +255,9 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── Authored content: letter samples + knowledge base (per-char static) ───
     "letter_samples_dir":     PathMeta("authored",  "character_inner", "per_char",      "ignore-but-authored"),
+    "letter_samples_read_dirs": PathMeta("authored", "character_inner", "per_char",      "ignore-but-authored"),
     "letter_knowledge_dir":   PathMeta("authored",  "character_inner", "per_char",      "ignore-but-authored"),
+    "letter_knowledge_read_dirs": PathMeta("authored", "character_inner", "per_char",    "ignore-but-authored"),
 
     # ── Canonical: sent letter archive (per-char-user) ────────────────────────
     "sent_letters":           PathMeta("canonical", "reality",         "per_char_user", "ignore"),
@@ -255,7 +270,9 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── authored: dream worlds/presets (userdata/characters/dream/，不走 data/ 沙盒偏移) ─
     "dream_worlds_dir":       PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
+    "dream_world_read_dirs":  PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
     "dream_presets_dir":      PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
+    "dream_preset_read_dirs": PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
     # data/dream/scenarios/{id}.yaml —— authored 剧本内容，同样是私人手写、不可重建
     "dream_scenarios_dir":    PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
     # defaults/dream_worlds/_default/ —— 随仓库发布的 tracked 中性模板源（Brief 96 §1），
