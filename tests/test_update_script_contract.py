@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import hashlib
 import zipfile
 
+import pytest
+
 import scripts.update_release as updater
 
 
@@ -125,6 +127,42 @@ def test_bundled_update_replaces_release_assets_without_touching_legacy_files(tm
     assert (install / "characters" / "default.json").read_text(encoding="utf-8") == "old default"
     assert (install / "characters" / "private.json").read_text(encoding="utf-8") == "keep me"
     assert (backup / "characters" / "private.json").read_text(encoding="utf-8") == "keep me"
+
+
+def test_bundled_update_removes_source_only_release_assets(tmp_path):
+    install = tmp_path / "PresenceKit"
+    (install / "bundled").mkdir(parents=True)
+    (install / "bundled" / "source-only.txt").write_text("old", encoding="utf-8")
+    source = tmp_path / "staged-release"
+    (source / "bundled").mkdir(parents=True)
+    (source / "bundled" / "target-only.txt").write_text("new", encoding="utf-8")
+
+    backup = updater.apply_release(install, source, "v1.0.0")
+
+    assert not (install / "bundled" / "source-only.txt").exists()
+    assert (install / "bundled" / "target-only.txt").read_text(encoding="utf-8") == "new"
+    assert (backup / "bundled" / "source-only.txt").read_text(encoding="utf-8") == "old"
+
+
+def test_copy_failure_keeps_complete_backup_and_rolls_back_replaced_files(tmp_path):
+    install = tmp_path / "PresenceKit"
+    install.mkdir()
+    (install / "VERSION").write_text("v1.0.0\n", encoding="utf-8")
+    (install / "main.py").write_text("old program", encoding="utf-8")
+    (install / "zzzz_injected_failure").mkdir()
+    source = tmp_path / "staged-release"
+    source.mkdir()
+    (source / "main.py").write_text("new program", encoding="utf-8")
+    # A file cannot atomically replace this source-only directory.  The name
+    # sorts after main.py, proving rollback runs after at least one replacement.
+    (source / "zzzz_injected_failure").write_text("trigger", encoding="utf-8")
+
+    with pytest.raises(updater.UpdateError, match="_update_backup_v1.0.0"):
+        updater.apply_release(install, source, "v1.0.0")
+
+    assert (install / "main.py").read_text(encoding="utf-8") == "old program"
+    assert (install / "zzzz_injected_failure").is_dir()
+    assert (install / "_update_backup_v1.0.0" / "main.py").read_text(encoding="utf-8") == "old program"
 
 
 def test_offline_release_rehearsal_updates_program_but_keeps_private_files(tmp_path, monkeypatch):

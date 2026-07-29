@@ -252,12 +252,39 @@ def _copy_program_files(source: Path, installation: Path, backup: Path) -> list[
                 temporary.unlink(missing_ok=True)
                 raise
             replaced.append((target, had_original))
+        _remove_stale_bundled_files(source, installation, replaced)
     except Exception:
         # Keep this local list available for a mid-copy failure.  Returning a
         # list only on success would otherwise lose the already replaced paths.
         _rollback_program_files(installation, backup, replaced)
         raise
     return replaced
+
+
+def _remove_stale_bundled_files(
+    source: Path, installation: Path, replaced: list[tuple[Path, bool]],
+) -> None:
+    """Make the release-owned bundled tree match the verified target package.
+
+    ``bundled/`` is program content, never a protected user root.  Keeping a
+    source-only file there would make an update an incomplete release replace.
+    Removed files join ``replaced`` so the existing copy-failure rollback
+    restores them from the complete pre-update snapshot.
+    """
+    source_bundled = source / "bundled"
+    installed_bundled = installation / "bundled"
+    if not source_bundled.is_dir() or not installed_bundled.is_dir():
+        return
+    for candidate in sorted(
+        installed_bundled.rglob("*"), key=lambda path: (len(path.parts), str(path)), reverse=True,
+    ):
+        if candidate.is_file():
+            relative = candidate.relative_to(installed_bundled)
+            if not (source_bundled / relative).is_file():
+                candidate.unlink()
+                replaced.append((candidate, True))
+        elif candidate.is_dir() and not any(candidate.iterdir()):
+            candidate.rmdir()
 
 
 def _rollback_program_files(installation: Path, backup: Path, replaced: list[tuple[Path, bool]]) -> None:
@@ -321,7 +348,10 @@ def apply_release(
         replaced = _copy_program_files(source, installation, backup)
     except Exception as exc:
         _rollback_program_files(installation, backup, replaced)
-        raise UpdateError(f"程序文件复制失败，已恢复本次已替换的程序文件：{exc}") from exc
+        raise UpdateError(
+            f"程序文件复制失败，已恢复本次已替换的程序文件；"
+            f"完整升级前备份保留在 {backup.name}，如需恢复请使用 --restore-backup：{exc}"
+        ) from exc
     _prune_old_backups(installation, backup)
     return backup
 
