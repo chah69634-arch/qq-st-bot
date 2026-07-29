@@ -15,6 +15,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-external-tools-1';
 
 function _actionArgs(element) {
   const raw = element.dataset.actionArgs;
@@ -57,7 +58,7 @@ async function loadPageFragment(page) {
   const container = document.getElementById('page-' + page);
   if (!container || container.dataset.pageLoaded === 'true') return container;
   if (!_pageFragmentLoads.has(page)) {
-    const request = fetch(`/static/pages/${encodeURIComponent(page)}.html`)
+    const request = fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`)
       .then(response => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.text();

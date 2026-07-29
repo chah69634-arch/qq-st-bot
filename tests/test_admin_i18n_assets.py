@@ -73,7 +73,7 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
 
-    assert '<script src="/static/i18n.js"></script>' in index
+    assert '<script src="/static/i18n.js?v=admin-ui-external-tools-1"></script>' in index
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
     assert "presence.admin.language" in runtime
     assert "localStorage.setItem(STORAGE_KEY, language)" in runtime
