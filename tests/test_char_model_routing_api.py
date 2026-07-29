@@ -104,9 +104,11 @@ def test_patch_valid_profile_binds_and_writes_file(registry, chars_tree):
     assert result["effective_profile"] == "claude-main"
     assert result["resolved_chat_preset"] == "claude"
 
-    saved = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / "yexuan.json").read_text(encoding="utf-8"))
     assert saved["presence_ext"]["model_routing"] == "claude-main"
     assert saved["name"] == "叶瑄", "其余字段不受影响"
+    legacy = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    assert legacy["presence_ext"] == {}, "legacy fallback 必须保持只读"
 
 
 def test_patch_unknown_profile_rejected_422(registry, chars_tree):
@@ -136,8 +138,10 @@ def test_patch_null_clears_binding(registry, chars_tree):
     assert result["effective_profile"] == "default"
     assert result["resolved_chat_preset"] == "ds"
 
-    saved = json.loads((chars_tree / "characters" / "claude_bound.json").read_text(encoding="utf-8"))
+    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / "claude_bound.json").read_text(encoding="utf-8"))
     assert "model_routing" not in saved["presence_ext"]
+    legacy = json.loads((chars_tree / "characters" / "claude_bound.json").read_text(encoding="utf-8"))
+    assert legacy["presence_ext"]["model_routing"] == "claude-main"
 
 
 def test_patch_unknown_char_404(registry):

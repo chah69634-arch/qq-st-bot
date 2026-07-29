@@ -113,11 +113,13 @@ def test_patch_single_field_does_not_touch_others(registry, chars_tree, tts_pres
     assert result["sticker_pack"] == "new_pack"
     assert result["live2d_model"] == "assistant.model3.json", "未提及的字段不应被清掉"
 
-    saved = json.loads((chars_tree / "characters" / "bound.json").read_text(encoding="utf-8"))
+    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / "bound.json").read_text(encoding="utf-8"))
     assert saved["presence_ext"]["sticker_pack"] == "new_pack"
     assert saved["presence_ext"]["live2d_model"] == "assistant.model3.json"
     assert saved["presence_ext"]["tts_preset"] == "cheerful"
     assert saved["name"] == "小助手", "其余字段不受影响"
+    legacy = json.loads((chars_tree / "characters" / "bound.json").read_text(encoding="utf-8"))
+    assert legacy["presence_ext"]["sticker_pack"] == "cute"
 
 
 def test_patch_empty_string_clears_field(registry, chars_tree, tts_presets):
@@ -128,7 +130,7 @@ def test_patch_empty_string_clears_field(registry, chars_tree, tts_presets):
     )
     assert result["sticker_pack"] is None
 
-    saved = json.loads((chars_tree / "characters" / "bound.json").read_text(encoding="utf-8"))
+    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / "bound.json").read_text(encoding="utf-8"))
     assert "sticker_pack" not in saved["presence_ext"]
     assert saved["presence_ext"]["tts_preset"] == "cheerful", "同一次请求里未提及的字段仍保留"
 
@@ -143,10 +145,12 @@ def test_patch_writes_new_bindings_onto_undeclared_char(registry, chars_tree):
             auth="dummy",
         )
     )
-    saved = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / "yexuan.json").read_text(encoding="utf-8"))
     assert saved["presence_ext"]["live2d_model"] == "yexuan.model3.json"
     assert saved["presence_ext"]["model_3d"] == "yexuan.glb"
     assert "tts_preset" not in saved["presence_ext"]
+    legacy = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    assert legacy["presence_ext"] == {}
 
 
 def test_patch_unknown_char_404(registry):

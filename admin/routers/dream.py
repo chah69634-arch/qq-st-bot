@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from admin.auth import require_scopes
 from core.config_loader import get_config
 from core.data_paths import DEFAULT_CHAR_ID
+from core.sandbox import get_paths
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -460,6 +461,26 @@ def _preset_asset_path(preset: str) -> Path:
         return get_paths().dream_presets_dir() / f"{preset}.md"
 
 
+def _preset_write_path(preset: str) -> Path:
+    if not isinstance(preset, str) or not _SAFE_PRESET_RE.match(preset):
+        raise HTTPException(status_code=422, detail=f"预设 id 不合法: {preset!r}")
+    return get_paths().dream_preset_write_path(preset)
+
+
+def _authored_source(read_path: Path, canonical: Path) -> str:
+    return "user" if read_path == canonical else "legacy"
+
+
+def _log_dream_write(
+    *, kind: str, read_path: Path, canonical: Path, source: str | None = None
+) -> None:
+    logger.info(
+        "[authored-writer] kind=%s effective_read_source=%s canonical_write_target=user",
+        kind,
+        source or _authored_source(read_path, canonical),
+    )
+
+
 def _reload_dream_preset_registry() -> None:
     """Make authoring changes visible to the next dream without a restart."""
     from core.asset_registry import reload_registry
@@ -486,11 +507,13 @@ async def create_standalone_dream_preset(
     content = body.get("content", "")
     if not isinstance(content, str):
         raise HTTPException(status_code=422, detail="content 必须为字符串")
-    path = _preset_asset_path(preset)
-    if path.exists():
+    read_path = _preset_asset_path(preset)
+    path = _preset_write_path(preset)
+    if read_path.exists():
         raise HTTPException(status_code=409, detail=f"预设 {preset} 已存在")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    _log_dream_write(kind="dream_preset", read_path=path, canonical=path, source="user")
     _reload_dream_preset_registry()
     return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
 
@@ -504,10 +527,14 @@ async def put_standalone_dream_preset(
     content = body.get("content")
     if not isinstance(content, str):
         raise HTTPException(status_code=422, detail="content 必须为字符串")
-    path = _preset_asset_path(preset)
-    if not path.is_file():
+    read_path = _preset_asset_path(preset)
+    if not read_path.is_file():
         raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
+    path = _preset_write_path(preset)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _log_dream_write(kind="dream_preset", read_path=read_path, canonical=path)
     path.write_text(content, encoding="utf-8")
+    _reload_dream_preset_registry()
     return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
 
 
@@ -518,15 +545,22 @@ async def delete_standalone_dream_preset(
 ):
     path = _preset_asset_path(preset)
     if not path.is_file():
+        legacy = get_paths().legacy_dream_presets_dir() / f"{preset}.md"
+        if legacy.is_file():
+            raise HTTPException(status_code=409, detail="legacy fallback Dream 预设为只读，不能删除")
         raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
 
     from core.dream.dream_settings import load as _load_settings
     if preset in (_load_settings(_owner_uid()).get("jailbreak_presets") or []):
         raise HTTPException(status_code=409, detail="该预设正在下一场梦的选用列表中，请先取消选用")
 
+    canonical = _preset_write_path(preset)
+    if path != canonical:
+        raise HTTPException(status_code=409, detail="legacy fallback Dream 预设为只读，不能删除")
     path.unlink()
     _reload_dream_preset_registry()
-    return {"ok": True, "deleted": preset}
+    legacy_reappeared = (get_paths().legacy_dream_presets_dir() / path.name).is_file()
+    return {"ok": True, "deleted": preset, "legacy_fallback_reappeared": legacy_reappeared}
 
 
 @router.get("/dream/stats", summary="梦境次数统计（只读，有效梦 > N 轮）")
@@ -632,7 +666,7 @@ def _validate_world_name(world: str, *, allow_reserved: bool = False) -> None:
 
 
 def _world_dir(world: str):
-    """返回 characters/dream_worlds/{world}/ 路径，经 sandbox 验证。"""
+    """Resolve a Dream world package for reading (legacy fallback preserved)."""
     from core.sandbox import get_paths
     if not _SAFE_WORLD_RE.match(world) or world in (".", ".."):
         raise HTTPException(status_code=422, detail=f"世界名称不合法: {world!r}")
@@ -640,8 +674,26 @@ def _world_dir(world: str):
     return p
 
 
+def _world_write_dir(world: str) -> Path:
+    _validate_world_name(world, allow_reserved=True)
+    return get_paths().dream_world_write_dir(world)
+
+
+def _materialize_world_for_write(world: str) -> Path:
+    """Copy one effective world package into userdata before mutating it."""
+    read_dir = _world_dir(world)
+    write_dir = _world_write_dir(world)
+    if write_dir.exists():
+        return write_dir
+    if not read_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"世界 {world} 不存在")
+    import shutil as _shutil
+    _shutil.copytree(read_dir, write_dir)
+    _log_dream_write(kind="dream_world", read_path=read_dir, canonical=write_dir)
+    return write_dir
+
 def _preset_path(world: str):
-    """返回 characters/dream_presets/{world}.md 路径。"""
+    """Resolve the legacy-compatible world-named preset for reading."""
     from core.sandbox import get_paths
     if not _SAFE_WORLD_RE.match(world) or world in (".", ".."):
         raise HTTPException(status_code=422, detail=f"世界名称不合法: {world!r}")
@@ -672,27 +724,16 @@ def _reset_world_layer_setting_if(match_world: str, reset_to: str) -> None:
 
 
 def _ensure_default_world_template_seeded() -> Path:
-    """确保 characters/dream_worlds/_default/ 存在，缺失文件从 tracked 模板补齐。
+    """Return the tracked default package as a read-only seed source.
 
-    characters/dream_worlds/ 整体在 .gitignore 内，fresh clone/release 包没有
-    任何世界文件——包括 _default/ 本身。新建世界的骨架必须"有东西可复制"，
-    所以这里先从随仓库发布的 defaults/dream_worlds/_default/ 播种，
-    再返回补齐后的 characters/dream_worlds/_default/ 供调用方复制。
+    C1.1 deliberately does not build a ``characters/dream_worlds`` subtree.
+    New worlds copy directly into the canonical userdata target.
     """
     from core.sandbox import get_paths
-    import shutil as _shutil
-
     template = get_paths().default_dream_world_template_dir()
-    dest = get_paths().dream_worlds_dir() / "_default"
-    dest.mkdir(parents=True, exist_ok=True)
-    for name in ("ruleset.md", "mes_example.md", "vocab.json", "lorebook.yaml"):
-        dest_file = dest / name
-        if dest_file.exists():
-            continue
-        src_file = template / name
-        if src_file.exists():
-            _shutil.copy2(src_file, dest_file)
-    return dest
+    if not template.is_dir():
+        raise HTTPException(status_code=500, detail="默认 Dream 世界模板缺失")
+    return template
 
 
 @router.get("/dream/worlds", summary="列出梦境世界目录")
@@ -723,8 +764,8 @@ async def create_dream_world(body: dict, _auth=Depends(require_scopes("activity"
     from core.sandbox import get_paths
     import shutil as _shutil
 
-    dest = get_paths().dream_worlds_dir() / world
-    if dest.exists():
+    dest = get_paths().dream_world_write_dir(world)
+    if _world_dir(world).exists():
         raise HTTPException(status_code=409, detail=f"世界 {world} 已存在")
 
     template = _ensure_default_world_template_seeded()
@@ -740,6 +781,8 @@ async def create_dream_world(body: dict, _auth=Depends(require_scopes("activity"
         (dest / "meta.json").write_text(
             _json.dumps({"label": label}, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+    _log_dream_write(kind="dream_world", read_path=template, canonical=dest, source="default")
 
     return {"ok": True, "world": world}
 
@@ -761,13 +804,16 @@ async def rename_dream_world(world: str, body: dict, _auth=Depends(require_scope
     src = _world_dir(world)
     if not src.is_dir():
         raise HTTPException(status_code=404, detail=f"世界 {world} 不存在")
-    dst = _world_dir(new_name)
-    if dst.exists():
+    dst = _world_write_dir(new_name)
+    if _world_dir(new_name).exists():
         raise HTTPException(status_code=409, detail=f"世界 {new_name} 已存在")
 
     if _dream_active_referencing_world(world):
         raise HTTPException(status_code=409, detail="该世界正被进行中的梦境使用，梦醒后再重命名")
 
+    if src != _world_write_dir(world):
+        raise HTTPException(status_code=409, detail="legacy fallback Dream 世界为只读，不能重命名")
+    dst.parent.mkdir(parents=True, exist_ok=True)
     src.rename(dst)
 
     _reset_world_layer_setting_if(world, new_name)
@@ -788,17 +834,24 @@ async def delete_dream_world(world: str, _auth=Depends(require_scopes("activity"
 
     target = _world_dir(world)
     if not target.is_dir():
+        legacy = get_paths().legacy_dream_worlds_dir() / world
+        if legacy.is_dir():
+            raise HTTPException(status_code=409, detail="legacy fallback Dream 世界为只读，不能删除")
         raise HTTPException(status_code=404, detail=f"世界 {world} 不存在")
 
     if _dream_active_referencing_world(world):
         raise HTTPException(status_code=409, detail="该世界正被进行中的梦境使用，梦醒后再删除")
 
+    canonical = _world_write_dir(world)
+    if target != canonical:
+        raise HTTPException(status_code=409, detail="legacy fallback Dream 世界为只读，不能删除")
     import shutil as _shutil
     _shutil.rmtree(target)
 
     _reset_world_layer_setting_if(world, "_default")
 
-    return {"ok": True, "deleted": world}
+    legacy_reappeared = (get_paths().legacy_dream_worlds_dir() / world).is_dir()
+    return {"ok": True, "deleted": world, "legacy_fallback_reappeared": legacy_reappeared}
 
 
 @router.get("/dream/worlds/{world}/lorebook", summary="读取梦境世界书条目列表")
@@ -820,7 +873,7 @@ async def get_dream_lorebook(world: str, _auth=Depends(require_scopes("activity"
 
 def _write_dream_lorebook(world: str, entries: list):
     import yaml as _yaml
-    p = _world_dir(world) / "lorebook.yaml"
+    p = _materialize_world_for_write(world) / "lorebook.yaml"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(
         _yaml.dump(entries, allow_unicode=True, default_flow_style=False, sort_keys=False),
@@ -831,7 +884,7 @@ def _write_dream_lorebook(world: str, entries: list):
 @router.post("/dream/worlds/{world}/lorebook", summary="新增梦境世界书条目")
 async def add_dream_lore_entry(world: str, body: dict, _auth=Depends(require_scopes("activity"))):
     import yaml as _yaml
-    p = _world_dir(world) / "lorebook.yaml"
+    p = _materialize_world_for_write(world) / "lorebook.yaml"
     entries = []
     if p.exists():
         raw = _yaml.safe_load(p.read_text(encoding="utf-8")) or []
@@ -858,7 +911,7 @@ async def add_dream_lore_entry(world: str, body: dict, _auth=Depends(require_sco
 @router.put("/dream/worlds/{world}/lorebook/{index}", summary="修改梦境世界书条目")
 async def update_dream_lore_entry(world: str, index: int, body: dict, _auth=Depends(require_scopes("activity"))):
     import yaml as _yaml
-    p = _world_dir(world) / "lorebook.yaml"
+    p = _materialize_world_for_write(world) / "lorebook.yaml"
     if not p.exists():
         raise HTTPException(status_code=404, detail="lorebook.yaml 不存在")
     entries = _yaml.safe_load(p.read_text(encoding="utf-8")) or []
@@ -886,7 +939,7 @@ async def update_dream_lore_entry(world: str, index: int, body: dict, _auth=Depe
 @router.delete("/dream/worlds/{world}/lorebook/{index}", summary="删除梦境世界书条目")
 async def delete_dream_lore_entry(world: str, index: int, _auth=Depends(require_scopes("activity"))):
     import yaml as _yaml
-    p = _world_dir(world) / "lorebook.yaml"
+    p = _materialize_world_for_write(world) / "lorebook.yaml"
     if not p.exists():
         raise HTTPException(status_code=404, detail="lorebook.yaml 不存在")
     entries = _yaml.safe_load(p.read_text(encoding="utf-8")) or []
@@ -909,8 +962,10 @@ async def get_dream_preset(world: str, _auth=Depends(require_scopes("activity"))
 @router.put("/dream/worlds/{world}/preset", summary="保存旧版同名梦境预设（兼容）")
 async def put_dream_preset(world: str, body: dict, _auth=Depends(require_scopes("activity"))):
     content = body.get("content", "")
-    p = _preset_path(world)
+    read_path = _preset_path(world)
+    p = get_paths().dream_preset_write_path(world)
     p.parent.mkdir(parents=True, exist_ok=True)
+    _log_dream_write(kind="dream_preset", read_path=read_path, canonical=p)
     p.write_text(str(content), encoding="utf-8")
     _reload_dream_preset_registry()
     return {"ok": True, "world": world, "bytes": len(content.encode("utf-8"))}

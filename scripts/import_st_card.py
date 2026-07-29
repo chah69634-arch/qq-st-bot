@@ -2,7 +2,7 @@
 SillyTavern 角色卡 → Presence 格式转换器
 
 用法:
-    python scripts/import_st_card.py <酒馆卡.json> [--out characters/<id>.json] [--id <id>]
+    python scripts/import_st_card.py <酒馆卡.json> [--out userdata/characters/cards/<id>.json] [--id <id>]
 """
 
 import argparse
@@ -292,12 +292,29 @@ def _default_id(src: Path) -> str:
     return cleaned.lower()
 
 
+def resolve_output_path(*, char_id: str, explicit_out: str | None, repo_root: Path = _REPO_ROOT) -> Path:
+    """Choose a canonical default while refusing explicit legacy-root writes."""
+    if not explicit_out:
+        return repo_root / "userdata" / "characters" / "cards" / f"{char_id}.json"
+
+    out_path = Path(explicit_out)
+    resolved_out = out_path.resolve()
+    for legacy_root in ("characters", "content", "defaults", "examples"):
+        root = (repo_root / legacy_root).resolve()
+        if resolved_out.is_relative_to(root):
+            raise ValueError(
+                f"--out 指向只读 legacy/public root ({legacy_root}/)；"
+                "请改用 userdata/characters/cards/ 或仓库外的显式导出路径。"
+            )
+    return out_path
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="将 SillyTavern 角色卡 (.json) 转换为 Presence 格式"
     )
     parser.add_argument("src", help="输入的酒馆卡 JSON 文件路径")
-    parser.add_argument("--out", help="输出路径，默认 characters/<id>.json")
+    parser.add_argument("--out", help="输出路径，默认 userdata/characters/cards/<id>.json")
     parser.add_argument("--id",  help="角色 ID，默认取输入文件名 stem")
     args = parser.parse_args()
 
@@ -308,10 +325,11 @@ def main():
 
     char_id = args.id or _default_id(src_path)
 
-    if args.out:
-        out_path = Path(args.out)
-    else:
-        out_path = _REPO_ROOT / "characters" / f"{char_id}.json"
+    try:
+        out_path = resolve_output_path(char_id=char_id, explicit_out=args.out)
+    except ValueError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
+        sys.exit(2)
 
     print(f"正在转换: {src_path} → {out_path}  (id={char_id})")
 

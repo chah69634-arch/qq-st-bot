@@ -3,6 +3,7 @@
 存储路径由 DataPaths.jailbreak_entries() 决定
 """
 from typing import Optional
+import logging
 import json
 import uuid
 from pathlib import Path
@@ -15,6 +16,7 @@ from admin.auth import require_scopes
 from core.sandbox import get_paths
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _new_id() -> str:
@@ -45,9 +47,15 @@ def _read() -> dict:
 
 
 def _write(data: dict):
-    p = get_paths().jailbreak_entries()
+    paths = get_paths()
+    read_path = paths.jailbreak_entries()
+    p = paths.reality_jailbreak_write_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info(
+        "[authored-writer] kind=reality_jailbreak effective_read_source=%s canonical_write_target=user",
+        "user" if read_path == p else "legacy",
+    )
 
 
 def _reload():

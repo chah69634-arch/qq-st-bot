@@ -4,6 +4,7 @@
 """
 
 from typing import List, Optional
+import logging
 import uuid
 
 import yaml
@@ -14,6 +15,7 @@ from admin.auth import require_scopes
 from core.sandbox import get_paths
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
@@ -50,12 +52,18 @@ def _read_lorebook() -> dict:
 
 
 def _write_lorebook(data: dict):
-    """写回 lorebook.yaml"""
-    p = get_paths().lorebook()
+    """Materialize the effective lorebook into its canonical userdata target."""
+    paths = get_paths()
+    read_path = paths.lorebook()
+    p = paths.reality_lorebook_write_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(p, "w", encoding="utf-8") as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        logger.info(
+            "[authored-writer] kind=reality_lorebook effective_read_source=%s canonical_write_target=user",
+            "user" if read_path == p else "legacy",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"写入 lorebook.yaml 失败: {e}")
 

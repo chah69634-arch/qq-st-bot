@@ -25,8 +25,8 @@ from core.sandbox import get_paths
 
 router = APIRouter()
 
-# New/edited private cards are written beneath userdata.  _safe_path retains a
-# read fallback for a deployment that has not yet completed the C1 move.
+# New/edited private cards are written beneath userdata.  Read resolution is
+# intentionally separate, because a legacy fallback is never a write target.
 CHARACTERS_DIR = get_paths().user_character_cards_dir()
 CONFIG_FILE = Path("config.yaml")
 
@@ -34,7 +34,7 @@ CONFIG_FILE = Path("config.yaml")
 # ─── 工具函数 ──────────────────────────────────────────────────────────────────
 
 def _safe_path(name: str) -> Path:
-    """返回安全路径，防止路径穿越攻击"""
+    """Resolve a card for reading only, retaining legacy compatibility."""
     if name != Path(name).name:
         raise HTTPException(status_code=400, detail="非法文件名")
     primary = (CHARACTERS_DIR / name).resolve()
@@ -45,6 +45,29 @@ def _safe_path(name: str) -> Path:
     if legacy.exists() and legacy.is_relative_to(legacy_base):
         return legacy
     return primary
+
+
+def _write_path(name: str) -> Path:
+    """Return the canonical userdata target for a validated card filename."""
+    if name != Path(name).name:
+        raise HTTPException(status_code=400, detail="非法文件名")
+    try:
+        return get_paths().character_card_write_file(name)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail="角色卡文件名不合法") from e
+
+
+def _card_source(path: Path, canonical: Path) -> str:
+    return "user" if path == canonical else "legacy"
+
+
+def _log_card_write(*, read_path: Path, canonical: Path, operation: str) -> None:
+    _char_logger.info(
+        "[authored-writer] kind=character operation=%s effective_read_source=%s "
+        "canonical_write_target=user",
+        operation,
+        _card_source(read_path, canonical),
+    )
 
 
 import logging as _logging
@@ -206,8 +229,9 @@ async def new_character(body: Dict[str, Any], auth=Depends(require_scopes("perso
     if raw_id != Path(raw_id).name or raw_id.startswith("."):
         raise HTTPException(status_code=422, detail=f"非法角色 id: {raw_id!r}")
 
-    dest = _safe_path(f"{raw_id}.json")
-    if dest.exists():
+    read_path = _safe_path(f"{raw_id}.json")
+    dest = get_paths().character_card_write_path(raw_id)
+    if read_path.exists():
         raise HTTPException(status_code=409, detail=f"角色卡 {raw_id} 已存在")
 
     template_path = Path("examples") / "character_template.json"
@@ -219,7 +243,7 @@ async def new_character(body: Dict[str, Any], auth=Depends(require_scopes("perso
     label = (body.get("name") or "").strip() or raw_id
     template["name"] = label
 
-    CHARACTERS_DIR.mkdir(parents=True, exist_ok=True)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(dest, "w", encoding="utf-8") as f:
             json.dump(template, f, ensure_ascii=False, indent=2)
@@ -245,7 +269,7 @@ async def upload_character(file: UploadFile = File(...), auth=Depends(require_sc
     CHARACTERS_DIR.mkdir(parents=True, exist_ok=True)
     # 只取文件名部分，防止路径穿越
     safe_name = Path(filename).name
-    dest = _safe_path(safe_name)
+    dest = _write_path(safe_name)
     content = await file.read()
     # JSON 文件额外验证合法性
     if suffix == ".json":
@@ -333,8 +357,12 @@ async def save_character(name: str, request: Request, _auth=Depends(require_scop
     - .txt/.md：raw body 作为 UTF-8 文本直接写入
     - .json：解析 JSON body 再写入
     """
-    path = _safe_path(name)
-    CHARACTERS_DIR.mkdir(parents=True, exist_ok=True)
+    read_path = _safe_path(name)
+    if not read_path.exists():
+        raise HTTPException(status_code=404, detail=f"角色卡 {name} 不存在")
+    path = _write_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _log_card_write(read_path=read_path, canonical=path, operation="save")
     suffix = path.suffix.lower()
     try:
         raw = await request.body()
@@ -353,7 +381,12 @@ async def save_character(name: str, request: Request, _auth=Depends(require_scop
             _reload_character(_active_id)
         except Exception as _e:
             _char_logger.warning(f"[character] save hot-reload failed (non-fatal): {_e}")
-    return {"message": f"角色卡 {name} 已保存并热重载"}
+    reload_registry()
+    return {
+        "message": f"角色卡 {name} 已保存并热重载",
+        "effective_read_source": _card_source(read_path, path),
+        "canonical_write_target": "user",
+    }
 
 
 
@@ -363,11 +396,18 @@ async def rename_character(name: str, body: Dict[str, Any], auth=Depends(require
     if not new_name:
         raise HTTPException(status_code=422, detail="new_name 不能为空")
     src = _safe_path(name)
-    dst = _safe_path(new_name)
+    dst = _write_path(new_name)
     if not src.exists():
         raise HTTPException(status_code=404, detail=f"角色卡 {name} 不存在")
-    if dst.exists():
+    if _safe_path(new_name).exists():
         raise HTTPException(status_code=409, detail=f"角色卡 {new_name} 已存在")
+    canonical_src = _write_path(name)
+    if src != canonical_src:
+        raise HTTPException(
+            status_code=409,
+            detail="legacy fallback 角色卡为只读；请先保存为 userdata override 后再重命名",
+        )
+    dst.parent.mkdir(parents=True, exist_ok=True)
     src.rename(dst)
     # 如果是当前活跃角色，同步更新 config.yaml（写新 id，不写 filename）
     new_id = Path(new_name).stem
@@ -385,7 +425,13 @@ async def rename_character(name: str, body: Dict[str, Any], auth=Depends(require
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"更新配置失败: {e}")
     reload_registry()
-    return {"message": f"已重命名为 {new_name}", "new_name": new_name, "new_id": new_id}
+    legacy_reappeared = (get_paths().legacy_character_cards_dir() / name).is_file()
+    return {
+        "message": f"已重命名为 {new_name}",
+        "new_name": new_name,
+        "new_id": new_id,
+        "legacy_fallback_reappeared": legacy_reappeared,
+    }
 
 
 # ─── per-角色模型路由绑定（Brief 87 §1）──────────────────────────────────────────
@@ -426,7 +472,8 @@ async def set_character_model_routing(
     except ValueError:
         raise HTTPException(status_code=404, detail=f"未知角色 id {char_id!r}")
 
-    path = entry.path()
+    read_path = entry.path()
+    path = get_paths().character_card_write_path(char_id)
     if path.suffix.lower() != ".json":
         raise HTTPException(status_code=422, detail="纯文本角色卡（.txt/.md）不支持 model_routing 绑定")
 
@@ -440,7 +487,7 @@ async def set_character_model_routing(
             )
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(read_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取角色卡失败: {e}")
@@ -453,6 +500,8 @@ async def set_character_model_routing(
         presence_ext["model_routing"] = body.model_routing
 
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _log_card_write(read_path=read_path, canonical=path, operation="model_routing")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
@@ -460,6 +509,7 @@ async def set_character_model_routing(
 
     # 缓存边沿：character_loader.load() 每次都重读磁盘，下次路由解析即生效；
     # 若该卡恰好是当前活跃角色，顺带热重载 pipeline.character 保持一致。
+    reload_registry()
     _active_id = _active_character_id()
     if _active_id:
         try:
@@ -554,12 +604,13 @@ async def set_character_asset_bindings(
     except ValueError:
         raise HTTPException(status_code=404, detail=f"未知角色 id {char_id!r}")
 
-    path = entry.path()
+    read_path = entry.path()
+    path = get_paths().character_card_write_path(char_id)
     if path.suffix.lower() != ".json":
         raise HTTPException(status_code=422, detail="纯文本角色卡（.txt/.md）不支持资产绑定")
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(read_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取角色卡失败: {e}")
@@ -576,11 +627,14 @@ async def set_character_asset_bindings(
             presence_ext[field_name] = value
 
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _log_card_write(read_path=read_path, canonical=path, operation="asset_bindings")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存角色卡失败: {e}")
 
+    reload_registry()
     _active_id = _active_character_id()
     if _active_id:
         try:

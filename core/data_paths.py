@@ -64,6 +64,14 @@ def safe_user_id(value: str | int) -> str:
     return safe
 
 
+def _safe_authored_component(value: str) -> str:
+    """Validate one user-authored filename component without ASCII-only policy."""
+    component = str(value)
+    if not component or component in {".", ".."} or Path(component).name != component:
+        raise ValueError(f"unsafe authored asset component: {value!r}")
+    return component
+
+
 def _read_config_mode() -> str:
     try:
         import yaml
@@ -147,6 +155,25 @@ class DataPaths:
     def user_character_cards_dir(self) -> Path:
         return self.userdata_root() / "characters" / "cards"
 
+    def character_card_write_path(self, char_id: str) -> Path:
+        """Canonical writer target for a JSON character card.
+
+        This is intentionally separate from ``character_card_dirs()``: callers
+        resolving a legacy fallback must never reuse that read path for writes.
+        Character cards are authored assets rather than runtime state, so tests
+        isolate this relative root by changing into ``tmp_path``.
+        """
+        safe_id = _safe_authored_component(char_id)
+        return self.user_character_cards_dir() / f"{safe_id}.json"
+
+    def character_card_write_file(self, filename: str) -> Path:
+        """Canonical writer target for a validated card filename (.json/.txt/.md)."""
+        name = Path(filename)
+        if name.name != filename or name.suffix.lower() not in {".json", ".txt", ".md"}:
+            raise ValueError(f"unsafe character card filename: {filename!r}")
+        _safe_authored_component(name.stem)
+        return self.user_character_cards_dir() / name.name
+
     def legacy_character_cards_dir(self) -> Path:
         return Path("characters")
 
@@ -167,17 +194,55 @@ class DataPaths:
     def user_reality_dir(self) -> Path:
         return self.userdata_root() / "characters" / "reality"
 
+    def reality_lorebook_write_path(self) -> Path:
+        """Canonical writer target for the combined Reality lorebook."""
+        if self.mode == "test":
+            return self._base / "reality" / "lorebook.yaml"
+        return self.user_reality_dir() / "lorebook.yaml"
+
+    def reality_jailbreak_write_path(self) -> Path:
+        """Canonical writer target for the combined Reality jailbreak entries."""
+        if self.mode == "test":
+            return self._base / "reality" / "jailbreak_entries.json"
+        return self.user_reality_dir() / "jailbreak_entries.json"
+
+    def reality_lorebook_write_dir(self) -> Path:
+        """Canonical writer root for modular Reality lorebooks."""
+        if self.mode == "test":
+            return self._base / "reality" / "lorebooks"
+        return self.user_reality_dir() / "lorebooks"
+
+    def reality_jailbreak_write_dir(self) -> Path:
+        """Canonical writer root for modular Reality jailbreaks."""
+        if self.mode == "test":
+            return self._base / "reality" / "jailbreaks"
+        return self.user_reality_dir() / "jailbreaks"
+
     def legacy_reality_dir(self) -> Path:
         return Path("characters") / "reality"
 
     def user_dream_worlds_dir(self) -> Path:
         return self.userdata_root() / "characters" / "dream" / "worlds"
 
+    def dream_world_write_dir(self, world_id: str) -> Path:
+        """Canonical writer target for one Dream world package."""
+        safe_id = _safe_authored_component(world_id)
+        if self.mode == "test":
+            return self._base / "dream_worlds" / safe_id
+        return self.user_dream_worlds_dir() / safe_id
+
     def legacy_dream_worlds_dir(self) -> Path:
         return Path("characters") / "dream_worlds"
 
     def user_dream_presets_dir(self) -> Path:
         return self.userdata_root() / "characters" / "dream" / "presets"
+
+    def dream_preset_write_path(self, preset_id: str) -> Path:
+        """Canonical writer target for one Dream preset."""
+        safe_id = _safe_authored_component(preset_id)
+        if self.mode == "test":
+            return self._base / "dream_presets" / f"{safe_id}.md"
+        return self.user_dream_presets_dir() / f"{safe_id}.md"
 
     def legacy_dream_presets_dir(self) -> Path:
         return Path("characters") / "dream_presets"
@@ -543,7 +608,10 @@ class DataPaths:
             if src.exists():
                 p.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, p)
-                logger.info(f"[sandbox] seeded {p} from {src}")
+                logger.info(
+                    "[authored-writer] kind=reality_jailbreak effective_read_source=default "
+                    "canonical_write_target=user"
+                )
             else:
                 logger.error(
                     f"[data_paths] authored asset missing: {p}  "
@@ -563,7 +631,10 @@ class DataPaths:
             if src.exists():
                 p.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, p)
-                logger.info(f"[sandbox] seeded {p} from {src}")
+                logger.info(
+                    "[authored-writer] kind=reality_lorebook effective_read_source=default "
+                    "canonical_write_target=user"
+                )
             else:
                 logger.error(
                     f"[data_paths] authored asset missing: {p}  "
