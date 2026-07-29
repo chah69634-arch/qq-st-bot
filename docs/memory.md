@@ -1,5 +1,24 @@
 # docs/memory.md — 记忆子系统设计
 
+## Path truth census（writer / read / history / prompt boundary）
+
+代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径
+不是新的写入建议；audit / trace 内容即使可由管理面读取，也永不直接进入 prompt。
+
+| logical data | canonical writer path/accessor | compatibility read fallback | historical/retired path | prompt eligibility |
+|---|---|---|---|---|
+| short-term history | `data/runtime/memory/{char_id}/{uid}/history.json`；`core/memory/short_term.py` / `path_resolver` | `data/history/{uid}.json` | uid-only history layout | 经过 scrub、speaker grouping 和 budget 后可进入 layer 9 |
+| event log | `data/runtime/memory/{char_id}/{uid}/event_log/{date}.md`；`core/memory/event_log.py` | `data/event_log/{uid}/{date}.md` 由 read union 兼容读取 | 旧 uid-only event-log tree；旧 `full_log.md` 只供导出 | 仅经 `event_log.search()` / 时间召回；trigger stub、source-isolated blocks 和被过滤内容不可进入 |
+| mid-term / episodic / profile / identity | `data/runtime/memory/{char_id}/{uid}/mid_term.json`, `episodic.json`, `profile.json`, `identity.yaml`；各自 memory module + `path_resolver` | 各模块的 migration `for_read()` 旧布局 | `data/mid_term`, `data/episodic_memory`, `data/user_identity` 等 uid-only roots | 仅由对应 prompt layer loader 选择；不是任意文件扫描 |
+| hidden state / afterglow / impression | hidden state 与 afterglow 在 `data/runtime/memory/{char_id}/{uid}/`；Dream impression 在 `data/runtime/dreams/{char_id}/impressions/{uid}.json` | 只按各 accessor 的显式兼容规则读取 | 旧 dream/reality 混合落盘 | hidden-state snapshot / afterglow / impression 均需专用 tag gate；不直接注入原始文件 |
+| trigger / perceive-event audit | `data/event_log/{uid}/trigger_audit.jsonl`；`fixation_pipeline._write_trigger_audit_log()`；`core/perceive_event_audit.py` 查询同一 forensic tree | 无 prompt-side fallback；历史坏行由 query fail-open 跳过 | 该 `data/event_log` 子树是 forensic audit，不是当前 event-log memory writer | 永不进入 prompt、memory consolidation 或 stimulus；仅 `state.read` observability |
+| recall / provenance / action trace | `data/runtime/memory/{char_id}/{uid}/recall_trace/`, `provenance_log.jsonl`, `action_trace.json` | 由各 accessor 处理历史缺失，不做目录猜测 | 旧散落 trace/log 文件 | 永不直接进入 prompt；只供观测、溯源和重复动作审计 |
+| scheduler / gating / dry-run / API audit | `data/logs/trigger_state.jsonl`, `gating_shadow.jsonl`, `execute_dryrun.jsonl`；API calls 在 `data/runtime/observability/api_calls-*.jsonl` | 无业务 memory fallback | 旧临时日志文件 | 永不进入 prompt 或 memory；仅管理面 forensic/observability |
+
+因此，`data/event_log/{uid}/trigger_audit.jsonl` 与 `data/logs/*` 不能被机械改名成 memory 路径：
+它们的 writer/read 语义是审计；而 event-log 日文件本身已由 writer 迁移到
+`data/runtime/memory/{char_id}/{uid}/event_log/`。
+
 多层记忆并行运作，各司其职，互不替代。
 
 > **P0 写入边界（2026-06-02）**：当前已落地 Write Envelope v0，采用 fail-closed

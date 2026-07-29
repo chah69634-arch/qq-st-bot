@@ -110,9 +110,11 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
 
 - `tool_categories`：`run_agentic_loop()` 取工具暴露面时，活跃角色卡声明了这个字段就用它，
   否则回落全局 `tool_loop.categories`。`exclude_tools` 始终读全局配置，per-char 不能绕过
-  硬件写类等排除项。示例卡 `examples/benwo.example.json` 把 `mcp` 类加入暴露面（`characters/`
+  硬件写类等排除项。示例卡 `examples/benwo.example.json` 把 `mcp` 类加入暴露面；
+  角色 authored 文件的 canonical 路径是 `userdata/characters/cards/<char_id>.json`，
   根目录不放模板/示例文件，见 `tests/test_authored_assets.py::test_no_template_files_in_characters_root`；
-  要实际加载体验这张卡，复制到 `characters/` 下改名去掉 `.example` 再改 `active_character`）。
+  要实际加载体验这张卡，复制到 `userdata/characters/cards/` 下改名去掉 `.example` 再改
+  `active_character`。旧 `characters/` 只在 compatibility fallback 中读取，不是推荐写入路径。
 - `tool_loop`：仅接受 `"on"` / `"off"`。`"on"` 允许这张卡在全局默认关闭时启用 Path C；
   `"off"` 关闭 Path C；字段缺失或非法值回落全局 `tool_loop.enabled`。它不会绕过 owner 私聊
   或 `function_calling` preset 两道硬闸。`examples/assistant.example.json` 是人机直连组合示例。

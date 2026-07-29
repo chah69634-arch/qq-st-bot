@@ -1,5 +1,17 @@
 # docs/dream.md — Dream System 总览与设计原则
 
+## Path authority（以代码和 data-taxonomy 为准）
+
+| 层级 | 当前事实 | authority / 边界 |
+|---|---|---|
+| canonical writable authored root | `userdata/characters/dream/worlds/` 与 `userdata/characters/dream/presets/` | `core/data_paths.py` 的 `user_dream_worlds_dir()` / `user_dream_presets_dir()`；新用户 authored 内容写这里 |
+| public/default seed | `defaults/dream_worlds/_default/` | tracked release seed；只用于播种，不是用户运行时写入目录 |
+| legacy read fallback | `characters/dream_worlds/` 与 `characters/dream_presets/` | `DataPaths.dream_worlds_dir()` / `dream_presets_dir()` 的兼容读取；不得作为推荐写入路径 |
+| scenario authored content | `data/dream/scenarios/{script_id}.yaml` | `DataPaths.dream_scenarios_dir()` 与 `admin/routers/dream.py` CRUD 的当前剧本路径；独立于 world/preset authored root |
+| runtime Dream state/archive/impression | `data/runtime/dreams/{char_id}/` 下的 `tmp/`, `archive/`, `summaries/`, `impressions/`, `state/`, `settings/`；群聊为 `data/runtime/dreams/_stage/{group_id}/` | `core/dream/*` 与 `core/data_paths.py`；runtime 文件不是 authored source |
+
+物理路径只用于 backend 实现和运维；客户端应依赖 Dream endpoint，而不是读取这些文件。旧 `characters/` / `content/characters` 只保留在 compatibility fallback 语义中。
+
 > 本文是**合同级**文档（哲学边界 / 不变式 / 当前实现 / 允许扩展），不逐行追代码。
 > 实现细节以 `core/dream/` 源码 grep 为准；本文滞后时，**代码为真**。
 > 人称约定：**叶瑄 = 男性 = 他**（描述层）/ **「我」**（梦境输出层）；**用户（风谕）= 在梦境输出中一律称「你」**（不用「她」）；**身体数值 = 她的**（情景扮演数值 schema 字段名，不出现在生成文本中）。
@@ -66,7 +78,7 @@
 - 它绝不写 memory / mood / hidden_state / impression，绝不进入任何 prompt loader；世界专有词可留在用户面对的信内。
 
 **世界包（v1）**
-- 六世界包 `characters/dream_worlds/{reality_derived,abo,vampire,cat,flower_bud,custom}/`，各含 `ruleset.md` / `mes_example.md` / `vocab.json` / `lorebook.yaml`(骨架)
+- 六世界包 `userdata/characters/dream/worlds/{reality_derived,abo,vampire,cat,flower_bud,custom}/`，各含 `ruleset.md` / `mes_example.md` / `vocab.json` / `lorebook.yaml`(骨架)
 - `world_loader`：`load_world()` / `strip_vocab()` / `match_dream_lore()` 纯函数
 - 入梦时世界冻结进 `dream_state.frozen_world`，整场不可切
 - 独立梦境 lorebook 匹配器（不引用现实 lore_engine，避免现实 state 污染）
@@ -330,7 +342,7 @@ data/runtime/dreams/{char_id}/     独立 dream 根（不并入 reality memory �
 ├── state/{uid}/dream_state.json   per-uid 会话状态
 └── settings/{uid}.json            per-uid 梦境设置
 
-characters/dream_worlds/{world_id}/
+userdata/characters/dream/worlds/{world_id}/
 ├── ruleset.md                     D2 世界规则
 ├── mes_example.md                 D3 世界 few-shot
 ├── vocab.json                     专有词表（strip_vocab 纵深用）
@@ -389,12 +401,12 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 真实存在——`world_loader` 对缺失世界本就 fail-open 回退到 `_default` 内容），同时
 允许选中面板新建的自定义世界。
 
-**新建世界骨架来源（Brief 96 §1 反假绿要点）**：`characters/dream_worlds/` 整体在
-`.gitignore` 内（用户数据），fresh clone / release 包里不存在任何世界文件——包括
+**新建世界骨架来源（Brief 96 §1 反假绿要点）**：`userdata/characters/dream/worlds/` 是用户 authored primary；
+fresh clone / release 不依赖旧 compatibility root；新建操作从 tracked `defaults/dream_worlds/_default/`
 `_default/` 本身。`POST /dream/worlds` 因此不能直接复制运行时的 `_default/`；它先调用
 `_ensure_default_world_template_seeded()`，从随仓库发布的 tracked
-`defaults/dream_worlds/_default/`（中性模板，不含任何具体世界的专属设定）补齐运行时
-`characters/dream_worlds/_default/` 缺失的文件，再从补齐后的目录复制骨架给新世界。
+`defaults/dream_worlds/_default/` 缺失时才作为 seed；运行时 authored 写入 `userdata/characters/dream/worlds/`。
+旧 `characters/dream_worlds/` 仅作为 compatibility read fallback，不是推荐操作路径。
 
 **管理面板三模式创作栏（Brief 96 §3）**：`admin/static/index.html` 的「梦境设定」页
 第一行为模式选择（sandbox / scenario / mirror，默认 sandbox），只切换本页显示哪套
@@ -465,7 +477,7 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 | `world_layer` | reality_derived / abo / vampire / cat / flower_bud / custom |
 | `lucid_mode` | lucid_shared / non_lucid |
 | `enable_dream_lorebook` | bool |
-| `jailbreak_preset` | `characters/dream_presets/{name}.md` 的安全 ASCII 名；缺失时回退 `default` |
+| `jailbreak_preset` | `userdata/characters/dream/presets/{name}.md` 的安全 ASCII 名；缺失时回退 `default` |
 | `reality_context_full_turns` | int，默认 3。D4 层 `recent_reality_context` 完整注入的轮数上限（见下方说明）。 |
 
 **D4 `recent_reality_context` 轮数衰减**
