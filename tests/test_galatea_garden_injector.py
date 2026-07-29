@@ -5,9 +5,8 @@ from __future__ import annotations
 import io
 import json
 import os
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
+from urllib.request import ProxyHandler
 
 import pytest
 
@@ -116,50 +115,42 @@ def test_network_and_server_errors_are_retryable():
 
 
 def test_default_local_request_ignores_environment_proxies(monkeypatch):
-    received = []
+    opened = []
+    captured_handlers = []
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_POST(self):
-            received.append(self.path)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"status":"accepted"}')
+    class DirectOpener:
+        def open(self, request, *, timeout):
+            opened.append((request.full_url, request.get_header("Authorization"), timeout))
+            return _Response({"status": "accepted"})
 
-        def log_message(self, format, *args):
-            return
+    def build_direct_opener(*handlers):
+        captured_handlers.append(handlers)
+        return DirectOpener()
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    serving = threading.Event()
-
-    def serve():
-        serving.set()
-        server.serve_forever()
-
-    thread = threading.Thread(target=serve, daemon=True)
-    thread.start()
-    assert serving.wait(timeout=2), "loopback test server did not start"
+    monkeypatch.setattr(inject, "build_opener", build_direct_opener)
     proxy_names = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY")
     before = {name: os.environ.get(name) for name in proxy_names}
-    try:
-        environment = _environment(PRESENCE_BASE_URL=f"http://127.0.0.1:{server.server_port}")
-        # First pollute the inherited proxy environment, then leave that scope
-        # and make another request in the same process.  The injector must use
-        # its explicit direct opener in both cases and the test must restore
-        # the ambient process environment for following tests.
-        with monkeypatch.context() as proxy_env:
-            proxy_env.setenv("HTTP_PROXY", "http://127.0.0.1:1")
-            proxy_env.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
-            proxy_env.setenv("ALL_PROXY", "http://127.0.0.1:1")
-            proxy_env.setenv("NO_PROXY", "")
-            assert inject.deliver(_envelope(), environ=environment) == inject.EXIT_SUCCESS
-        assert {name: os.environ.get(name) for name in proxy_names} == before
+    environment = _environment()
+    # First pollute the inherited proxy environment, then leave that scope and
+    # make another request in the same process.  _local_opener must construct
+    # its own empty ProxyHandler rather than consult the ambient environment.
+    with monkeypatch.context() as proxy_env:
+        proxy_env.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+        proxy_env.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+        proxy_env.setenv("ALL_PROXY", "http://127.0.0.1:1")
+        proxy_env.setenv("NO_PROXY", "")
         assert inject.deliver(_envelope(), environ=environment) == inject.EXIT_SUCCESS
-    finally:
-        server.shutdown()
-        thread.join(timeout=2)
-        server.server_close()
-    assert received == ["/integrations/garden/wake", "/integrations/garden/wake"]
+        assert len(captured_handlers) == 1
+        (proxy_handler,) = captured_handlers[0]
+        assert isinstance(proxy_handler, ProxyHandler)
+        assert proxy_handler.proxies == {}
+    assert {name: os.environ.get(name) for name in proxy_names} == before
+    assert inject.deliver(_envelope(), environ=environment) == inject.EXIT_SUCCESS
+    assert len(captured_handlers) == 2
+    assert [url for url, _, _ in opened] == [
+        "http://127.0.0.1:8123/integrations/garden/wake",
+        "http://127.0.0.1:8123/integrations/garden/wake",
+    ]
 
 
 @pytest.mark.parametrize(("failure", "expected"), [
