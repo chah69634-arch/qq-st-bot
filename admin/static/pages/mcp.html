@@ -1,5 +1,5 @@
 
-      <h1 class="page-title" data-i18n="mcp.title">MCP 外部工具</h1>
+      <h1 class="page-title" data-i18n="mcp.title">MCP 工具</h1>
       <div class="card admin-inline-006">
         <p data-i18n="mcp.security_notice" class="admin-inline-144">外部 MCP 的工具描述与返回内容均为不可信输入。仅在你明确需要时启用，并使用工具白名单；连接 token 请使用 ${ENV_VAR}，不要写进角色卡、Prompt 或文档。</p>
       </div>
@@ -26,6 +26,9 @@
         <div class="card-header"><h3 data-i18n="mcp.llm_debug.title">LLM 请求调试快照</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpDebugRequests" data-i18n="common.refresh">刷新</button></div>
         <p class="admin-inline-144" data-i18n="mcp.llm_debug.notice">仅用于短时排查：会记录发送给模型的 Prompt、工具 schema 与生成参数；密钥字段和图片数据会遮蔽。默认关闭，只有管理员可读。</p>
         <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="mcp-llm-debug-enabled"><span data-i18n="mcp.llm_debug.enabled">记录请求快照</span></label><label class="field"><span data-i18n="mcp.llm_debug.keep_days">保留天数</span><input id="mcp-llm-debug-keep-days" type="number" min="1" max="7" value="1"></label></div>
-        <button class="btn btn-primary btn-sm" data-action="saveMcpDebugRequests" data-i18n="mcp.llm_debug.save">保存调试设置</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" data-action="saveMcpDebugRequests" data-i18n="mcp.llm_debug.save">保存调试设置</button>
+          <button class="btn btn-danger btn-sm" data-action="clearMcpDebugRequests" data-i18n="mcp.llm_debug.clear">清理日志</button>
+        </div>
         <pre id="mcp-llm-debug-entries" class="log-view admin-inline-133"></pre>
       </div>

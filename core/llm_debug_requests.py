@@ -113,3 +113,18 @@ def query(*, purpose: str = "", limit: int = 20) -> list[dict]:
         return sorted(rows, key=lambda row: float(row.get("ts") or 0), reverse=True)[:max(1, min(100, limit))]
     except Exception:
         return []
+
+
+def clear() -> int:
+    """Remove every locally stored high-sensitivity debug snapshot."""
+    try:
+        base_path = get_paths().llm_debug_request_log()
+        paths = [base_path] + list(base_path.parent.glob(f"{base_path.stem}-*{base_path.suffix}"))
+        removed = 0
+        for path in paths:
+            if path.exists():
+                path.unlink()
+                removed += 1
+        return removed
+    except Exception:
+        return 0

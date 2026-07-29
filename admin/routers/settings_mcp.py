@@ -40,6 +40,8 @@ class McpServerUpdate(BaseModel):
     headers: Optional[dict[str, str]] = None
     tool_timeout_s: Optional[float] = None
     use_proxy: Optional[bool] = None
+    tool_presets: Optional[list[dict]] = None
+    active_tool_preset: Optional[str] = None
 
 
 def _validate_draft(draft: McpServerDraft) -> dict:
@@ -96,6 +98,30 @@ def _safe_headers(headers: object) -> dict[str, str]:
     }
 
 
+def _normalize_tool_presets(raw: object) -> list[dict[str, object]]:
+    """Validate the per-server named allowlist presets stored in config.yaml."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or len(raw) > 50:
+        raise HTTPException(status_code=422, detail="tool_presets 最多 50 个，且必须是列表")
+    normalized: list[dict[str, object]] = []
+    names: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=422, detail="每个工具预设必须是对象")
+        name = str(item.get("name") or "").strip()
+        tools = item.get("tools")
+        if not name or len(name) > 64:
+            raise HTTPException(status_code=422, detail="工具预设名称不能为空，且最多 64 个字符")
+        if name in names:
+            raise HTTPException(status_code=422, detail=f"工具预设名称重复: {name}")
+        if not isinstance(tools, list) or len(tools) > 200 or not all(isinstance(tool, str) and tool for tool in tools):
+            raise HTTPException(status_code=422, detail="工具预设的 tools 必须是最多 200 项的非空字符串列表")
+        names.add(name)
+        normalized.append({"name": name, "tools": list(dict.fromkeys(tools))})
+    return normalized
+
+
 def _server_view(server_cfg: dict) -> dict:
     from core.mcp_client import is_local_mcp_url, server_runtime
 
@@ -110,6 +136,8 @@ def _server_view(server_cfg: dict) -> dict:
         "enabled": bool(server_cfg.get("enabled", True)),
         "tool_timeout_s": float(server_cfg.get("tool_timeout_s", 30)),
         "allow_tools": list(server_cfg.get("allow_tools") or []),
+        "tool_presets": _normalize_tool_presets(server_cfg.get("tool_presets")),
+        "active_tool_preset": str(server_cfg.get("active_tool_preset") or ""),
         "runtime": server_runtime(name),
     }
 
@@ -191,7 +219,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin"))):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
-    if all(value is None for value in (body.enabled, body.allow_tools, body.headers, body.tool_timeout_s, body.use_proxy)):
+    if all(value is None for value in (body.enabled, body.allow_tools, body.headers, body.tool_timeout_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
         raise HTTPException(status_code=422, detail="没有可更新字段")
     full_cfg = _read_config()
     servers = full_cfg.setdefault("mcp_servers", {}).setdefault("servers", [])
@@ -202,6 +230,25 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         server["enabled"] = body.enabled
     if body.allow_tools is not None:
         server["allow_tools"] = list(dict.fromkeys(body.allow_tools))
+        # A manual checkbox edit is deliberately a custom selection, not a silent
+        # mutation of whichever named preset happened to be active.
+        server.pop("active_tool_preset", None)
+    if body.tool_presets is not None:
+        server["tool_presets"] = _normalize_tool_presets(body.tool_presets)
+        current = str(server.get("active_tool_preset") or "")
+        if current and current not in {item["name"] for item in server["tool_presets"]}:
+            server.pop("active_tool_preset", None)
+    if body.active_tool_preset is not None:
+        selected = body.active_tool_preset.strip()
+        if not selected:
+            server.pop("active_tool_preset", None)
+        else:
+            presets = _normalize_tool_presets(server.get("tool_presets"))
+            preset = next((item for item in presets if item["name"] == selected), None)
+            if preset is None:
+                raise HTTPException(status_code=422, detail=f"工具预设不存在: {selected}")
+            server["active_tool_preset"] = selected
+            server["allow_tools"] = list(preset["tools"])
     if body.headers is not None:
         if not all(key.strip() and value for key, value in body.headers.items()):
             raise HTTPException(status_code=422, detail="headers 的键和值都必须是非空字符串")

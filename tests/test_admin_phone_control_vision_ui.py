@@ -8,8 +8,8 @@ ROOT = Path(__file__).parents[1]
 I18N = (ROOT / "admin" / "static" / "i18n.js").read_text(encoding="utf-8")
 
 
-def test_status_page_exposes_phone_control_vision_override_with_inheritance_copy():
-    page = read_admin_page("status")
+def test_model_routing_page_exposes_phone_control_vision_override_with_inheritance_copy():
+    page = read_admin_page("model-routing")
     source = read_admin_client_source()
 
     for marker in (

@@ -28,6 +28,16 @@ async def llm_debug_requests(
     return {"entries": entries, "count": len(entries)}
 
 
+@router.delete(
+    "/observability/llm-debug-requests",
+    summary="清空 LLM 请求调试快照（高敏感）",
+)
+async def clear_llm_debug_requests(_auth=Depends(require_scopes("admin"))):
+    from core.llm_debug_requests import clear
+
+    return {"message": "LLM 请求调试快照已清空", "removed_files": clear()}
+
+
 @router.get(
     "/observability/tool-traces",
     summary="列出有工具执行痕迹的 uid（只读）",

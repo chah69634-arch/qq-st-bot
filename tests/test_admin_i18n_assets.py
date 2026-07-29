@@ -108,6 +108,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
     status = read_admin_page("status")
+    routing = read_admin_page("model-routing")
 
     for key in (
         "status.title",
@@ -116,8 +117,6 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "status.proxy.title",
         "status.context.title",
         "status.llm.title",
-        "status.vision.title",
-        "status.phone_vision.title",
         "status.screen.title",
         "status.relay.title",
         "status.tts.title",
@@ -129,6 +128,9 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "status.pronoun.title",
     ):
         assert f'data-i18n="{key}"' in status
+
+    for key in ("status.vision.title", "status.phone_vision.title"):
+        assert f'data-i18n="{key}"' in routing
 
     assert "t('flag.' + name, item.label)" in index
     for flag in (
@@ -150,8 +152,8 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     ):
         assert f"'flag.{flag}'" in runtime
 
-    assert "https://aistudio.google.com/app/apikey" in status
-    assert "https://open.bigmodel.cn/usercenter/apikeys" in status
+    assert "https://aistudio.google.com/app/apikey" in routing
+    assert "https://open.bigmodel.cn/usercenter/apikeys" in routing
 
 
 def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():

@@ -41,3 +41,14 @@ def test_debug_request_snapshot_keeps_tool_schema_but_redacts_sensitive_data(tmp
     assert rows[0]["messages"][0]["authorization"] == "[REDACTED]"
     assert rows[0]["request_kwargs"]["api_key"] == "[REDACTED]"
     assert rows[0]["request_kwargs"]["image"] == "[REDACTED image data URL]"
+
+
+def test_clear_removes_all_daily_debug_snapshot_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(debug, "get_paths", lambda: _paths(tmp_path))
+    base = tmp_path / "llm_debug_requests.jsonl"
+    base.write_text('{"base": true}\n', encoding="utf-8")
+    (tmp_path / "llm_debug_requests-2026-07-29.jsonl").write_text('{"daily": true}\n', encoding="utf-8")
+
+    assert debug.clear() == 2
+    assert not base.exists()
+    assert not (tmp_path / "llm_debug_requests-2026-07-29.jsonl").exists()

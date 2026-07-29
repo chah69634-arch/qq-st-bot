@@ -479,6 +479,8 @@ const MR_CATEGORY_DESC = {
 };
 
 async function loadModelRouting() {
+  loadVisionParams();
+  loadPhoneControlVisionParams();
   document.getElementById('mr-presets-body').innerHTML = '<div class="loading">加载中…</div>';
   document.getElementById('mr-profiles-body').innerHTML = '<div class="loading">加载中…</div>';
   try {

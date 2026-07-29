@@ -46,13 +46,15 @@
     <div class="nav-group" id="navgroup-ops">
       <a class="active" data-page="status" data-action="goto" data-action-args='["status"]'><span class="icon">📊</span><span data-i18n="nav.status">系统状态</span></a>
       <a data-page="scheduler" data-action="goto" data-action-args='["scheduler"]'><span class="icon">⏰</span><span data-i18n="nav.scheduler">调度器</span></a>
-      <a data-page="integrations" data-action="goto" data-action-args='["integrations"]'><span class="icon">🔌</span><span data-i18n="nav.integrations">外部唤醒</span></a>
-      <a data-page="users"     data-action="goto" data-action-args='["users"]'>    <span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
-      <a data-page="logs"      data-action="goto" data-action-args='["logs"]'>     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
       <a data-page="auth-tokens" data-action="goto" data-action-args='["auth-tokens"]'><span class="icon">🔑</span><span data-i18n="nav.auth_tokens">Token</span></a>
       <a data-page="model-routing" data-action="goto" data-action-args='["model-routing"]'><span class="icon">🔀</span><span data-i18n="nav.model_routing">模型路由</span></a>
-      <a data-page="mcp" data-action="goto" data-action-args='["mcp"]'><span class="icon">🧩</span><span data-i18n="nav.mcp">MCP 外部工具</span></a>
       <a data-page="relationship-facts" data-action="goto" data-action-args='["relationship-facts"]'><span class="icon">📌</span><span data-i18n="nav.relationship_facts">关系事实</span></a>
+    </div>
+
+    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["external-tools"]'><span class="nav-caret" id="caret-external-tools">▾</span><span data-i18n="nav.group.external_tools">🧩 外部工具</span></div>
+    <div class="nav-group" id="navgroup-external-tools">
+      <a data-page="integrations" data-action="goto" data-action-args='["integrations"]'><span class="icon">🔌</span><span data-i18n="nav.integrations">Garden 论坛唤醒</span></a>
+      <a data-page="mcp" data-action="goto" data-action-args='["mcp"]'><span class="icon">🧩</span><span data-i18n="nav.mcp">MCP 工具</span></a>
     </div>
 
     <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["state"]'><span class="nav-caret" id="caret-state">▾</span><span data-i18n="nav.group.internal_state">🔬 内部状态</span></div>
@@ -63,6 +65,8 @@
       <a data-page="observe-hidden"  data-action="goto" data-action-args='["observe-hidden"]'> <span class="icon">🔬</span><span data-i18n="nav.hidden_state">隐性状态</span></a>
       <a data-page="observe-chatlog" data-action="goto" data-action-args='["observe-chatlog"]'><span class="icon">💬</span><span data-i18n="nav.chat_log">聊天日志</span></a>
       <a data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime">运行时内部态</span></a>
+      <a data-page="users"     data-action="goto" data-action-args='["users"]'>    <span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
+      <a data-page="logs"      data-action="goto" data-action-args='["logs"]'>     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
     </div>
 
     <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["observe"]'><span class="nav-caret" id="caret-observe">▾</span><span data-i18n="nav.group.observation">🔍 观测</span></div>

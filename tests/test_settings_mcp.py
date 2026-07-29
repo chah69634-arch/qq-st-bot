@@ -138,6 +138,26 @@ def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeyp
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]["use_proxy"] is True
 
 
+def test_selecting_named_tool_preset_updates_runtime_allowlist(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: [toy_status]\n      tool_presets:\n        - name: 只读\n          tools: [toy_status]\n        - name: 对局\n          tools: [toy_status, play]\n")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    calls = []
+
+    async def reload(name):
+        calls.append(name)
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda name: {"connected": True, "tools": []})
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy", mod.McpServerUpdate(active_tool_preset="对局"), _auth=None,
+    ))
+
+    assert result["server"]["active_tool_preset"] == "对局"
+    assert result["server"]["allow_tools"] == ["toy_status", "play"]
+    assert calls == ["cedar_toy"]
+
+
 def test_delete_server_removes_config_and_syncs_its_runtime(tmp_path, monkeypatch):
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n    - name: keep_me\n      transport: http\n      url: https://example.test/keep\n")
     _patch_config(monkeypatch, path)

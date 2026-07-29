@@ -1,4 +1,5 @@
 let _mcpImport = null;
+const _mcpCollapsedServers = new Set();
 
 function _mcpDraftFromForm() {
   let headers = {};
@@ -75,6 +76,31 @@ async function saveMcpDebugRequests() {
   } catch (e) { toast(t('mcp.llm_debug.save_error', '保存调试设置失败: {error}', { error: e.message }), 'err'); }
 }
 
+async function clearMcpDebugRequests() {
+  if (!confirm(t('mcp.llm_debug.clear_confirm', '确定清理所有 LLM 请求调试快照吗？此操作不可恢复。'))) return;
+  try {
+    await api('DELETE', '/observability/llm-debug-requests');
+    toast(t('mcp.llm_debug.cleared', 'LLM 请求调试快照已清理'), 'ok');
+    await loadMcpDebugRequests();
+  } catch (e) { toast(t('mcp.llm_debug.clear_error', '清理调试快照失败: {error}', { error: e.message }), 'err'); }
+}
+
+function _mcpServerTools(name) {
+  return [...document.querySelectorAll(`[data-mcp-server="${name}"]:checked`)].map(el => el.value);
+}
+
+function _mcpPresetButtons(server) {
+  const active = server.active_tool_preset || '';
+  const args = escapeHtml(JSON.stringify([server.name, '']));
+  const custom = `<button class="btn btn-ghost btn-sm" data-action="selectMcpToolPreset" data-action-args="${args}">${escapeHtml(t('mcp.preset.custom', '自定义'))}</button>`;
+  const presets = (server.tool_presets || []).map(preset => {
+    const actionArgs = escapeHtml(JSON.stringify([server.name, preset.name]));
+    const klass = preset.name === active ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+    return `<button class="${klass}" data-action="selectMcpToolPreset" data-action-args="${actionArgs}">${escapeHtml(preset.name)}</button>`;
+  }).join('');
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.preset.selected', '工具预设'))}</span>${custom}${presets || `<span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</span>`}</div>`;
+}
+
 function _renderMcpServer(server) {
   const runtime = server.runtime || {};
   const tools = runtime.tools || [];
@@ -89,12 +115,68 @@ function _renderMcpServer(server) {
   }, {})).map(([prefix, entries]) => `<div style="margin-top:9px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong>${entries.map(tool => `<label class="checkbox-row" style="margin-top:5px"><input type="checkbox" data-mcp-server="${escapeHtml(server.name)}" value="${escapeHtml(tool.name)}" ${allow.has(tool.name) ? 'checked' : ''}><span><code>${escapeHtml(tool.name)}</code>${tool.description ? ` — ${escapeHtml(tool.description)}` : ''}<small id="mcp-call-${escapeHtml(server.name)}-${escapeHtml(tool.name)}" style="display:block;color:var(--muted)">调用记录加载中…</small></span></label>`).join('')}</div>`).join('');
   const exposureWarn = exposedCount > 20 ? `<p style="font-size:12px;color:var(--danger);margin:8px 0">⚠ 当前会暴露 ${exposedCount} 个工具，超过单次暴露 ≤20 的安全红线；请勾选最小白名单。</p>` : '';
   const actionArgs = escapeHtml(JSON.stringify([server.name]));
+  const collapsed = _mcpCollapsedServers.has(server.name);
+  const collapseArgs = escapeHtml(JSON.stringify([server.name]));
   const saveLabel = escapeHtml(t('mcp.save_server', '保存 server 设置'));
   const deleteLabel = escapeHtml(t('mcp.delete_server', '删除 server'));
   const proxyControl = server.is_local_url
     ? `<span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.proxy_direct', '本地地址：始终直连'))}</span>`
     : `<label class="checkbox-row" style="margin-top:8px"><input type="checkbox" id="mcp-server-use-proxy-${escapeHtml(server.name)}" ${server.use_proxy ? 'checked' : ''}><span>${escapeHtml(t('mcp.proxy_label', '远程 MCP 使用全局代理'))}</span></label>`;
-  return `<section class="card" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><h3>${escapeHtml(server.name)} ${status}</h3><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">不勾选任何工具 = 保持“全部允许”的兼容语义；建议显式勾选最小白名单。工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></section>`;
+  const presets = (server.tool_presets || []).map(preset => {
+    const editArgs = escapeHtml(JSON.stringify([server.name, preset.name]));
+    return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><code>${escapeHtml(preset.name)}</code><span style="font-size:12px;color:var(--muted)">${preset.tools.length} ${escapeHtml(t('mcp.preset.tools', '个工具'))}</span><button class="btn btn-ghost btn-sm" data-action="editMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.edit', '修改'))}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.delete', '删除'))}</button></div>`;
+  }).join('');
+  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">不勾选任何工具 = 保持“全部允许”的兼容语义；建议显式勾选最小白名单。工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
+}
+
+function toggleMcpServerCollapsed(name) {
+  _mcpCollapsedServers.has(name) ? _mcpCollapsedServers.delete(name) : _mcpCollapsedServers.add(name);
+  loadMcpPage();
+}
+
+async function _saveMcpToolPresets(name, presets, active_tool_preset = undefined) {
+  const body = { tool_presets: presets };
+  if (active_tool_preset !== undefined) body.active_tool_preset = active_tool_preset;
+  await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, body);
+  await loadMcpPage();
+}
+
+async function selectMcpToolPreset(name, presetName) {
+  try { await _saveMcpToolPresets(name, undefined, presetName); toast(t('mcp.preset.selected_ok', '工具预设已切换并热重载'), 'ok'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+function _mcpPresetsFromCard(name) {
+  const card = document.getElementById(`mcp-server-enabled-${name}`)?.closest('section');
+  return JSON.parse(card?.dataset.mcpPresets || '[]');
+}
+
+async function createMcpToolPreset(name) {
+  const presetName = prompt(t('mcp.preset.name_prompt', '请输入预设名称：'))?.trim();
+  if (!presetName) return;
+  const presets = _mcpPresetsFromCard(name);
+  presets.push({ name: presetName, tools: _mcpServerTools(name) });
+  try { await _saveMcpToolPresets(name, presets); toast(t('mcp.preset.created', '工具预设已保存'), 'ok'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function editMcpToolPreset(name, oldName) {
+  const presets = _mcpPresetsFromCard(name);
+  const preset = presets.find(item => item.name === oldName);
+  if (!preset) return;
+  const newName = prompt(t('mcp.preset.rename_prompt', '修改预设名称：'), oldName)?.trim();
+  if (!newName) return;
+  preset.name = newName;
+  preset.tools = _mcpServerTools(name);
+  try { await _saveMcpToolPresets(name, presets, newName); toast(t('mcp.preset.updated', '工具预设已更新'), 'ok'); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function deleteMcpToolPreset(name, presetName) {
+  if (!confirm(t('mcp.preset.delete_confirm', '删除工具预设“{name}”？', { name: presetName }))) return;
+  const presets = _mcpPresetsFromCard(name).filter(item => item.name !== presetName);
+  try { await _saveMcpToolPresets(name, presets, ''); toast(t('mcp.preset.deleted', '工具预设已删除'), 'ok'); }
+  catch (e) { toast(e.message, 'err'); }
 }
 
 async function _loadMcpRecentCalls(servers) {

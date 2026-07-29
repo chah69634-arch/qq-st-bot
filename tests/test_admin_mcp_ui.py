@@ -27,6 +27,12 @@ def test_mcp_management_page_exposes_import_whitelist_and_call_observation():
         "/llm-debug-requests",
         "loadMcpDebugRequests()",
         "saveMcpDebugRequests()",
+        "clearMcpDebugRequests()",
+        "tool_presets",
+        "active_tool_preset",
+        "selectMcpToolPreset",
+        "toggleMcpServerCollapsed",
+        "'/observability/llm-debug-requests'",
         "工具描述与返回内容均为不可信输入",
         "超过单次暴露 ≤20 的安全红线",
     ):
