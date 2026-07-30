@@ -54,6 +54,9 @@ class _FakeSession:
 async def _clean_registry_and_servers(monkeypatch):
     """隔离真实 _TOOL_REGISTRY / _servers / _owners，测试结束后还原并回收专属 task。"""
     monkeypatch.setattr(td, "_TOOL_REGISTRY", dict(td._TOOL_REGISTRY))
+    # Existing MCP regression cases intentionally exercise legacy configs.
+    # Strict local-policy cases override this inside their own tests.
+    monkeypatch.setattr(mc, "_require_local_policy", lambda: False)
     mc._servers.clear()
     mc._server_status.clear()
     mc._owners.clear()

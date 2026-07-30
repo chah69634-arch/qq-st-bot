@@ -72,6 +72,79 @@ def _get_mcp_config() -> dict:
     return get_config().get("mcp_servers", {}) or {}
 
 
+_LOCAL_EFFECTS = frozenset({"read", "write", "actuate", "emergency"})
+
+
+def _require_local_policy() -> bool:
+    return bool(_get_mcp_config().get("require_local_policy", False))
+
+
+def _validated_local_tool_policy(server_cfg: dict) -> dict[str, dict] | None:
+    """Return normalized trusted local policy, or None for legacy operation.
+
+    MCP annotations describe a remote server's claim.  They never supply this
+    local authorization data, so strict mode deliberately validates policy
+    before any session or dynamic tool registration is created.
+    """
+    if not _require_local_policy():
+        return None
+
+    name = str(server_cfg.get("name") or "<unnamed>")
+    allow_tools = server_cfg.get("allow_tools")
+    if not isinstance(allow_tools, list) or not allow_tools:
+        raise ValueError(
+            f"MCP server '{name}' require_local_policy=true 时必须配置非空 allow_tools"
+        )
+    if not all(isinstance(tool_name, str) and tool_name for tool_name in allow_tools):
+        raise ValueError(f"MCP server '{name}' 的 allow_tools 必须全部是非空工具名")
+
+    raw_policy = server_cfg.get("tool_policy")
+    if not isinstance(raw_policy, dict):
+        raise ValueError(f"MCP server '{name}' require_local_policy=true 时必须配置 tool_policy")
+
+    normalized: dict[str, dict] = {}
+    for tool_name in allow_tools:
+        entry = raw_policy.get(tool_name)
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"MCP server '{name}' 的 allow_tools 工具 '{tool_name}' 缺少 tool_policy"
+            )
+        effect = entry.get("effect")
+        if effect not in _LOCAL_EFFECTS:
+            allowed = ", ".join(sorted(_LOCAL_EFFECTS))
+            raise ValueError(
+                f"MCP server '{name}' 工具 '{tool_name}' 的 effect 无效；仅允许 {allowed}"
+            )
+        configured_confirm = entry.get("require_confirm")
+        if configured_confirm is not None and not isinstance(configured_confirm, bool):
+            raise ValueError(
+                f"MCP server '{name}' 工具 '{tool_name}' 的 require_confirm 必须是 bool"
+            )
+        if effect == "emergency":
+            if configured_confirm is True:
+                logger.warning(
+                    "[mcp_client] MCP emergency 工具忽略 require_confirm=true: server=%s tool=%s",
+                    name, tool_name,
+                )
+            require_confirm = False
+        elif configured_confirm is not None:
+            require_confirm = configured_confirm
+        else:
+            require_confirm = effect == "actuate"
+        normalized[tool_name] = {
+            "effect": effect,
+            "require_confirm": require_confirm,
+        }
+
+    extras = sorted(set(raw_policy) - set(allow_tools))
+    if extras:
+        logger.warning(
+            "[mcp_client] MCP tool_policy 含未白名单工具，已忽略: server=%s tools=%s",
+            name, extras,
+        )
+    return normalized
+
+
 def _expand_headers(raw_headers: object) -> dict[str, str] | None:
     """展开 HTTP MCP headers 中的 ${ENV_VAR}，缺失变量 fail-closed。"""
     if raw_headers is None:
@@ -392,6 +465,16 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
     from mcp import ClientSession
     from core.tool_dispatcher import _TOOL_REGISTRY
 
+    try:
+        local_policy = _validated_local_tool_policy(server_cfg)
+    except Exception as exc:
+        _record_init(name, ok=False, error=str(exc))
+        raise RuntimeError(f"MCP server '{name}' 初始化失败: {exc}") from exc
+    if local_policy is None:
+        logger.warning(
+            "[mcp_client] MCP server 正运行于 legacy unclassified policy: server=%s",
+            name,
+        )
     stack = AsyncExitStack()
     try:
         read, write = await _open_transport(stack, server_cfg)
@@ -425,18 +508,39 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
         if reg_name in _TOOL_REGISTRY:
             logger.warning("[mcp_client] 工具名与已注册工具冲突，MCP 侧让位: %s", reg_name)
             continue
+        claimed_read_only = _tool_is_read_only(tool)
+        if local_policy is None:
+            # Legacy keeps the old no-confirm behavior.  The conservative
+            # write label is explicitly marked unclassified; it is never
+            # inferred from a remote tool name or annotation.
+            effect = "write"
+            require_confirm = False
+        else:
+            policy = local_policy[tool.name]
+            effect = policy["effect"]
+            require_confirm = policy["require_confirm"]
+        if claimed_read_only and effect != "read":
+            logger.warning(
+                "[mcp_client] MCP readOnlyHint 与本地 effect 冲突，本地策略优先: "
+                "server=%s tool=%s effect=%s",
+                name, tool.name, effect,
+            )
         _TOOL_REGISTRY[reg_name] = {
             "func": _make_tool_func(name, tool.name, timeout_s),
             "description": tool.description or "",
-            "dangerous": False,
+            "dangerous": require_confirm,
             "category": "mcp",
             "parameters": tool.inputSchema or {"type": "object", "properties": {}},
             "mcp_server": name,
             "mcp_tool": tool.name,
+            "effect": effect,
+            "require_confirm": require_confirm,
+            "mcp_claimed_read_only": claimed_read_only,
+            "mcp_policy_legacy": local_policy is None,
             # MCP annotations are optional.  Keep the read-only declaration so
             # the tool-loop can safely point models at server-provided docs /
             # inspection tools without guessing from a tool's name.
-            "mcp_read_only": _tool_is_read_only(tool),
+            "mcp_read_only": claimed_read_only,
         }
         handle.tool_names.append(reg_name)
 

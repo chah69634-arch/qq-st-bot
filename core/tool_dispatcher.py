@@ -1099,12 +1099,21 @@ _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
 })
 
 
+def get_tool_effect(tool_name: str) -> str:
+    """Return an explicitly registered external effect, if this tool has one."""
+    effect = _TOOL_REGISTRY.get(tool_name, {}).get("effect")
+    return effect if effect in {"read", "write", "actuate", "emergency"} else ""
+
+
 def is_side_effect_tool(tool_name: str) -> bool:
     """返回该工具是否有副作用（会写状态或向外部发动作）。
 
     优先复用 registry 中的 dangerous=True 标记，
     再对照 _SIDE_EFFECT_TOOLS 白名单兜底。
     """
+    effect = get_tool_effect(tool_name)
+    if effect:
+        return effect != "read"
     spec = _TOOL_REGISTRY.get(tool_name, {})
     if spec.get("dangerous", False):
         return True
@@ -1523,7 +1532,9 @@ async def execute(
             return _msg, None
 
     # 高危工具确认机制
-    if tool_info["dangerous"]:
+    # emergency MCP actions deliberately bypass the existing confirmation
+    # state machine; every other tool preserves its current dangerous gate.
+    if tool_info["dangerous"] and get_tool_effect(tool_name) != "emergency":
         if session_state.status != session_state.WAITING_CONFIRM:
             _ask = _build_confirm_ask(tool_name, tool_args)
             _trace("pending_confirm", _ask)
