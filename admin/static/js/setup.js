@@ -438,10 +438,12 @@ function toggleNavGroup(key){
 }
 function restoreNavGroups(){
   const st=JSON.parse(localStorage.getItem('navGroupsCollapsed')||'{}');
-  for(const key of ['create','ops','state','observe']){
+  const groups = document.querySelectorAll('[id^="navgroup-"]');
+  for(const group of groups){
+    const key = group.id.slice('navgroup-'.length);
     if(st[key]){
-      const g=document.getElementById('navgroup-'+key), c=document.getElementById('caret-'+key);
-      if(g) g.style.display='none';
+      const c=document.getElementById('caret-'+key);
+      group.style.display='none';
       if(c) c.textContent='▸';
     }
   }
