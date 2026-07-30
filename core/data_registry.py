@@ -48,7 +48,6 @@ REGISTRY: dict[str, PathMeta] = {
     "scheduler_cooldowns":    PathMeta("canonical", "shared",          "global",        "ignore"),
     "layout_version":         PathMeta("canonical", "shared",          "global",        "ignore"),
     "scheduler_user_state":   PathMeta("runtime",   "shared",          "global",        "ignore"),
-    "proactive_recent":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "proactive_ledger":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "wake_delivery_ledger":   PathMeta("canonical", "shared",          "per_user",      "ignore"),
     "wake_bridge_root":       PathMeta("canonical", "shared",          "global",        "ignore"),

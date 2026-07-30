@@ -34,7 +34,6 @@ _COOLDOWNS: dict[str, int] = {
     "diary_inject":          6 * 3600,   # 日记注入：6小时
     "daily_journal":         1 * 3600,   # 每日手账：1小时冷却（深夜触发）
     "diary_share_reminder":  8 * 3600,   # 日记分享提醒：8小时
-    "activity_remind":      20 * 3600,   # 运动提醒：20小时
     "topic_followup":       24 * 3600,   # 未完结话题追问：24小时
     "birthday_midnight": 365 * 24 * 3600,
     "birthday_eve":        20 * 3600,

@@ -59,6 +59,8 @@ def test_scheduler_persistence_rebinds_after_import(monkeypatch, tmp_path):
     assert _contains(sandbox_root, "u1")
     assert _contains(sandbox_root, "owner1")
     assert _contains(sandbox_root, "test_char")
+    assert not (sandbox_root / "runtime" / "proactive_recent.json").exists()
+    assert not (sandbox_root / "runtime" / "proactive_recent.json.bak").exists()
     assert _manifest(actual_data) == actual_before
 
     monkeypatch.setattr(sandbox_mod, "_instance", _paths_at(next_sandbox_root, mode="test"))
@@ -68,4 +70,6 @@ def test_scheduler_persistence_rebinds_after_import(monkeypatch, tmp_path):
 
     assert not _contains(sandbox_root, "second_sandbox")
     assert _contains(next_sandbox_root, "second_sandbox")
+    assert not (next_sandbox_root / "runtime" / "proactive_recent.json").exists()
+    assert not (next_sandbox_root / "runtime" / "proactive_recent.json.bak").exists()
     assert _manifest(actual_data) == actual_before

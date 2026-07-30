@@ -323,9 +323,6 @@ class DataPaths:
     def scheduler_user_state(self) -> Path:
         return self._p("runtime", "scheduler_user_state.json")
 
-    def proactive_recent(self) -> Path:
-        return self._p("runtime", "proactive_recent.json")
-
     def proactive_ledger(self) -> Path:
         return self._p("runtime", "proactive_ledger.json")
 

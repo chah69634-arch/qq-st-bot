@@ -6,12 +6,13 @@
     / `desktop_wake` Path B / `manual_trigger` / watch emergency）调用 `record_send()` 记账。
 
 接管原先分散在 `loop.py`（`_next_proactive_ts` 全局间隔 + jitter 一次性采样，A2）和
-`execution.py`（`_append_proactive_recent` 承接感 gist）里的状态，新增当日发送预算
+执行出口里的状态，新增当日发送预算
 （`scheduler.max_daily_proactive`，默认 8，emergency 豁免但仍记账）。
 
 RC5 修复：此前 `_mark_global_proactive()` 只在 `execution.execute_prompt()` 成功后调用，
 sensor_aware / desktop_wake Path B / manual_trigger 等出口完全不记账，导致 gating 看到的
 "上次主动时间" 是残缺的。这里把所有已知发言出口统一收口到同一账本。
+这是唯一的主动发言运行时账本。
 """
 
 from __future__ import annotations

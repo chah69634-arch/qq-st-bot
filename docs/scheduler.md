@@ -119,8 +119,7 @@ can_send(trigger_name, *, priority) -> (bool, reason)
     # 检查 next_allowed_ts（A2：一次性 jitter 采样，只增不减）+ 当日预算
     # priority="emergency" 恒 True（间隔/预算均豁免），但仍需 record_send 记账
 record_send(trigger_name, *, channel, gist) -> None
-    # 写 next_allowed_ts、当日计数、最近 3 条 gist（B3 承接感，接管旧
-    # _append_proactive_recent / proactive_recent.json）
+    # 写 next_allowed_ts、当日计数、最近 3 条 gist（B3 承接感）
 continuity_hint() -> str
     # 读最近一条 gist，生成"别重复上次话题"软提示；fail-open
 snapshot() -> dict
@@ -667,7 +666,6 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 | `spontaneous_recall` | 4h | 低 | time_based | 主动回忆触发 |
 | `dlq_monitor` | 24h | 低 | time_based | 扫 DLQ 目录，文件数 > 0 时 log warning；R8-A：legacy task 超 30 天自动归档到 `expired/` |
 | `log_maintenance` | 24h | 维护 | loop.py 内联 | 清理 event_log、done reminders、dream archive、inbox/image cache，并压缩 observations |
-| `activity_remind` | 20h | 低 | — | 仅预留冷却位，尚无对应实现 |
 | `diary_reminder` | 20h | 低 | diary | 提醒用户写日记；冷启动门控见下 |
 | `diary_inject` | 6h | 低 | diary | 日记上下文注入 |
 | `diary_share_reminder` | 8h | 低 | diary | 很久没看到日记时提一句；冷启动门控见下 |
@@ -701,7 +699,6 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 | `presence_nag` | 2h | 低 | presence_nag | 高活跃配置 + 60min 无互动 + 负面情绪时，下发可强制全关的桌面存在感弹窗 |
 | `dream_exit` | 1h | 普通 | dream_exit | 出梦后由 dream_state.char_id 对应角色主动开口；QUIET-only、一梦一次；无 afterglow 时按有限时段降级为中性问候 |
 | `letter_writer` | 7天 | 低 | letter_writer | 梦境、久未对话、强记忆、纪念日前夕或 hidden state 溢出时，经质量与相似度门控后发送真实邮件 |
-| ~~`sleep_report`~~ | 20h | 低 | watch | 睡眠报告（未实现，已移除冷却位） |
 | reminders（备忘录） | 无冷却 | 低 | loop.py内联 | 到点即发，发完标记完成 |
 
 ---
@@ -749,6 +746,19 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 含 `next_allowed_ts`（A2 一次性 jitter 采样结果）、`daily_count`/`daily_logical_day`
 （当日发送预算计数）、`recent`（最近 3 条发送 gist，B3 承接感）。惰性加载，进程内首次
 调用 `can_send()`/`record_send()` 时读一次磁盘。
+
+`proactive_ledger.json` 是唯一的主动发言运行时账本。旧的
+`proactive_recent.json` 不属于当前运行时协议，scheduler 不会读取或创建它，也不会在
+启动时自动删除既有用户文件。
+
+### 已废弃状态文件的人工清理
+
+升级到不含 `proactive_recent` 读写者的版本后，若要移除旧数据，只能在后端服务已停止时
+执行。先再次运行全仓静态搜索确认当前版本没有生产读写者，并备份当前遗留位置的两个明确
+文件：`data/runtime/proactive_recent.json` 与
+`data/runtime/proactive_recent.json.bak`。确认备份可用后，才可以用 `Remove-Item -LiteralPath`
+逐一删除这两个文件；不要使用通配符，也不要删除 `proactive_ledger.json`、
+`scheduler_user_state.json`、`scheduler_cooldowns.json` 或任何其他 `.bak` 文件。
 
 **A4 失败退避**（内存态，不持久化）：`core/scheduler/loop.py` 的 `_attempt_backoff_secs`
 /`_attempt_cooldown_until` 记录 `sent=False` 后的指数退避窗口（首次 15min，翻倍，封顶

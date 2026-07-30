@@ -471,7 +471,7 @@ mobile 队列，后台也就没有横幅可弹。
 | sleep_end 没传 trigger_name 污染 user 行 | 用 `WATCH` source + `trigger_name="sleep_end"` 修正 |
 | garden 事件冷却名挂着但未节流 | 列入开放问题 #2 等决议 |
 
-codex 报告里维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / activity_switch / dnd / sleep_report / activity_remind）**不在本 Phase 1 范围**，因为它们不是 assistant turn。
+codex 报告里维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / activity_switch / dnd）**不在本 Phase 1 范围**，因为它们不是 assistant turn。
 
 ---
 
