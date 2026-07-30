@@ -23,6 +23,7 @@ from core.safe_write import safe_write_json, safe_write_text
 from core.sandbox import get_paths
 
 from core.activity.reading_session import ReadingSession
+from core.activity.store import ActivityPersistenceError
 
 logger = logging.getLogger(__name__)
 
@@ -42,20 +43,27 @@ def _pages_dir(char_id: str, uid: str, session_id: str) -> Path:
 # ── 写操作 ─────────────────────────────────────────────────────────────────────
 
 def save_session(session: ReadingSession) -> None:
-    """原子写入 session metadata（不含页面正文）。"""
+    """原子写入 session metadata（不含页面正文），失败时抛出明确错误。"""
     p = _session_dir(session.char_id, session.uid, session.session_id) / "metadata.json"
     ok = safe_write_json(p, session.to_dict())
     if not ok:
         logger.error("[activity_store] 保存 metadata 失败: %s", session.session_id)
+        raise ActivityPersistenceError("Reading session metadata persistence failed")
 
 
 def save_pages(char_id: str, uid: str, session_id: str, pages: list[str]) -> None:
-    """逐页保存文本，pages[i] 是第 i+1 页（1-indexed）。"""
+    """逐页保存文本，任一页失败时抛出明确错误。"""
     d = _pages_dir(char_id, uid, session_id)
-    d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.error("[activity_store] 创建 pages 目录失败: %s", session_id)
+        raise ActivityPersistenceError("Reading page persistence failed") from exc
     for i, text in enumerate(pages):
         page_no = i + 1
-        safe_write_text(d / f"{page_no}.txt", text)
+        if not safe_write_text(d / f"{page_no}.txt", text):
+            logger.error("[activity_store] 保存 page 失败: session=%s page=%d", session_id, page_no)
+            raise ActivityPersistenceError("Reading page persistence failed")
 
 
 # ── 读操作 ─────────────────────────────────────────────────────────────────────

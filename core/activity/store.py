@@ -29,6 +29,10 @@ from core.activity.types import ALLOWED_ACTIVITY_TYPES
 logger = logging.getLogger(__name__)
 
 
+class ActivityPersistenceError(RuntimeError):
+    """Raised when an Activity state change could not be durably persisted."""
+
+
 # ── 验证 ──────────────────────────────────────────────────────────────────────
 
 def _validate_activity_type(activity_type: str) -> None:
@@ -50,11 +54,12 @@ def _session_path(char_id: str, uid: str, activity_type: str, session_id: str) -
 # ── 基础读写 ──────────────────────────────────────────────────────────────────
 
 def save_session(session: ActivitySession) -> None:
-    """原子写入 session.json。"""
+    """原子写入 session.json，失败时拒绝向调用方伪装成功。"""
     p = _session_path(session.char_id, session.uid, session.activity_type, session.session_id)
     ok = safe_write_json(p, session.to_dict())
     if not ok:
         logger.error("[activity_store] save failed: %s", session.session_id)
+        raise ActivityPersistenceError("Activity session persistence failed")
 
 
 def load_session(

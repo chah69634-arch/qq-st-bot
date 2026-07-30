@@ -1,5 +1,21 @@
 # 一起看书 — Reading Activity (P0)
 
+## P0 hardening
+
+Reading remains an independent `ReadingSession` and store. Starting either a
+file or a library session first closes and persists any active session for the
+same `(uid, char_id)`; a failed close prevents the replacement from being
+created. Metadata or page write failures fail the request, and partially
+created new session directories are best-effort removed.
+
+The ordinary page, turn-page, close, and chat API paths load sessions by the
+exact `(uid, char_id, session_id)` tuple. `uid` is optional for compatibility
+and defaults to the configured owner, so normal desktop requests do not scan
+other users' directories.
+
+Reading chat and close requests use the desktop Activity long-request client,
+because their backend work can include LLM generation or summary reflow.
+
 ## 定位
 
 **"一起看书"是 Reality-side Activity，不是 Trigger/Stimulus。**

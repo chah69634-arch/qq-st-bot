@@ -1,5 +1,14 @@
 # Gomoku Activity (P0 + P1 + P3-pending)
 
+## P0 hardening
+
+In `character_ai` games, the ordinary move endpoint is restricted to the user
+turn. It rejects both `pending_ai_turn=true` and a state whose `current_turn`
+is the AI player; only `/ai_move` can place the AI stone. Human-vs-human games
+retain normal alternating moves. Companion chat, proactive comment, and close
+use the desktop Activity long-request timeout; board, state, and move requests
+retain the normal timeout.
+
 五子棋活动模式，Reality-side Activity。
 
 ## 设计原则

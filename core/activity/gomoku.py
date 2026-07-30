@@ -187,6 +187,14 @@ def make_move(
     state["opponent"] = _normalize_opponent(state.get("opponent", "human"))
     if state.get("status") != "active":
         raise ValueError(f"棋局已结束（{state.get('status')}），不能继续落子")
+    if (
+        state.get("opponent") == "character_ai"
+        and (
+            state.get("pending_ai_turn")
+            or state.get("current_turn") == state.get("ai_player", "white")
+        )
+    ):
+        raise ValueError("当前是 AI 回合，请调用 ai_move")
 
     size = state["board_size"]
     if not (0 <= x < size and 0 <= y < size):

@@ -8,6 +8,14 @@
 
 `ActivitySession` 是 **reality-side session**，不是 trigger，不是 tool result，不进入普通短期记忆。
 
+## P0 persistence convention
+
+Gomoku and Chess continue to use the shared `ActivitySession` lifecycle, while
+Reading keeps its independent `ReadingSession` store. This is a shared behavior
+convention, not a plugin interface or a data-layout migration. A create, state
+update, or close response is returned only after the corresponding session
+write succeeds; failed writes surface as HTTP 500 without exposing local paths.
+
 它用于承载用户与角色之间的结构化共同活动（reading / gomoku / chess / dream_seed），生命周期由用户显式 API 调用控制：
 
 ```

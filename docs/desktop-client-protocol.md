@@ -1,6 +1,7 @@
 # Desktop client protocol
 
 PresenceKit-desktop 与本后端当前正式使用的桌面协议是 **v0.1（legacy 冻结版）**。
+MCP is backend-only and is not part of the desktop/mobile client transport contract.
 
 协议正文的唯一权威位于 PresenceKit-desktop 仓库：
 

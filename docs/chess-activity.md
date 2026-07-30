@@ -1,5 +1,14 @@
 # Chess Activity (P0)
 
+## P0 hardening
+
+In `character_ai` games, ordinary `apply_move()` accepts only the user turn.
+It rejects both a pending AI turn and any board position whose turn belongs to
+the configured AI player; `/ai_move` remains the only AI-move path. Human mode
+continues to allow the side to move. Companion chat, proactive comment, and
+close use the desktop Activity long-request timeout, while state, legal-move,
+and move calls keep the normal timeout.
+
 国际象棋对局作为 ActivitySession 实现，与 Reading / Gomoku 并列为 P0 活动类型。
 
 ---

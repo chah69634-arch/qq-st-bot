@@ -28,6 +28,7 @@ from core.activity import activity_summary as _activity_summary
 from core.activity import chess as chess_activity
 from core.activity import chess_companion
 from core.activity import store as activity_store
+from core.activity.store import ActivityPersistenceError
 from core.activity.registry import get_activity_meta as _get_activity_meta
 from core.config_loader import get_config
 from core.sandbox import get_paths as _get_paths
@@ -113,12 +114,15 @@ async def start_chess(body: StartRequest, auth=Depends(require_scopes("activity"
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    session = activity_store.create_session(
-        uid=resolved_uid,
-        char_id=char_id,
-        activity_type=_ACTIVITY_TYPE,
-        initial_state=initial_state,
-    )
+    try:
+        session = activity_store.create_session(
+            uid=resolved_uid,
+            char_id=char_id,
+            activity_type=_ACTIVITY_TYPE,
+            initial_state=initial_state,
+        )
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     logger.info(
         "[chess] start: uid=%s char=%s session=%s fen=%r",
         resolved_uid, char_id, session.session_id, initial_state["fen"],
@@ -178,13 +182,16 @@ async def make_move(body: MoveRequest, auth=Depends(require_scopes("activity")))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    updated = activity_store.update_state(
-        char_id=char_id,
-        uid=resolved_uid,
-        activity_type=_ACTIVITY_TYPE,
-        session_id=body.session_id,
-        state=new_state,
-    )
+    try:
+        updated = activity_store.update_state(
+            char_id=char_id,
+            uid=resolved_uid,
+            activity_type=_ACTIVITY_TYPE,
+            session_id=body.session_id,
+            state=new_state,
+        )
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     if updated is None:
         raise HTTPException(status_code=500, detail="state 保存失败")
 
@@ -242,12 +249,15 @@ async def close_chess(body: CloseRequest, auth=Depends(require_scopes("activity"
             "closed_at": session.updated_at,
         }
 
-    closed = activity_store.close_session(
-        char_id=char_id,
-        uid=resolved_uid,
-        activity_type=_ACTIVITY_TYPE,
-        session_id=body.session_id,
-    )
+    try:
+        closed = activity_store.close_session(
+            char_id=char_id,
+            uid=resolved_uid,
+            activity_type=_ACTIVITY_TYPE,
+            session_id=body.session_id,
+        )
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     logger.info("[chess] close: session=%s", body.session_id)
     if closed:
         threshold = _get_activity_meta("chess").memory_policy.summary_threshold
@@ -293,13 +303,16 @@ async def chess_ai_move(body: AiMoveRequest, auth=Depends(require_scopes("activi
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    updated = activity_store.update_state(
-        char_id=char_id,
-        uid=resolved_uid,
-        activity_type=_ACTIVITY_TYPE,
-        session_id=body.session_id,
-        state=new_state,
-    )
+    try:
+        updated = activity_store.update_state(
+            char_id=char_id,
+            uid=resolved_uid,
+            activity_type=_ACTIVITY_TYPE,
+            session_id=body.session_id,
+            state=new_state,
+        )
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     if updated is None:
         raise HTTPException(status_code=500, detail="state 保存失败")
 

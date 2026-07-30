@@ -76,6 +76,12 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
             "activity_reading_turn_page",
             "activity_reading_close",
             "activity_reading_chat",
+            "activity_reading_library",
+            "activity_reading_add_book",
+            "activity_reading_start_from_library",
+            "activity_reading_delete_book",
+            "activity_reading_rename_book",
+            "activity_reading_categorize_book",
         ),
         memory_policy=MemoryPolicy(
             transcript="activity_local",
@@ -101,6 +107,7 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
             "activity_gomoku_close",
             "activity_gomoku_chat",
             "activity_gomoku_ai_move",
+            "activity_gomoku_comment",
         ),
         memory_policy=MemoryPolicy(
             transcript="activity_local",
@@ -126,6 +133,8 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
             "activity_chess_legal_moves",
             "activity_chess_close",
             "activity_chess_chat",
+            "activity_chess_ai_move",
+            "activity_chess_comment",
         ),
         memory_policy=MemoryPolicy(
             transcript="activity_local",

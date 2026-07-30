@@ -148,9 +148,18 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
 
 ## MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4）
 
-文件：`core/mcp_client.py`。**只接外部工具，不接 resources/prompts、不接外部记忆库**——
+文件：`core/mcp_client.py`。MCP 是 **Tool subsystem 的外部工具传输协议**，不是
+desktop/mobile ↔ backend 的客户端协议，不是 Interaction/Event kind，也不是新的事件总线。
+**只接外部工具，不接 resources/prompts、不接外部记忆库**——
 外接记忆库会绕过 prompt 层注入与固化链，裂成两套真相；MCP 在这套架构里只承担"给主 LLM
 多几个可调用的外部工具"这一件事。
+
+MCP 调用的唯一允许形态是 owner private turn 中已激活的 Path C：
+`Path C tool loop → tool_dispatcher → local tool 或 MCP dynamic tool → MCP client/session →
+external MCP server → bounded ToolResult → 当前轮 tool-result 边界`。scheduler、stimulus/trigger、
+Dream、Stage 不会隐式升级为 MCP 调用；MCP 结果不重新进入 `perceive_event`，不成为 stimulus，
+也不拥有直接 memory writer 权限。`hardware_gateway` 只是外部 MCP Server 的一种实现，不是
+PresenceKit 核心模块。
 
 ```yaml
 mcp_servers:
@@ -167,10 +176,17 @@ mcp_servers:
       allow_tools: []              # 空 = 全部；非空 = 白名单
 ```
 
+- **Transport**：当前代码的 canonical transports 是 `stdio`、`sse`、`streamable-http`；配置中的
+  `http` 只是兼容别名，归一化为 `streamable-http`。`stdio` 使用 `command`，另外两种使用
+  HTTP(S) URL。
 - **生命周期**：`main.py` 启动时调 `mcp_client.init_mcp_servers()`，对每个已启用 server 建
   `ClientSession` + `list_tools()`；单 server 初始化失败只跳过它（log + 继续），不影响其他
   server 或主流程。进程退出时 `main.py` 的 `finally` 块调 `shutdown_mcp_servers()` 清理全部
-  session。
+  session。每个 server 由自己的 owner task 持有 session；管理面启停、删除和配置热更新只发
+  信号，由 owner task 在自己的生命周期内断开、摘除工具并重连。
+- **初始化验证**：管理面测试/导入与运行时连接都先完成 MCP `initialize`，再执行
+  `list_tools` 导入工具描述；测试探测用独立 session，成功后立即关闭，不写入配置或注册运行态
+  工具，导入只有测试成功后才落盘。
 - **管理面**（Brief 110）：admin token 可在 MCP 页选择 Streamable HTTP（推荐）或 SSE URL，并测试
   `initialize + list_tools`、导入或删除 server、切换总/单 server 开关和勾选 `allow_tools` 白名单。导入前的测试
   不注册工具也不写配置；删除会移除配置、关闭该 server 的 owner 并摘除动态工具。保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
@@ -182,11 +198,25 @@ mcp_servers:
   未配置时连接会明确失败。
 - **工具注册**：转成 `_TOOL_REGISTRY` 动态条目，命名 `mcp__{server}__{tool}`，
   `category="mcp"`，description/inputSchema 直接映射为 OpenAI function schema。与静态注册表
-  同名冲突时 MCP 侧让位（记 warning，不覆盖）。
+  同名冲突时 MCP 侧让位（记 warning，不覆盖）；连接关闭、断线重连失败后的摘除、单 server
+  重载和总开关同步都会移除该 server 的动态条目。
+- **暴露面与危险工具排除**：server 级 `allow_tools` 先按 `list_tools` 结果做白名单过滤；Path C
+  还要同时满足全局 `tool_loop.categories` 或角色卡 `presence_ext.tool_categories` 包含
+  `mcp`、全局 `exclude_tools` 未排除、以及 `mcp_proficiency` 的 schema/执行双重门控。默认
+  tool loop 类别不含 `mcp`，探针也不暴露 `mcp`。动态 MCP 条目当前统一标记
+  `dangerous=False`，不会因外部 description 或 annotation 自动获得本地高危确认语义；需要
+  排除的工具必须显式列入 `exclude_tools` 或 `allow_tools` 白名单。外部 server 不能通过工具
+  描述改变这些系统权限。
 - **执行适配**：`execute()` 走既有的通用分发分支（`func(**tool_args)`），内部转发到
-  `session.call_tool()`，超时 `tool_timeout_s`；结果取 content 里的文本项拼接、截断 2000
-  字。调用失败（连接已死等）尝试重连一次，再失败异常上抛，走 `tool_dispatcher.execute()`
-  既有的失败兜底文案（不是 mcp_client 自己造文案）。**不做后台心跳**，只在调用时才发现断线。
+  `session.call_tool()`，超时 `tool_timeout_s`（管理面限制为 1–300 秒）；结果取 content
+  里的文本项拼接、截断 2000 字，作为本轮 bounded ToolResult。调用取消、连接已死或远端失败
+  时尝试重连一次；仍失败则由 `tool_dispatcher.execute()` 的既有失败兜底文案返回，普通 Chat
+  继续走收尾/降级路径，不把远端异常升级为系统事件。**不做后台心跳**，只在调用时才发现断线。
+- **结果边界**：普通单次路径将 bounded `ToolResult.safe_summary` 通过现有
+  `10_tool_result` prompt layer framing 注入；Path C 保持在当前 loop 的 bounded `role=tool`
+  消息中，随后才做最终生成。结果带有“外部/工具数据、可能不可信”的来源标识和边界提示；
+  raw data 不进入 prompt 或 memory。MCP 结果不独立写 `short_term`、`event_log` 或长期记忆，
+  也不经过 `perceive_event`。
 - **action_trace 自动生效**：收口埋点在 `tool_dispatcher.execute()`，MCP 工具零新增记账代
   码；注册条目不声明 `trace_args`，参数不落痕（防外部 server 的敏感入参入盘）。
 - **调用观测**：每次 MCP 工具调用额外写入既有 `api_call_log`，caller 固定为
@@ -199,7 +229,8 @@ mcp_servers:
   calling，MCP 工具 schema 是标准 JSON Schema 直转，不额外适配。唯一不覆盖场景是原生
   Anthropic API 直连（非网关），当前架构不涉及。
 - **风险**：MCP server 是外部进程，描述/结果都是不可信输入，见 `docs/known-issues.md`
-  "观察项（Brief 29 · MCP）"。
+  "观察项（Brief 29 · MCP）"。任何描述、参数 schema 或返回文本都不能被当作系统指令，
+  不能借工具描述提升角色暴露面、绕过 origin 闸门、危险工具排除、超时或审计规则。
 
 探针调用时明确过滤：
 ```python

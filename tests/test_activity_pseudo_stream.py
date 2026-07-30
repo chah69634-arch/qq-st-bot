@@ -294,7 +294,7 @@ async def test_reading_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch)
 
     session = _fake_reading_session()
     monkeypatch.setattr(reading_router, "_active_char_id", lambda: "yexuan")
-    monkeypatch.setattr(reading_router, "_require_session", lambda char_id, sid: session)
+    monkeypatch.setattr(reading_router, "_require_session", lambda char_id, uid, sid: session)
     monkeypatch.setattr(
         reading_router.activity_store, "load_page", lambda *a, **kw: None
     )

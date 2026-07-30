@@ -106,6 +106,17 @@ Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排�
 
 **Trigger 不写 short_term**：stimulus 事件触发的助手回复通过正常 `record_assistant_turn` 写 short_term（`bypass_gate=True`），但 stimulus 事件本身不写任何 short_term 记录。
 
+### 3.5 MCP 边界
+
+- **MCP invocation is not an event kind.** 不创建 `kind=mcp`，MCP 工具调用生命周期继续属于
+  tool subsystem。
+- MCP results never re-enter as stimulus：结果只作为当前轮 bounded ToolResult/tool message
+  回注，不重新经过 `perceive_event`，不写入该 gate 的 audit，也不成为新的现实刺激。
+- MCP does not turn `perceive_event` into a dispatcher。`perceive_event` 仍只是 reality-side
+  low-trust stimulus gate，不负责按 MCP 或其他 kind 路由。
+- 这不构成 v1 `EventEnvelope`、统一 dispatcher 或 EventBus 承诺；MCP 的 session、动态工具
+  注册/摘除和调用取消仍由现有 tool subsystem 管理。
+
 ---
 
 ## 四、事件流图（v0.1 简化）

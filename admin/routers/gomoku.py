@@ -29,6 +29,7 @@ from core.activity import activity_summary as _activity_summary
 from core.activity import gomoku as gomoku_engine
 from core.activity import gomoku_companion
 from core.activity import store as gomoku_store
+from core.activity.store import ActivityPersistenceError
 from core.config_loader import get_config
 from core.sandbox import get_paths as _get_paths
 
@@ -96,6 +97,8 @@ async def start_gomoku(body: StartRequest, auth=Depends(require_scopes("activity
         session = gomoku_engine.start_game(
             uid, char_id, body.board_size, body.opponent, body.ai_style, body.ai_response_mode
         )
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     state = session.state
@@ -146,6 +149,8 @@ async def gomoku_move(body: MoveRequest, auth=Depends(require_scopes("activity")
     _validate_session_id(body.session_id)
     try:
         result = gomoku_engine.make_move(uid, char_id, body.session_id, body.x, body.y)
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return result
@@ -161,7 +166,10 @@ async def close_gomoku(body: CloseRequest, auth=Depends(require_scopes("activity
     char_id = _active_char_id()
     uid = body.uid.strip() or _default_uid()
     _validate_session_id(body.session_id)
-    session, summary = gomoku_engine.close_game(uid, char_id, body.session_id)
+    try:
+        session, summary = gomoku_engine.close_game(uid, char_id, body.session_id)
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     if session is None:
         raise HTTPException(status_code=404, detail=f"session {body.session_id!r} 不存在")
     if summary is not None:
@@ -206,6 +214,8 @@ async def gomoku_ai_move(body: AiMoveRequest, auth=Depends(require_scopes("activ
 
     try:
         result = gomoku_engine.apply_ai_move(uid, char_id, body.session_id, style_tilt)
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="棋局 session 保存失败") from exc
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 

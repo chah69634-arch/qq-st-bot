@@ -102,6 +102,16 @@ def apply_move(state: dict, move_str: str) -> dict:
         raise ValueError(f"棋局已结束，无法落子: status={state.get('status')!r}")
 
     board = chess.Board(state["fen"])
+    opponent = _normalize_opponent(state.get("opponent", "human"))
+    ai_player = state.get("ai_player")
+    if (
+        opponent == "character_ai"
+        and (
+            state.get("pending_ai_turn")
+            or (ai_player is not None and _turn_str(board) == ai_player)
+        )
+    ):
+        raise ValueError("当前是 AI 回合，请调用 ai_move")
 
     move: Optional[chess.Move] = None
     uci_candidate: Optional[chess.Move] = None
@@ -147,8 +157,6 @@ def apply_move(state: dict, move_str: str) -> dict:
     result, termination = _check_game_over(board)
     game_status = "completed" if result is not None else "active"
 
-    opponent = _normalize_opponent(state.get("opponent", "human"))
-    ai_player = state.get("ai_player")
     ai_style = state.get("ai_style", "balanced")
 
     # If game still active and AI opponent, check if it's now AI's turn.

@@ -131,6 +131,38 @@ get_tags()（build_prompt 内计算；部分入口可显式传入复用）
   │  - 不持久化队列（进程退出丢失，有意设计）
 ```
 
+## MCP 在架构中的唯一定位
+
+MCP（Model Context Protocol）是 **Tool subsystem 的外部工具传输协议**，不是
+desktop/mobile ↔ backend 的客户端协议，也不是 Interaction/Event kind。当前真实调用链只从
+owner 的私聊回合、且在 Path C 有效时进入：
+
+```
+owner private turn
+  → Path C tool loop
+  → tool_dispatcher
+  → local tool 或 MCP dynamic tool
+  → MCP client/session
+  → external MCP server / hardware_gateway
+  → bounded ToolResult
+  → 当前轮 tool-result 边界
+       ├─ 普通单次路径：prompt layer 10_tool_result
+       └─ Path C：当前 loop 内对齐的 bounded role=tool 消息，随后才收尾生成
+```
+
+这里的 `hardware_gateway` 只是外部 MCP Server 的一种实现，不是 PresenceKit 核心内部
+模块。MCP server 的工具描述和返回结果均视为不可信外部输入；它们只能经现有工具暴露面、
+`tool_dispatcher.execute()` 的 origin/角色/白名单/安全闸门，以及当前轮 ToolResult 边界，
+不能改变系统权限。
+
+- scheduler、stimulus/trigger、Dream 和 Stage 不得隐式升级为 MCP tool call；它们继续沿各自
+  的入口与生命周期运行。MCP 调用不是新的 stimulus，也不经过 `perceive_event`。
+- MCP 不拥有直接 memory writer 权限。MCP 结果不会独立写 `short_term`、`event_log` 或长期
+  记忆；普通回合的最终 assistant turn 仍由既有 turn sink 处理，工具动作的最小审计痕迹仍由
+  既有 dispatcher 收口。
+- MCP 不是 EventBus、EventEnvelope 或 kind dispatcher 的替代物；这些统一事件设计仍属于
+  deferred scope。
+
 ---
 
 ## 探针（probe）机制

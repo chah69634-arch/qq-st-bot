@@ -228,6 +228,22 @@ def test_tauri_command_prefix_in_activity_api_ts(activity_id, activity_api_ts_te
     )
 
 
+def test_registry_includes_current_activity_command_surface():
+    """Keep the static registry aligned with the currently exposed commands."""
+    commands = {command for meta in ACTIVITY_REGISTRY for command in meta.tauri_commands}
+    assert {
+        "activity_reading_library",
+        "activity_reading_add_book",
+        "activity_reading_start_from_library",
+        "activity_reading_delete_book",
+        "activity_reading_rename_book",
+        "activity_reading_categorize_book",
+        "activity_gomoku_comment",
+        "activity_chess_ai_move",
+        "activity_chess_comment",
+    } <= commands
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # E. registry route_prefix → real FastAPI route cross-check
 #

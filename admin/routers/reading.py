@@ -38,6 +38,7 @@ from core.activity import activity_store
 from core.activity import activity_summary as _activity_summary
 from core.activity import reading_companion
 from core.activity.registry import get_activity_meta as _get_activity_meta
+from core.activity.store import ActivityPersistenceError
 from core.activity.pdf_reader import (
     PDFFileTooLarge,
     PDFOCRRequired,
@@ -89,12 +90,33 @@ def _validate_session_id(session_id: str) -> str:
     return session_id
 
 
-def _require_session(char_id: str, session_id: str) -> ReadingSession:
-    """按 session_id 查找 session，若不存在或已关闭则抛 HTTPException。"""
-    session = activity_store.load_session_by_id(char_id, session_id)
+def _require_session(char_id: str, uid: str, session_id: str) -> ReadingSession:
+    """按 char_id + uid + session_id 精确加载 session。"""
+    session = activity_store.load_session(char_id, uid, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail=f"session {session_id!r} 不存在")
     return session
+
+
+def _persist_new_session(session: ReadingSession, pages: list[str]) -> None:
+    """Close an existing active session, then durably create the replacement."""
+    existing = activity_store.find_active_session(session.char_id, session.uid)
+    if existing is not None:
+        existing.status = "closed"
+        existing.updated_at = now_iso()
+        activity_store.save_session(existing)
+
+    try:
+        activity_store.save_session(session)
+        activity_store.save_pages(session.char_id, session.uid, session.session_id, pages)
+    except ActivityPersistenceError:
+        # New sessions are disposable until every initial file is durable. The
+        # old session was intentionally left intact except for its saved close.
+        session_dir = _get_paths().reading_session_dir(
+            char_id=session.char_id, uid=session.uid, session_id=session.session_id
+        )
+        shutil.rmtree(session_dir, ignore_errors=True)
+        raise
 
 
 # ── 书库 manifest 助手 ─────────────────────────────────────────────────────────
@@ -190,8 +212,10 @@ async def start_reading(
         status="active",
     )
 
-    activity_store.save_session(session)
-    activity_store.save_pages(char_id, resolved_uid, session.session_id, pages)
+    try:
+        _persist_new_session(session, pages)
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="阅读 session 保存失败") from exc
     logger.info(
         "[reading] start: uid=%s char=%s file=%r pages=%d session=%s",
         resolved_uid, char_id, safe_name, total, session.session_id,
@@ -216,11 +240,13 @@ async def get_reading_state(
 async def get_page(
     session_id: str = Query(...),
     page: int = Query(...),
+    uid: str = Query(default=""),
     auth=Depends(require_scopes("activity")),
 ):
     char_id = _active_char_id()
+    resolved_uid = uid.strip() or _default_uid()
     _validate_session_id(session_id)
-    session = _require_session(char_id, session_id)
+    session = _require_session(char_id, resolved_uid, session_id)
     if session.status != "active":
         raise HTTPException(status_code=409, detail="session 已关闭")
     if page < 1 or page > session.total_pages:
@@ -228,7 +254,7 @@ async def get_page(
             status_code=422,
             detail=f"page {page} 超出范围 [1, {session.total_pages}]",
         )
-    text = activity_store.load_page(char_id, session.uid, session_id, page)
+    text = activity_store.load_page(char_id, resolved_uid, session_id, page)
     if text is None:
         raise HTTPException(status_code=500, detail=f"第 {page} 页文本文件缺失")
     return {
@@ -243,6 +269,7 @@ class TurnPageRequest(BaseModel):
     session_id: str
     direction: Optional[Literal["next", "prev"]] = None
     page: Optional[int] = None
+    uid: str = ""
 
 
 @router.post("/reading/turn_page", summary="翻页")
@@ -251,8 +278,9 @@ async def turn_page(
     auth=Depends(require_scopes("activity")),
 ):
     char_id = _active_char_id()
+    resolved_uid = body.uid.strip() or _default_uid()
     _validate_session_id(body.session_id)
-    session = _require_session(char_id, body.session_id)
+    session = _require_session(char_id, resolved_uid, body.session_id)
     if session.status != "active":
         raise HTTPException(status_code=409, detail="session 已关闭")
 
@@ -274,9 +302,12 @@ async def turn_page(
 
     session.current_page = target
     session.updated_at = now_iso()
-    activity_store.save_session(session)
+    try:
+        activity_store.save_session(session)
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="阅读 session 保存失败") from exc
 
-    text = activity_store.load_page(char_id, session.uid, body.session_id, target)
+    text = activity_store.load_page(char_id, resolved_uid, body.session_id, target)
     if text is None:
         raise HTTPException(status_code=500, detail=f"第 {target} 页文本文件缺失")
     return {
@@ -290,11 +321,13 @@ async def turn_page(
 class CloseRequest(BaseModel):
     session_id: str
     brief_summary: Optional[str] = None
+    uid: str = ""
 
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    uid: str = ""
 
 
 _CHAT_MAX_MESSAGE_LEN = 1000
@@ -306,8 +339,9 @@ async def close_reading(
     auth=Depends(require_scopes("activity")),
 ):
     char_id = _active_char_id()
+    resolved_uid = body.uid.strip() or _default_uid()
     _validate_session_id(body.session_id)
-    session = _require_session(char_id, body.session_id)
+    session = _require_session(char_id, resolved_uid, body.session_id)
 
     if session.status == "closed":
         return {
@@ -322,7 +356,10 @@ async def close_reading(
     now = now_iso()
     session.status = "closed"
     session.updated_at = now
-    activity_store.save_session(session)
+    try:
+        activity_store.save_session(session)
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="阅读 session 保存失败") from exc
     logger.info(
         "[reading] close: session=%s last_page=%d", body.session_id, session.current_page
     )
@@ -462,8 +499,10 @@ async def start_reading_from_library(
         status="active",
     )
 
-    activity_store.save_session(session)
-    activity_store.save_pages(char_id, resolved_uid, session.session_id, pages)
+    try:
+        _persist_new_session(session, pages)
+    except ActivityPersistenceError as exc:
+        raise HTTPException(status_code=500, detail="阅读 session 保存失败") from exc
     logger.info(
         "[reading] start_from_library: uid=%s char=%s file=%r pages=%d session=%s",
         resolved_uid, char_id, safe_name, total, session.session_id,
@@ -559,6 +598,7 @@ async def reading_chat(
     page_text 截断后注入 LLM，完整文本不进记忆。
     """
     char_id = _active_char_id()
+    resolved_uid = body.uid.strip() or _default_uid()
     _validate_session_id(body.session_id)
 
     msg = body.message.strip() if body.message else ""
@@ -570,16 +610,16 @@ async def reading_chat(
             detail=f"message 超出 {_CHAT_MAX_MESSAGE_LEN} 字限制",
         )
 
-    session = _require_session(char_id, body.session_id)
+    session = _require_session(char_id, resolved_uid, body.session_id)
     if session.status != "active":
         raise HTTPException(status_code=409, detail=f"session {body.session_id!r} 已关闭，不允许聊天")
 
     # Load current page text for grounding (may be None if missing)
-    page_text = activity_store.load_page(char_id, session.uid, body.session_id, session.current_page)
+    page_text = activity_store.load_page(char_id, resolved_uid, body.session_id, session.current_page)
 
     reply, control, grounding = await reading_companion.generate_reply(
         char_id=char_id,
-        uid=session.uid,
+        uid=resolved_uid,
         session_id=body.session_id,
         current_page=session.current_page,
         total_pages=session.total_pages,
