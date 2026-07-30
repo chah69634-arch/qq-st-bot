@@ -9,6 +9,8 @@ import logging
 import re
 import time
 from pathlib import Path
+from threading import Lock, RLock
+from typing import Callable
 
 from core.config_loader import get_config
 from core.character_name_provider import get_active_char_name
@@ -18,6 +20,22 @@ from core.memory.scope import MemoryScope, require_character_id
 from core.data_paths import DEFAULT_CHAR_ID
 
 logger = logging.getLogger(__name__)
+
+# Profile writers are synchronous and may be reached from async routes.  Keep a
+# small, per-profile lock pool so a read-modify-write transaction is serialized
+# without coupling different users or characters.
+_profile_locks: dict[tuple[str, str], RLock] = {}
+_profile_locks_guard = Lock()
+
+
+def _profile_lock(user_id: str, char_id: str) -> RLock:
+    key = (str(user_id), require_character_id(char_id))
+    with _profile_locks_guard:
+        lock = _profile_locks.get(key)
+        if lock is None:
+            lock = RLock()
+            _profile_locks[key] = lock
+        return lock
 
 # 画像字段的默认结构
 _DEFAULT_PROFILE = {
@@ -43,6 +61,38 @@ _RECENCY_WINDOW_SECONDS = 90 * 86400  # 90 天默认
 _RECENCY_WINDOW_BY_TAG: dict[str, int] = {
     "status.project": 30 * 86400,
 }
+
+_DELETED = object()
+
+
+class _ProfileDocument(dict):
+    """A loaded profile snapshot that records its top-level mutations."""
+
+    def __init__(self, initial: dict):
+        super().__init__(initial)
+        self._dirty: dict[str, object] = {}
+
+    def __setitem__(self, key: str, value: object) -> None:
+        super().__setitem__(key, value)
+        self._dirty[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        super().__delitem__(key)
+        self._dirty[key] = _DELETED
+
+    def pop(self, key: str, *default: object) -> object:
+        if key in self:
+            value = super().pop(key)
+            self._dirty[key] = _DELETED
+            return value
+        if default:
+            return default[0]
+        raise KeyError(key)
+
+    def setdefault(self, key: str, default: object = None) -> object:
+        if key not in self:
+            self[key] = default
+        return self[key]
 
 # Prompt-side profile budgets.  These intentionally protect the hot read path
 # rather than deleting or rewriting the underlying profile: older free-form
@@ -259,7 +309,7 @@ def _profile_write_path(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path
     return p
 
 
-def load(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
+def _load_unlocked(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
     """
     读取用户画像，文件不存在时返回空模板
     """
@@ -271,10 +321,20 @@ def load(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
             # 用默认模板填充缺失字段，保证结构完整
             merged = dict(_DEFAULT_PROFILE)
             merged.update(data)
-            return merged
+            return _ProfileDocument(merged)
     except Exception as e:
         log_error("user_profile.load", e)
-    return dict(_DEFAULT_PROFILE)
+    return _ProfileDocument(dict(_DEFAULT_PROFILE))
+
+
+def load(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
+    """Load a profile snapshot.
+
+    Readers intentionally do not acquire the writer lock: atomic replacement
+    means they observe either the old complete JSON document or the new one.
+    Call ``mutate`` for any read-modify-write operation.
+    """
+    return _load_unlocked(user_id, char_id=char_id)
 
 
 async def _compress_facts(facts: list) -> list:
@@ -534,19 +594,47 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
         log_error("user_profile.extract_and_update", e)
 
 
-def _save(user_id: str, profile: dict, *, char_id: str = DEFAULT_CHAR_ID):
+def _save(user_id: str, profile: dict, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
     """把画像写回磁盘"""
-    path = _profile_write_path(user_id, char_id=char_id)
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(profile, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        log_error("user_profile._save", e)
+    from core.safe_write import safe_write_text
+
+    with _profile_lock(user_id, char_id):
+        path = _profile_write_path(user_id, char_id=char_id)
+        try:
+            if isinstance(profile, _ProfileDocument):
+                latest = _load_unlocked(user_id, char_id=char_id)
+                for key, value in profile._dirty.items():
+                    if value is _DELETED:
+                        latest.pop(key, None)
+                    else:
+                        latest[key] = value
+                data = dict(latest)
+            else:
+                data = dict(profile)
+            payload = json.dumps(data, ensure_ascii=False, indent=2)
+            return safe_write_text(path, payload)
+        except Exception as e:
+            log_error("user_profile._save", e)
+            return False
 
 
 def save(user_id: str, profile: dict, *, char_id: str = DEFAULT_CHAR_ID):
     """公开接口：直接将 profile 写回磁盘（admin 覆盖编辑用）"""
     _save(user_id, profile, char_id=char_id)
+
+
+def mutate(
+    user_id: str,
+    mutation: Callable[[dict], None],
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+) -> dict:
+    """Reload, mutate, and atomically save under one profile-specific lock."""
+    with _profile_lock(user_id, char_id):
+        profile = _load_unlocked(user_id, char_id=char_id)
+        mutation(profile)
+        _save(user_id, profile, char_id=char_id)
+        return profile
 
 
 def delete_important_fact(user_id: str, index: int, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
@@ -618,7 +706,12 @@ def overwrite_important_fact(
 
 def clear(user_id: str, *, char_id: str = DEFAULT_CHAR_ID):
     """清空用户画像（admin 用）"""
-    _save(user_id, dict(_DEFAULT_PROFILE), char_id=char_id)
+    def reset_owned_fields(profile: dict) -> None:
+        for key, value in _DEFAULT_PROFILE.items():
+            profile[key] = list(value) if isinstance(value, list) else value
+        profile.pop("_pending_overrides", None)
+
+    mutate(user_id, reset_owned_fields, char_id=char_id)
 
 
 # ─── 好感度系统（已冻结） ────────────────────────────────────────────────────────────────
@@ -648,37 +741,19 @@ def get_affection(user_id: str) -> int:
 
 def add_affection(user_id: str, delta: int):
     """增减好感度，结果限制在 0-1000"""
-    read_path = _profile_read_path(user_id)
-    write_path = _profile_write_path(user_id)
-    try:
-        if read_path.exists():
-            with open(read_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            data = dict(_DEFAULT_PROFILE)
-        current = int(data.get("affection", 0))
-        data["affection"] = max(0, min(1000, current + delta))
-        with open(write_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        log_error("user_profile.add_affection", e)
+    def apply(profile: dict) -> None:
+        current = int(profile.get("affection", 0))
+        profile["affection"] = max(0, min(1000, current + delta))
+
+    mutate(user_id, apply)
 
 
 def set_affection(user_id: str, value: int):
     """直接设置好感度（管理员用）"""
-    read_path = _profile_read_path(user_id)
-    write_path = _profile_write_path(user_id)
-    try:
-        if read_path.exists():
-            with open(read_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            data = dict(_DEFAULT_PROFILE)
-        data["affection"] = max(0, min(1000, int(value)))
-        with open(write_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        log_error("user_profile.set_affection", e)
+    def apply(profile: dict) -> None:
+        profile["affection"] = max(0, min(1000, int(value)))
+
+    mutate(user_id, apply)
 
 
 def get_affection_level(user_id: str) -> dict:
@@ -701,19 +776,7 @@ def get_period_info(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
 
 def set_period_date(user_id: str, date_str: str):
     """设置上次生理期日期（格式：YYYY-MM-DD）"""
-    read_path = _profile_read_path(user_id)
-    write_path = _profile_write_path(user_id)
-    try:
-        if read_path.exists():
-            with open(read_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            data = dict(_DEFAULT_PROFILE)
-        data["last_period_date"] = date_str
-        with open(write_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        log_error("user_profile.set_period_date", e)
+    mutate(user_id, lambda profile: profile.__setitem__("last_period_date", date_str))
 
 
 class UserProfile:
