@@ -37,6 +37,7 @@ _state: dict = {
     "recent": [],  # [{"trigger_name", "gist", "ts", "channel"}], 最近 3 条
 }
 _loaded = False
+_loaded_path_token: str | None = None
 
 
 def _cfg() -> dict:
@@ -60,10 +61,18 @@ def _logical_day_str(now_ts: float | None = None) -> str:
 
 def _load() -> None:
     """惰性加载，进程内只读一次磁盘；写入均走 _persist() 保持内存与磁盘一致。"""
-    global _loaded
-    if _loaded:
+    global _loaded, _loaded_path_token, _state
+    token = str(get_paths().root_dir().resolve())
+    if _loaded and (_loaded_path_token is None or token == _loaded_path_token):
         return
+    _state = {
+        "next_allowed_ts": 0.0,
+        "daily_count": 0,
+        "daily_logical_day": "",
+        "recent": [],
+    }
     _loaded = True
+    _loaded_path_token = token
     try:
         import json
         p = get_paths().proactive_ledger()
@@ -79,9 +88,11 @@ def _load() -> None:
 
 
 def _persist() -> None:
+    global _loaded_path_token
     try:
         from core.safe_write import safe_write_json
         p = get_paths().proactive_ledger()
+        _loaded_path_token = str(get_paths().root_dir().resolve())
         p.parent.mkdir(parents=True, exist_ok=True)
         safe_write_json(p, {
             _NEXT_ALLOWED_KEY: _state["next_allowed_ts"],

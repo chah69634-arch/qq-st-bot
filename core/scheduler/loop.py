@@ -78,6 +78,7 @@ _COOLDOWNS: dict[str, int] = {
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
 _last_trigger: dict[str, float] = {}
+_persistent_state_path_token: str | None = None
 
 
 def _cooldown_key(name: str, char_id: str | None = None) -> str:
@@ -122,9 +123,6 @@ def _load_scheduler_state():
     except Exception as e:
         logger.warning(f"[scheduler] 冷却状态读取失败: {e}")
 
-_load_scheduler_state()
-
-
 # 上次主动分享日记的时间戳（由 diary_tool 调用 mark_diary_shared 更新）
 def _get_last_diary_share() -> float:
     try:
@@ -138,7 +136,24 @@ def _get_last_diary_share() -> float:
     return 0.0
 
 
-_last_diary_share: float = _get_last_diary_share()
+_last_diary_share: float = 0.0
+
+
+def _persistent_state_token() -> str:
+    """Identify the active DataPaths root without retaining a Path object."""
+    return str(get_paths().root_dir().resolve())
+
+
+def _ensure_persistent_state_loaded() -> None:
+    """Load scheduler state lazily and discard state from a previous data root."""
+    global _persistent_state_path_token, _last_diary_share
+    token = _persistent_state_token()
+    if token == _persistent_state_path_token:
+        return
+    _persistent_state_path_token = token
+    _last_trigger.clear()
+    _load_scheduler_state()
+    _last_diary_share = _get_last_diary_share()
 
 # 调度器启动时间戳（用于冷启动保护）
 _scheduler_start_time: float = time.time()
@@ -212,6 +227,7 @@ def _cfg_retention() -> dict:
 
 def _is_ready(name: str, *, char_id: str | None = None) -> bool:
     """检查触发器是否已度过冷却期（正式冷却 + 失败退避 attempt-cooldown 均需通过，A4）。"""
+    _ensure_persistent_state_loaded()
     elapsed = time.time() - _last_trigger.get(_cooldown_key(name, char_id), 0)
     if elapsed < _COOLDOWNS.get(name, 3600):
         return False
@@ -251,6 +267,7 @@ def _attempt_cooldown_ready(name: str, *, char_id: str | None = None) -> bool:
 
 def _persist_cooldowns() -> None:
     """Persist _last_trigger to scheduler_cooldowns.json. Fail-soft."""
+    _ensure_persistent_state_loaded()
     try:
         import json
         from core.safe_write import safe_write_json
@@ -267,6 +284,7 @@ def _persist_cooldowns() -> None:
 
 def _mark(name: str, *, char_id: str | None = None):
     """记录触发时间，同时持久化到 scheduler_cooldowns.json。"""
+    _ensure_persistent_state_loaded()
     _last_trigger[_cooldown_key(name, char_id)] = time.time()
     _persist_cooldowns()
 
@@ -1052,6 +1070,7 @@ async def _loop():
 def start() -> asyncio.Task:
     """启动调度器后台 Task，返回 Task 对象供 main.py 管理"""
     global _scheduler_task
+    _ensure_persistent_state_loaded()
     _scheduler_task = asyncio.create_task(_loop())
     logger.info("[scheduler] 调度器 Task 已创建")
     return _scheduler_task

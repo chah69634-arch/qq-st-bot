@@ -278,25 +278,42 @@ class TriggerStateMachine:
         )
 
 
-_machine = TriggerStateMachine()
+_machine: TriggerStateMachine | None = None
+_machine_path_token: str | None = None
+
+
+def _current_machine() -> TriggerStateMachine:
+    """Return a machine bound to the current DataPaths root.
+
+    Tests install their sandbox after test modules have been imported.  Keeping
+    construction lazy prevents the module import from loading production state,
+    and a path switch cannot retain a previous root's in-memory snapshot.
+    """
+    global _machine, _machine_path_token
+    token = str(get_paths().root_dir().resolve())
+    if _machine is None or token != _machine_path_token:
+        _machine = TriggerStateMachine()
+        _machine_path_token = token
+    return _machine
 
 
 def notify_owner_turn(uid: str) -> None:
-    _machine.notify_owner_turn(uid)
+    _current_machine().notify_owner_turn(uid)
 
 
 def feed_sensor_tick(uid: str, event_count: int) -> None:
-    _machine.feed_sensor_tick(uid, event_count)
+    _current_machine().feed_sensor_tick(uid, event_count)
 
 
 def get_state(uid: str) -> TriggerState:
-    return _machine.get_state(uid)
+    return _current_machine().get_state(uid)
 
 
 def snapshot(uid: str) -> dict:
-    return _machine.snapshot(uid)
+    return _current_machine().snapshot(uid)
 
 
 def _reset_for_tests() -> None:
-    global _machine
+    global _machine, _machine_path_token
     _machine = TriggerStateMachine()
+    _machine_path_token = str(get_paths().root_dir().resolve())

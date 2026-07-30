@@ -107,6 +107,7 @@ def reset_proactive_ledger():
     gating._decide() to spuriously fail with global_gap_filtered.
     """
     from core.scheduler import proactive_ledger as _ledger
+    from core.sandbox import get_paths
     _ledger._state = {
         "next_allowed_ts": 0.0,
         "daily_count": 0,
@@ -114,6 +115,7 @@ def reset_proactive_ledger():
         "recent": [],
     }
     _ledger._loaded = True  # skip disk load; state above is authoritative for the test
+    _ledger._loaded_path_token = str(get_paths().root_dir().resolve())
     yield
 
 
