@@ -22,7 +22,6 @@ FLAGS = {
     "spend": ("spend", "enabled", "支出意向"),
     "practice": ("practice", "enabled", "自主练习"),
     "action_trace": ("action_trace", "enabled", "行为痕迹"),
-    "intent_reflex": ("intent_reflex", "enabled", "意图反射（降级路径）"),
     "mcp_servers": ("mcp_servers", "enabled", "MCP 外部工具"),
     "fs_access": ("fs_access", "enabled", "文件只读访问"),
     "anti_collapse": ("anti_collapse", "enabled", "输出防坍缩"),

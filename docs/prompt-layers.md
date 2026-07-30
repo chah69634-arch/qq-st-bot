@@ -65,7 +65,7 @@
 
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >
-> 层 10.5（Brief 27）：`tool_dispatcher.execute()` 每次 return（origin 闸门拒绝除外）都调 `action_trace.record()` 落一条精简痕迹（`data/runtime/memory/{char_id}/{uid}/action_trace.json`，环形上限 30 条）；Path B（`pipeline._parse_and_execute_intent`）不经 `execute()`，单独补记。`result_digest` 只消费 `ToolResult.safe_summary`，`peek_screen_content` 特判只留 title_hint。**当轮去重**：本轮已有 `tool_result` 且其工具名与痕迹最新一条相同时跳过该条，避免层10/10.5 重复同一件事。不进 `_drop_priority` 裁剪链（够小且时效性强），全层预算截断 400 字。`action_trace.enabled: false` 时零行为变化。可选 `event_log_echo` 配置项：`status=ok` 时经 `fixation_pipeline.capture_turn(trigger_name="action_trace")` 回流一条到 event_log（**不得**直接调用底层写入函数，见 `tests/test_r6b_reality_scrub_contract.py` C2 契约）；回流文案刻意不整行包在中文括号里，否则会被 `scrub_reality_output_text` 当整行动作旁白丢弃。
+> 层 10.5（Brief 27）：`tool_dispatcher.execute()` 每次 return（origin 闸门拒绝除外）都调 `action_trace.record()` 落一条精简痕迹（`data/runtime/memory/{char_id}/{uid}/action_trace.json`，环形上限 30 条）。`result_digest` 只消费 `ToolResult.safe_summary`，`peek_screen_content` 特判只留 title_hint。**当轮去重**：本轮已有 `tool_result` 且其工具名与痕迹最新一条相同时跳过该条，避免层10/10.5 重复同一件事。不进 `_drop_priority` 裁剪链（够小且时效性强），全层预算截断 400 字。`action_trace.enabled: false` 时零行为变化。可选 `event_log_echo` 配置项：`status=ok` 时经 `fixation_pipeline.capture_turn(trigger_name="action_trace")` 回流一条到 event_log（**不得**直接调用底层写入函数，见 `tests/test_r6b_reality_scrub_contract.py` C2 契约）；回流文案刻意不整行包在中文括号里，否则会被 `scrub_reality_output_text` 当整行动作旁白丢弃。
 >
 > `6f_dream_afterglow` 与 `dream_afterglow_soft_hint` 为互斥层：前者在退梦后 0–5h 注入逐渐模糊的摘要，后者在详细层为空后接管至 8h TTL。两层均只读、非现实事实、读取异常 fail-closed，不写 memory / mood / profile / hidden state。
 >

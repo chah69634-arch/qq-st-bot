@@ -1,14 +1,11 @@
 """
 tests/test_toy_dream_invite_path_c.py
 
-Brief 103/109 收尾：toy_invite / dream_invite 此前只经 Path B
-(_parse_and_execute_intent) 触发，从未注册进 _TOOL_REGISTRY。Path B 已被
-config.intent_reflex.enabled=false 关闭且计划到期整删（cc-tasks/103），
-若不迁移这两个动作会在删除后无任何路径可触发。
+Brief 103 retirement coverage: toy_invite / dream_invite are formal desktop tools.
 
-本测试验证迁移落地：
+本测试验证：
 - 两个工具已注册进 _TOOL_REGISTRY，category=desktop，无必填参数。
-- 调用 wrapper 时推送的 action payload 与 Path B 原始行为完全一致
+- 调用 wrapper 时推送稳定的 action payload
   （type="toy_invite"/"dream_invite"，无额外 params），保证桌面客户端侧
   协议不变（前端不用改）。
 - execute() 走 desktop 分类的安全模式闸门（_MODE_RESTRICTED_CATEGORIES）。

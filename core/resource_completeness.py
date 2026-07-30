@@ -182,17 +182,6 @@ def _check_tool_loop() -> CheckResult:
     return CheckResult(id="tool_loop", label="工具多步执行(Path C)", status="ok")
 
 
-def _check_intent_reflex() -> CheckResult:
-    from core.config_loader import get_config
-    cfg = get_config().get("intent_reflex", {})
-    on = cfg.get("enabled", False)
-    return CheckResult(
-        id="intent_reflex", label="意图反射(Path B，计划删除)",
-        status="off" if not on else "ok",
-        detail="默认关，Path C 已覆盖其能力（见 cc-tasks/103）" if not on else "仍手动开启中",
-    )
-
-
 def _check_screen_peek() -> CheckResult:
     from core.config_loader import get_config
     cfg = get_config().get("screen_peek", {})
@@ -257,7 +246,6 @@ _CHECKS: list[tuple[str, str, Any]] = [
     ("vision", "图像识别（通用视觉）", _check_vision),
     ("use_computer_vision", "用电脑（桌面自动化视觉）", _check_use_computer_vision),
     ("tool_loop", "工具多步执行(Path C)", _check_tool_loop),
-    ("intent_reflex", "意图反射(Path B)", _check_intent_reflex),
     ("screen_peek", "屏幕内容自主查看", _check_screen_peek),
     ("visual_perception", "视觉观测(shadow trace)", _check_visual_perception),
     ("hardware", "硬件联动(玩具)", _check_hardware),

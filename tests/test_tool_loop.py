@@ -368,33 +368,7 @@ def test_tool_loop_active_character_override(monkeypatch):
     pipeline_registry.register(None)
 
 
-# ── 9. 路径 B 跳过：loop_executed=True 时 Path B 直接 return ────────────────
-
-@pytest.mark.asyncio
-async def test_loop_executed_skips_path_b(monkeypatch):
-    # Brief 35: intent_reflex 默认关；本测试验证的是 loop_executed 守卫 (d)
-    # 本身的短路顺序，需强制 enabled=true 才能越过入口的 intent_reflex 闸真正触及守卫 (d)。
-    from core import config_loader
-    monkeypatch.setattr(config_loader, "get_config", lambda: {"intent_reflex": {"enabled": True}})
-
-    async def _fail_if_called(*a, **kw):
-        raise AssertionError("loop_executed=True 时不应再调用 LLM 解析 Path B 意图")
-
-    monkeypatch.setattr("core.llm_client.chat", _fail_if_called)
-
-    pipeline = _make_pipeline()
-    # 不抛出 AssertionError 即说明守卫 (d) 在最前面短路了，未触及后续任何 LLM 调用
-    await pipeline._parse_and_execute_intent(
-        "我现在去帮你把窗口关掉",
-        trigger_name="",
-        user_content="帮我关一下",
-        user_id="u1",
-        char_id="yexuan",
-        loop_executed=True,
-    )
-
-
-# ── 10. stream：工具步非流式，最终答案经 chat_stream 出口逐 token yield ─────
+# ── 9. stream：工具步非流式，最终答案经 chat_stream 出口逐 token yield ─────
 
 @pytest.mark.asyncio
 async def test_stream_tool_step_nonstream_final_streamed(monkeypatch):

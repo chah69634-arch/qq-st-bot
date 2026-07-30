@@ -300,16 +300,13 @@ async def _desktop_notify_wrapper(title: str = "", message: str = "") -> str:
 
 
 async def _toy_invite_wrapper() -> str:
-    """Brief 103/109 迁移：toy_invite 原仅经 Path B（_parse_and_execute_intent）触发，
-    未在 _TOOL_REGISTRY 注册过，Path B 删除后会无替代路径。此处以与 Path B 完全一致的
-    action type（"toy_invite"，无 params）接入 Path A/C 正路，前端行为不变。"""
+    """以 desktop 工具正路推送 ToyWindow 邀请。"""
     result = await _push_desktop_action({"type": "toy_invite"})
     return "已邀请进入玩耍模式" if result == "ok" else result
 
 
 async def _dream_invite_wrapper() -> str:
-    """Brief 103/109 迁移：dream_invite 同 toy_invite，原仅经 Path B 触发，此处接入
-    正路，action type 与 Path B 保持一致（"dream_invite"，无 params）。"""
+    """以 desktop 工具正路推送 DreamWindow 邀请。"""
     result = await _push_desktop_action({"type": "dream_invite"})
     return "已邀请进入梦境" if result == "ok" else result
 
@@ -1336,7 +1333,7 @@ def parse_tail_brace(text: str) -> tuple[str, str | None]:
 
 
 _EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({
-    "user_live", "assistant_intent", "assistant_loop", "assistant_loop_relay",
+    "user_live", "assistant_loop", "assistant_loop_relay",
 })
 _OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
     "toy_vibrate",
@@ -1446,8 +1443,8 @@ async def execute(
     ask_confirm_text: 高危工具等待确认时的询问文字，None 表示无需确认
 
     origin 必填，不在白名单则 fail-closed：返回 (None, None) + 记 warning。
-    白名单：user_live（Path A 用户发起）/ assistant_intent（Path B 意图执行，附加门控）/
-    assistant_loop（Path C tool loop 自主多步调用，Brief 28）/ assistant_loop_relay（Path C
+    白名单：user_live（Path A 用户发起）/ assistant_loop（Path C tool loop 自主多步调用，
+    Brief 28）/ assistant_loop_relay（Path C
     尾部花括号二次调用兜底，Brief 120——与 assistant_loop 区分开，是为了让 action_trace /
     error.log 里能分清一次工具执行到底来自模型的原生结构化 tool_calls，还是来自
     {true:...} 标记走的中转解析；此前两者共用同一个 origin，出故障时完全没法从落痕

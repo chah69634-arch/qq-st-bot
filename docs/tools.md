@@ -29,25 +29,9 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
 
   /chat 管理面板冻结入口 → 不走工具探针
 
-路径B：意图解析（pipeline 之后，受限旁路；Brief 35 起两步降级中，第一步）
-  他的回复 → _parse_and_execute_intent()
-             → 入口闸：config.intent_reflex.enabled（默认 false）→ 关闭时直接 return
-             → 守卫全部满足才执行：
-               (a) trigger_name 为空 → 真实 owner turn（非 scheduler/sensor/watch）
-               (b) user_content 非空 → 本轮有真实用户输入
-               (c) 意图非 dangerous（device_shutdown/device_sleep 永不经此路径）
-               (d) 本轮未走 tool loop（loop_executed=False，Brief 28）
-             → c1: LLM 只在「第一人称、当下要做」时命中；承认/复述/过去式/吐槽回应一律不命中
-             → c2: per-uid 同动作幂等窗口 120s（key = uid:action:关键参数）
-             → 通过后调 _push_desktop_action，失败写 pending_perception
-```
-
-> 两步降级节奏见 `docs/known-issues.md` PB4：第一步只加 config 默认关，守卫/测试本步保留；
-> 观察一个月无缺口后第二步整删本路径。
-
 **memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。**
 `read_diary/read_watch/search_diary/get_profile/get_episodic` 已注册且 `execute()` 能执行，
-但路径A/B 都没有把 memory 类喂给探针或主生成。Fable R5 已修复与 Author's Note 工具承诺的落差：
+但路径A不把 memory 类喂给探针。Fable R5 已修复与 Author's Note 工具承诺的落差：
 层11 Author's Note 现在是条件分支，有 `tool_result` 时提示已提供，无时明确禁止编造，
 不再承诺主 LLM 可以调用工具。见 `docs/known-issues.md` F11。
 
@@ -69,16 +53,14 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
     - 用过 ≥1 个工具后，最终生成前注入 voice_reanchor system 提示，收尾出口改走
       run_llm()/run_llm_stream()（复用既有反坍缩重试），不再带 tools 参数
     - 高危工具触发 ask_confirm → 立即强制收尾，直接把询问文字作为本轮回复，下一步必须是问用户
-    - 本轮结束后 pipeline.post_process(loop_executed=True) → 跳过路径B
-      （_parse_and_execute_intent 守卫 (d)），避免同一意图被路径C和路径B各执行一次
     - 暴露面：categories（默认 info/desktop/memory）减去 exclude_tools
       （默认排除 toy_vibrate/toy_stop/toy_pattern/write_toy_file），前端设置页可调
 
-  与路径A/B互斥表：
-    | 场景                                  | 路径A探针 | 路径B意图解析 | 路径C loop |
-    |---------------------------------------|-----------|---------------|------------|
-    | 有效 tool_loop 关 / preset 非 FC / 非owner  | 正常执行  | 正常执行      | 不激活     |
-    | 有效 tool_loop 开 + owner + FC preset       | 跳过      | 跳过（loop_executed）| 激活 |
+  与路径A互斥表：
+    | 场景                                  | 路径A探针 | 路径C loop |
+    |---------------------------------------|-----------|------------|
+    | 有效 tool_loop 关 / preset 非 FC / 非owner  | 正常执行  | 不激活     |
+    | 有效 tool_loop 开 + owner + FC preset       | 跳过      | 激活       |
 
   默认不排斥的角落：QQ 关键词快速路径命中后走 tool_result 注入，loop 里的模型能在层10
   看到这次执行结果，不会重复调用；两者理论上仍可能对同一意图各执行一次，见
@@ -498,51 +480,7 @@ Path C 多步调用复用同一次探测结果。
   3. `cleanup_stale()`：根目录扫超24h文件；processing 目录扫 mtime 超1h的文件
 - 时间前缀自动计算：`[刚刚]` / `[N秒前]` / `[N分钟前]`
 
-### send_notification 防误触发
-
-二次校验：意图解析为 `send_notification` 后，他回复必须同时包含时间词和动作词才真正触发通知：
-```
-时间词：等下 / 待会 / 一会 / 明天 / 后天 / 点 / 分钟后 / 小时后 / 到时 / 之后 / 时候
-动作词：提醒你 / 通知 / 告诉你 / 帮你记 / 记着 / 别忘 / 不要忘
-```
-
----
-
-## 意图解析（_parse_and_execute_intent）
-
-在 `post_process` 里异步执行。不同于探针（在用户消息上判断），意图解析是在**他的回复**上判断。
-
-他说"我去把游戏关掉" → 真的执行 `minimize_window`
-
-**守卫（全部满足才执行）：**
-
-| 守卫 | 实现 | 说明 |
-|---|---|---|
-| (a) 真实 owner turn | `trigger_name == ""` | scheduler/sensor/watch turn 的 trigger_name 非空，直接跳过 |
-| (b) 有真实用户输入 | `user_content.strip()` 非空 | 防止空 span 触发 |
-| (c) 非危险动作 | action not in `{device_shutdown, device_sleep}` | 永不经 Path B 自动触发 |
-| c1 收紧 prompt | 只在第一人称当下主动意图时命中 | 承认/复述/过去式/吐槽回应/睡眠关机语义均不命中 |
-| c2 幂等窗口 | `_INTENT_LAST_ACTION[uid:action:key]` 120s 内跳过 | 防止他复述导致重复执行（吐槽+复述链路可能跨 60s） |
-
-**支持的意图类型：**
-- `minimize_window`：最小化窗口（不匹配睡眠/关机语义）
-- `play_song`：播放歌曲
-- `open_url`：打开网址
-- `play_pause`：播放/暂停
-- `send_notification`：发通知（有额外时间词+动作词组合校验）
-- `dream_invite`：角色明确邀请用户进入梦境；向桌面客户端推送邀请动作
-- `toy_invite`：角色明确邀请进入玩耍模式；向桌面客户端推送 `{type: toy_invite}` UI 动作，前端在玩耍模式开启时打开 ToyWindow（非危险动作，沿用 Path B 三道守卫与 120s 幂等窗口）
-
-> **2026-07-25 迁移**：`dream_invite` / `toy_invite` 此前只经 Path B 触发，未注册进
-> `_TOOL_REGISTRY`——是 PB4 到期删除单（`cc-tasks/103`）里点出的最大风险点：Path B
-> 若按计划整删，这两个动作会因无替代路径而彻底失效。现已补注册为 `desktop` 类目下的
-> 正式工具（`core/tool_dispatcher.py`），Path A 探针与 Path C tool loop 均可触发，
-> 推送的 action payload（`{"type": "toy_invite"}` / `{"type": "dream_invite"}`，均无
-> params）与 Path B 原始行为完全一致，前端协议不变。`_MODE_RESTRICTED_CATEGORIES`
-> 安全模式闸门同样适用。Path B 仍保留（config 关闭中），迁移完成后 103 号单不再需要
-> 因这两个动作而搁置。
-
-**execute() origin 闸门（Path A）：**
+## execute() origin 闸门
 
 `tool_dispatcher.execute()` 新增**必填**关键字参数 `origin: str`（无默认值）。
 
@@ -551,10 +489,9 @@ Path C 多步调用复用同一次探测结果。
 | 漏传（调用方未写 `origin=`） | `TypeError`，调用即崩，杜绝静默绕过 |
 | 传入值不在白名单 | `(None, None)` + `logger.warning`，零副作用（fail-closed） |
 | `origin="user_live"` | Path A 正常执行 |
-| `origin="assistant_intent"` | 保留供 Path B 未来接线；当前 Path B 直接调 `_push_desktop_action` |
 | `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
 
-白名单 = `_EXECUTE_ALLOWED_ORIGINS = {"user_live", "assistant_intent", "assistant_loop"}`。
+白名单 = `_EXECUTE_ALLOWED_ORIGINS = {"user_live", "assistant_loop", "assistant_loop_relay"}`。
 Path A 的 4 个调用方（`main.py` WAITING_CONFIRM / WAITING_INPUT / 探针结果 + `chat.py` `_probe_and_execute_tools`）均已显式传入 `origin="user_live"`。
 
 ---
@@ -571,8 +508,6 @@ Path A 的 4 个调用方（`main.py` WAITING_CONFIRM / WAITING_INPUT / 探针�
   闸门拒绝（fail-closed 那支）不记**——那不是角色做过的事。其余分支（工具不存在/模式闸/
   未启用/权限拒绝/高危待确认/persist 去重跳过/成功/异常）全部落痕迹，`status` 分别对应
   `failed` / `pending_confirm` / `ok`。
-- Path B（`pipeline._parse_and_execute_intent`）不经 `execute()`，直接调
-  `_push_desktop_action`，在拿到 `last_result` 后单独补记一条（`origin="assistant_intent"`）。
 
 **存储：** `data/runtime/memory/{char_id}/{uid}/action_trace.json`，JSON 数组，环形上限
 30 条，原子写（`core/safe_write.py`）。单条 schema：

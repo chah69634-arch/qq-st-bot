@@ -132,8 +132,8 @@ HTTP assistant reply 保留 `turn_id`，并同时返回兼容字段 `msg_id`；�
 - 普通消息：`push_message()` 发送 `channel_message`，不等 ack。
 - 叙事分段：`turn_sink` 在普通消息之后并行发送 `message_segments`，不等 ack。
 - 桌面动作：`push_action_and_wait()` 发送 `action`，最多等 5 秒 ack。
-- 梦境邀请：Path B 推送 `dream_invite` action；PresenceKit-desktop 收到并 ack 后打开 Dream 窗口。
-- 玩耍邀请：Path B 推送 `toy_invite` action；PresenceKit-desktop 在「玩耍模式」开关开启时打开 ToyWindow，关闭时忽略并正常回 ack。
+- 梦境邀请：desktop 工具推送 `dream_invite` action；PresenceKit-desktop 收到并 ack 后打开 Dream 窗口。
+- 玩耍邀请：desktop 工具推送 `toy_invite` action；PresenceKit-desktop 在「玩耍模式」开关开启时打开 ToyWindow，关闭时忽略并正常回 ack。
 - 心跳：服务端每 20 秒发 `ping`，超过约 70 秒没有 `pong` 会断开。
 
 桌宠上线时会把 `DesktopChannel` 设为活跃；断开时取消文件 fallback 活跃标志。
@@ -419,7 +419,6 @@ perform 字段属于 v0.1 `message_segments` 契约；权威入口见 [desktop-c
 | `data/runtime/channel_queue.json` | 普通消息队列 | `DesktopChannel._write_to_queue()` | 桌宠端轮询 |
 | `data/runtime/mobile_queue.json` | 手机主动消息队列 | `MobileChannel._write_to_queue()` | 手机端 `/mobile/poll` |
 | `data/runtime/agent_actions.json` | 桌面动作队列 | `tool_dispatcher._push_desktop_action()` / `DesktopChannel.send(..., behavior=...)` | 桌宠端轮询 |
-| `data/runtime/pending_perception/` | 动作失败后的下轮感知 | `pipeline._parse_and_execute_intent()` | `pipeline.build_prompt()` |
 
 所有上述路径都通过 `core/sandbox.get_paths()` 获取，测试模式会切到 `data/test_sandbox/{session}/`。
 

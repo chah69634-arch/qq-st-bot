@@ -1,14 +1,11 @@
 """
 core/api_contract_check.py — 后端→前端 desktop action 契约测试（2026-07-25，茶茶反馈）
 
-背景：core/pipeline.py::_parse_and_execute_intent (Path B) 和 core/tool_dispatcher.py 里
-desktop 类 _TOOL_REGISTRY wrapper (Path C) 都会通过 _push_desktop_action({"type": ..., ...})
+背景：core/tool_dispatcher.py 里 desktop 类 _TOOL_REGISTRY wrapper 会通过
+_push_desktop_action({"type": ..., ...})
 把动作推给桌面客户端；前端 Emerald-client 的 src/shared/api/ws.ts::_dispatchAction 用一个
 switch(type) 消费，不认识的 type 会 throw "unsupported action type"。两边分属两个仓库，
-字符串字面量不共享 schema，历史上真的漂移过——2026-07-25 排查本项（item 10）时发现
-Path B 的 send_notification/play_pause 与前端实际的 show_notify/media_play_pause 不一致，
-play_song 更进一步连 params 形状都不对；已在 core/pipeline.py 修复，回归测试见
-tests/test_intent_grounding.py。这个模块把"扫两边源码找漂移"变成一个可重复运行的检查，
+字符串字面量不共享 schema，历史上确实发生过漂移。这个模块把"扫两边源码找漂移"变成一个可重复运行的检查，
 而不是每次都要人工重新翻两个仓库的代码。
 
 不是真正的 JSON Schema 契约测试（协议本来就是扁平 {type, ...params}，没有版本化 schema），
@@ -67,9 +64,7 @@ def _find_frontend_repo() -> Path | None:
 
 def _scan_push_desktop_action_types(py_source: str) -> dict[str, list[int]]:
     """扫描一段后端源码里所有 `_push_desktop_action({"type": "xxx", ...})` 静态字面量调用，
-    返回 {type: [出现行号, ...]}。只能扫到字面量，扫不到 Path B 那种把变量拼进 type 字段的
-    动态推送——Path B 走 core.pipeline._INTENT_SUPPORTED_ACTIONS / _INTENT_ACTION_TYPE_MAP
-    单独处理，见 _path_b_produced_types()。"""
+    返回 {type: [出现行号, ...]}。"""
     hits: dict[str, list[int]] = {}
     for m in re.finditer(r"_push_desktop_action\(", py_source):
         window = py_source[m.end(): m.end() + 400]
@@ -81,30 +76,10 @@ def _scan_push_desktop_action_types(py_source: str) -> dict[str, list[int]]:
     return hits
 
 
-def _path_b_produced_types() -> dict[str, str]:
-    """Path B 每个 action 实际会推送的 type 字符串（经翻译表/委托解析后的最终值）。"""
-    from core import pipeline as _pp
-
-    produced: dict[str, str] = {}
-    for action in _pp._INTENT_SUPPORTED_ACTIONS:
-        if action == "play_song":
-            # 委托 _play_song_wrapper 做网易云搜索后自己推送 "play_netease"
-            produced[action] = "play_netease"
-        else:
-            produced[action] = _pp._INTENT_ACTION_TYPE_MAP.get(action, action)
-    return produced
-
-
 def _backend_producible_types() -> dict[str, list[str]]:
-    """汇总 Path B（动态）+ Path C/其余静态调用点（tool_dispatcher.py, pipeline.py 源码扫描）
-    能产出的全部 type，返回 {type: [来源描述, ...]}。"""
-    from core import pipeline as _pp
-
+    """汇总静态 _push_desktop_action 调用点的所有可产出 type。"""
     backend_root = Path(__file__).resolve().parent
     sources: dict[str, list[str]] = {}
-
-    for action, pushed_type in _path_b_produced_types().items():
-        sources.setdefault(pushed_type, []).append(f"Path B: action={action}")
 
     for py_file in (backend_root / "tool_dispatcher.py", backend_root / "pipeline.py"):
         try:

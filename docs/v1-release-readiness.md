@@ -17,7 +17,7 @@
 | Blocking | Authored-root migration recovery evidence | C1.3 is read-only and C1.1/C1.2 preserve canonical writer/read layering | Reviewed C1.3 results and manual resolution of legacy-only/diverged assets before relying on fallback |
 | Blocking | Data schema/version policy | `data/layout_version.json` establishes v1 baseline/schema 1; future schema changes need an explicit supported forward path | Version matrix and forward-migration evidence for each later schema change |
 | Blocking for reliable background claim | Relay real-device recovery | Queue has 24h / 500 cap (`channels/mobile.py`); relay publisher retries/logs but has no operator alert | Real-device matrix: background, Doze, process kill, reboot, relay loss/reconnect; TTL/cap eviction and alert evidence |
-| Blocking | Path B observation and deletion decision | Path B remains in `core/pipeline.py`; Path C is optional and default-off | Metrics/log review window, zero-required-use or bounded exceptions, approved removal criteria and rollback plan |
+| Closed | Retired intent-reflex side path | Removed after capability-equivalence audit; desktop tools keep their existing gates and protocol | Focused/full pytest plus real-device desktop, ToyWindow, and DreamWindow smoke evidence |
 | Blocking | Three-repo protocol fixtures | Current desktop v0.1 is cross-repo prose/code; mobile foreground chat uses shared `/desktop/chat` | Versioned fixtures for v0.1 WS + HTTP correlation + mobile poll/ack, compatibility matrix executed against all three heads |
 | Blocking | Install/upgrade/downgrade/recovery | v1-only fixture covers baseline, forward update, repeat, restore, and refusal paths | Release-candidate rehearsal across the three repos and documented operator recovery evidence |
 | Non-blocking | Future WS v1/envelope/EventBus | Not implemented (`docs/protocol-v0.md`, `docs/interaction-event-model.md`) | None: explicitly post-v1 |
@@ -70,6 +70,6 @@ separate versioned implementation changes `BackendClient.sendChat()`.
    migration procedure is available; test v1 restore rather than downgrade.
 4. Complete Android signed-install and relay device matrix before describing
    background delivery as reliable.
-5. Review Path B observation logs over an agreed window before any deletion brief.
+5. Preserve the recorded retirement evidence for the intent-reflex side path; no date-only observation gate remains.
 6. Publish only after the compatibility matrix and artifacts/sha256 records are
    attached to the release decision.

@@ -142,7 +142,6 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "spend",
         "practice",
         "action_trace",
-        "intent_reflex",
         "mcp_servers",
         "fs_access",
         "anti_collapse",

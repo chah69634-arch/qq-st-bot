@@ -354,12 +354,6 @@ action_trace:
   inject_window_hours: 24    # 只注入这个时间窗内的痕迹
   event_log_echo: true       # status=ok 时是否回流一条到 event_log（供日记/往事检索看见）
 
-# Brief 35 · Path B（意图反射）两步降级第一步：默认关，现有用户升级即关。
-# 观察一个月：tool loop（Path C）+ 探针覆盖是否已顶替 Path B；无缺口则第二步整删
-# _parse_and_execute_intent + 五道守卫 + c2 幂等窗口 + 相关测试。见 docs/known-issues.md。
-intent_reflex:
-  enabled: false
-
 # Brief 28 · tool loop 多步工具执行器：只在 chat preset 为 function_calling 模式的
 # owner 真实私聊（QQ / desktop）生效，小模型 xml_fallback / 探针路径零改动。
 # enabled: false 即完全回到现状（所有分支都在 tool_loop_active() 判断之后）。

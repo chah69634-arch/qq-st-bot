@@ -34,7 +34,7 @@
 |---|---|---|---|---|
 | Desktop WS proactive/action delivery | Desktop | Backend queue/turn truth | Existing HTTP/chat path and desktop fallback behavior remain usable | No, after v0.1 contract tests pass |
 | Mobile relay wake signal | Android mobile | Backend poll queue owns body; relay has signal only | Signal failure/reconnect falls back to poll/AlarmManager recovery | No for baseline chat; yes for claimed reliable background delivery |
-| Tool loop (Path C) | Backend; desktop/mobile settings may configure it | Backend registry/config/character permissions | Global default is off; legacy probe/Path B path remains | No |
+| Tool loop (Path C) | Backend; desktop/mobile settings may configure it | Backend registry/config/character permissions | Global default is off; Path A probe remains for non-loop turns | No |
 | QQ, TTS, stickers, sensors | Respective optional channel/client | Backend truth; client only captures/renders | Feature remains absent or local UI reports failure | No |
 
 ## Experimental

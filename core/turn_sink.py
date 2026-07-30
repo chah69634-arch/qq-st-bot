@@ -228,8 +228,7 @@ async def record_assistant_turn(
     freeze 链路。
     fanout=[] 时不执行 channel fanout（QQ visible send 由调用方在 adapter 内独立完成）。
     bypass_gate=True 时跳过 conversation_lock（QQ adapter 已在 conversation_lock 内）。
-    loop_executed（Brief 28）：本轮是否走了 tool loop，透传给 post_process_slow →
-    Path B 跳过判断。
+    loop_executed（Brief 28）：本轮是否走了 tool loop，透传给 post_process_slow。
     """
     from core.write_envelope import WriteEnvelope
     if envelope is None:

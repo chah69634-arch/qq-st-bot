@@ -36,7 +36,7 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
     from core.pipeline import Pipeline
 
     uid = "uid_order_test"
-    reply = "hi"  # len < 10 → _parse_and_execute_intent 提前返回，无需 mock chat
+    reply = "hi"
 
     # ── LLM 桩 ───────────────────────────────────────────────────────────────
     monkeypatch.setattr("core.llm_client.detect_emotion", AsyncMock(return_value="happy"))
