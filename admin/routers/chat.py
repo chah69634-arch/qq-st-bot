@@ -333,7 +333,7 @@ async def _probe_and_execute_tools(message: str, user_id: str, *, char_id: str) 
     from core.memory import user_profile as _up, short_term as _st_probe
     from core.session_state import get as _get_state
 
-    _profile = _up.load(user_id)
+    _profile = _up.load(user_id, char_id=char_id)
     _location = _profile.get("location", "杭州")
     tools_schema = tool_dispatcher.get_tools_schema(categories=["info", "desktop"])
     state = _get_state(f"user_{user_id}")
@@ -342,7 +342,7 @@ async def _probe_and_execute_tools(message: str, user_id: str, *, char_id: str) 
     # 过滤 trigger_stub 条目，避免系统占位符混入探针上下文
     _probe_ctx = [
         {"role": m["role"], "content": m.get("content", "")}
-        for m in _st_probe.load(user_id)
+        for m in _st_probe.load(user_id, char_id=char_id)
         if m.get("_source") != "trigger_stub"
     ][-4:]
     probe_messages = [

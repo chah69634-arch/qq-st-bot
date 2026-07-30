@@ -1579,7 +1579,18 @@ async def execute(
                 pass
         else:
             result = await func(**tool_args)
-        logger.info(f"[tool_dispatcher] 工具 {tool_name} 执行完毕，结果: {result}")
+        # Tool implementations may return a ToolResult.  Keep raw_data inside
+        # that object: all outward-facing execution paths consume only its
+        # safe_summary, never the dataclass repr or its raw payload.
+        from core.tools.tool_result import to_tool_result
+        tool_result = to_tool_result(result)
+        safe_summary = tool_result.safe_summary
+        logger.info(
+            "[tool_dispatcher] 工具执行完成: tool=%s result_len=%d safe_len=%d",
+            tool_name,
+            len(tool_result.raw_data),
+            len(safe_summary),
+        )
 
         # ── persist 工具：执行成功后记录指纹 + 回写 short_term ───────────────
         if _is_persist and _fingerprint:
@@ -1594,8 +1605,8 @@ async def execute(
             except Exception as _rec_err:
                 logger.warning("[tool_dispatcher] persist record error: %s", _rec_err)
 
-        _trace("ok", result)
-        return f"工具已执行：{tool_name}，结果：{result}", None
+        _trace("ok", safe_summary)
+        return f"工具已执行：{tool_name}，结果：{safe_summary}", None
     except TypeError as e:
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)

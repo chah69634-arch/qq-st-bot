@@ -230,6 +230,45 @@ def test_tool_result_content_in_layer10(monkeypatch):
     )
 
 
+def test_layer10_adapts_and_frames_only_safe_tool_result(monkeypatch):
+    """Path A keeps its existing to_tool_result -> frame_tool_result boundary."""
+    from core.tools import tool_result as _tr
+
+    raw = _tr.ToolResult(raw_data="SECRET", safe_summary="SAFE")
+    real_to_tool_result = _tr.to_tool_result
+    real_frame_tool_result = _tr.frame_tool_result
+    calls: dict[str, object] = {}
+
+    def _spy_to_tool_result(value):
+        calls["to_tool_result"] = value
+        return real_to_tool_result(value)
+
+    def _spy_frame_tool_result(safe_summary, char_name=None):
+        calls["safe_summary"] = safe_summary
+        return real_frame_tool_result(safe_summary, char_name=char_name)
+
+    monkeypatch.setattr(_tr, "to_tool_result", _spy_to_tool_result)
+    monkeypatch.setattr(_tr, "frame_tool_result", _spy_frame_tool_result)
+    messages, _ = _build_minimal(monkeypatch, tool_result=raw)
+    layer10 = next(m["content"] for m in messages if m.get("_layer") == "10_tool_result")
+
+    assert calls["to_tool_result"] is raw
+    assert calls["safe_summary"] == "SAFE"
+    assert "SAFE" in layer10
+    assert "SECRET" not in layer10
+
+
+def test_layer10_long_tool_result_exposes_only_truncated_summary(monkeypatch):
+    from core.tools.tool_result import TOOL_RESULT_CHAR_CAP, to_tool_result
+
+    raw = "A" * (TOOL_RESULT_CHAR_CAP + 40) + "TAIL_SECRET"
+    messages, _ = _build_minimal(monkeypatch, tool_result=to_tool_result(raw))
+    layer10 = next(m["content"] for m in messages if m.get("_layer") == "10_tool_result")
+
+    assert "…（工具结果已截断）" in layer10
+    assert "TAIL_SECRET" not in layer10
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. 工具名来自 _TOOL_REGISTRY — format_tool_capability_note
 # ─────────────────────────────────────────────────────────────────────────────

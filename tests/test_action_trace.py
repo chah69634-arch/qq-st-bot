@@ -119,6 +119,38 @@ class TestExecuteRecording:
         entries = action_trace.recent("u_reject", DEFAULT_CHAR_ID, max_items=10, window_hours=999)
         assert entries == []
 
+    async def test_tool_result_safe_summary_is_the_only_success_output(self, monkeypatch, caplog):
+        """execute() must not stringify ToolResult and leak raw_data downstream."""
+        import logging
+
+        import core.tool_dispatcher as td
+        from core.memory import action_trace
+        from core.session_state import SessionState
+        from core.tools.tool_result import ToolResult
+
+        async def _returns_secret():
+            return ToolResult(raw_data="SECRET", safe_summary="SAFE")
+
+        records: list[dict] = []
+        monkeypatch.setattr(td, "_TOOL_REGISTRY", {
+            "p0_safe_tool": {"func": _returns_secret, "dangerous": False, "category": "info"},
+        })
+        monkeypatch.setattr(td, "_is_tool_enabled", lambda _: True)
+        monkeypatch.setattr(action_trace, "record", lambda *args, **kwargs: records.append(kwargs))
+
+        with caplog.at_level(logging.INFO, logger="core.tool_dispatcher"):
+            result, ask = await td.execute(
+                tool_name="p0_safe_tool", tool_args={}, user_id="u_safe", target_id="u_safe",
+                is_group=False, session_state=SessionState(), origin="user_live", char_id=DEFAULT_CHAR_ID,
+            )
+
+        assert ask is None
+        assert result == "工具已执行：p0_safe_tool，结果：SAFE"
+        assert "SECRET" not in result
+        assert records[0]["result_digest"] == "SAFE"
+        assert "SECRET" not in caplog.text
+        assert "result_len=6" in caplog.text
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. 环形上限 30 条

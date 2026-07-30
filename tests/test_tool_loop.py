@@ -173,7 +173,10 @@ async def test_two_step_natural_termination_with_tool_includes_reanchor(monkeypa
     tool_msgs = [m for m in final_messages if m.get("role") == "tool"]
     assert len(tool_msgs) == 1
     assert tool_msgs[0]["tool_call_id"] == "call_1"
-    assert tool_msgs[0]["content"] == "晴，25度"
+    assert "<<<TOOL_DATA_START>>>" in tool_msgs[0]["content"]
+    assert "<<<TOOL_DATA_END>>>" in tool_msgs[0]["content"]
+    assert "晴，25度" in tool_msgs[0]["content"]
+    assert "请用" not in tool_msgs[0]["content"]
 
     reanchor_msgs = [
         m for m in final_messages
@@ -680,7 +683,9 @@ async def test_tail_brace_relay_triggers_second_tool_call(monkeypatch):
         m for m in final_messages
         if m.get("role") == "tool" and m.get("tool_call_id") == relay_assistant["tool_calls"][0]["id"]
     )
-    assert tool_result_msg["content"] == "鱼上钩了"
+    assert "<<<TOOL_DATA_START>>>" in tool_result_msg["content"]
+    assert "<<<TOOL_DATA_END>>>" in tool_result_msg["content"]
+    assert "鱼上钩了" in tool_result_msg["content"]
 
 
 @pytest.mark.asyncio

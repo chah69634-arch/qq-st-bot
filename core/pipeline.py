@@ -905,6 +905,7 @@ class Pipeline:
             get_tool_loop_relay_prompt,
             parse_tail_brace,
         )
+        from core.tools.tool_result import frame_tool_message
 
         # Brief 82 · 决策 7：本轮最后一条用户消息命中显式重读短语时，放行本轮全部
         # persist 工具已读指纹（多步调用复用同一次探测结果，短语与工具目标同轮）。
@@ -989,6 +990,14 @@ class Pipeline:
         used_tool = False
         # ("natural"/"exhausted"/"confirm", text) — 收尾结果种类 + 文本
         outcome: tuple[str, str] | None = None
+
+        def _tool_message_content(result: str | None, ask_confirm: str | None) -> str:
+            """Keep confirmation state outside the untrusted tool-data frame."""
+            if ask_confirm:
+                return ask_confirm
+            if result:
+                return frame_tool_message(result)
+            return "（工具无结果或执行失败）"
 
         async def _resolve_relay_intent(intent_text: str) -> list[dict]:
             """Brief 120·工具循环二次调用兜底：把 {true:...} 里模型自标注的干净意图
@@ -1086,7 +1095,7 @@ class Pipeline:
                                 loop_msgs.append({
                                     "role": "tool",
                                     "tool_call_id": rc["id"],
-                                    "content": ask_confirm or result or "（工具无结果或执行失败）",
+                                    "content": _tool_message_content(result, ask_confirm),
                                 })
                                 if ask_confirm:
                                     outcome = ("confirm", ask_confirm)
@@ -1115,7 +1124,7 @@ class Pipeline:
                     loop_msgs.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
-                        "content": ask_confirm or result or "（工具无结果或执行失败）",
+                        "content": _tool_message_content(result, ask_confirm),
                     })
                     if ask_confirm:
                         outcome = ("confirm", ask_confirm)
