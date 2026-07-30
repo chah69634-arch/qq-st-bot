@@ -69,6 +69,7 @@
 - **path_resolver**（`core/memory/path_resolver.py`）：统一路径构造入口；`test_memory_direct_path_lint.py` 覆盖 `user_memory_root(...)` 直调门禁。
 - **慢队列 scope payload**：`summarize_to_midterm` 及后续 handler 均在入队时携带 `char_id` 快照，handler 透传至写入层。
 - **`user_facts` 全局域拆分**：跨角色通用事实（姓名、生日等）已归入 global scope，不再混在 per-char 的 `user_profile` 内。
+- **`health_state` 全局域**：`data/runtime/memory/global/{uid}/health_state.json` 保存 uid-only 的睡眠、心率、手机传感与 `last_period_date`；后者仅接受 `YYYY-MM-DD`，旧 profile 值只作一次性兼容导入。
 - **R3 CI 门禁**（2026-06-11）：`tests/test_r3_scope_lint.py` — core/ 不得新增 `char_id="yexuan"` 函数默认参数或裸 `data/` 路径构造；`tests/test_r3_memory_scope_cleanup_contract.py` — 迁移目标文件仍有违规时通过（文件清理后失败，提示移除 allowlist 条目）；admin/ 不得新增 char_id 默认参数。
 
 ### 残余工作（P0 范围外，2026-06-11 核对）

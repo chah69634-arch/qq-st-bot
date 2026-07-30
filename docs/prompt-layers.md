@@ -20,9 +20,9 @@
 | `3_relation` | 与该用户的关系 + 称呼 | `user_relation.has_configured_relation(user_id)` 为真（有用户专属条目或 relations.yaml 的全局 default 段）；全新用户/relations.yaml 无该条目时整层不注入，不写硬编码兜底 stranger（Brief 97 §5） | `user_relation` |
 | `4_group_context` | 群聊最近动态 | 群聊时 | `group_context.get_recent()` |
 | `4.2_stage_transcript` | 带真实 speaker 标签的共享 Stage transcript | reality Stage 角色生成时 | `core/stage/context.py` |
-| `3.5_period` | 生理期感知（第N天） | tagged（见下） | `user_profile.get_period_info()` |
-| `3.6_watch` | 最近一次睡眠数据（以角色第三人称旁白注入，无方括号标签） | tagged（见下） | `user_profile` sleep_segments |
-| `3.7_sensor` | 手机传感器（步数/电量/位置/亮屏次数，以角色旁白注入，无方括号标签/时间戳/数据来源描述） | 当天有数据即注（无 tag 门控） | `user_profile.phone_sensor_today` |
+| `3.5_period` | 生理期感知（第N天） | tagged（见下） | `health_state.get_period_info()`（uid-global） |
+| `3.6_watch` | 最近一次睡眠数据（以角色第三人称旁白注入，无方括号标签） | tagged（见下） | `health_state.sleep_segments`（uid-global） |
+| `3.7_sensor` | 手机传感器（步数/电量/位置/亮屏次数，以角色旁白注入，无方括号标签/时间戳/数据来源描述） | 当天有数据即注（无 tag 门控） | `health_state.phone_sensor_today`（uid-global） |
 | `3.8_activity` | 屏幕活动快照（以角色旁白注入，无方括号标签；内容来自 activity_snapshot 的类别字段，不含原始应用名） | tagged（见下） | `data/runtime/characters/{char_id}/inner/activity_snapshot.json`（TTL 5分钟） |
 | `3.8_growth_self` | 角色自身近期兴趣、等级与最新心得；软提示，不作数据播报 | tagged：成长 domain 或直接询问角色近况 | `core/growth/interest_state.py` + `core/growth/notes.py`（只读、失败不注入） |
 | `3.9_screen_awareness` | 桌面实时感知摘要（粗粒度应用/活动类别 + 模糊编辑状态；不注入窗口标题或屏幕原文） | 活动相关 tagged 快照 5 分钟内，或用户活跃且快照 3 分钟内 | `core.memory.realtime_state`（纯内存，重启清零） |

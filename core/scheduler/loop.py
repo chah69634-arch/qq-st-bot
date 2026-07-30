@@ -843,26 +843,21 @@ async def manual_trigger(name: str) -> str:
             oid = _owner_id()
             if not oid:
                 return "owner_id 未配置"
-            from core.memory.user_profile import get_period_info
+            from core.memory.health_state import get_period_info
             from datetime import date as _date
             info = get_period_info(oid)
             last_date_str = info.get("last_period_date")
-            if last_date_str:
-                last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
-                days_elapsed = (_date.today() - last_date).days
-                await _pipeline_send(
-                    f"（{_char_name()}记得你的生理期已经来了{days_elapsed}天，悄悄关心一下）",
-                    trigger_name="period_reminder",
-                    search_query="生理期",
-                    recall_policy="anchored",
-                )
-            else:
-                await _pipeline_send(
-                    f"（{_char_name()}想关心一下你的身体状况）",
-                    trigger_name="period_reminder",
-                    search_query="生理期",
-                    recall_policy="anchored",
-                )
+            if not last_date_str:
+                logger.info("[period] missing_period_date")
+                return "missing_period_date"
+            last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+            days_elapsed = (_date.today() - last_date).days
+            await _pipeline_send(
+                f"（{_char_name()}记得你的生理期已经来了{days_elapsed}天，悄悄关心一下）",
+                trigger_name="period_reminder",
+                search_query="生理期",
+                recall_policy="anchored",
+            )
             _mark("period_reminder")
         elif name == "diary_reminder":
             oid = _owner_id()

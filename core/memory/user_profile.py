@@ -768,15 +768,20 @@ def get_affection_level(user_id: str) -> dict:
 
 # ─── 生理期 ────────────────────────────────────────────────────────────────────
 
-def get_period_info(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
-    """读取生理期信息，返回包含 last_period_date 字段的字典"""
-    profile = load(user_id, char_id=char_id)
-    return {"last_period_date": profile.get("last_period_date")}
+def get_period_info(user_id: str) -> dict:
+    """Deprecated compatibility shim for the uid-global period state."""
+    logger.warning("user_profile.get_period_info is deprecated; use health_state.get_period_info")
+    from core.memory.health_state import get_period_info as _get_period_info
+
+    return _get_period_info(user_id)
 
 
 def set_period_date(user_id: str, date_str: str):
-    """设置上次生理期日期（格式：YYYY-MM-DD）"""
-    mutate(user_id, lambda profile: profile.__setitem__("last_period_date", date_str))
+    """Deprecated compatibility shim for the uid-global period state."""
+    logger.warning("user_profile.set_period_date is deprecated; use health_state.set_period_date")
+    from core.memory.health_state import set_period_date as _set_period_date
+
+    return _set_period_date(user_id, date_str)
 
 
 class UserProfile:

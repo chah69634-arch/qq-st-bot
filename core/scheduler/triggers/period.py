@@ -8,11 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 def _days_elapsed(uid: str, today: _date | None = None) -> int | None:
-    from core.memory.user_profile import get_period_info
+    from core.memory.health_state import get_period_info
 
     info = get_period_info(uid)
     last_date_str = info.get("last_period_date")
     if not last_date_str:
+        logger.info("[period] missing_period_date")
         return None
     last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
     return ((today or _date.today()) - last_date).days

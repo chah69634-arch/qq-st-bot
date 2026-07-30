@@ -671,7 +671,7 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 | `diary_reminder` | 20h | 低 | diary | 提醒用户写日记；冷启动门控见下 |
 | `diary_inject` | 6h | 低 | diary | 日记上下文注入 |
 | `diary_share_reminder` | 8h | 低 | diary | 很久没看到日记时提一句；冷启动门控见下 |
-| `period_reminder` | 24h | **高** | period | 生理期关心 |
+| `period_reminder` | 24h | **高** | period | 生理期关心；仅在 uid-global `health_state.last_period_date` 已记录时产生候选 |
 | `topic_followup` | 24h | 低 | memory | 未完结话题追问 |
 | `birthday_midnight` | 365天 | **高** | birthday | 生日零点告白 |
 | `birthday_eve` | 20h | **高** | birthday | 生日前夜预热 |

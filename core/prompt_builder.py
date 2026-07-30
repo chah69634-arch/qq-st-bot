@@ -669,9 +669,9 @@ def build(
     _period_triggers = {"topic.body", "emotion.physical_discomfort", "query.body_state", "emotion.down", "emotion.indirect"}
     if _tags & _period_triggers:
         try:
-            from core.memory.user_profile import get_period_info
+            from core.memory.health_state import get_period_info
             from datetime import date as _date, datetime as _datetime
-            _period = get_period_info(user_id, char_id=char_id)
+            _period = get_period_info(user_id)
             _last = _period.get("last_period_date")
             if _last:
                 _days = (_date.today() - _datetime.strptime(_last, "%Y-%m-%d").date()).days
