@@ -376,24 +376,58 @@ thinking:
   monologue_max_tokens: 200
   apply_to_proactive: false  # scheduler 主动消息是否也思考（默认省钱不开）
 
-# MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4）。
-# 只接外部工具，不接 resources/prompts、不接外部记忆库——外接记忆会绕过 prompt 层注入
-# 与固化链，裂成两套真相。工具只经 tool loop 暴露：角色卡 presence_ext.tool_categories
-# 含 "mcp" 才看得见这些工具，其余角色扮演场景不受影响。
+# MCP（Model Context Protocol）外部工具客户端。
+# 只接外部工具，不接 resources/prompts 或外部记忆库。工具只经 Path C tool loop 暴露；
+# categories 含 "mcp" 只控制模型能否看见 MCP 工具，不能代替下面的本地副作用策略。
 mcp_servers:
-  enabled: false
-  servers: []
-    # - name: filesystem
-    #   transport: stdio            # stdio | sse | streamable-http（http 是旧版 streamable-http 别名）
-    #   command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "D:/some/dir"]
-    #   # sse / streamable-http 时用: url: https://your-mcp-server.example/mcp
-    #   # 可选 HTTP 鉴权头；支持 ${ENV_VAR} 展开，勿在示例/文档写入真实 token
-    #   # headers: {Authorization: "Bearer ${MCP_SERVER_TOKEN}"}
-    #   # 远程 MCP 才可选 true；localhost / loopback 始终直连，不读取环境代理
-    #   use_proxy: false
-    #   enabled: true             # per-server 开关；总开关仍由 mcp_servers.enabled 控制
-    #   tool_timeout_s: 30
-    #   allow_tools: []              # 空 = 全部；非空 = 白名单
+  enabled: false                  # 总开关；关闭时不会建立任何 MCP session
+  require_local_policy: true      # true=启用的 server 必须有非空 allow_tools + 完整 tool_policy
+  # effect 只信任本地配置：
+  #   read      = 只读，不确认
+  #   write     = 改外部状态，默认不确认；可显式 require_confirm: true
+  #   actuate   = 控制实体/设备，默认确认；可显式 require_confirm: false
+  #   emergency = 立即停止/保护动作，永不确认
+  # 远端 annotations.readOnlyHint 仅记录与观测，不能授予 read 权限；本地 effect 优先。
+  servers:
+    # 分类 A：普通外部服务（读 + 写）。write 工具仍是合法 MCP 能力，不要因 effect=write 删除它。
+    - name: example_forum
+      transport: streamable-http   # stdio | sse | streamable-http（http 为兼容别名）
+      url: https://mcp.example.invalid/mcp
+      headers: {Authorization: "Bearer ${EXAMPLE_MCP_TOKEN}"}  # 不写真实 token
+      use_proxy: false             # 仅远程 server 可设 true；loopback 始终直连
+      enabled: false               # per-server 开关；总开关仍由 mcp_servers.enabled 控制
+      tool_timeout_s: 30
+      allow_tools:                 # strict policy 下不可为空；远端多余工具会被忽略
+        - list_threads
+        - create_reply
+      tool_policy:
+        list_threads:
+          effect: read
+        create_reply:
+          effect: write
+
+    # 分类 B：具身硬件。actuate 默认确认；emergency 是无条件立即执行的停止动作。
+    - name: example_hardware
+      transport: streamable-http
+      url: http://127.0.0.1:8766/mcp
+      headers: {Authorization: "Bearer ${HARDWARE_MCP_TOKEN}"}
+      use_proxy: false
+      enabled: false
+      tool_timeout_s: 30
+      allow_tools:
+        - hardware_status
+        - hardware_pulse
+        - hardware_stop
+      tool_policy:
+        hardware_status:
+          effect: read
+        hardware_pulse:
+          effect: actuate
+          require_confirm: true
+        hardware_stop:
+          effect: emergency
+
+  # 兼容模式：删除/设为 false 后保留旧 MCP 注册行为，但会记录 legacy unclassified policy 警告。
 
 # fs 只读浏览工具（Brief 31）：fs_list / fs_read，只读，范围严格限于 allow_roots。
 # 与 MCP 同策略——只经 tool loop 暴露，角色卡 presence_ext.tool_categories 含 "fs" 才看得见。
