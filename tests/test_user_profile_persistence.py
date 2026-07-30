@@ -61,7 +61,6 @@ def test_clear_only_removes_profile_owned_fields(sandbox):
         "sleep_segments": [{"duration_minutes": 420}],
         "last_period_date": "2026-01-01",
         "heart_rate_events": [{"value": 80}],
-        "affection": 123,
         "unknown_extension": {"preserve": True},
     })
 
@@ -78,5 +77,4 @@ def test_clear_only_removes_profile_owned_fields(sandbox):
     assert profile["sleep_segments"] == [{"duration_minutes": 420}]
     assert profile["last_period_date"] == "2026-01-01"
     assert profile["heart_rate_events"] == [{"value": 80}]
-    assert profile["affection"] == 123
     assert profile["unknown_extension"] == {"preserve": True}

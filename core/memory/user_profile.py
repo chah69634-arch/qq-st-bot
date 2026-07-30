@@ -13,7 +13,6 @@ from threading import Lock, RLock
 from typing import Callable
 
 from core.config_loader import get_config
-from core.character_name_provider import get_active_char_name
 from core.error_handler import log_error
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope, require_character_id
@@ -714,58 +713,6 @@ def clear(user_id: str, *, char_id: str = DEFAULT_CHAR_ID):
     mutate(user_id, reset_owned_fields, char_id=char_id)
 
 
-# ─── 好感度系统（已冻结） ────────────────────────────────────────────────────────────────
-
-_AFFECTION_LEVELS = [
-    (0,   99,   "陌生人",   "{char}对她还不太了解"),
-    (100, 299,  "普通朋友", "{char}对她有些印象"),
-    (300, 499,  "好朋友",   "{char}很高兴认识她"),
-    (500, 699,  "亲密朋友", "{char}很珍惜和她在一起的时光"),
-    (700, 899,  "挚友",     "{char}对她有深厚的情感"),
-    (900, 1000, "灵魂伴侣", "{char}认为她是最重要的人"),
-]
-
-
-def get_affection(user_id: str) -> int:
-    """读取用户好感度，默认 0"""
-    path = _profile_read_path(user_id)
-    try:
-        if path.exists():
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return int(data.get("affection", 0))
-    except Exception as e:
-        log_error("user_profile.get_affection", e)
-    return 0
-
-
-def add_affection(user_id: str, delta: int):
-    """增减好感度，结果限制在 0-1000"""
-    def apply(profile: dict) -> None:
-        current = int(profile.get("affection", 0))
-        profile["affection"] = max(0, min(1000, current + delta))
-
-    mutate(user_id, apply)
-
-
-def set_affection(user_id: str, value: int):
-    """直接设置好感度（管理员用）"""
-    def apply(profile: dict) -> None:
-        profile["affection"] = max(0, min(1000, int(value)))
-
-    mutate(user_id, apply)
-
-
-def get_affection_level(user_id: str) -> dict:
-    """返回好感度等级信息：{value, label, description}"""
-    char_name = get_active_char_name()
-    value = get_affection(user_id)
-    for lo, hi, label, desc in _AFFECTION_LEVELS:
-        if lo <= value <= hi:
-            return {"value": value, "label": label, "description": desc.replace("{char}", char_name)}
-    return {"value": value, "label": "灵魂伴侣", "description": _AFFECTION_LEVELS[-1][3].replace("{char}", char_name)}
-
-
 # ─── 生理期 ────────────────────────────────────────────────────────────────────
 
 def get_period_info(user_id: str) -> dict:
@@ -801,15 +748,3 @@ class UserProfile:
 
     def clear(self, user_id: str):
         clear(user_id)
-
-    def get_affection(self, user_id: str) -> int:
-        return get_affection(user_id)
-
-    def add_affection(self, user_id: str, delta: int):
-        add_affection(user_id, delta)
-
-    def set_affection(self, user_id: str, value: int):
-        set_affection(user_id, value)
-
-    def get_affection_level(self, user_id: str) -> dict:
-        return get_affection_level(user_id)

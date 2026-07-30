@@ -257,7 +257,6 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
 
     monkeypatch.setattr(_reg, "_pipeline", _FakePipeline())
     monkeypatch.setattr(_sink, "record_assistant_turn", _fake_record)
-    monkeypatch.setattr(_up, "get_affection_level", lambda uid: {"value": 0, "label": "陌生"})
 
     # _FakePipeline 没实现 run_agentic_loop；显式关闭 tool loop 分支，避免这个测试
     # 意外依赖真实 config/角色卡状态判出 tool_loop_active=True（Brief 50 · 工单B）。
@@ -273,7 +272,7 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     # Stub tool probe to skip (must be async — the real function is a coroutine)
     import admin.routers.chat as _chat
 
-    async def _noop_probe(msg, uid, *, char_id="yexuan"):
+    async def _noop_probe(msg, uid, *, char_id="yexuan", provenance_channel=None):
         return None
 
     monkeypatch.setattr(_chat, "_probe_and_execute_tools", _noop_probe)

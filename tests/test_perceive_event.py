@@ -383,7 +383,7 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     # Stub tool probe so it returns None (no tool call)
     import admin.routers.chat as _chat
 
-    async def _no_tool(msg, uid, *, char_id="yexuan"):
+    async def _no_tool(msg, uid, *, char_id="yexuan", provenance_channel=None):
         return None
 
     monkeypatch.setattr(_chat, "_probe_and_execute_tools", _no_tool)
@@ -391,9 +391,6 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     # Stub channel lookup
     from channels import registry as _reg
     _reg._channels = {}
-
-    # Stub user profile
-    monkeypatch.setattr("core.memory.user_profile.get_affection_level", lambda uid: {"value": 5, "label": "好感"})
 
     # Stub write_envelope
     import core.write_envelope as _we

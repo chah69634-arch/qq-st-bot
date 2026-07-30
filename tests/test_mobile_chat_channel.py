@@ -155,11 +155,6 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
     )
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_sink)
     monkeypatch.setattr("core.coplay.session.is_active", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(
-        "core.memory.user_profile.get_affection_level",
-        lambda _uid: {"value": 0, "label": "normal"},
-    )
-
     result = await chat.run_owner_chat_turn(
         "你好",
         "mobile",
@@ -168,6 +163,8 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
     )
 
     assert result["turn_id"] == result["msg_id"] == "turn-mobile"
+    assert "affection" not in result
+    assert "level" not in result
     assert prompt_channels == ["mobile"]
     assert probe_channels == ["mobile"]
     assert capture_origins == [{"origin": "mobile"}]

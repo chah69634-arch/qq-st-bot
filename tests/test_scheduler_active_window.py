@@ -129,13 +129,12 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
     monkeypatch.setattr(loop, "_last_user_message_time", 0.0)
     monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "u1"}})
-    async def fake_probe(message, user_id, *, char_id="yexuan"):
+    async def fake_probe(message, user_id, *, char_id="yexuan", provenance_channel=None):
         return ""
 
     monkeypatch.setattr(chat, "_probe_and_execute_tools", fake_probe)
     monkeypatch.setattr("channels.registry.get", lambda name: None)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
-    monkeypatch.setattr("core.memory.user_profile.get_affection_level", lambda uid: {"value": 0, "label": "n/a"})
 
     await chat.run_owner_chat_turn("hello", "desktop")
 

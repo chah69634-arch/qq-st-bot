@@ -12,7 +12,6 @@ P1-0H: 运行期 yexuan fallback 审计测试
   T1: [已修] prompt_builder.get_period_info 已传 char_id（P1-0H.1, 2026-06-05）
   T2: scheduler/loop.py + period.py get_period_info 无 char_id 上下文
   T3: scheduler/time_based.py yexuan_inner_diary() 无 char_id
-  T4: admin/routers/chat.py get_affection_level 未传 char_id（已冻结系统）
 """
 
 import json
@@ -440,7 +439,6 @@ def test_pipeline_dlq_new_payload_no_fallback():
 #   修复建议：调度器解析 active char_id 并透传。
 #
 # T4 (admin/routers/chat.py:107, :219)
-#   get_affection_level(user_id) 未传 char_id（好感度系统已冻结）。
 #   风险：好感度始终从 yexuan 桶读取。
 #   修复建议：从 pipeline._active_character_id 获取 char_id 并透传，
 #   或将好感度迁移到非角色域存储。

@@ -258,7 +258,6 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
     monkeypatch.setattr("core.conversation_gate.conversation_lock", noop_lock)
     monkeypatch.setattr(channel_registry, "get", lambda name: None)
     monkeypatch.setattr(turn_sink, "record_assistant_turn", fake_record_assistant_turn)
-    monkeypatch.setattr(user_profile, "get_affection_level", lambda uid: {"value": 0, "label": "n/a"})
     monkeypatch.setattr(segment_enforcer, "get_segment_enforce_settings", lambda: (enabled, 20))
     monkeypatch.setattr(reality_output_guard, "get_segment_enforce_settings", lambda: (enabled, 20))
     monkeypatch.setattr(ui_push, "any_connected", lambda: True)

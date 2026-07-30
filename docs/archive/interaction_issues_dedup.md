@@ -325,7 +325,7 @@ legacy WS 协议先接通，action executor 未迁入新 Tauri 客户端。
 严重度：P1：多端状态不一致、重复写入、触发误判
 
 问题描述：  
-desktop WS 使用 `channel_message/action` legacy 协议；mobile queue 使用 `id/content/user_id/timestamp/behavior`；HTTP chat 返回 `reply/emotion/affection/level/turn_id?`；QQ 直接发文本，不消费 channel envelope。缺少统一字段导致去重、来源、priority、trigger、behavior、test/debug 等信息在不同端表现不一致。
+desktop WS 使用 `channel_message/action` legacy 协议；mobile queue 使用 `id/content/user_id/timestamp/behavior`；HTTP chat 返回 `reply/emotion/turn_id?`；QQ 直接发文本，不消费 channel envelope。缺少统一字段导致去重、来源、priority、trigger、behavior、test/debug 等信息在不同端表现不一致。
 
 证据：
 - `<desktop-client-root>\src\shared\api\ws.ts:87`：desktop `channel_message`。

@@ -267,9 +267,6 @@ async def run_owner_chat_turn(
         )
         _t_post = time.monotonic() - _t0
 
-        from core.memory.user_profile import get_affection_level
-        info = get_affection_level(user_id)
-
         # Visible reply: strip render/NMP tags only so action descriptions survive
         # for chat texture.  Memory is already scrubbed inside record_assistant_turn.
         from core.response_processor import strip_render_tags as _strip_tags
@@ -330,8 +327,6 @@ async def run_owner_chat_turn(
 
         return {
             "reply": visible_reply,
-            "affection": info["value"],
-            "level": info["label"],
             "emotion": turn_result.emotion,
             "turn_id": turn_result.turn_id,
             # 流式路径：HTTP msg_id 与 WS 流式帧共享同一 id，
@@ -489,14 +484,8 @@ async def frontend_chat(body: dict, auth=Depends(require_scopes("chat"))):
         pipeline.post_process(user_id, message, reply)
     )
 
-    # 返回回复 + 最新好感度
-    from core.memory.user_profile import get_affection_level
-    info = get_affection_level(user_id)
-
     return {
         "reply":      reply,
-        "affection":  info["value"],
-        "level":      info["label"],
     }
 
 
