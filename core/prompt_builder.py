@@ -694,8 +694,8 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     if _tags & _WATCH_TRIGGERS:
         try:
-            from core.memory.user_profile import load as _load_up
-            _up = _load_up(user_id)
+            from core.memory.health_state import load as _load_health
+            _up = _load_health(user_id)
             _segs = [s for s in _up.get("sleep_segments", []) if s.get("duration_minutes", 0) > 0]
             if _segs:
                 _last_seg = _segs[-1]
@@ -723,9 +723,9 @@ def build(
     # 层 3.7：手机传感器摘要（口袋角色回传）
     # ─────────────────────────────────────────────────────────────────────────
     try:
-        from core.memory.user_profile import load as _load_up2
-        _up2 = _load_up2(user_id)
-        _sensor = _up2.get("phone_sensor_today", {})
+        from core.memory.health_state import load as _load_health2
+        _up2 = _load_health2(user_id)
+        _sensor = _up2.get("phone_sensor_today") or {}
         _sensor_date = _sensor.get("date", "")
         _today_str = __import__("datetime").date.today().isoformat()
         if _sensor and _sensor_date == _today_str:

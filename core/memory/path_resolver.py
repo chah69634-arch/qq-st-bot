@@ -55,6 +55,7 @@ REALITY_CHARACTER_ARTIFACTS: frozenset[str] = frozenset({
 # Global-scoped: path uses uid only, no char_id in scope.
 GLOBAL_USER_ARTIFACTS: frozenset[str] = frozenset({
     "user_facts",
+    "health_state",
 })
 
 # Dream-scoped: path uses char_id, uid, and world_id.
@@ -211,6 +212,9 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
         # Parallel to reality user_memory_root (data/runtime/memory/{char_id}/{uid}/)
         # but without char_id since this is cross-character.
         return paths._p("runtime", "memory", "global", uid, "user_facts.json")
+
+    if artifact == "health_state":
+        return paths._p("runtime", "memory", "global", uid, "health_state.json")
 
     # ── dream-scoped: (char_id, uid, world_id) ───────────────────────────────
 

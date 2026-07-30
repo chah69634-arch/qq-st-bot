@@ -22,7 +22,6 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional
 from admin.auth import require_scopes
 from core.config_loader import get_config
-from core.memory.user_profile import load as _load_profile, save as _save_profile
 from core.memory import realtime_state
 from core.sandbox import get_paths
 
@@ -43,54 +42,40 @@ def _is_sensitive_window_text(text: str) -> bool:
     return any(keyword.casefold() in folded for keyword in _SENSITIVE_WINDOW_KEYWORDS)
 
 
-def _save_sensor_to_profile(data: dict):
-    """把传感器数据聚合后存入用户画像"""
-    from core.write_envelope import stamp_sensor_watch
-    _env = stamp_sensor_watch()
-    if not _env.can_write_memory:
-        return
+def _save_sensor_to_health_state(data: dict):
+    """Persist objective sensor observations outside the character profile."""
     oid = str(get_config().get("scheduler", {}).get("owner_id", ""))
     if not oid:
         return
 
-    profile = _load_profile(oid)
+    from core.memory import health_state
 
-    # 存入 phone_sensor_log，保留最近30条
-    log = profile.get("phone_sensor_log", [])
-    log.append({
-        "time":            datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "steps":           data.get("steps"),
-        "battery":         data.get("battery"),
-        "location":        data.get("location"),
-        "screen_sessions": data.get("screen_sessions"),
-    })
-    profile["phone_sensor_log"] = log[-30:]
+    def apply_sensor(state: dict) -> None:
+        log = state["phone_sensor_log"]
+        log.append({
+            "time":            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "steps":           data.get("steps"),
+            "battery":         data.get("battery"),
+            "location":        data.get("location"),
+            "screen_sessions": data.get("screen_sessions"),
+        })
+        state["phone_sensor_log"] = log[-30:]
 
-    # 聚合今日摘要，角色读的是这个，不是原始流水
-    today = datetime.now().strftime("%Y-%m-%d")
-    summary = profile.get("phone_sensor_today", {})
+        today = datetime.now().strftime("%Y-%m-%d")
+        summary = dict(state["phone_sensor_today"] or {})
+        if data.get("steps") is not None:
+            summary["steps"] = max(summary.get("steps", 0), data["steps"])
+        if data.get("battery") is not None:
+            summary["battery"] = data["battery"]
+        if data.get("location"):
+            summary["location"] = data["location"]
+        if data.get("screen_sessions") is not None:
+            summary["screen_sessions"] = max(summary.get("screen_sessions", 0), data["screen_sessions"])
+        summary["date"] = today
+        summary["last_updated"] = datetime.now().strftime("%H:%M")
+        state["phone_sensor_today"] = summary
 
-    # 步数取最大值（今日累计）
-    if data.get("steps") is not None:
-        summary["steps"] = max(summary.get("steps", 0), data["steps"])
-
-    # 电量记录最新值
-    if data.get("battery") is not None:
-        summary["battery"] = data["battery"]
-
-    # 位置记录最新值
-    if data.get("location"):
-        summary["location"] = data["location"]
-
-    # 亮屏次数取最大值
-    if data.get("screen_sessions") is not None:
-        summary["screen_sessions"] = max(summary.get("screen_sessions", 0), data["screen_sessions"])
-
-    summary["date"] = today
-    summary["last_updated"] = datetime.now().strftime("%H:%M")
-    profile["phone_sensor_today"] = summary
-
-    _save_profile(oid, profile)
+    health_state.mutate(oid, apply_sensor)
 
 
 @router.post("/sensor/push", summary="接收手机传感器数据")
@@ -140,8 +125,7 @@ async def receive_sensor_data(body: dict, auth=Depends(require_scopes("sensor.wr
         "received_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
 
-    # 存入用户画像
-    _save_sensor_to_profile(data)
+    _save_sensor_to_health_state(data)
 
     return {"message": "传感器数据已接收", "data": data}
 
@@ -158,8 +142,8 @@ async def get_sensor_today(auth=Depends(require_scopes("state.read"))):
     oid = str(get_config().get("scheduler", {}).get("owner_id", ""))
     if not oid:
         return {}
-    profile = _load_profile(oid)
-    return profile.get("phone_sensor_today", {})
+    from core.memory import health_state
+    return health_state.load(oid).get("phone_sensor_today") or {}
 
 
 # ── Pydantic 模型（仅 /sensor/realtime 使用，不对外暴露）─────────────────────
@@ -262,4 +246,3 @@ async def get_behavior_status(auth=Depends(require_scopes("state.read"))):
     from core.scheduler.triggers import sensor_aware
 
     return sensor_aware.get_last_decision()
-

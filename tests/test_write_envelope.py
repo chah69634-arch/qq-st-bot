@@ -206,7 +206,7 @@ class TestQQWithIsTest:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 5. sensor 原始事件 — profile 不写
+# 5. sensor 原始事件 — profile 不写，objective health state 正常写入
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestSensorWatchRaw:
@@ -216,33 +216,33 @@ class TestSensorWatchRaw:
         assert env.can_write_memory is False
         assert env.can_affect_mood is False
 
-    def test_sensor_router_profile_not_written(self, monkeypatch):
-        """admin/routers/sensor.py _save_sensor_to_profile → profile 不写。"""
+    def test_sensor_router_writes_health_not_profile(self, sandbox, monkeypatch):
+        """Raw sensor data persists only in the uid-global health state."""
         import admin.routers.sensor as _sensor_module
+        from core.memory import health_state, user_profile
 
-        saved = []
-        monkeypatch.setattr(_sensor_module, "_save_profile", lambda uid, p: saved.append(p))
-        monkeypatch.setattr(_sensor_module, "_load_profile", lambda uid: {})
         monkeypatch.setattr(
             _sensor_module, "get_config",
             lambda: {"scheduler": {"owner_id": "owner1"}},
         )
+        user_profile.save("owner1", {"name": "profile-only"})
 
-        _sensor_module._save_sensor_to_profile({"steps": 5000, "battery": 80})
+        _sensor_module._save_sensor_to_health_state({"steps": 5000, "battery": 80})
 
-        assert saved == [], "sensor 原始感知不应写 user_profile"
+        assert user_profile.load("owner1")["name"] == "profile-only"
+        assert health_state.load("owner1")["phone_sensor_today"]["steps"] == 5000
 
-    def test_watch_router_heart_rate_not_written(self, monkeypatch):
-        """admin/routers/watch.py _append_heart_rate_event → profile 不写。"""
+    def test_watch_router_heart_rate_writes_health_not_profile(self, sandbox):
+        """Raw heart-rate observations do not use the character profile."""
         import admin.routers.watch as _watch_module
+        from core.memory import health_state, user_profile
 
-        saved = []
-        monkeypatch.setattr(_watch_module, "_save_profile", lambda uid, p: saved.append(p))
-        monkeypatch.setattr(_watch_module, "_load_profile", lambda uid: {})
+        user_profile.save("owner1", {"name": "profile-only"})
 
         _watch_module._append_heart_rate_event("owner1", 110, triggered=True)
 
-        assert saved == [], "心率原始感知不应写 user_profile"
+        assert user_profile.load("owner1")["name"] == "profile-only"
+        assert health_state.load("owner1")["heart_rate_events"][-1]["value"] == 110
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

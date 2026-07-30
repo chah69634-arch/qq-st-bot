@@ -1,4 +1,4 @@
-from core.memory.user_profile import load as load_profile
+from core.memory.health_state import load as load_health_state
 
 
 def read_watch_for_user(user_id: str, query: str = "") -> str:
@@ -6,14 +6,14 @@ def read_watch_for_user(user_id: str, query: str = "") -> str:
     读取用户的watch数据，返回给角色的自然语言描述。
     query可以是"睡眠"/"心率"/"运动"/"最近"，不填返回综合摘要。
     """
-    profile = load_profile(user_id)
+    health_state = load_health_state(user_id)
 
     sleep_segments = [
-        s for s in profile.get("sleep_segments", [])
+        s for s in health_state.get("sleep_segments", [])
         if s.get("duration_minutes", 0) > 0
     ][-3:]
 
-    heart_rate_events = profile.get("heart_rate_events", [])[-3:]
+    heart_rate_events = health_state.get("heart_rate_events", [])[-3:]
 
     if not sleep_segments and not heart_rate_events:
         return "暂时没有身体数据记录"
