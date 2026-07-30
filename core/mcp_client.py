@@ -79,14 +79,18 @@ def _require_local_policy() -> bool:
     return bool(_get_mcp_config().get("require_local_policy", False))
 
 
-def _validated_local_tool_policy(server_cfg: dict) -> dict[str, dict] | None:
+def validate_local_tool_policy(
+    server_cfg: dict, *, required: bool | None = None
+) -> dict[str, dict] | None:
     """Return normalized trusted local policy, or None for legacy operation.
 
     MCP annotations describe a remote server's claim.  They never supply this
     local authorization data, so strict mode deliberately validates policy
     before any session or dynamic tool registration is created.
     """
-    if not _require_local_policy():
+    if required is None:
+        required = _require_local_policy()
+    if not required:
         return None
 
     name = str(server_cfg.get("name") or "<unnamed>")
@@ -143,6 +147,11 @@ def _validated_local_tool_policy(server_cfg: dict) -> dict[str, dict] | None:
             name, extras,
         )
     return normalized
+
+
+def _validated_local_tool_policy(server_cfg: dict) -> dict[str, dict] | None:
+    """Use the configured strict-policy setting for runtime registration."""
+    return validate_local_tool_policy(server_cfg)
 
 
 def _expand_headers(raw_headers: object) -> dict[str, str] | None:

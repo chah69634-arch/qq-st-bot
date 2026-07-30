@@ -26,6 +26,7 @@ class McpServerDraft(BaseModel):
     use_proxy: bool = False
     headers: dict[str, str] = Field(default_factory=dict)
     allow_tools: list[str] = Field(default_factory=list)
+    tool_policy: Optional[dict[str, "McpToolPolicy"]] = None
     enabled: bool = True
     tool_timeout_s: float = 30
 
@@ -34,9 +35,15 @@ class McpSettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
+class McpToolPolicy(BaseModel):
+    effect: Literal["read", "write", "actuate", "emergency"]
+    require_confirm: Optional[bool] = None
+
+
 class McpServerUpdate(BaseModel):
     enabled: Optional[bool] = None
     allow_tools: Optional[list[str]] = None
+    tool_policy: Optional[dict[str, McpToolPolicy]] = None
     headers: Optional[dict[str, str]] = None
     tool_timeout_s: Optional[float] = None
     use_proxy: Optional[bool] = None
@@ -67,6 +74,13 @@ def _validate_draft(draft: McpServerDraft) -> dict:
         "url": draft.url.strip(),
         "headers": dict(draft.headers),
         "allow_tools": list(dict.fromkeys(draft.allow_tools)),
+        **(
+            {"tool_policy": {
+                tool_name: policy.model_dump(exclude_none=True)
+                for tool_name, policy in draft.tool_policy.items()
+            }}
+            if draft.tool_policy is not None else {}
+        ),
         "enabled": bool(draft.enabled),
         "tool_timeout_s": max(1, min(300, float(draft.tool_timeout_s))),
     }
@@ -136,6 +150,7 @@ def _server_view(server_cfg: dict) -> dict:
         "enabled": bool(server_cfg.get("enabled", True)),
         "tool_timeout_s": float(server_cfg.get("tool_timeout_s", 30)),
         "allow_tools": list(server_cfg.get("allow_tools") or []),
+        "tool_policy": dict(server_cfg.get("tool_policy") or {}),
         "tool_presets": _normalize_tool_presets(server_cfg.get("tool_presets")),
         "active_tool_preset": str(server_cfg.get("active_tool_preset") or ""),
         "runtime": server_runtime(name),
@@ -188,6 +203,31 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
     from core import config_loader, mcp_client
 
     server_cfg = _validate_draft(body)
+    full_cfg = _read_config()
+    mcp_cfg = full_cfg.setdefault("mcp_servers", {})
+    existing = next(
+        (
+            item
+            for item in (mcp_cfg.get("servers") or [])
+            if item.get("name") == server_cfg["name"]
+        ),
+        None,
+    )
+    # The import form does not edit trusted local tool policy. Retain an
+    # existing strict policy when re-importing the same server.
+    if isinstance(existing, dict):
+        if not server_cfg["allow_tools"] and isinstance(
+            existing.get("allow_tools"), list
+        ):
+            server_cfg["allow_tools"] = list(existing["allow_tools"])
+        if isinstance(existing.get("tool_policy"), dict):
+            server_cfg["tool_policy"] = dict(existing["tool_policy"])
+    if bool(mcp_cfg.get("require_local_policy", False)):
+        try:
+            mcp_client.validate_local_tool_policy(server_cfg, required=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     try:
         tools = await mcp_client.test_server_config(server_cfg)
     except Exception as exc:
@@ -197,8 +237,6 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
     if unknown:
         raise HTTPException(status_code=422, detail=f"allow_tools 含未发现工具: {unknown}")
 
-    full_cfg = _read_config()
-    mcp_cfg = full_cfg.setdefault("mcp_servers", {})
     servers = [item for item in (mcp_cfg.get("servers") or []) if item.get("name") != server_cfg["name"]]
     servers.append(server_cfg)
     mcp_cfg["servers"] = servers
@@ -219,7 +257,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin"))):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
-    if all(value is None for value in (body.enabled, body.allow_tools, body.headers, body.tool_timeout_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
+    if all(value is None for value in (body.enabled, body.allow_tools, body.tool_policy, body.headers, body.tool_timeout_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
         raise HTTPException(status_code=422, detail="没有可更新字段")
     full_cfg = _read_config()
     servers = full_cfg.setdefault("mcp_servers", {}).setdefault("servers", [])
@@ -233,6 +271,11 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         # A manual checkbox edit is deliberately a custom selection, not a silent
         # mutation of whichever named preset happened to be active.
         server.pop("active_tool_preset", None)
+    if body.tool_policy is not None:
+        server["tool_policy"] = {
+            tool_name: policy.model_dump(exclude_none=True)
+            for tool_name, policy in body.tool_policy.items()
+        }
     if body.tool_presets is not None:
         server["tool_presets"] = _normalize_tool_presets(body.tool_presets)
         current = str(server.get("active_tool_preset") or "")
@@ -257,8 +300,16 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         server["tool_timeout_s"] = max(1, min(300, float(body.tool_timeout_s)))
     if body.use_proxy is not None:
         server["use_proxy"] = bool(body.use_proxy)
-    _write_config(full_cfg)
     from core import config_loader, mcp_client
+    if (
+        bool(full_cfg.get("mcp_servers", {}).get("require_local_policy", False))
+        and bool(server.get("enabled", True))
+    ):
+        try:
+            mcp_client.validate_local_tool_policy(server, required=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _write_config(full_cfg)
     config_loader.reload_config()
     # Brief 115 根治：同上，走信号队列热重载，由 server 专属常驻 task 自己关闭/重连。
     await mcp_client.reload_server_from_config(name)

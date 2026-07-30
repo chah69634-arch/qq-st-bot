@@ -96,6 +96,20 @@ def test_import_rejects_unknown_whitelist_without_writing(tmp_path, monkeypatch)
     assert path.read_text(encoding="utf-8") == before
 
 
+def test_strict_import_rejects_missing_local_policy_before_probe(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers: []\n")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    async def probe(_cfg):
+        raise AssertionError("must not probe a strict server without local policy")
+
+    monkeypatch.setattr(mcp_client, "test_server_config", probe)
+    with pytest.raises(HTTPException, match="必须配置 tool_policy") as exc:
+        asyncio.run(mod.import_mcp_server(_draft(), _auth=None))
+    assert exc.value.status_code == 422
+
+
 def test_global_toggle_writes_config_and_hot_syncs(tmp_path, monkeypatch):
     """Brief 115 根治：总开关热同步已恢复，sync_mcp_servers 只发信号给专属常驻 task。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: false\n  servers: []\n")
@@ -136,6 +150,64 @@ def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeyp
     assert calls == ["cedar_toy"]
     assert "重启" not in result["message"]
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]["use_proxy"] is True
+
+
+def test_strict_policy_rejects_incomplete_whitelist_before_writing(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n"
+        "      allow_tools: [toy_status]\n      tool_policy:\n"
+        "        toy_status: {effect: read}\n",
+    )
+    before = path.read_text(encoding="utf-8")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    async def reload(name):
+        raise AssertionError(f"must not reload invalid strict policy: {name}")
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    with pytest.raises(HTTPException, match="缺少 tool_policy") as exc:
+        asyncio.run(mod.update_mcp_server(
+            "cedar_toy", mod.McpServerUpdate(allow_tools=["toy_status", "delete_thread"]), _auth=None,
+        ))
+    assert exc.value.status_code == 422
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_strict_policy_accepts_complete_whitelist_and_policy(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n"
+        "      allow_tools: [toy_status]\n      tool_policy:\n"
+        "        toy_status: {effect: read}\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    calls = []
+
+    async def reload(name):
+        calls.append(name)
+        return True
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda name: {"connected": True, "tools": []})
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy",
+        mod.McpServerUpdate(
+            allow_tools=["toy_status", "delete_thread"],
+            tool_policy={
+                "toy_status": mod.McpToolPolicy(effect="read"),
+                "delete_thread": mod.McpToolPolicy(effect="write"),
+            },
+        ),
+        _auth=None,
+    ))
+
+    assert result["server"]["tool_policy"]["delete_thread"] == {"effect": "write"}
+    assert calls == ["cedar_toy"]
 
 
 def test_selecting_named_tool_preset_updates_runtime_allowlist(tmp_path, monkeypatch):

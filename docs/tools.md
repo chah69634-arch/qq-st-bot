@@ -192,6 +192,9 @@ mcp_servers:
   不注册工具也不写配置；删除会移除配置、关闭该 server 的 owner 并摘除动态工具。保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
   `headers` 的 `${ENV_VAR}` 会在连接时展开，缺失环境变量即连接失败；管理面仅显示环境变量
   占位符或“已配置”，不回显字面 token。
+- **本地 effect 策略**：`require_local_policy: true` 时，管理面更新 `allow_tools` 必须同时提交完整的
+  `tool_policy`。每个白名单工具都要显式标为 `read`、`write`、`actuate` 或 `emergency`；校验失败不会
+  写入配置或热重载。像删除远端帖子这样的操作应标为 `write`，不根据远端工具描述自动推断。
 - **代理**：MCP HTTP client 一律 `trust_env=False`，不会继承 `HTTP_PROXY` / `HTTPS_PROXY`。
   `localhost`、`.localhost`、IPv4/IPv6 loopback 与未指定地址强制直连；远程 URL 只有配置
   `use_proxy: true`（或管理面勾选）才使用全局 `proxy.http` / `proxy.https`，且全局代理未启用或
