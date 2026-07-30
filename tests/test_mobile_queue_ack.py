@@ -134,5 +134,32 @@ async def test_mobile_router_poll_cursor_and_ack_remaining(sandbox, monkeypatch)
     )
 
     assert response["cursor"] == response["messages"][-1]["seq"]
+    assert response["ok"] is True
+    assert response["active"] is True
     assert all("seq" in item for item in response["messages"])
     assert ack_response == {"ok": True, "remaining": 1}
+
+
+async def test_mobile_router_unregistered_channel_has_explicit_business_failure(monkeypatch):
+    from admin.routers import mobile as mobile_router
+
+    monkeypatch.setattr(mobile_router, "_get_mobile_channel", lambda: None)
+
+    activation = await mobile_router.mobile_activate(auth=True)
+    deactivation = await mobile_router.mobile_deactivate(auth=True)
+    poll = await mobile_router.mobile_poll(after=9, limit=20, wait=0, auth=True)
+
+    assert activation == {
+        "ok": False,
+        "active": False,
+        "error": "mobile channel 未注册",
+    }
+    assert deactivation == activation
+    assert poll == {
+        "ok": False,
+        "active": False,
+        "error": "mobile channel 未注册",
+        "messages": [],
+        "count": 0,
+        "cursor": 9,
+    }

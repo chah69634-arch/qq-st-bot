@@ -23,7 +23,7 @@ def _get_mobile_channel():
 async def mobile_activate(auth=Depends(require_scopes("chat"))):
     mobile = _get_mobile_channel()
     if mobile is None:
-        return {"ok": False, "error": "mobile channel 未注册"}
+        return {"ok": False, "active": False, "error": "mobile channel 未注册"}
     mobile.set_active(True)
     return {"ok": True, "active": True}
 
@@ -32,7 +32,7 @@ async def mobile_activate(auth=Depends(require_scopes("chat"))):
 async def mobile_deactivate(auth=Depends(require_scopes("chat"))):
     mobile = _get_mobile_channel()
     if mobile is None:
-        return {"ok": False, "error": "mobile channel 未注册"}
+        return {"ok": False, "active": False, "error": "mobile channel 未注册"}
     mobile.set_active(False)
     return {"ok": True, "active": False}
 
@@ -46,10 +46,23 @@ async def mobile_poll(
 ):
     mobile = _get_mobile_channel()
     if mobile is None:
-        return {"messages": [], "count": 0, "cursor": after, "active": False}
+        return {
+            "ok": False,
+            "active": False,
+            "error": "mobile channel 未注册",
+            "messages": [],
+            "count": 0,
+            "cursor": after,
+        }
     messages = await mobile.poll(after=after, limit=limit, wait_seconds=wait)
     cursor = max((message["seq"] for message in messages), default=after)
-    return {"messages": messages, "count": len(messages), "cursor": cursor, "active": True}
+    return {
+        "ok": True,
+        "active": True,
+        "messages": messages,
+        "count": len(messages),
+        "cursor": cursor,
+    }
 
 
 @router.post("/mobile/ack", summary="确认手机端已持久化的主动消息")
