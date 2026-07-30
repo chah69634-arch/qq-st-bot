@@ -9,6 +9,32 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.post("/mobile/chat", summary="手机端普通对话（Bearer 鉴权）")
+async def mobile_chat(body: dict, _auth=Depends(require_scopes("chat"))):
+    """Run the shared reality-chat pipeline with mobile provenance."""
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message 不能为空")
+    reply_to = body.get("reply_to")
+
+    from admin.routers.chat import _check_reality_not_in_dream, run_owner_chat_turn
+    from core.config_loader import get_config
+
+    uid = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
+    _check_reality_not_in_dream(uid)
+    result = await run_owner_chat_turn(
+        message,
+        "mobile",
+        live_origin_channel="mobile",
+        durable_mobile_mirror=True,
+        reply_to=reply_to,
+    )
+
+    from core.scheduler.sensor_events import notify_chat_happened
+    notify_chat_happened()
+    return result
+
+
 def _get_mobile_channel():
     from channels.registry import get
     from channels.mobile import MobileChannel

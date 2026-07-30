@@ -33,6 +33,7 @@ _ROUTE_RE = re.compile(r'@router\.(post|patch|put)\(\s*"([^"]+)"')
 NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     # ── 桌宠客户端（Emerald-client）专属通道 ────────────────────────────
     ("POST", "/desktop/chat"): "桌宠对话入口，由 Emerald-client 直连，非管理面板功能",
+    ("POST", "/mobile/chat"): "手机普通对话入口，由 PresenceKit-mobile 直连，非管理面板功能",
     ("POST", "/desktop/activate"): "桌宠上线激活 desktop 通道，由 Emerald-client 直连",
     ("POST", "/desktop/wake"): "桌宠重开问候，由 Emerald-client 直连",
     ("POST", "/upload/ingest"): "三端统一文件上传入口，管理面板不做上传 UI",

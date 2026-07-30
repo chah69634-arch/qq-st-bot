@@ -16,7 +16,7 @@
 
 ```
 QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 QQ
-桌宠/手机发消息 → POST /desktop/chat → Pipeline → HTTP 返回 reply + turn_sink fanout 到其他活跃端
+桌宠发消息 → POST /desktop/chat；手机发消息 → POST /mobile/chat → 共享 Pipeline → HTTP 返回 reply + turn_sink fanout
 调度器主动消息 → scheduler._pipeline_send → turn_sink → channels.registry.broadcast()
                                           ├─ DesktopChannel
                                           ├─ MobileChannel
@@ -77,15 +77,18 @@ MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活
 signal-only 中继唤醒（仅含 `id` / `seq` / `user_id` / `timestamp` / `signal`）；正文和
 `behavior` 只保留在 `/mobile/poll` 队列。三项任一缺失时静默跳过中继发布。
 
-手机和桌宠共用同一个 `/desktop/chat` 入口（手机端目前没有独立的 chat 端点），
+手机普通聊天使用 `/mobile/chat`，桌宠使用 `/desktop/chat`；两者复用同一个
+`run_owner_chat_turn()` 与
 经 `core/conversation_gate.py` 的 per-user 锁：同一用户的并发请求不会并行进入
 `fetch_context → LLM → post_process_critical`（Brief 37：只锁到落盘的关键段；`post_process_slow` 里的
 `detect_emotion` / mood_state 更新是 send 后异步 `asyncio.create_task` 出去的，不占这把锁，
 下一条消息不需要等它跑完）。
-本端 reply 通过 HTTP response 返回；`record_assistant_turn(fanout="all", exclude_origin_channel=...)`
-会把同一回复同步到其他活跃端，避免本端重复收到一份队列消息。
+本端 reply 通过 HTTP response 返回；`exclude_origin_channel` 只排除实时来源，
+mobile durable mirror 则由独立策略控制，确保手机发消息后立即切后台仍有可 poll 的副本。
 
-HTTP assistant reply 保留 `turn_id`，并同时返回兼容字段 `msg_id`；两者相等。该 canonical ID
+HTTP assistant reply 保留 `turn_id`，并同时返回兼容字段 `msg_id`；两者相等。mobile 普通聊天的
+provenance 是 `mobile`（prompt、probe 与观测），实时来源也是 `mobile`（不启用 desktop stream，
+不激活 desktop），但 USER_CHAT 的 mobile durable mirror 是独立策略，始终写入一次队列。该 canonical ID
 也用于同一 assistant turn 的 WS `channel_message.msg_id` / `message_segments.msg_id`。
 `/desktop/wake` 在实际返回 assistant reply 时同样返回相等的 `turn_id` / `msg_id`。
 

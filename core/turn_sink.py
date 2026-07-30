@@ -88,6 +88,7 @@ async def _fanout(
     fanout: FanoutPolicy,
     behavior: Optional[dict],
     exclude_origin_channel: Optional[str] = None,
+    durable_mobile_mirror: bool = True,
     ws_msg_id: Optional[str] = None,
     char_id: Optional[str] = None,
     source: Optional[TurnSource] = None,
@@ -123,18 +124,11 @@ async def _fanout(
         # safe to call for an offline phone. is_active should gate live poll
         # responses, not whether we bother leaving a message in the queue.
         #
-        # Why unconditional (not just _is_proactive): the phone shares
-        # /desktop/chat with the desktop client (channel_name is always
-        # "desktop", never "mobile" — see admin/routers/chat.py), so a reply to a
-        # message the phone itself just sent still needs to land in mobile_queue
-        # to pop a QQ/WeChat-style banner if the user backgrounds the app before
-        # the reply is ready. This is safe from double-notifications: Android's
-        # MainActivity.onResume() stops MobileNotificationService entirely (see
-        # PresenceKit-mobile), so nothing is listening for the relay wake while
-        # the app is foreground — the message just sits queued and gets picked up
-        # by Flutter's own foreground poll instead, same as it already does for
-        # proactive messages.
-        if exclude_origin_channel != "mobile":
+        # Delivery is deliberately independent from live fanout exclusion. A
+        # mobile-originated HTTP turn still needs its durable copy if the app is
+        # backgrounded before the response arrives; the client reconciles that
+        # copy with the HTTP response by the canonical turn id.
+        if durable_mobile_mirror:
             mobile_ch = registry.get("mobile")
             already = any(getattr(t, "name", "") == "mobile" for t in targets)
             if mobile_ch is not None and not already:
@@ -194,6 +188,7 @@ async def record_assistant_turn(
     await_critical_post_process: bool = True,
     bypass_gate: bool = False,
     exclude_origin_channel: Optional[str] = None,
+    durable_mobile_mirror: bool = True,
     pipeline=None,
     envelope=None,
     audit_extras: Optional[dict] = None,
@@ -314,6 +309,7 @@ async def record_assistant_turn(
         fanout=fanout,
         behavior=behavior,
         exclude_origin_channel=exclude_origin_channel,
+        durable_mobile_mirror=durable_mobile_mirror,
         ws_msg_id=_ws_msg_id,
         char_id=char_id,
         source=source,

@@ -343,6 +343,37 @@ async def test_user_chat_reaches_offline_mobile_queue(sandbox):
     assert queue[0]["content"] == "在的，怎么了。"
 
 
+async def test_mobile_live_origin_keeps_durable_mirror_and_desktop_fanout(sandbox):
+    """实时排除 mobile 不得取消同一 turn 的 durable mobile 副本。"""
+    from channels import registry
+    from channels.mobile import MobileChannel
+    from core.turn_sink import TurnSource, record_assistant_turn
+
+    await _reset_channels()
+    desktop = _Channel("desktop")
+    mobile = MobileChannel()
+    registry.register(desktop)
+    registry.register(mobile)
+
+    result = await record_assistant_turn(
+        assistant_text="手机回复",
+        uid="owner",
+        source=TurnSource.USER_CHAT,
+        user_text="手机消息",
+        fanout="all",
+        bypass_gate=True,
+        exclude_origin_channel="mobile",
+        durable_mobile_mirror=True,
+        pipeline=_FakePipeline(),
+    )
+
+    queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
+    assert result.fanout_targets == ["desktop", "mobile"]
+    assert desktop.sent == [("手机回复", "owner", None)]
+    assert len(queue) == 1
+    assert queue[0]["id"] == result.turn_id == "turn-手机消息"
+
+
 async def test_mobile_fanout_queue_id_matches_turn_id(sandbox):
     from channels import registry
     from channels.mobile import MobileChannel

@@ -29,8 +29,10 @@ _FOURTH_WALL_NOTE = (
 
 async def run_owner_chat_turn(
     message: str,
-    channel_name: str,
+    provenance_channel: str,
     *,
+    live_origin_channel: str | None = None,
+    durable_mobile_mirror: bool = True,
     trusted_user_text: str | None = None,
     reply_to: dict | None = None,
 ) -> dict:
@@ -50,6 +52,7 @@ async def run_owner_chat_turn(
       探针（_probe_text）刻意使用拼接前的原始文本，避免引用原文里的操作性
       短语被探针误判为当轮指令。非法/缺失时静默降级为普通消息。
     """
+    live_origin_channel = live_origin_channel or provenance_channel
     from core.pipeline_registry import get as _get_pipeline
     pipeline = _get_pipeline()
     if pipeline is None:
@@ -110,7 +113,12 @@ async def run_owner_chat_turn(
                 # Path C 已激活：工具决策权整体移交主模型，跳过 pre-pipeline 探针。
                 result = None
             else:
-                result = await _probe_and_execute_tools(_probe_text, user_id, char_id=_frozen_scope.character_id)
+                result = await _probe_and_execute_tools(
+                    _probe_text,
+                    user_id,
+                    char_id=_frozen_scope.character_id,
+                    provenance_channel=provenance_channel,
+                )
             _t_probe = time.monotonic() - _t0
             return result
 
@@ -124,7 +132,7 @@ async def run_owner_chat_turn(
         tool_result_text, context = await asyncio.gather(_timed_probe(), _timed_ctx())
         try:
             from core.observe.prompt_capture import set_capture_origin as _set_capture_origin
-            _set_capture_origin({"origin": "desktop"})
+            _set_capture_origin({"origin": provenance_channel})
         except Exception:
             pass
         _t0 = time.monotonic()
@@ -133,7 +141,7 @@ async def run_owner_chat_turn(
             message,
             context,
             tool_result=tool_result_text,
-            channel=channel_name,
+            channel=provenance_channel,
             char_id=_frozen_scope.character_id,
         )
         _t_prompt = time.monotonic() - _t0
@@ -147,7 +155,11 @@ async def run_owner_chat_turn(
         _t_first_delta = None
         _t_stream = None
         _t_llm = None
-        _use_stream = (channel_name == "desktop") and _ui_push.any_connected()
+        _use_stream = (
+            provenance_channel == "desktop"
+            and live_origin_channel == "desktop"
+            and _ui_push.any_connected()
+        )
         _stream_paragraph_enforcer = None
         if _use_stream:
             from core.output.segment_enforcer import (
@@ -227,7 +239,7 @@ async def run_owner_chat_turn(
             reply = _clean_memory_reply(reply, pipeline.character.name) or reply
 
         from channels.registry import get as _get_channel
-        channel = _get_channel(channel_name)
+        channel = _get_channel(live_origin_channel)
         if channel and hasattr(channel, "set_active"):
             channel.set_active(True)
 
@@ -244,7 +256,8 @@ async def run_owner_chat_turn(
             user_text=message,
             fanout="all",
             bypass_gate=True,
-            exclude_origin_channel=channel_name,
+            exclude_origin_channel=live_origin_channel,
+            durable_mobile_mirror=durable_mobile_mirror,
             pipeline=pipeline,
             envelope=stamp_user_chat(),
             frozen_scope=_frozen_scope,
@@ -302,7 +315,7 @@ async def run_owner_chat_turn(
         if _use_stream:
             _cps = (_chars / _t_stream) if _t_stream else 0.0
             logger.info(
-                f"[owner_chat/timing] probe={_t_probe:.2f}s ctx={_t_ctx:.2f}s "
+                f"[owner_chat/timing] channel={provenance_channel} probe={_t_probe:.2f}s ctx={_t_ctx:.2f}s "
                 f"prompt={_t_prompt:.2f}s first_delta={(_t_first_delta or 0.0):.2f}s "
                 f"stream={(_t_stream or 0.0):.2f}s chars={_chars} ({_cps:.1f} c/s) "
                 f"post={_t_post:.2f}s total={_t_total:.2f}s"
@@ -310,7 +323,7 @@ async def run_owner_chat_turn(
         else:
             _cps = (_chars / _t_llm) if _t_llm else 0.0
             logger.info(
-                f"[owner_chat/timing] probe={_t_probe:.2f}s ctx={_t_ctx:.2f}s "
+                f"[owner_chat/timing] channel={provenance_channel} probe={_t_probe:.2f}s ctx={_t_ctx:.2f}s "
                 f"prompt={_t_prompt:.2f}s llm={(_t_llm or 0.0):.2f}s "
                 f"chars={_chars} ({_cps:.1f} c/s) post={_t_post:.2f}s total={_t_total:.2f}s"
             )
@@ -328,14 +341,21 @@ async def run_owner_chat_turn(
         }
 
 
-async def _probe_and_execute_tools(message: str, user_id: str, *, char_id: str) -> str | None:
+async def _probe_and_execute_tools(
+    message: str,
+    user_id: str,
+    *,
+    char_id: str,
+    provenance_channel: str,
+) -> str | None:
     from core import tool_dispatcher, llm_client as _llm
     from core.memory import user_profile as _up, short_term as _st_probe
     from core.session_state import get as _get_state
 
     _profile = _up.load(user_id, char_id=char_id)
     _location = _profile.get("location", "杭州")
-    tools_schema = tool_dispatcher.get_tools_schema(categories=["info", "desktop"])
+    categories = ["info", "desktop"] if provenance_channel == "desktop" else ["info"]
+    tools_schema = tool_dispatcher.get_tools_schema(categories=categories)
     state = _get_state(f"user_{user_id}")
 
     # 注入最近 2 轮（最多 4 条）真实对话，帮助探针解析代词指代
@@ -348,7 +368,7 @@ async def _probe_and_execute_tools(message: str, user_id: str, *, char_id: str) 
     probe_messages = [
         {
             "role": "system",
-            "content": tool_dispatcher.get_probe_prompt(_location),
+            "content": tool_dispatcher.get_probe_prompt(_location, categories=categories),
         },
         *_probe_ctx,
         {"role": "user", "content": message},
@@ -368,13 +388,13 @@ async def _probe_and_execute_tools(message: str, user_id: str, *, char_id: str) 
             pass
 
     try:
-        logger.info(f"[owner_chat] 工具探针，channel消息={message[:20]!r}")
+        logger.info(f"[owner_chat] 工具探针，channel={provenance_channel} 消息={message[:20]!r}")
         probe_raw = await _llm.chat(probe_messages, tools=tools_schema, call_category="probe")
         logger.info(f"[owner_chat] 探针回复={probe_raw[:60] if probe_raw else 'empty'!r}")
         tool_calls = _llm.parse_tool_call_response(probe_raw)
         _probe_snap = {
             "is_fast_path": False,
-            "probe_system": tool_dispatcher.get_probe_prompt(_location),
+            "probe_system": tool_dispatcher.get_probe_prompt(_location, categories=categories),
             "probe_context": _probe_ctx,
             "user_message": message,
             "tools_available": [
@@ -383,7 +403,7 @@ async def _probe_and_execute_tools(message: str, user_id: str, *, char_id: str) 
             ],
             "probe_response_raw": probe_raw if isinstance(probe_raw, str) else "",
             "tool_calls": tool_calls or [],
-            "channel": "desktop",
+            "channel": provenance_channel,
         }
         if not tool_calls:
             _capture_snap()

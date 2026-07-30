@@ -1260,7 +1260,7 @@ def format_tool_capability_note(categories: list[str] | None = None) -> str:
 def _build_probe_prompt(categories, *, location: str | None = None, relay: bool = False) -> str:
     """探针类 prompt 的共享构建逻辑。
 
-    被 get_probe_prompt()（Path A，固定 info/desktop 两类）与
+    被 get_probe_prompt()（Path A，默认 info/desktop）与
     get_tool_loop_relay_prompt()（Brief 120·工具循环二次调用兜底，categories 参数化）
     共同调用。不要在 get_probe_prompt 里加 if 分支——两者未来措辞可能分叉，分开维护
     避免探针本身的 prompt 被这次改动污染。
@@ -1295,9 +1295,13 @@ def _build_probe_prompt(categories, *, location: str | None = None, relay: bool 
     return "\n".join(lines)
 
 
-def get_probe_prompt(location: str) -> str:
-    """动态从注册表构建探针 prompt，新增工具自动同步，无需手动维护。"""
-    return _build_probe_prompt(("info", "desktop"), location=location)
+def get_probe_prompt(
+    location: str,
+    *,
+    categories: tuple[str, ...] | list[str] = ("info", "desktop"),
+) -> str:
+    """动态从注册表构建探针 prompt，默认保持 desktop 的 info/desktop 暴露面。"""
+    return _build_probe_prompt(categories, location=location)
 
 
 def get_tool_loop_relay_prompt(categories: list[str]) -> str:
