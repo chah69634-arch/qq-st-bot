@@ -886,6 +886,7 @@ class Pipeline:
         is_group: bool = False,
         stream: bool = False,
         is_proactive: bool = False,
+        exclude_tools: set[str] | None = None,
     ):
         """主生成多步调用工具再回答，只在 tool_dispatcher.tool_loop_active(uid) 为真时被调用。
 
@@ -927,18 +928,20 @@ class Pipeline:
         max_steps = int(cfg.get("max_steps", 5))
         total_timeout_s = float(cfg.get("total_timeout_s", 90))
         # per-char 工具暴露面覆盖（Brief 29 · 3.4）：活跃角色卡 presence_ext.tool_categories
-        # 存在则用它，否则回落全局 tool_loop.categories。exclude_tools 保持全局，不许 per-char 绕过。
+        # 存在则用它，否则回落全局 tool_loop.categories。配置排除项与本轮调用方传入的
+        # 排除项都在此应用，不许 per-char 绕过。
         _active_char = getattr(self, "character", None)
         char_categories = (_active_char.presence_ext or {}).get("tool_categories") if _active_char else None
         categories = char_categories if char_categories is not None else cfg.get("categories", ["info", "desktop", "memory"])
-        exclude_tools = set(cfg.get("exclude_tools", []))
+        excluded_tool_names = set(cfg.get("exclude_tools", []))
+        excluded_tool_names.update(exclude_tools or ())
 
         # Keep the registry helper's long-standing call shape for test/plugin
         # compatibility; proficiency is an exposure-layer filter applied here.
         from core.growth.mcp_proficiency import filter_schemas as _filter_growth_tools
         tools = [
             t for t in _filter_growth_tools(get_tools_schema(categories=categories), char_id=char_id)
-            if (t.get("function") or t).get("name") not in exclude_tools
+            if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
         if len(tools) > 20:
             logger.warning(

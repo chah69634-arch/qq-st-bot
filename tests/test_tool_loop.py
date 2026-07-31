@@ -93,6 +93,63 @@ def _patch_final_chat(monkeypatch, text: str):
     return calls
 
 
+@pytest.mark.asyncio
+async def test_per_turn_exclude_tools_hides_only_completed_fast_path_tool(monkeypatch):
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[])
+    _patch_tools_schema(monkeypatch, ["get_time", "web_search"])
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="direct response", tool_calls=[], assistant_message={"role": "assistant", "content": "direct response"}),
+    ])
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "what time is it"}],
+        uid="u1",
+        char_id="yexuan",
+        session_state=object(),
+        exclude_tools={"get_time"},
+    )
+
+    assert result == "direct response"
+    exposed_names = [
+        (schema.get("function") or schema).get("name")
+        for schema in chat_turn_calls[0]["tools"]
+    ]
+    assert "get_time" not in exposed_names
+    assert "web_search" in exposed_names
+
+
+@pytest.mark.asyncio
+async def test_without_per_turn_exclusion_native_fc_can_call_get_time(monkeypatch):
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[])
+    _patch_tools_schema(monkeypatch, ["get_time", "web_search"])
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "time_1", "name": "get_time", "arguments": {}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+        ChatTurn(content="已查到时间", tool_calls=[], assistant_message={"role": "assistant", "content": "已查到时间"}),
+    ])
+    execute_calls = _script_execute(monkeypatch, [("工具已执行：get_time，结果：当前时间 10:00", None)])
+    _patch_final_chat(monkeypatch, text="现在十点。")
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "what time is it"}],
+        uid="u1",
+        char_id="yexuan",
+        session_state=object(),
+        exclude_tools=set(),
+    )
+
+    assert result == "现在十点。"
+    assert execute_calls[0]["tool_name"] == "get_time"
+    exposed_names = [
+        (schema.get("function") or schema).get("name")
+        for schema in chat_turn_calls[0]["tools"]
+    ]
+    assert "get_time" in exposed_names
+
+
 # ── 1. 自然终止（从未调用工具）───────────────────────────────────────────────
 
 @pytest.mark.asyncio

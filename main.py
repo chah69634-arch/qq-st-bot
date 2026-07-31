@@ -429,6 +429,7 @@ async def handle_message(message: dict):
             )
             logger.info(
                 "[qq_fast_path_match] event=qq_fast_path_match "
+                "fast_path_matched=True "
                 "uid=%s is_group=%s matched_tool=%s matched_keyword=%r "
                 "tool_category=%s has_side_effect=%s fast_path_risk=%s "
                 "original_text_preview=%r will_skip_probe=True "
@@ -517,6 +518,7 @@ async def handle_message(message: dict):
                 "channel": "qq",
             }
         _probe_tool_results: list[dict] = []
+        _fast_path_exclude_tools: set[str] = set()
         if tool_calls:
             try:
                 # N2-A/N2-B: thinking mood 写入通过显式 helper，传入 qq envelope
@@ -559,6 +561,21 @@ async def handle_message(message: dict):
                     "result": t_result or "",
                     "has_side_effect": tool_dispatcher.is_side_effect_tool(t_name),
                 })
+                _success_prefix = f"工具已执行：{t_name}，结果："
+                _fast_path_succeeded = (
+                    bool(_fast_match)
+                    and isinstance(t_result, str)
+                    and t_result.startswith(_success_prefix)
+                    and bool(t_result[len(_success_prefix):].strip())
+                )
+                if _fast_path_succeeded and _loop_active:
+                    _fast_path_exclude_tools.add(t_name)
+                    logger.info(
+                        "[qq_fast_path_tool_loop] "
+                        "fast_path_tool_excluded_from_loop=True uid=%s tool=%s",
+                        user_id,
+                        t_name,
+                    )
                 if t_result:
                     tool_result_text = t_result
                     if t_name == "read_diary":
@@ -590,6 +607,7 @@ async def handle_message(message: dict):
         if _loop_active:
             raw_reply = await _pipeline.run_agentic_loop(
                 messages, uid=user_id, char_id=_char_id, session_state=state, is_group=is_group,
+                exclude_tools=_fast_path_exclude_tools,
             )
         else:
             raw_reply = await _pipeline.run_llm(messages)
