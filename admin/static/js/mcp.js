@@ -288,9 +288,12 @@ async function importMcpServer() {
 
 async function saveMcpServer(name) {
   const enabled = document.getElementById(`mcp-server-enabled-${name}`).checked;
-  const allow_tools = [...document.querySelectorAll(`[data-mcp-server="${name}"]:checked`)].map(el => el.value);
+  const toolInputs = [...document.querySelectorAll(`[data-mcp-server="${name}"]`)];
   const proxyControl = document.getElementById(`mcp-server-use-proxy-${name}`);
-  const body = { enabled, allow_tools };
+  const body = { enabled };
+  // A disabled server has no runtime-discovered checkboxes. Do not turn that
+  // absence into an empty persisted whitelist when it is being re-enabled.
+  if (toolInputs.length) body.allow_tools = toolInputs.filter(el => el.checked).map(el => el.value);
   if (proxyControl) body.use_proxy = proxyControl.checked;
   try { const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, body); toast(result.reload_status === 'restart_required' ? `${name} 已保存，需要重启服务` : `${name} 已热重载`, result.reload_status === 'restart_required' ? 'err' : 'ok'); loadMcpPage(); }
   catch (e) { toast(e.message, 'err'); }
