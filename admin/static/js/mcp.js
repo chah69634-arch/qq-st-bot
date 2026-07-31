@@ -174,7 +174,7 @@ function _renderMcpServer(server) {
   const actionArgs = escapeHtml(JSON.stringify([server.name]));
   const collapsed = !_mcpExpandedServers.has(server.name);
   const collapseArgs = escapeHtml(JSON.stringify([server.name]));
-  const saveLabel = escapeHtml(t('mcp.save_server', '保存 server 设置'));
+  const saveLabel = escapeHtml(t('mcp.save_server', '设置'));
   const deleteLabel = escapeHtml(t('mcp.delete_server', '删除 server'));
   const proxyControl = server.is_local_url
     ? `<span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.proxy_direct', '本地地址：始终直连'))}</span>`
