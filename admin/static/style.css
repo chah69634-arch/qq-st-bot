@@ -22,6 +22,7 @@ body {
   font-family: 'Segoe UI', system-ui, sans-serif;
   font-size: 14px;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* ── Auth overlay ── */
@@ -94,7 +95,7 @@ nav .icon { width: 18px; text-align: center; flex-shrink: 0; }
 
 /* ── Main content ── */
 main {
-  flex: 1; overflow-y: auto;
+  flex: 1; min-width: 0; overflow-x: hidden; overflow-y: auto;
   padding: 28px 32px;
 }
 .admin-topbar {
@@ -271,6 +272,97 @@ textarea { resize: vertical; min-height: 72px; }
 .nav-group-header{padding:8px 20px 2px;font-size:11px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
 .nav-group-header:hover{color:var(--text)}
 .nav-caret{display:inline-block;font-size:9px;width:10px}
+
+.nav-menu-toggle,
+.nav-backdrop {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  body.admin-sidebar-open {
+    overflow: hidden;
+  }
+
+  #app.admin-sidebar-open main {
+    overflow: hidden;
+  }
+
+  .nav-menu-toggle {
+    display: inline-flex;
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 8px);
+    left: calc(env(safe-area-inset-left) + 8px);
+    z-index: 1001;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 22px;
+    cursor: pointer;
+  }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: rgba(0, 0, 0, .55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease;
+  }
+
+  #app.admin-sidebar-open .nav-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  nav {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1000;
+    width: min(82vw, 320px);
+    min-width: 260px;
+    max-width: calc(100vw - 48px);
+    height: auto;
+    padding-top: calc(env(safe-area-inset-top) + 64px);
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    transform: translateX(-105%);
+    transition: transform .18s ease;
+    overscroll-behavior: contain;
+    box-shadow: 12px 0 28px rgba(0, 0, 0, .3);
+  }
+
+  #app.admin-sidebar-open nav {
+    transform: translateX(0);
+  }
+
+  main {
+    width: 100%;
+    padding: calc(env(safe-area-inset-top) + 64px) 16px max(20px, env(safe-area-inset-bottom));
+  }
+
+  .admin-topbar {
+    margin: 0 0 16px;
+  }
+
+  .form-row,
+  .form-row.col-3,
+  .profile-grid,
+  .admin-inline-053,
+  .admin-inline-178 {
+    grid-template-columns: 1fr;
+  }
+}
 
 
 /* Brief 126: exact legacy inline-style migration. */

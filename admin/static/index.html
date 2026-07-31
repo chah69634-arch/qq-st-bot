@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>His Presence 管理面板</title>
-<link rel="stylesheet" href="/static/style.css?v=admin-ui-split-2">
+<link rel="stylesheet" href="/static/style.css?v=admin-ui-mobile-drawer-1">
 </head>
 <body>
 
@@ -28,7 +28,27 @@
 
 <!-- Main app -->
 <div id="app" class="admin-inline-056">
-  <nav>
+  <button
+    id="nav-menu-toggle"
+    class="nav-menu-toggle"
+    type="button"
+    data-action="toggleSidebar"
+    data-i18n-aria-label="nav.menu_toggle"
+    aria-label="Toggle navigation"
+    aria-expanded="false"
+    aria-controls="admin-navigation"
+  ><span aria-hidden="true">&#9776;</span></button>
+  <button
+    id="nav-backdrop"
+    class="nav-backdrop"
+    type="button"
+    data-action="closeSidebar"
+    data-i18n-aria-label="nav.close_menu"
+    aria-label="Close navigation"
+    aria-hidden="true"
+    tabindex="-1"
+  ></button>
+  <nav id="admin-navigation">
     <div class="nav-logo">
       <h2 data-i18n="nav.console">运维控制台</h2>
       <p id="nav-host">127.0.0.1:8080</p>
@@ -528,8 +548,8 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=admin-ui-mcp-save-label-1"></script>
-<script src="/static/js/core.js?v=admin-ui-external-tools-1"></script>
+<script src="/static/i18n.js?v=admin-ui-mobile-drawer-1"></script>
+<script src="/static/js/core.js?v=admin-ui-mobile-drawer-1"></script>
 <script src="/static/js/setup.js"></script>
 <script src="/static/js/mcp.js?v=admin-ui-mcp-save-label-1"></script>
 <script src="/static/js/status-users.js?v=admin-ui-existence-1"></script>

@@ -73,7 +73,7 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
 
-    assert '<script src="/static/i18n.js?v=admin-ui-external-tools-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=admin-ui-mobile-drawer-1"></script>' in index
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
     assert "presence.admin.language" in runtime
     assert "localStorage.setItem(STORAGE_KEY, language)" in runtime
@@ -93,7 +93,7 @@ def test_i18n_javascript_is_served_with_an_executable_mime_type():
 
 def test_all_navigation_links_use_semantic_i18n_keys():
     index = read_admin_client_source()
-    nav = re.search(r"<nav>(.*?)</nav>", index, re.S)
+    nav = re.search(r"<nav\b[^>]*>(.*?)</nav>", index, re.S)
     assert nav is not None
 
     links = re.findall(r'<a\b[^>]*data-page="[^"]+"[^>]*>(.*?)</a>', nav.group(1), re.S)

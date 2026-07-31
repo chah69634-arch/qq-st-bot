@@ -1,6 +1,11 @@
 """Regression coverage for persisted admin navigation groups."""
 
+from pathlib import Path
+
 from admin_static_assets import read_admin_client_source
+
+
+STYLE = Path(__file__).parents[1] / "admin" / "static" / "style.css"
 
 
 def test_navigation_restore_discovers_all_rendered_groups():
@@ -11,3 +16,21 @@ def test_navigation_restore_discovers_all_rendered_groups():
     assert "for(const key of ['create','ops','state','observe'])" not in source
     assert 'data-action-args=\'["external-tools"]\'' in source
     assert 'data-action-args=\'["presence"]\'' in source
+
+
+def test_mobile_navigation_uses_a_shell_managed_drawer():
+    source = read_admin_client_source()
+    style = STYLE.read_text(encoding="utf-8")
+
+    assert 'id="nav-menu-toggle"' in source
+    assert 'aria-controls="admin-navigation"' in source
+    assert 'id="nav-backdrop"' in source
+    assert "const MOBILE_NAV_MEDIA = window.matchMedia('(max-width: 767px)');" in source
+    assert "app.classList.toggle('admin-sidebar-open', shouldOpen);" in source
+    assert "document.body.classList.toggle('admin-sidebar-open', shouldOpen);" in source
+    assert "if (event.target.closest('a[data-page]')) closeSidebar();" in source
+    assert "if (event.key === 'Escape') closeSidebar();" in source
+    assert "MOBILE_NAV_MEDIA.addEventListener('change', () => closeSidebar());" in source
+    assert '@media (max-width: 767px)' in style
+    assert 'transform: translateX(-105%);' in style
+    assert 'width: min(82vw, 320px);' in style

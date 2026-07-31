@@ -13,6 +13,8 @@
       'auth.login': '登录',
       'common.language': '语言',
       'nav.console': '运维控制台',
+      'nav.menu_toggle': '切换导航菜单',
+      'nav.close_menu': '关闭导航菜单',
       'nav.setup': '配置',
       'nav.group.creation': '🎨 创作',
       'nav.character': '角色卡',
@@ -1101,6 +1103,8 @@
       'auth.login': 'Sign in',
       'common.language': 'Language',
       'nav.console': 'Operations Console',
+      'nav.menu_toggle': 'Toggle navigation menu',
+      'nav.close_menu': 'Close navigation menu',
       'nav.setup': 'Setup',
       'nav.group.creation': '🎨 Creation',
       'nav.character': 'Characters',
@@ -2326,6 +2330,10 @@
     scope.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
       const key = element.dataset.i18nPlaceholder;
       element.placeholder = t(key, element.placeholder);
+    });
+    scope.querySelectorAll('[data-i18n-aria-label]').forEach(element => {
+      const key = element.dataset.i18nAriaLabel;
+      element.setAttribute('aria-label', t(key, element.getAttribute('aria-label')));
     });
     applyLegacyI18n(scope);
     document.querySelectorAll('[data-language-select]').forEach(selector => {
