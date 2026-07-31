@@ -47,7 +47,11 @@ function _runAction(event) {
 
 function bindPageActions(scope) {
   if (!scope) return;
-  scope.querySelectorAll('[data-action]').forEach(element => {
+  const actions = [
+    ...(scope.matches?.('[data-action]') ? [scope] : []),
+    ...scope.querySelectorAll('[data-action]'),
+  ];
+  actions.forEach(element => {
     if (element.dataset.actionBound === 'true') return;
     element.addEventListener('click', _runAction);
     element.dataset.actionBound = 'true';

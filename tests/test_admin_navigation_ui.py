@@ -25,6 +25,7 @@ def test_mobile_navigation_uses_a_shell_managed_drawer():
     assert 'id="nav-menu-toggle"' in source
     assert 'aria-controls="admin-navigation"' in source
     assert 'id="nav-backdrop"' in source
+    assert "scope.matches?.('[data-action]') ? [scope] : []" in source
     assert "const MOBILE_NAV_MEDIA = window.matchMedia('(max-width: 767px)');" in source
     assert "app.classList.toggle('admin-sidebar-open', shouldOpen);" in source
     assert "document.body.classList.toggle('admin-sidebar-open', shouldOpen);" in source
