@@ -23,7 +23,7 @@ _MAX_STEPS_MAX = 8
 _DEFAULTS = {
     "enabled": False,
     "max_steps": 5,
-    "total_timeout_s": 90,
+    "total_timeout_s": 300,
     "categories": ["info", "desktop", "memory"],
     "exclude_tools": ["toy_vibrate", "toy_stop", "toy_pattern", "write_toy_file"],
     "nudge_hint": "",

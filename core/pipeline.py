@@ -926,7 +926,7 @@ class Pipeline:
 
         cfg = get_config().get("tool_loop", {})
         max_steps = int(cfg.get("max_steps", 5))
-        total_timeout_s = float(cfg.get("total_timeout_s", 90))
+        total_timeout_s = float(cfg.get("total_timeout_s", 300))
         # per-char 工具暴露面覆盖（Brief 29 · 3.4）：活跃角色卡 presence_ext.tool_categories
         # 存在则用它，否则回落全局 tool_loop.categories。配置排除项与本轮调用方传入的
         # 排除项都在此应用，不许 per-char 绕过。
