@@ -105,11 +105,29 @@ async def test_local_policy_confirmation_defaults_and_emergency_override(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_destructive_annotation_remains_high_risk_after_local_confirmation(monkeypatch):
+    tools = [SimpleNamespace(
+        name="delete_item", description="", inputSchema={},
+        annotations=SimpleNamespace(destructiveHint=True),
+    )]
+    monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+    _patch_client_session(monkeypatch, _FakeSession(tools))
+
+    await mc._connect_server("srv1", _strict_server(
+        allow_tools=["delete_item"],
+        tool_policy={"delete_item": {"effect": "write", "require_confirm": False}},
+    ))
+
+    entry = td._TOOL_REGISTRY["mcp__srv1__delete_item"]
+    assert entry["mcp_high_risk"] is True
+    assert entry["dangerous"] is True
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("allow_tools", "tool_policy", "error"),
     [
         ([], {}, "非空 allow_tools"),
-        (["status"], {}, "缺少 tool_policy"),
         (["status"], {"status": {"effect": "unknown"}}, "effect 无效"),
     ],
 )
@@ -128,6 +146,40 @@ async def test_strict_local_policy_fails_closed_before_transport(monkeypatch, al
         ))
     assert opened is False
     assert mc.server_runtime("srv1")["last_init_ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_strict_allowlisted_tool_without_confirmation_is_discovered_but_not_registered(monkeypatch):
+    tools = [SimpleNamespace(name="mystery_action", description="", inputSchema={})]
+    monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+    _patch_client_session(monkeypatch, _FakeSession(tools))
+
+    await mc._connect_server("srv1", _strict_server(
+        allow_tools=["mystery_action"], tool_policy={},
+    ))
+
+    runtime = mc.server_runtime("srv1")
+    assert runtime["registered_tools"] == []
+    assert runtime["pending_confirmation_tools"] == ["mystery_action"]
+    assert "mcp__srv1__mystery_action" not in td._TOOL_REGISTRY
+
+
+@pytest.mark.parametrize(
+    ("name", "description", "annotations", "effect", "high_risk", "status"),
+    [
+        ("anything", "", {"readOnlyHint": True}, "read", False, "suggested"),
+        ("anything", "", {"destructiveHint": True}, "write", True, "suggested"),
+        ("send_message", "", None, "write", False, "suggested"),
+        ("opaque", "does a thing", None, None, False, "confirmation_required"),
+    ],
+)
+def test_policy_suggestion_uses_annotations_then_conservative_local_heuristic(
+    name, description, annotations, effect, high_risk, status,
+):
+    suggestion = mc.suggest_tool_policy(name, description, annotations)
+    assert suggestion["effect"] == effect
+    assert suggestion["high_risk"] is high_risk
+    assert suggestion["status"] == status
 
 
 @pytest.mark.asyncio

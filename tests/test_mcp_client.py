@@ -255,7 +255,17 @@ class TestHttpHeadersAndProbe:
 
         tools = await mc.test_server_config({"name": "remote", "transport": "http", "url": "https://x/mcp"})
 
-        assert tools == [{"name": "inspect", "description": "inspect status"}]
+        assert tools == [{
+            "name": "inspect",
+            "description": "inspect status",
+            "suggestion": {
+                "effect": "read",
+                "source": "name_description",
+                "status": "suggested",
+                "high_risk": False,
+                "require_confirm": False,
+            },
+        }]
         assert "mcp__remote__inspect" not in td._TOOL_REGISTRY
 
 

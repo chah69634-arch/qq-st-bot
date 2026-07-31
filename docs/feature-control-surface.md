@@ -39,7 +39,7 @@ MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /s
 `use_proxy`，启用后使用全局 `proxy.http` / `proxy.https`。删除会立即断开该 server 并摘除它的动态工具；总开关同步所有 session，单 server 的启停/白名单只重载该 server；工具调用以
 `caller=mcp__{server}__{tool}` 记录到 API 调用总账。桌面客户端不代理这些 admin 配置或密钥。
 
-每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，白名单和每项工具的本地 `tool_policy.effect` 必须一并完整提交，否则管理面拒绝写入和热重载。
+每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；新白名单工具会从 MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述获得仅供建议的 effect。管理员确认或修改后才写入 `tool_policy`，缺少确认的白名单工具保持 `pending_confirmation`，不会注册或调用。已有显式策略保持不变；保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
 
 LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admin-only 的
 `GET/PUT /llm-debug-requests` 控制 `llm_debug_requests.enabled` 与 `keep_days`（1–7，默认关闭/1 天）。

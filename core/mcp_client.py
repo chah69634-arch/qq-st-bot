@@ -57,6 +57,7 @@ class _ServerHandle:
     session: object  # mcp.ClientSession，延迟导入避免模块级依赖未安装时报错
     tool_names: list[str] = field(default_factory=list)
     tool_details: list[dict] = field(default_factory=list)
+    pending_tool_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -73,6 +74,10 @@ def _get_mcp_config() -> dict:
 
 
 _LOCAL_EFFECTS = frozenset({"read", "write", "actuate", "emergency"})
+_READ_TOOL_WORDS = frozenset({"get", "list", "read", "search", "status"})
+_WRITE_TOOL_WORDS = frozenset({
+    "create", "update", "set", "send", "delete", "remove", "stop",
+})
 
 
 def _require_local_policy() -> bool:
@@ -102,17 +107,16 @@ def validate_local_tool_policy(
     if not all(isinstance(tool_name, str) and tool_name for tool_name in allow_tools):
         raise ValueError(f"MCP server '{name}' 的 allow_tools 必须全部是非空工具名")
 
-    raw_policy = server_cfg.get("tool_policy")
+    raw_policy = server_cfg.get("tool_policy") or {}
     if not isinstance(raw_policy, dict):
-        raise ValueError(f"MCP server '{name}' require_local_policy=true 时必须配置 tool_policy")
+        raise ValueError(f"MCP server '{name}' 的 tool_policy 必须是对象")
 
     normalized: dict[str, dict] = {}
-    for tool_name in allow_tools:
-        entry = raw_policy.get(tool_name)
+    for tool_name, entry in raw_policy.items():
+        if tool_name not in allow_tools:
+            continue
         if not isinstance(entry, dict):
-            raise ValueError(
-                f"MCP server '{name}' 的 allow_tools 工具 '{tool_name}' 缺少 tool_policy"
-            )
+            raise ValueError(f"MCP server '{name}' 的 tool_policy.{tool_name} 必须是对象")
         effect = entry.get("effect")
         if effect not in _LOCAL_EFFECTS:
             allowed = ", ".join(sorted(_LOCAL_EFFECTS))
@@ -176,12 +180,73 @@ def _expand_headers(raw_headers: object) -> dict[str, str] | None:
     return resolved
 
 
+def _annotation_bool(annotations: object, *names: str) -> bool | None:
+    if isinstance(annotations, dict):
+        for name in names:
+            if name in annotations:
+                return annotations[name] if isinstance(annotations[name], bool) else None
+        return None
+    for name in names:
+        value = getattr(annotations, name, None)
+        if isinstance(value, bool):
+            return value
+    return None
+
+
+def suggest_tool_policy(
+    tool_name: str, description: str = "", annotations: object = None,
+) -> dict:
+    """Produce a non-authoritative local policy suggestion for an MCP tool.
+
+    The result is display-only until an administrator writes a matching local
+    ``tool_policy`` entry.  In particular, remote annotations never authorize
+    registration or execution on their own.
+    """
+    read_only = _annotation_bool(annotations, "readOnlyHint", "read_only_hint")
+    destructive = _annotation_bool(annotations, "destructiveHint", "destructive_hint")
+    if read_only is True:
+        return {
+            "effect": "read", "source": "annotation.readOnlyHint",
+            "status": "suggested", "high_risk": False, "require_confirm": False,
+        }
+    if destructive is True:
+        return {
+            "effect": "write", "source": "annotation.destructiveHint",
+            "status": "suggested", "high_risk": True, "require_confirm": True,
+        }
+    if read_only is False:
+        return {
+            "effect": "write", "source": "annotation.readOnlyHint=false",
+            "status": "suggested", "high_risk": False, "require_confirm": False,
+        }
+
+    words = set(re.findall(r"[a-z]+", f"{tool_name} {description}".lower()))
+    if words & _WRITE_TOOL_WORDS:
+        return {
+            "effect": "write", "source": "name_description",
+            "status": "suggested", "high_risk": False, "require_confirm": False,
+        }
+    if words & _READ_TOOL_WORDS:
+        return {
+            "effect": "read", "source": "name_description",
+            "status": "suggested", "high_risk": False, "require_confirm": False,
+        }
+    return {
+        "effect": None, "source": "unknown", "status": "confirmation_required",
+        "high_risk": False, "require_confirm": False,
+    }
+
+
 def _tool_details(listed) -> list[dict]:
-    return [
-        {"name": str(tool.name), "description": str(tool.description or "")}
-        for tool in (getattr(listed, "tools", None) or [])
-        if getattr(tool, "name", None)
-    ]
+    details: list[dict] = []
+    for tool in (getattr(listed, "tools", None) or []):
+        if not getattr(tool, "name", None):
+            continue
+        name = str(tool.name)
+        description = str(tool.description or "")
+        suggestion = suggest_tool_policy(name, description, getattr(tool, "annotations", None))
+        details.append({"name": name, "description": description, "suggestion": suggestion})
+    return details
 
 
 def _record_init(name: str, *, ok: bool, error: str = "", tools: list[dict] | None = None) -> None:
@@ -212,9 +277,11 @@ def server_runtime(name: str) -> dict:
     if handle is not None:
         state["tools"] = list(handle.tool_details)
         state["registered_tools"] = list(handle.tool_names)
+        state["pending_confirmation_tools"] = list(handle.pending_tool_names)
     else:
         state.setdefault("tools", [])
         state["registered_tools"] = []
+        state["pending_confirmation_tools"] = []
     return state
 
 
@@ -513,11 +580,19 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
     for tool in listed.tools:
         if allow and tool.name not in allow:
             continue
+        if local_policy is not None and tool.name not in local_policy:
+            # Strict local policy intentionally treats an allowlisted tool
+            # without an explicit local confirmation as unavailable.
+            handle.pending_tool_names.append(str(tool.name))
+            continue
         reg_name = f"mcp__{name}__{tool.name}"
         if reg_name in _TOOL_REGISTRY:
             logger.warning("[mcp_client] 工具名与已注册工具冲突，MCP 侧让位: %s", reg_name)
             continue
         claimed_read_only = _tool_is_read_only(tool)
+        suggestion = suggest_tool_policy(
+            str(tool.name), str(tool.description or ""), getattr(tool, "annotations", None),
+        )
         if local_policy is None:
             # Legacy keeps the old no-confirm behavior.  The conservative
             # write label is explicitly marked unclassified; it is never
@@ -534,18 +609,21 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
                 "server=%s tool=%s effect=%s",
                 name, tool.name, effect,
             )
+        high_risk = bool(suggestion["high_risk"])
+        effective_require_confirm = require_confirm or high_risk
         _TOOL_REGISTRY[reg_name] = {
             "func": _make_tool_func(name, tool.name, timeout_s),
             "description": tool.description or "",
-            "dangerous": require_confirm,
+            "dangerous": effective_require_confirm,
             "category": "mcp",
             "parameters": tool.inputSchema or {"type": "object", "properties": {}},
             "mcp_server": name,
             "mcp_tool": tool.name,
             "effect": effect,
-            "require_confirm": require_confirm,
+            "require_confirm": effective_require_confirm,
             "mcp_claimed_read_only": claimed_read_only,
             "mcp_policy_legacy": local_policy is None,
+            "mcp_high_risk": high_risk,
             # MCP annotations are optional.  Keep the read-only declaration so
             # the tool-loop can safely point models at server-provided docs /
             # inspection tools without guessing from a tool's name.
@@ -555,7 +633,10 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
 
     _servers[name] = handle
     _record_init(name, ok=True, tools=details)
-    logger.info("[mcp_client] server '%s' 已连接，注册 %d 个工具", name, len(handle.tool_names))
+    logger.info(
+        "[mcp_client] server '%s' 已连接，注册 %d 个工具，待确认 %d 个",
+        name, len(handle.tool_names), len(handle.pending_tool_names),
+    )
 
 
 def _tool_is_read_only(tool) -> bool:

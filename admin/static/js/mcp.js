@@ -39,13 +39,26 @@ function _mcpDraftFromForm() {
   };
 }
 
+function _mcpSuggestion(tool) {
+  return tool?.suggestion || { effect: null, source: 'unknown', status: 'confirmation_required', high_risk: false };
+}
+
+function _mcpEffectBadge(suggestion, policyStatus = '') {
+  const effect = suggestion.effect || '待确认';
+  const source = suggestion.source === 'name_description' ? '名称/描述建议' : suggestion.source || '待确认';
+  const risk = suggestion.high_risk ? ' 高风险' : '';
+  const pending = policyStatus && policyStatus !== 'confirmed' && policyStatus !== 'legacy_allowed'
+    ? ' 待确认' : '';
+  return `<small style="display:block;color:${suggestion.high_risk ? 'var(--danger)' : 'var(--muted)'}">建议 ${escapeHtml(effect)} · ${escapeHtml(source)}${risk}${pending}</small>`;
+}
+
 function _mcpGroupTools(tools) {
   const groups = {};
   (tools || []).forEach(tool => {
     const prefix = String(tool.name || '').split('_')[0] || '其他';
     (groups[prefix] ||= []).push(tool);
   });
-  return Object.entries(groups).map(([prefix, entries]) => `<div style="margin-top:8px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong><div style="display:grid;gap:5px;margin-top:4px">${entries.map(tool => `<label class="checkbox-row"><input type="checkbox" data-mcp-import-tool="${escapeHtml(tool.name)}"><span><code>${escapeHtml(tool.name)}</code>${tool.description ? ` — ${escapeHtml(tool.description)}` : ''}</span></label>`).join('')}</div></div>`).join('');
+  return Object.entries(groups).map(([prefix, entries]) => `<div style="margin-top:8px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong><div style="display:grid;gap:5px;margin-top:4px">${entries.map(tool => `<label class="checkbox-row"><input type="checkbox" data-mcp-import-tool="${escapeHtml(tool.name)}"><span><code>${escapeHtml(tool.name)}</code>${tool.description ? ` — ${escapeHtml(tool.description)}` : ''}${_mcpEffectBadge(_mcpSuggestion(tool))}</span></label>`).join('')}</div></div>`).join('');
 }
 
 async function loadMcpPage() {
@@ -119,6 +132,21 @@ function _mcpPresetButtons(server) {
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.preset.selected', '工具预设'))}</span>${custom}${presets || `<span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</span>`}</div>`;
 }
 
+function _mcpPolicyControl(server, tool, allowlisted) {
+  const state = (server.tool_states || []).find(item => item.name === tool.name) || {};
+  const suggestion = state.suggestion || _mcpSuggestion(tool);
+  const confirmed = state.policy_status === 'confirmed' || state.policy_status === 'legacy_allowed';
+  const badge = _mcpEffectBadge(suggestion, state.policy_status || '');
+  if (!allowlisted || confirmed) return badge;
+  const selected = state.policy?.effect || suggestion.effect || 'write';
+  const options = ['read', 'write', 'actuate', 'emergency'].map(effect =>
+    `<option value="${effect}" ${effect === selected ? 'selected' : ''}>${effect}</option>`
+  ).join('');
+  const args = escapeHtml(JSON.stringify([server.name, tool.name]));
+  const selectId = `mcp-policy-effect-${server.name}-${tool.name}`;
+  return `${badge}<span style="display:flex;gap:6px;align-items:center;margin-top:4px"><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><button class="btn btn-ghost btn-sm" data-action="confirmMcpToolPolicy" data-action-args="${args}">确认</button></span>`;
+}
+
 function _renderMcpServer(server) {
   const runtime = server.runtime || {};
   const tools = runtime.tools || [];
@@ -130,7 +158,7 @@ function _renderMcpServer(server) {
   const initError = runtime.last_init_error ? `<div style="color:var(--danger);font-size:12px;margin-top:6px">${escapeHtml(runtime.last_init_error)}</div>` : '';
   const grouped = Object.entries((tools || []).reduce((out, tool) => {
     const prefix = String(tool.name || '').split('_')[0] || '其他'; (out[prefix] ||= []).push(tool); return out;
-  }, {})).map(([prefix, entries]) => `<div style="margin-top:9px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong>${entries.map(tool => `<label class="checkbox-row" style="margin-top:5px"><input type="checkbox" data-mcp-server="${escapeHtml(server.name)}" value="${escapeHtml(tool.name)}" ${allow.has(tool.name) ? 'checked' : ''}><span><code>${escapeHtml(tool.name)}</code>${tool.description ? ` — ${escapeHtml(tool.description)}` : ''}<small id="mcp-call-${escapeHtml(server.name)}-${escapeHtml(tool.name)}" style="display:block;color:var(--muted)">调用记录加载中…</small></span></label>`).join('')}</div>`).join('');
+  }, {})).map(([prefix, entries]) => `<div style="margin-top:9px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong>${entries.map(tool => `<label class="checkbox-row" style="margin-top:5px"><input type="checkbox" data-mcp-server="${escapeHtml(server.name)}" value="${escapeHtml(tool.name)}" ${allow.has(tool.name) ? 'checked' : ''}><span><code>${escapeHtml(tool.name)}</code>${tool.description ? ` — ${escapeHtml(tool.description)}` : ''}${_mcpPolicyControl(server, tool, allow.has(tool.name))}<small id="mcp-call-${escapeHtml(server.name)}-${escapeHtml(tool.name)}" style="display:block;color:var(--muted)">调用记录加载中…</small></span></label>`).join('')}</div>`).join('');
   const exposureWarn = exposedCount > 20 ? `<p style="font-size:12px;color:var(--danger);margin:8px 0">⚠ 当前会暴露 ${exposedCount} 个工具，超过单次暴露 ≤20 的安全红线；请勾选最小白名单。</p>` : '';
   const actionArgs = escapeHtml(JSON.stringify([server.name]));
   const collapsed = !_mcpExpandedServers.has(server.name);
@@ -168,6 +196,23 @@ async function selectMcpToolPreset(name, presetName) {
 function _mcpPresetsFromCard(name) {
   const card = document.getElementById(`mcp-server-enabled-${name}`)?.closest('section');
   return JSON.parse(card?.dataset.mcpPresets || '[]');
+}
+
+async function confirmMcpToolPolicy(name, toolName) {
+  try {
+    const data = await api('GET', '/settings/mcp');
+    const server = (data.servers || []).find(item => item.name === name);
+    if (!server) throw new Error('MCP server 不存在');
+    const state = (server.tool_states || []).find(item => item.name === toolName) || {};
+    const effectControl = document.getElementById(`mcp-policy-effect-${name}-${toolName}`);
+    const effect = effectControl?.value || state.suggestion?.effect || 'write';
+    const policy = { ...(server.tool_policy || {}) };
+    policy[toolName] = { effect };
+    if (state.suggestion?.high_risk) policy[toolName].require_confirm = true;
+    const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { tool_policy: policy });
+    toast(result.reload_status === 'restart_required' ? '策略已保存，需要重启服务' : '工具策略已确认并热重载', result.reload_status === 'restart_required' ? 'err' : 'ok');
+    await loadMcpPage();
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 async function createMcpToolPreset(name) {
@@ -236,8 +281,8 @@ async function importMcpServer() {
   if (!_mcpImport) return;
   const allow = [...document.querySelectorAll('[data-mcp-import-tool]:checked')].map(el => el.dataset.mcpImportTool);
   try {
-    await api('POST', '/settings/mcp/import', { ..._mcpImport.draft, allow_tools: allow });
-    toast('MCP server 已导入', 'ok'); _mcpImport = null; document.getElementById('mcp-import-save').disabled = true; document.getElementById('mcp-import-result').innerHTML = ''; loadMcpPage();
+    const result = await api('POST', '/settings/mcp/import', { ..._mcpImport.draft, allow_tools: allow });
+    toast(result.reload_status === 'restart_required' ? 'MCP server 已导入，需要重启服务' : 'MCP server 已导入；请选择确认每个工具的策略', result.reload_status === 'restart_required' ? 'err' : 'ok'); _mcpImport = null; document.getElementById('mcp-import-save').disabled = true; document.getElementById('mcp-import-result').innerHTML = ''; loadMcpPage();
   } catch (e) { toast(e.message, 'err'); }
 }
 
@@ -247,7 +292,7 @@ async function saveMcpServer(name) {
   const proxyControl = document.getElementById(`mcp-server-use-proxy-${name}`);
   const body = { enabled, allow_tools };
   if (proxyControl) body.use_proxy = proxyControl.checked;
-  try { await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, body); toast(`${name} 已热重载`, 'ok'); loadMcpPage(); }
+  try { const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, body); toast(result.reload_status === 'restart_required' ? `${name} 已保存，需要重启服务` : `${name} 已热重载`, result.reload_status === 'restart_required' ? 'err' : 'ok'); loadMcpPage(); }
   catch (e) { toast(e.message, 'err'); }
 }
 

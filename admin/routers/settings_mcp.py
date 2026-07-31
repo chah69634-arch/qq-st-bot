@@ -136,10 +136,53 @@ def _normalize_tool_presets(raw: object) -> list[dict[str, object]]:
     return normalized
 
 
-def _server_view(server_cfg: dict) -> dict:
-    from core.mcp_client import is_local_mcp_url, server_runtime
+def _prune_tool_policy(server: dict) -> None:
+    """Keep persisted policy entries only for currently allowlisted tools."""
+    policy = server.get("tool_policy")
+    if not isinstance(policy, dict):
+        server.pop("tool_policy", None)
+        return
+    allowed = set(server.get("allow_tools") or [])
+    filtered = {name: value for name, value in policy.items() if name in allowed}
+    if filtered:
+        server["tool_policy"] = filtered
+    else:
+        server.pop("tool_policy", None)
+
+
+def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dict:
+    from core.mcp_client import is_local_mcp_url, server_runtime, suggest_tool_policy
 
     name = str(server_cfg.get("name") or "")
+    runtime = server_runtime(name)
+    allowed = set(server_cfg.get("allow_tools") or [])
+    policy = dict(server_cfg.get("tool_policy") or {})
+    tool_states: list[dict] = []
+    for tool in runtime.get("tools", []):
+        tool_name = str(tool.get("name") or "")
+        if not tool_name:
+            continue
+        suggestion = tool.get("suggestion") or suggest_tool_policy(
+            tool_name, str(tool.get("description") or ""),
+        )
+        allowlisted = not allowed or tool_name in allowed
+        confirmed = isinstance(policy.get(tool_name), dict)
+        if not allowlisted:
+            policy_status = "not_allowlisted"
+        elif confirmed:
+            policy_status = "confirmed"
+        elif require_local_policy:
+            policy_status = "pending_confirmation"
+        else:
+            policy_status = "legacy_allowed"
+        tool_states.append({
+            "name": tool_name,
+            "description": str(tool.get("description") or ""),
+            "allowlisted": allowlisted,
+            "policy_status": policy_status,
+            "suggestion": suggestion,
+            "policy": policy.get(tool_name),
+        })
     return {
         "name": name,
         "transport": server_cfg.get("transport", "stdio"),
@@ -150,10 +193,11 @@ def _server_view(server_cfg: dict) -> dict:
         "enabled": bool(server_cfg.get("enabled", True)),
         "tool_timeout_s": float(server_cfg.get("tool_timeout_s", 30)),
         "allow_tools": list(server_cfg.get("allow_tools") or []),
-        "tool_policy": dict(server_cfg.get("tool_policy") or {}),
+        "tool_policy": policy,
+        "tool_states": tool_states,
         "tool_presets": _normalize_tool_presets(server_cfg.get("tool_presets")),
         "active_tool_preset": str(server_cfg.get("active_tool_preset") or ""),
-        "runtime": server_runtime(name),
+        "runtime": runtime,
     }
 
 
@@ -163,7 +207,10 @@ async def get_mcp_settings(_auth=Depends(require_scopes("admin"))):
     servers = [item for item in (cfg.get("servers") or []) if isinstance(item, dict)]
     return {
         "enabled": bool(cfg.get("enabled", False)),
-        "servers": [_server_view(item) for item in servers],
+        "servers": [
+            _server_view(item, require_local_policy=bool(cfg.get("require_local_policy", False)))
+            for item in servers
+        ],
         "warning": "外部 MCP 的工具描述与结果均为不可信输入；不要把密钥写进角色卡、prompt 或文档。",
     }
 
@@ -237,6 +284,8 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
     if unknown:
         raise HTTPException(status_code=422, detail=f"allow_tools 含未发现工具: {unknown}")
 
+    _prune_tool_policy(server_cfg)
+
     servers = [item for item in (mcp_cfg.get("servers") or []) if item.get("name") != server_cfg["name"]]
     servers.append(server_cfg)
     mcp_cfg["servers"] = servers
@@ -245,11 +294,15 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
     # Brief 115 根治：热重载已恢复，走 reload_server_from_config 的信号队列，由该
     # server 专属常驻 task 自己 aclose()/重连，不跨 task。测试探测（test_server_config）
     # 用的是独立、当次即开即关的 stack，本来就不受这条根因影响。
-    await mcp_client.reload_server_from_config(server_cfg["name"])
+    reload_ok = await mcp_client.reload_server_from_config(server_cfg["name"])
+    reloaded = reload_ok is not False
     return {
-        "message": "MCP server 已导入并连接",
+        "message": "MCP server 已导入并连接" if reloaded else "配置已保存，但 MCP 热重载失败，需要重启服务",
+        "reload_status": "reloaded" if reloaded else "restart_required",
         "tools": tools,
-        "server": _server_view(server_cfg),
+        "server": _server_view(
+            server_cfg, require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+        ),
     }
 
 
@@ -300,6 +353,7 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         server["tool_timeout_s"] = max(1, min(300, float(body.tool_timeout_s)))
     if body.use_proxy is not None:
         server["use_proxy"] = bool(body.use_proxy)
+    _prune_tool_policy(server)
     from core import config_loader, mcp_client
     if (
         bool(full_cfg.get("mcp_servers", {}).get("require_local_policy", False))
@@ -312,8 +366,16 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
     _write_config(full_cfg)
     config_loader.reload_config()
     # Brief 115 根治：同上，走信号队列热重载，由 server 专属常驻 task 自己关闭/重连。
-    await mcp_client.reload_server_from_config(name)
-    return {"message": "MCP server 配置已更新并热重载", "server": _server_view(server)}
+    reload_ok = await mcp_client.reload_server_from_config(name)
+    reloaded = reload_ok is not False
+    return {
+        "message": "MCP server 配置已更新并热重载" if reloaded else "配置已保存，但 MCP 热重载失败，需要重启服务",
+        "reload_status": "reloaded" if reloaded else "restart_required",
+        "server": _server_view(
+            server,
+            require_local_policy=bool(full_cfg.get("mcp_servers", {}).get("require_local_policy", False)),
+        ),
+    }
 
 
 @router.delete("/settings/mcp/{name}", summary="删除一个 MCP server 并断开其运行态")
