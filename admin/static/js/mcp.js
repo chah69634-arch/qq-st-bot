@@ -72,9 +72,20 @@ async function loadMcpPage() {
       ? (data.servers || []).map(_renderMcpServer).join('')
       : '<div class="empty">尚未配置 MCP server。先填写 URL 并测试连接。</div>';
     bindPageActions(serversEl);
+    _moveMcpSaveControls(serversEl);
     await _loadMcpRecentCalls(data.servers || []);
     await loadMcpDebugRequests();
   } catch (e) { serversEl.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+
+function _moveMcpSaveControls(root) {
+  root.querySelectorAll('[data-action="saveMcpServer"]').forEach(button => {
+    const header = button.closest('section')?.querySelector('.card-header');
+    const enabledControl = header?.querySelector('[id^="mcp-server-enabled-"]')?.closest('label');
+    if (!header || !enabledControl) return;
+    button.style.marginLeft = 'auto';
+    enabledControl.before(button);
+  });
 }
 
 async function loadMcpDebugRequests() {
