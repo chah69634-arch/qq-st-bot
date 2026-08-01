@@ -34,6 +34,7 @@ import os
 import re
 import time
 import uuid
+from typing import Awaitable, Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -749,10 +750,15 @@ async def test_server_config(server_cfg: dict) -> list[dict]:
 def _make_tool_func(
     server_name: str, tool_name: str, timeout_s: float, effect: str, idempotent: bool,
 ):
-    async def _call(**kwargs) -> str:
+    async def _call(
+        *,
+        _tool_status_observer: Callable[..., Awaitable[None] | None] | None = None,
+        **kwargs,
+    ) -> str:
         return await _call_tool(
             server_name, tool_name, kwargs, timeout_s,
             effect=effect, idempotent=idempotent,
+            status_observer=_tool_status_observer,
         )
     return _call
 
@@ -779,6 +785,7 @@ async def _call_tool(
     *,
     effect: str = "",
     idempotent: bool = False,
+    status_observer: Callable[..., Awaitable[None] | None] | None = None,
 ) -> str:
     handle = _servers.get(server_name)
     if handle is None:
@@ -792,6 +799,13 @@ async def _call_tool(
         return await asyncio.wait_for(
             session.call_tool(tool_name, arguments, **kwargs), timeout=timeout_s
         )
+
+    async def _notify_waiting(attempt: int) -> None:
+        if status_observer is None:
+            return
+        result = status_observer("waiting", attempt=attempt)
+        if hasattr(result, "__await__"):
+            await result
 
     try:
         retry_limit = _retry_limit(effect=effect, idempotent=idempotent, tool_name=tool_name)
@@ -808,6 +822,9 @@ async def _call_tool(
                     "[mcp_client] 调用 %s.%s 失败，按幂等策略重连后重试（%d/%d）: %s request_id=%s",
                     server_name, tool_name, attempt + 1, retry_limit, exc, request_id or "-",
                 )
+                # This is a reconnect retry, not a separate action. The caller
+                # retains one status id and updates only the attempt count.
+                await _notify_waiting(attempt + 2)
                 try:
                     await _reconnect_server(server_name)
                 except BaseException as reconnect_exc:

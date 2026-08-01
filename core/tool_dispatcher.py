@@ -9,6 +9,7 @@
 设备控制和定时器逻辑较简单，直接写在此模块内。
 """
 
+import inspect
 import json
 import logging
 import platform
@@ -1448,6 +1449,7 @@ async def execute(
     origin: str,
     char_id: str,
     bypass_read_log: bool = False,
+    tool_status_observer=None,
 ) -> tuple[str | None, str | None]:
     """
     执行工具，返回 (tool_result, ask_confirm_text)
@@ -1488,6 +1490,22 @@ async def execute(
         except Exception as _at_err:
             logger.debug("[tool_dispatcher] action_trace record error: %s", _at_err)
 
+    async def _notify_status(kind: str, *, attempt: int = 1) -> None:
+        """UI-only hook; it runs after dispatcher gates and never affects execution."""
+        if tool_status_observer is None:
+            return
+        try:
+            value = tool_status_observer(kind, attempt=attempt)
+            if inspect.isawaitable(value):
+                await value
+        except Exception:
+            logger.warning(
+                "[tool_dispatcher] tool status observer failed: tool=%s kind=%s",
+                tool_name,
+                kind,
+                exc_info=True,
+            )
+
     from core import user_relation
 
     from core.error_handler import get_tool_fail_response
@@ -1517,6 +1535,21 @@ async def execute(
 
     tool_info = _TOOL_REGISTRY[tool_name]
 
+    # Keep the prelude truthful: an observer is not told the tool is queued
+    # until its basic local argument shape has been checked as well.
+    if not isinstance(tool_args, dict):
+        _msg = "工具参数格式不正确"
+        _trace("failed", _msg)
+        return _msg, None
+    _schema = tool_info.get("parameters") or {}
+    _required = _schema.get("required") if isinstance(_schema, dict) else None
+    if isinstance(_required, list):
+        _missing = [key for key in _required if isinstance(key, str) and key not in tool_args]
+        if _missing:
+            _msg = f"工具参数不完整：缺少{_missing[0]}"
+            _trace("failed", _msg)
+            return _msg, None
+
     # 权限校验
     if tool_name in _OWNER_ONLY_HARDWARE_TOOLS:
         owner_id = str(get_config().get("scheduler", {}).get("owner_id") or "")
@@ -1543,6 +1576,7 @@ async def execute(
             _ask = _build_confirm_ask(tool_name, tool_args)
             _trace("pending_confirm", _ask)
             session_state.set_waiting_confirm(tool_name, tool_args)
+            await _notify_status("pending_confirmation")
             return None, _ask
 
     # ── persist 工具：指纹去重检查 ────────────────────────────────────────────
@@ -1566,6 +1600,9 @@ async def execute(
     # 执行工具
     try:
         func = tool_info["func"]
+        # All local policy/permission/confirmation gates have passed. This is
+        # "handling it", not a claim that a remote service or device started.
+        await _notify_status("queued")
         if tool_name in (
             "add_reminder", "read_diary", "read_watch", "search_diary",
             "get_profile", "get_episodic",
@@ -1592,6 +1629,8 @@ async def execute(
                 _wsf.write_text(_wj.dumps(_wstate), encoding="utf-8")
             except Exception:
                 pass
+        elif tool_info.get("category") == "mcp" and tool_status_observer is not None:
+            result = await func(**tool_args, _tool_status_observer=_notify_status)
         else:
             result = await func(**tool_args)
         # Tool implementations may return a ToolResult.  Keep raw_data inside
@@ -1621,12 +1660,14 @@ async def execute(
                 logger.warning("[tool_dispatcher] persist record error: %s", _rec_err)
 
         _trace("ok", safe_summary)
+        await _notify_status("finished")
         return f"工具已执行：{tool_name}，结果：{safe_summary}", None
     except TypeError as e:
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)
         fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
         _trace("failed", fallback)
+        await _notify_status("failed")
         return fallback, None
     except Exception as e:
         from core.mcp_client import McpOutcomeUnknown
@@ -1634,6 +1675,7 @@ async def execute(
             result_text = e.safe_summary()
             logger.warning("[tool_dispatcher.execute] MCP 动作结果不明: tool=%s", tool_name)
             _trace("outcome_unknown", result_text)
+            await _notify_status("outcome_unknown")
             return result_text, None
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)
@@ -1644,9 +1686,11 @@ async def execute(
             # 带上缺的参数重试，尤其是在 120 号的工具循环里。
             result_text = f"工具调用未成功：{server_reason}"
             _trace("failed", result_text)
+            await _notify_status("failed")
             return result_text, None
         fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
         _trace("failed", fallback)
+        await _notify_status("failed")
         return fallback, None
 
 
@@ -1669,7 +1713,7 @@ class ToolDispatcher:
     def get_tools_schema(self, categories: list[str] | None = None) -> list:
         return get_tools_schema(categories=categories)
 
-    async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str, bypass_read_log: bool = False):
+    async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str, bypass_read_log: bool = False, tool_status_observer=None):
         return await execute(
             tool_name=tool_name,
             tool_args=tool_args,
@@ -1680,4 +1724,5 @@ class ToolDispatcher:
             origin=origin,
             char_id=char_id,
             bypass_read_log=bypass_read_log,
+            tool_status_observer=tool_status_observer,
         )

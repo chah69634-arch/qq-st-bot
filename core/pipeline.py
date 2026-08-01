@@ -18,6 +18,7 @@ from core.data_paths import DEFAULT_CHAR_ID
 logger = logging.getLogger(__name__)
 
 _DETECT_EMOTION_TIMEOUT = 8.0  # detect_emotion wait_for 超时阈值，测试时可 monkeypatch
+_TOOL_EPHEMERAL_WAITING_AFTER_S = 3.0
 
 YANDERE_KEYWORDS = (
     "只属于我", "别看别人", "只能是我", "独占",
@@ -887,6 +888,7 @@ class Pipeline:
         stream: bool = False,
         is_proactive: bool = False,
         exclude_tools: set[str] | None = None,
+        tool_event_observer=None,
     ):
         """主生成多步调用工具再回答，只在 tool_dispatcher.tool_loop_active(uid) 为真时被调用。
 
@@ -895,6 +897,7 @@ class Pipeline:
 
         origin 固定传 "assistant_loop"（tool_dispatcher._EXECUTE_ALLOWED_ORIGINS 白名单项）。
         is_proactive: 本次是否 scheduler 主动消息（Brief 32）。
+        tool_event_observer: 可选 UI-only 瞬态状态观察者，不进入 turn sink 或任何记忆路径。
         """
         from core import llm_client, thinking
         from core.config_loader import get_config
@@ -907,6 +910,7 @@ class Pipeline:
             parse_tail_brace,
         )
         from core.tools.tool_result import frame_tool_message
+        from core.tool_ephemeral import DEFAULT_TTL_S, ToolEphemeralEvent, notify as _notify_tool_event
 
         # Brief 82 · 决策 7：本轮最后一条用户消息命中显式重读短语时，放行本轮全部
         # persist 工具已读指纹（多步调用复用同一次探测结果，短语与工具目标同轮）。
@@ -993,6 +997,78 @@ class Pipeline:
         used_tool = False
         # ("natural"/"exhausted"/"confirm", text) — 收尾结果种类 + 文本
         outcome: tuple[str, str] | None = None
+
+        async def _execute_with_ephemeral_status(
+            call_id: str,
+            tool_name: str,
+            tool_args: dict,
+            *,
+            index: int,
+            total: int,
+            origin: str,
+        ) -> tuple[str | None, str | None]:
+            """Bridge trusted dispatcher lifecycle events into one UI-only status."""
+            if tool_event_observer is None:
+                return await _execute(
+                    tool_name, tool_args, uid, uid, is_group, session_state,
+                    origin=origin, char_id=char_id, bypass_read_log=_bypass_read_log,
+                )
+
+            # call_id is model-provided, so never expose it as the public status
+            # identifier. The generated id persists only through this live call.
+            del call_id
+            status_id = f"tool_{uuid.uuid4().hex}"
+            waiting_task: asyncio.Task | None = None
+            terminal = False
+
+            async def _emit(kind: str, *, attempt: int = 1) -> None:
+                nonlocal terminal, waiting_task
+                if terminal:
+                    return
+                if kind in {"finished", "failed", "outcome_unknown", "cancelled"}:
+                    terminal = True
+                    if waiting_task is not None:
+                        waiting_task.cancel()
+                        waiting_task = None
+                event = ToolEphemeralEvent(
+                    status_id=status_id,
+                    kind=kind,
+                    tool_name=tool_name,
+                    index=index,
+                    total=total,
+                    attempt=attempt,
+                    ttl_s=DEFAULT_TTL_S,
+                )
+                await _notify_tool_event(tool_event_observer, event)
+
+            async def _delayed_waiting() -> None:
+                try:
+                    await asyncio.sleep(_TOOL_EPHEMERAL_WAITING_AFTER_S)
+                    if not terminal:
+                        await _emit("waiting")
+                except asyncio.CancelledError:
+                    return
+
+            async def _dispatcher_status(kind: str, *, attempt: int = 1) -> None:
+                nonlocal waiting_task
+                await _emit(kind, attempt=attempt)
+                if kind == "queued" and waiting_task is None:
+                    waiting_task = asyncio.create_task(_delayed_waiting())
+                elif kind == "waiting" and waiting_task is not None:
+                    # A reconnect has already produced a truthful wait update.
+                    # Do not later create a second threshold-driven status bubble.
+                    waiting_task.cancel()
+                    waiting_task = None
+
+            try:
+                return await _execute(
+                    tool_name, tool_args, uid, uid, is_group, session_state,
+                    origin=origin, char_id=char_id, bypass_read_log=_bypass_read_log,
+                    tool_status_observer=_dispatcher_status,
+                )
+            finally:
+                if waiting_task is not None:
+                    waiting_task.cancel()
 
         def _tool_message_content(result: str | None, ask_confirm: str | None) -> str:
             """Keep confirmation state outside the untrusted tool-data frame."""
@@ -1085,12 +1161,13 @@ class Pipeline:
                                     for rc in relay_calls
                                 ],
                             })
-                            for rc in relay_calls:
+                            for _index, rc in enumerate(relay_calls, start=1):
                                 try:
-                                    result, ask_confirm = await _execute(
-                                        rc["name"], rc["arguments"], uid, uid, is_group,
-                                        session_state, origin="assistant_loop_relay", char_id=char_id,
-                                        bypass_read_log=_bypass_read_log,
+                                    result, ask_confirm = await _execute_with_ephemeral_status(
+                                        rc["id"], rc["name"], rc["arguments"],
+                                        index=_index,
+                                        total=len(relay_calls),
+                                        origin="assistant_loop_relay",
                                     )
                                 except Exception as e:
                                     log_error("pipeline.run_agentic_loop.relay_execute", e)
@@ -1114,12 +1191,13 @@ class Pipeline:
                     return
                 loop_msgs.append(turn.assistant_message)
                 used_tool = True
-                for tc in turn.tool_calls:
+                for _index, tc in enumerate(turn.tool_calls, start=1):
                     try:
-                        result, ask_confirm = await _execute(
-                            tc["name"], tc["arguments"], uid, uid, is_group,
-                            session_state, origin="assistant_loop", char_id=char_id,
-                            bypass_read_log=_bypass_read_log,
+                        result, ask_confirm = await _execute_with_ephemeral_status(
+                            tc["id"], tc["name"], tc["arguments"],
+                            index=_index,
+                            total=len(turn.tool_calls),
+                            origin="assistant_loop",
                         )
                     except Exception as e:
                         log_error("pipeline.run_agentic_loop.execute", e)

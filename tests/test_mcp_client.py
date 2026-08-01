@@ -492,6 +492,29 @@ class TestCallTool:
         result = await mc._call_tool("srv1", "toolA", {}, 5, effect="read")
         assert result == "ok"
 
+    async def test_reconnect_retry_reports_next_attempt_to_status_observer(self, monkeypatch):
+        dead_session = _FakeSession(call_results=[RuntimeError("connection dead")])
+        self._install_handle("srv1", dead_session, tool_names=["mcp__srv1__toolA"])
+        new_session = _FakeSession(call_results=[
+            SimpleNamespace(content=[SimpleNamespace(text="ok")], isError=False),
+        ])
+
+        async def _fake_connect_server(name, cfg):
+            mc._servers[name] = mc._ServerHandle(
+                name=name, cfg=cfg, stack=AsyncExitStack(), session=new_session,
+                tool_names=["mcp__srv1__toolA"],
+            )
+
+        attempts = []
+        monkeypatch.setattr(mc, "_connect_server", _fake_connect_server)
+        result = await mc._call_tool(
+            "srv1", "toolA", {}, 5, effect="read",
+            status_observer=lambda kind, *, attempt: attempts.append((kind, attempt)),
+        )
+
+        assert result == "ok"
+        assert attempts == [("waiting", 2)]
+
     async def test_reconnect_then_fail_raises(self, monkeypatch):
         dead_session = _FakeSession(call_results=[RuntimeError("dead once")])
         self._install_handle("srv1", dead_session, tool_names=["mcp__srv1__toolA"])

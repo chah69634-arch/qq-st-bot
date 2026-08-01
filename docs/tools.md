@@ -53,6 +53,16 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
     - 用过 ≥1 个工具后，最终生成前注入 voice_reanchor system 提示，收尾出口改走
       run_llm()/run_llm_stream()（复用既有反坍缩重试），不再带 tools 参数
     - 高危工具触发 ask_confirm → 立即强制收尾，直接把询问文字作为本轮回复，下一步必须是问用户
+    - Tool Ephemeral Status P0：`run_agentic_loop(tool_event_observer=)` 可将工具生命周期
+      发给 UI 专用观察者。事件仅在进程内传递，带 status_id、串行 index/total、attempt 和 20 秒
+      TTL，绝不经过 `record_assistant_turn()`、short_term、event_log、prompt history、TTS、贴纸或
+      action_trace。`queued` 只会在参数、权限和确认闸门通过之后发出，语义是“正在处理”，不代表
+      远端或设备已开始；它的受控前置文案为“我先处理一下。”，不展示模型原始 tool-call content，
+      且默认不允许 TTS。超过 3 秒才最多补一次 `waiting`。MCP 重连重试复用同一 status_id，仅更新
+      attempt 并抑制后续阈值等待气泡；`outcome_unknown` 绝不降级成失败或已完成。当前没有 user cancel API，也没有绕开
+      `conversation_lock` 的 emergency-stop 抢占链路，因此 P0 不发伪造的 `cancelled` 成功状态；
+      硬件服务主动上报前也不推断排队、开始或百分比进度。P0 不改 desktop/mobile 协议，也不向
+      持久移动端队列投递此类事件；桌宠专属状态气泡须由后续配对客户端工单注册观察者后再显示。
     - 暴露面：categories（默认 info/desktop/memory）减去 exclude_tools
       （默认排除 toy_vibrate/toy_stop/toy_pattern/write_toy_file），前端设置页可调
 
