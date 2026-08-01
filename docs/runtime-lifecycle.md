@@ -224,6 +224,11 @@ execution
 | FastAPI Admin Server | main.py | process lifetime |
 | Sensor workers | corresponding runner | process lifetime when enabled |
 
+The FastAPI admin server and QQ listener run behind separate service boundaries in
+`main.py`. A bind failure, `SystemExit`, or ordinary exception in one service is
+logged without cancelling the other service. Cooperative task cancellation still
+propagates during process shutdown.
+
 ---
 
 # 7. Background Workers

@@ -922,6 +922,24 @@ async def _qq_reality_reply_adapter(
 # 主入口
 # ═══════════════════════════════════════════════════════════════════════════════
 
+async def _run_long_lived_service(name: str, service) -> None:
+    """Keep one optional service failure from cancelling sibling services."""
+    try:
+        await service
+    except asyncio.CancelledError:
+        raise
+    except (SystemExit, Exception) as exc:
+        from core.error_handler import log_error
+
+        log_error(f"runtime_service.{name}", exc)
+        logger.error(
+            "长期服务 %s 已退出，其他服务继续运行: %s: %s",
+            name,
+            type(exc).__name__,
+            exc,
+        )
+
+
 async def main():
     logger.info("=" * 60)
     logger.info("  Emerald-Presence 启动中...")
@@ -996,13 +1014,13 @@ async def main():
     if admin_cfg.get("enabled", False) and admin_cfg.get("auto_start", True):
         logger.info("管理面板已启用，正在启动...")
         from admin.admin_server import start_admin_server
-        tasks.append(asyncio.create_task(start_admin_server()))
+        tasks.append(asyncio.create_task(_run_long_lived_service("admin", start_admin_server())))
     else:
         logger.info("管理面板未启用（config.admin.enabled 或 auto_start 为 false）")
 
     if qq_runtime_enabled:
         logger.info(f"正在连接 NapCat: ws://{cfg['qq']['host']}:{cfg['qq']['port']}")
-        tasks.append(asyncio.create_task(qq_adapter.connect_and_listen()))
+        tasks.append(asyncio.create_task(_run_long_lived_service("qq", qq_adapter.connect_and_listen())))
     else:
         if standalone_mode:
             logger.info("standalone_mode=true，不连接NapCat")
