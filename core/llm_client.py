@@ -164,6 +164,44 @@ def reload_client():
     logger.info("[llm_client] 客户端已重置，下次请求时按最新配置重建")
 
 
+class UpstreamResponseFormatError(RuntimeError):
+    """A model gateway did not return an OpenAI Chat Completions response."""
+
+
+def _first_chat_choice(
+    response: Any,
+    *,
+    operation: str,
+    require_tool_fields: bool = False,
+    require_serializable_message: bool = False,
+):
+    """Validate the minimum response contract before any `.choices` access."""
+    choices = getattr(response, "choices", None)
+    if not isinstance(choices, list) or not choices:
+        raise UpstreamResponseFormatError(
+            f"{operation} received {type(response).__name__}, expected an OpenAI "
+            "ChatCompletion with choices[0].message"
+        )
+
+    choice = choices[0]
+    message = getattr(choice, "message", None)
+    if message is None or not hasattr(message, "content"):
+        raise UpstreamResponseFormatError(
+            f"{operation} response is missing choices[0].message.content"
+        )
+    if require_tool_fields and (
+        not hasattr(choice, "finish_reason") or not hasattr(message, "tool_calls")
+    ):
+        raise UpstreamResponseFormatError(
+            f"{operation} response is missing function-calling fields"
+        )
+    if require_serializable_message and not callable(getattr(message, "model_dump", None)):
+        raise UpstreamResponseFormatError(
+            f"{operation} response message cannot be serialized for a tool loop"
+        )
+    return choice
+
+
 async def chat(
     messages: list[dict],
     tools: list[dict] | None = None,
@@ -214,13 +252,14 @@ async def chat(
                     max_tokens=1000,
                     timeout=_CALL_TIMEOUTS["vision"],
                 )
+                choice = _first_chat_choice(response, operation="chat[vision]")
                 _log_completed_call(
                     provider=str(vision_cfg.get("provider") or "vision"),
                     model=str(vision_cfg.get("model") or ""),
                     purpose="vision",
                     started_at=started_at,
                 )
-                return response.choices[0].message.content or ""
+                return choice.message.content or ""
             except Exception as e:
                 _record_api_call(
                     provider=str(vision_cfg.get("provider") or "vision"),
@@ -274,7 +313,11 @@ async def chat(
                 tool_choice="auto",
                 **_gen_kwargs,
             )
-            choice = response.choices[0]
+            choice = _first_chat_choice(
+                response,
+                operation=f"chat[{call_category}]",
+                require_tool_fields=True,
+            )
             if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
                 tool_calls = []
                 for tc in choice.message.tool_calls:
@@ -313,8 +356,9 @@ async def chat(
                 messages=msgs,
                 **_gen_kwargs,
             )
+            choice = _first_chat_choice(response, operation=f"chat[{call_category}]")
             _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
-            return thinking.strip_think_tags(response.choices[0].message.content) or ""
+            return thinking.strip_think_tags(choice.message.content) or ""
 
         # ── 普通对话（无工具）────────────────────────────────────────────────
         else:
@@ -327,8 +371,9 @@ async def chat(
                 messages=messages,
                 **_gen_kwargs,
             )
+            choice = _first_chat_choice(response, operation=f"chat[{call_category}]")
             _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
-            return thinking.strip_think_tags(response.choices[0].message.content) or ""
+            return thinking.strip_think_tags(choice.message.content) or ""
 
     except Exception as e:
         _record_api_call(
@@ -451,6 +496,12 @@ async def chat_turn(
             tool_choice="auto",
             **gen_kwargs,
         )
+        choice = _first_chat_choice(
+            response,
+            operation=f"chat_turn[{call_category}]",
+            require_tool_fields=True,
+            require_serializable_message=True,
+        )
     except Exception as e:
         _record_api_call(
             provider=mc.provider_kind,
@@ -470,7 +521,6 @@ async def chat_turn(
         started_at=started_at,
     )
 
-    choice = response.choices[0]
     message = choice.message
     assistant_message = message.model_dump(exclude_none=True)
     # 铁律防线：思考内容不得经 assistant_message 混入 loop_msgs / 历史。

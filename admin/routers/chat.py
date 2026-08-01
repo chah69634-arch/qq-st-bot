@@ -537,7 +537,21 @@ async def desktop_chat(body: dict, _auth=Depends(require_scopes("chat"))):
     _uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
     _check_reality_not_in_dream(_uid)
 
-    result = await run_owner_chat_turn(message, "desktop", reply_to=reply_to)
+    try:
+        result = await run_owner_chat_turn(message, "desktop", reply_to=reply_to)
+    except Exception as exc:
+        from core.llm_client import UpstreamResponseFormatError
+
+        if not isinstance(exc, UpstreamResponseFormatError):
+            raise
+        logger.warning("[desktop_chat] model gateway returned an incompatible completion: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "模型服务返回了不兼容的响应格式，当前原生工具调用不可用。"
+                "请改用支持 function calling 的 preset，或将该 preset 设为 xml_fallback / 关闭 tool loop。"
+            ),
+        ) from exc
 
     from core.scheduler.sensor_events import notify_chat_happened
     notify_chat_happened()
