@@ -202,7 +202,7 @@ function _moveMcpSaveControls(root) {
     const header = button.closest('section')?.querySelector('.card-header');
     const enabledControl = header?.querySelector('[id^="mcp-server-enabled-"]')?.closest('label');
     if (!header || !enabledControl) return;
-    button.style.marginLeft = 'auto';
+    button.style.margin = '0 5px 0 auto';
     enabledControl.before(button);
   });
 }
