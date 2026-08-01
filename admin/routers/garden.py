@@ -37,9 +37,10 @@ async def get_garden_state(auth=Depends(require_scopes("state.read"))):
     return garden_manager.get_state(char_id=_active_char_id())
 
 
-# This retained, scoped endpoint is for controlled integrations only.  Normal
-# Desktop and Mobile garden surfaces are read-only; role tools and scheduler
-# state machines call garden_manager directly instead of exposing this action.
+# This retained, scoped endpoint is for controlled integrations only. No
+# first-party client currently calls it: normal Desktop and Mobile garden
+# surfaces are read-only, while role tools and scheduler state machines call
+# garden_manager directly instead of exposing this action.
 @router.post("/water", summary="受控浇水（非普通客户端 UI 操作）")
 async def water_garden_endpoint(auth=Depends(require_scopes("chat"))):
     return garden_manager.force_water(char_id=_active_char_id())

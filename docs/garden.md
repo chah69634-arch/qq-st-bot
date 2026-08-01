@@ -156,8 +156,8 @@ _check_garden_water()
 接口只读取和必要时初始化状态，不执行浇水。Desktop / Mobile 只使用该读取能力和本地刷新。
 
 `POST /garden/water` 保留给受控集成调用，要求 `chat` scope，并复用
-`garden_manager.force_water()`。它不属于普通客户端 UI，也不是调度器或角色工具的
-调用路径：后二者直接调用 manager。该边界避免把观察花园变成玩家直接改写花园状态的入口。
+`garden_manager.force_water()`。当前没有第一方客户端调用它；它不属于普通客户端 UI，也不是
+调度器或角色工具的调用路径：后二者直接调用 manager。该边界避免把观察花园变成玩家直接改写花园状态的入口。
 
 ---
 
