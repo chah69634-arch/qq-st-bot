@@ -1629,6 +1629,12 @@ async def execute(
         _trace("failed", fallback)
         return fallback, None
     except Exception as e:
+        from core.mcp_client import McpOutcomeUnknown
+        if isinstance(e, McpOutcomeUnknown):
+            result_text = e.safe_summary()
+            logger.warning("[tool_dispatcher.execute] MCP 动作结果不明: tool=%s", tool_name)
+            _trace("outcome_unknown", result_text)
+            return result_text, None
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)
         server_reason = _mcp_server_reported_error(e)

@@ -227,6 +227,25 @@ def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeyp
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]["use_proxy"] is True
 
 
+def test_update_server_persists_per_tool_timeout_and_returns_it(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    async def reload(_name):
+        return True
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy", mod.McpServerUpdate(tool_timeouts_s={"hardware_sequence": 60}), _auth=None,
+    ))
+
+    assert result["server"]["tool_timeouts_s"] == {"hardware_sequence": 60.0}
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert stored["mcp_servers"]["servers"][0]["tool_timeouts_s"] == {"hardware_sequence": 60.0}
+
+
 def test_update_server_reports_restart_when_owner_reload_fails(tmp_path, monkeypatch):
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: [toy_status]\n")
     _patch_config(monkeypatch, path)

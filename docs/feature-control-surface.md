@@ -38,7 +38,7 @@ MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /s
 `stdio`；旧 `http` 配置继续按 `streamable-http` 处理。HTTP headers 支持 `${ENV_VAR}` 展开，管理面不回显
 字面 header 值。MCP 不继承环境代理：loopback/localhost 地址始终直连，远程地址可在管理面单独设置
 `use_proxy`，启用后使用全局 `proxy.http` / `proxy.https`。删除会立即断开该 server 并摘除它的动态工具；总开关同步所有 session，单 server 的启停/白名单只重载该 server；工具调用以
-`caller=mcp__{server}__{tool}` 记录到 API 调用总账。桌面客户端不代理这些 admin 配置或密钥。
+`caller=mcp__{server}__{tool}` 记录到 API 调用总账。`tool_timeout_s` 是 server 默认值，`tool_timeouts_s.<tool>` 可为个别工具覆盖 1-300 秒的调用上限；设置读取接口会返回两者，更新会热重载对应 server。动作工具超时会记录相同 `request_id` 并返回 `outcome_unknown`，不会自动重放。桌面客户端不代理这些 admin 配置或密钥。
 
 每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；新白名单工具会从 MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述获得仅供建议的 effect。管理员确认或修改后才写入 `tool_policy`，缺少确认的白名单工具保持 `pending_confirmation`，不会注册或调用。已有显式策略保持不变；保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
 

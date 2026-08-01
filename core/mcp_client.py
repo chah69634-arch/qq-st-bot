@@ -26,10 +26,12 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import logging
 import os
 import re
 import time
+import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -80,6 +82,22 @@ _WRITE_TOOL_WORDS = frozenset({
 })
 
 
+class McpOutcomeUnknown(RuntimeError):
+    """A physical action may have reached the server, but its result was lost."""
+
+    def __init__(self, *, tool_name: str, request_id: str):
+        self.payload = {
+            "outcome": "outcome_unknown",
+            "tool": tool_name,
+            "request_id": request_id,
+            "message": "动作可能已经送达，禁止自动重放；请调用 hardware_status 或人工确认设备状态。",
+        }
+        super().__init__("MCP actuation outcome is unknown")
+
+    def safe_summary(self) -> str:
+        return json.dumps(self.payload, ensure_ascii=False, separators=(",", ":"))
+
+
 def _require_local_policy() -> bool:
     return bool(_get_mcp_config().get("require_local_policy", False))
 
@@ -128,6 +146,11 @@ def validate_local_tool_policy(
             raise ValueError(
                 f"MCP server '{name}' 工具 '{tool_name}' 的 require_confirm 必须是 bool"
             )
+        configured_idempotent = entry.get("idempotent", False)
+        if not isinstance(configured_idempotent, bool):
+            raise ValueError(
+                f"MCP server '{name}' 工具 '{tool_name}' 的 idempotent 必须是 bool"
+            )
         if effect == "emergency":
             if configured_confirm is True:
                 logger.warning(
@@ -142,6 +165,7 @@ def validate_local_tool_policy(
         normalized[tool_name] = {
             "effect": effect,
             "require_confirm": require_confirm,
+            "idempotent": configured_idempotent,
         }
 
     extras = sorted(set(raw_policy) - set(allow_tools))
@@ -572,6 +596,10 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
 
     allow = set(server_cfg.get("allow_tools") or [])
     timeout_s = float(server_cfg.get("tool_timeout_s", 30))
+    configured_timeouts = server_cfg.get("tool_timeouts_s") or {}
+    if not isinstance(configured_timeouts, dict):
+        logger.warning("[mcp_client] tool_timeouts_s 必须是对象，已忽略: server=%s", name)
+        configured_timeouts = {}
     details = _tool_details(listed)
     handle = _ServerHandle(
         name=name, cfg=server_cfg, stack=stack, session=session, tool_details=details,
@@ -603,6 +631,9 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
             policy = local_policy[tool.name]
             effect = policy["effect"]
             require_confirm = policy["require_confirm"]
+            idempotent = policy["idempotent"]
+        if local_policy is None:
+            idempotent = False
         if claimed_read_only and effect != "read":
             logger.warning(
                 "[mcp_client] MCP readOnlyHint 与本地 effect 冲突，本地策略优先: "
@@ -612,7 +643,13 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
         high_risk = bool(suggestion["high_risk"])
         effective_require_confirm = require_confirm or high_risk
         _TOOL_REGISTRY[reg_name] = {
-            "func": _make_tool_func(name, tool.name, timeout_s),
+            "func": _make_tool_func(
+                name,
+                tool.name,
+                _tool_timeout_s(configured_timeouts, str(tool.name), timeout_s),
+                effect,
+                idempotent,
+            ),
             "description": tool.description or "",
             "dangerous": effective_require_confirm,
             "category": "mcp",
@@ -623,6 +660,7 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
             "require_confirm": effective_require_confirm,
             "mcp_claimed_read_only": claimed_read_only,
             "mcp_policy_legacy": local_policy is None,
+            "mcp_idempotent": idempotent,
             "mcp_high_risk": high_risk,
             # MCP annotations are optional.  Keep the read-only declaration so
             # the tool-loop can safely point models at server-provided docs /
@@ -650,6 +688,19 @@ def _tool_is_read_only(tool) -> bool:
     )
 
 
+def _tool_timeout_s(configured_timeouts: dict, tool_name: str, default_timeout_s: float) -> float:
+    raw_timeout = configured_timeouts.get(tool_name, default_timeout_s)
+    try:
+        timeout_s = float(raw_timeout)
+    except (TypeError, ValueError):
+        logger.warning("[mcp_client] 工具超时无效，回退 server 默认值: tool=%s", tool_name)
+        return default_timeout_s
+    if not 1 <= timeout_s <= 300:
+        logger.warning("[mcp_client] 工具超时超出 1-300 秒，回退 server 默认值: tool=%s", tool_name)
+        return default_timeout_s
+    return timeout_s
+
+
 async def test_server_config(server_cfg: dict) -> list[dict]:
     """连接并 list_tools 后立即关闭，供 URL 导入的提交前探测使用。"""
     try:
@@ -675,28 +726,61 @@ async def test_server_config(server_cfg: dict) -> list[dict]:
             logger.debug("[mcp_client] test_server_config 关闭 stack 出错: %s", close_exc)
 
 
-def _make_tool_func(server_name: str, tool_name: str, timeout_s: float):
+def _make_tool_func(
+    server_name: str, tool_name: str, timeout_s: float, effect: str, idempotent: bool,
+):
     async def _call(**kwargs) -> str:
-        return await _call_tool(server_name, tool_name, kwargs, timeout_s)
+        return await _call_tool(
+            server_name, tool_name, kwargs, timeout_s,
+            effect=effect, idempotent=idempotent,
+        )
     return _call
 
 
-async def _call_tool(server_name: str, tool_name: str, arguments: dict, timeout_s: float) -> str:
+def _retry_allowed(*, effect: str, idempotent: bool, tool_name: str) -> bool:
+    if effect == "read":
+        return True
+    if effect == "write":
+        return idempotent
+    return effect == "emergency" and idempotent and tool_name == "hardware_stop"
+
+
+async def _call_tool(
+    server_name: str,
+    tool_name: str,
+    arguments: dict,
+    timeout_s: float,
+    *,
+    effect: str = "",
+    idempotent: bool = False,
+) -> str:
     handle = _servers.get(server_name)
     if handle is None:
         raise RuntimeError(f"MCP server '{server_name}' 未连接")
     started = time.perf_counter()
+    request_id = str(uuid.uuid4()) if effect in {"actuate", "emergency"} else ""
+    meta = {"request_id": request_id} if request_id else None
+
+    async def _call_once(session):
+        kwargs = {"meta": meta} if meta is not None else {}
+        return await asyncio.wait_for(
+            session.call_tool(tool_name, arguments, **kwargs), timeout=timeout_s
+        )
+
     try:
         try:
-            result = await asyncio.wait_for(
-                handle.session.call_tool(tool_name, arguments), timeout=timeout_s
-            )
+            result = await _call_once(handle.session)
         except BaseException as exc:
-            # 同 _connect_server：真正的工具调用最常经过这条路径（每次 execute() 都走
-            # 这里），wait_for 超时自己内部取消底层 anyio 流读写时，同样可能抛
-            # CancelledError / BaseExceptionGroup，必须用 BaseException 才接得住，
-            # 否则重连都走不到就已经把请求捅穿了。
-            logger.warning("[mcp_client] 调用 %s.%s 失败，尝试重连一次: %s", server_name, tool_name, exc)
+            if effect in {"actuate", "emergency"} and not _retry_allowed(
+                effect=effect, idempotent=idempotent, tool_name=tool_name,
+            ):
+                raise McpOutcomeUnknown(tool_name=tool_name, request_id=request_id) from exc
+            if not _retry_allowed(effect=effect, idempotent=idempotent, tool_name=tool_name):
+                raise RuntimeError(f"MCP 工具调用失败: {exc}") from exc
+            logger.warning(
+                "[mcp_client] 调用 %s.%s 失败，按幂等策略重连重试一次: %s request_id=%s",
+                server_name, tool_name, exc, request_id or "-",
+            )
             try:
                 await _reconnect_server(server_name)
             except BaseException as reconnect_exc:
@@ -705,19 +789,21 @@ async def _call_tool(server_name: str, tool_name: str, arguments: dict, timeout_
             if handle is None:
                 raise RuntimeError(f"MCP 工具调用失败且重连未恢复: {exc}") from exc
             try:
-                result = await asyncio.wait_for(
-                    handle.session.call_tool(tool_name, arguments), timeout=timeout_s
-                )
+                result = await _call_once(handle.session)
             except BaseException as retry_exc:
+                if effect in {"actuate", "emergency"}:
+                    raise McpOutcomeUnknown(tool_name=tool_name, request_id=request_id) from retry_exc
                 raise RuntimeError(f"MCP 工具调用失败: {retry_exc}") from retry_exc
         text = _format_result(result)
     except BaseException as exc:
+        outcome_unknown = isinstance(exc, McpOutcomeUnknown)
         _record_call(server_name, tool_name, ok=False, error=str(exc))
         from core.api_call_log import append as append_api_call
         append_api_call(
             caller=f"mcp__{server_name}__{tool_name}", purpose="mcp_tool", provider=server_name,
             model=tool_name, duration_ms=int((time.perf_counter() - started) * 1000), ok=False,
-            output_hint="MCP call failed",
+            output_hint="MCP action outcome unknown" if outcome_unknown else "MCP call failed",
+            request_id=request_id,
         )
         if isinstance(exc, Exception):
             raise
@@ -728,6 +814,7 @@ async def _call_tool(server_name: str, tool_name: str, arguments: dict, timeout_
         caller=f"mcp__{server_name}__{tool_name}", purpose="mcp_tool", provider=server_name,
         model=tool_name, duration_ms=int((time.perf_counter() - started) * 1000), ok=True,
         output_hint="MCP call succeeded",
+        request_id=request_id,
     )
     return text
 

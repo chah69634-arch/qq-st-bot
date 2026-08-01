@@ -29,6 +29,7 @@ class McpServerDraft(BaseModel):
     tool_policy: Optional[dict[str, "McpToolPolicy"]] = None
     enabled: bool = True
     tool_timeout_s: float = 30
+    tool_timeouts_s: dict[str, float] = Field(default_factory=dict)
 
 
 class McpSettingsUpdate(BaseModel):
@@ -38,6 +39,7 @@ class McpSettingsUpdate(BaseModel):
 class McpToolPolicy(BaseModel):
     effect: Literal["read", "write", "actuate", "emergency"]
     require_confirm: Optional[bool] = None
+    idempotent: Optional[bool] = None
 
 
 class McpServerUpdate(BaseModel):
@@ -46,6 +48,7 @@ class McpServerUpdate(BaseModel):
     tool_policy: Optional[dict[str, McpToolPolicy]] = None
     headers: Optional[dict[str, str]] = None
     tool_timeout_s: Optional[float] = None
+    tool_timeouts_s: Optional[dict[str, float]] = None
     use_proxy: Optional[bool] = None
     tool_presets: Optional[list[dict]] = None
     active_tool_preset: Optional[str] = None
@@ -83,7 +86,25 @@ def _validate_draft(draft: McpServerDraft) -> dict:
         ),
         "enabled": bool(draft.enabled),
         "tool_timeout_s": max(1, min(300, float(draft.tool_timeout_s))),
+        "tool_timeouts_s": _normalize_tool_timeouts(draft.tool_timeouts_s),
     }
+
+
+def _normalize_tool_timeouts(raw: object) -> dict[str, float]:
+    if not isinstance(raw, dict) or len(raw) > 200:
+        raise HTTPException(status_code=422, detail="tool_timeouts_s 必须是不超过 200 项的对象")
+    normalized: dict[str, float] = {}
+    for tool_name, timeout_s in raw.items():
+        if not isinstance(tool_name, str) or not tool_name:
+            raise HTTPException(status_code=422, detail="tool_timeouts_s 的工具名必须是非空字符串")
+        try:
+            value = float(timeout_s)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="tool_timeouts_s 的值必须是秒数") from exc
+        if not 1 <= value <= 300:
+            raise HTTPException(status_code=422, detail="tool_timeouts_s 的值必须在 1-300 秒")
+        normalized[tool_name] = value
+    return normalized
 
 
 def _read_config() -> dict:
@@ -192,6 +213,7 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
         "headers": _safe_headers(server_cfg.get("headers")),
         "enabled": bool(server_cfg.get("enabled", True)),
         "tool_timeout_s": float(server_cfg.get("tool_timeout_s", 30)),
+        "tool_timeouts_s": dict(server_cfg.get("tool_timeouts_s") or {}),
         "allow_tools": list(server_cfg.get("allow_tools") or []),
         "tool_policy": policy,
         "tool_states": tool_states,
@@ -310,7 +332,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin"))):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
-    if all(value is None for value in (body.enabled, body.allow_tools, body.tool_policy, body.headers, body.tool_timeout_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
+    if all(value is None for value in (body.enabled, body.allow_tools, body.tool_policy, body.headers, body.tool_timeout_s, body.tool_timeouts_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
         raise HTTPException(status_code=422, detail="没有可更新字段")
     full_cfg = _read_config()
     servers = full_cfg.setdefault("mcp_servers", {}).setdefault("servers", [])
@@ -329,6 +351,8 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
             tool_name: policy.model_dump(exclude_none=True)
             for tool_name, policy in body.tool_policy.items()
         }
+    if body.tool_timeouts_s is not None:
+        server["tool_timeouts_s"] = _normalize_tool_timeouts(body.tool_timeouts_s)
     if body.tool_presets is not None:
         server["tool_presets"] = _normalize_tool_presets(body.tool_presets)
         current = str(server.get("active_tool_preset") or "")

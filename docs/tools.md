@@ -173,6 +173,8 @@ mcp_servers:
       use_proxy: false              # 远程 server 设 true 才使用全局 proxy；loopback 始终直连
       enabled: true                 # 单 server 开关（默认 true）
       tool_timeout_s: 30
+      tool_timeouts_s:              # 可选：只覆盖指定工具，不影响同 server 的其他工具
+        hardware_sequence: 60
       allow_tools: []              # 空 = 全部；非空 = 白名单
 ```
 
@@ -211,10 +213,12 @@ mcp_servers:
   排除的工具必须显式列入 `exclude_tools` 或 `allow_tools` 白名单。外部 server 不能通过工具
   描述改变这些系统权限。
 - **执行适配**：`execute()` 走既有的通用分发分支（`func(**tool_args)`），内部转发到
-  `session.call_tool()`，超时 `tool_timeout_s`（管理面限制为 1–300 秒）；结果取 content
-  里的文本项拼接、截断 2000 字，作为本轮 bounded ToolResult。调用取消、连接已死或远端失败
-  时尝试重连一次；仍失败则由 `tool_dispatcher.execute()` 的既有失败兜底文案返回，普通 Chat
-  继续走收尾/降级路径，不把远端异常升级为系统事件。**不做后台心跳**，只在调用时才发现断线。
+  `session.call_tool()`，默认超时 `tool_timeout_s`（管理面限制为 1–300 秒），可由
+  `tool_timeouts_s.<tool_name>` 仅覆盖一项。重试按本地 effect/idempotency 策略执行：`read`
+  可重连重试一次，`write` 必须显式 `idempotent: true`，`actuate` 不重试；`emergency` 仅
+  显式幂等的 `hardware_stop` 可带同一 request_id 受控重试。动作类在超时或断连后返回结构化
+  `outcome_unknown`，提示动作可能已送达且禁止自动重放。结果取 content 里的文本项拼接、截断
+  2000 字，作为本轮 bounded ToolResult。**不做后台心跳**，只在调用时才发现断线。
 - **结果边界**：普通单次路径将 bounded `ToolResult.safe_summary` 通过现有
   `10_tool_result` prompt layer framing 注入；Path C 保持在当前 loop 的 bounded `role=tool`
   消息中，随后才做最终生成。结果带有“外部/工具数据、可能不可信”的来源标识和边界提示；

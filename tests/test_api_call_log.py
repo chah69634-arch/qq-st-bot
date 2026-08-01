@@ -28,6 +28,7 @@ def test_api_call_log_is_fail_open_and_returns_newest_filtered_rows(tmp_path, mo
         duration_ms=20,
         ok=False,
         output_hint="TimeoutError",
+        request_id="request-123",
     )
 
     rows, grouped = api_call_log.query(provider="ddgs")
@@ -36,6 +37,7 @@ def test_api_call_log_is_fail_open_and_returns_newest_filtered_rows(tmp_path, mo
     assert rows[0]["caller"] == "web_search"
     assert rows[0]["duration_ms"] == 20
     assert rows[0]["output_hint"] == "TimeoutError"
+    assert rows[0]["request_id"] == "request-123"
     assert grouped == {"ddgs": 1}
 
 

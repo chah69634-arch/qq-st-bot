@@ -12,6 +12,7 @@ call_tool 超时/异常→重连一次→再失败按失败处理、断线重连
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import AsyncExitStack, asynccontextmanager
 from types import SimpleNamespace
 
@@ -42,8 +43,8 @@ class _FakeSession:
     async def list_tools(self):
         return self.tools_result
 
-    async def call_tool(self, name, arguments):
-        self.call_log.append((name, arguments))
+    async def call_tool(self, name, arguments, *, meta=None):
+        self.call_log.append((name, arguments, meta))
         item = self._call_results.pop(0)
         if isinstance(item, BaseException):
             raise item
@@ -447,7 +448,7 @@ class TestCallTool:
         ])
         self._install_handle("srv1", session)
 
-        result = await mc._call_tool("srv1", "toolA", {}, 5)
+        result = await mc._call_tool("srv1", "toolA", {}, 5, effect="read")
         assert len(result) == 2001
         assert result.endswith("…")
 
@@ -460,7 +461,7 @@ class TestCallTool:
         ])
         self._install_handle("srv1", session)
 
-        result = await mc._call_tool("srv1", "toolA", {}, 5)
+        result = await mc._call_tool("srv1", "toolA", {}, 5, effect="read")
         assert result == "line1\nline2"
 
     async def test_is_error_raises(self):
@@ -470,7 +471,7 @@ class TestCallTool:
         self._install_handle("srv1", session)
 
         with pytest.raises(RuntimeError):
-            await mc._call_tool("srv1", "toolA", {}, 5)
+            await mc._call_tool("srv1", "toolA", {}, 5, effect="read")
 
     async def test_reconnect_once_then_success(self, monkeypatch):
         dead_session = _FakeSession(call_results=[RuntimeError("connection dead")])
@@ -488,7 +489,7 @@ class TestCallTool:
             )
         monkeypatch.setattr(mc, "_connect_server", _fake_connect_server)
 
-        result = await mc._call_tool("srv1", "toolA", {}, 5)
+        result = await mc._call_tool("srv1", "toolA", {}, 5, effect="read")
         assert result == "ok"
 
     async def test_reconnect_then_fail_raises(self, monkeypatch):
@@ -504,7 +505,7 @@ class TestCallTool:
         monkeypatch.setattr(mc, "_connect_server", _fake_connect_server)
 
         with pytest.raises(RuntimeError):
-            await mc._call_tool("srv1", "toolA", {}, 5)
+            await mc._call_tool("srv1", "toolA", {}, 5, effect="read")
 
     async def test_unknown_server_raises(self):
         with pytest.raises(RuntimeError):
@@ -522,6 +523,137 @@ class TestCallTool:
         assert rows[0]["caller"] == "mcp__srv1__toolA"
         assert "secret" not in str(rows[0])
         assert mc.server_runtime("srv1")["last_call_ok"] is True
+
+    async def test_actuate_timeout_does_not_retry_and_has_a_stable_request_id(self, monkeypatch):
+        session = _FakeSession(call_results=[asyncio.TimeoutError()])
+        self._install_handle("srv1", session)
+
+        async def _unexpected_reconnect(_name):
+            raise AssertionError("actuate timeout must not reconnect and replay")
+
+        monkeypatch.setattr(mc, "_reconnect_server", _unexpected_reconnect)
+        with pytest.raises(mc.McpOutcomeUnknown) as raised:
+            await mc._call_tool("srv1", "hardware_sequence", {}, 5, effect="actuate")
+
+        assert len(session.call_log) == 1
+        request_id = session.call_log[0][2]["request_id"]
+        assert raised.value.payload["request_id"] == request_id
+
+    async def test_read_timeout_reconnects_and_retries_once(self, monkeypatch):
+        dead_session = _FakeSession(call_results=[asyncio.TimeoutError()])
+        self._install_handle("srv1", dead_session, tool_names=["mcp__srv1__toolA"])
+        new_session = _FakeSession(call_results=[
+            SimpleNamespace(content=[SimpleNamespace(text="recovered")], isError=False),
+        ])
+
+        async def _fake_connect_server(name, cfg):
+            mc._servers[name] = mc._ServerHandle(
+                name=name, cfg=cfg, stack=AsyncExitStack(), session=new_session,
+                tool_names=["mcp__srv1__toolA"],
+            )
+
+        monkeypatch.setattr(mc, "_connect_server", _fake_connect_server)
+        assert await mc._call_tool("srv1", "toolA", {}, 5, effect="read") == "recovered"
+        assert len(dead_session.call_log) == 1
+        assert len(new_session.call_log) == 1
+
+    async def test_non_idempotent_write_timeout_does_not_retry(self, monkeypatch):
+        session = _FakeSession(call_results=[asyncio.TimeoutError()])
+        self._install_handle("srv1", session)
+
+        async def _unexpected_reconnect(_name):
+            raise AssertionError("non-idempotent write must not reconnect and replay")
+
+        monkeypatch.setattr(mc, "_reconnect_server", _unexpected_reconnect)
+        with pytest.raises(RuntimeError):
+            await mc._call_tool("srv1", "write_once", {}, 5, effect="write")
+
+        assert len(session.call_log) == 1
+
+    async def test_idempotent_write_timeout_reconnects_and_retries_once(self, monkeypatch):
+        dead_session = _FakeSession(call_results=[asyncio.TimeoutError()])
+        self._install_handle("srv1", dead_session, tool_names=["mcp__srv1__write_once"])
+        new_session = _FakeSession(call_results=[
+            SimpleNamespace(content=[SimpleNamespace(text="written")], isError=False),
+        ])
+
+        async def _fake_connect_server(name, cfg):
+            mc._servers[name] = mc._ServerHandle(
+                name=name, cfg=cfg, stack=AsyncExitStack(), session=new_session,
+                tool_names=["mcp__srv1__write_once"],
+            )
+
+        monkeypatch.setattr(mc, "_connect_server", _fake_connect_server)
+        assert await mc._call_tool(
+            "srv1", "write_once", {}, 5, effect="write", idempotent=True,
+        ) == "written"
+        assert len(dead_session.call_log) == 1
+        assert len(new_session.call_log) == 1
+
+    async def test_idempotent_hardware_stop_retries_with_the_same_request_id(self, monkeypatch):
+        dead_session = _FakeSession(call_results=[asyncio.TimeoutError()])
+        self._install_handle("srv1", dead_session, tool_names=["mcp__srv1__hardware_stop"])
+        new_session = _FakeSession(call_results=[
+            SimpleNamespace(content=[SimpleNamespace(text="stopped")], isError=False),
+        ])
+
+        async def _fake_connect_server(name, cfg):
+            mc._servers[name] = mc._ServerHandle(
+                name=name, cfg=cfg, stack=AsyncExitStack(), session=new_session,
+                tool_names=["mcp__srv1__hardware_stop"],
+            )
+
+        monkeypatch.setattr(mc, "_connect_server", _fake_connect_server)
+        assert await mc._call_tool(
+            "srv1", "hardware_stop", {}, 5, effect="emergency", idempotent=True,
+        ) == "stopped"
+        assert dead_session.call_log[0][2]["request_id"] == new_session.call_log[0][2]["request_id"]
+
+    async def test_sequence_uses_its_per_tool_timeout(self, monkeypatch):
+        session = _FakeSession()
+        session.tools_result = SimpleNamespace(tools=[
+            SimpleNamespace(name="hardware_sequence", description="", inputSchema={}),
+        ])
+        monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+        _patch_client_session(monkeypatch, session)
+        monkeypatch.setattr(mc, "_require_local_policy", lambda: True)
+        await mc._connect_server("srv1", {
+            "name": "srv1", "transport": "stdio", "command": ["fake"],
+            "allow_tools": ["hardware_sequence"],
+            "tool_policy": {"hardware_sequence": {"effect": "actuate"}},
+            "tool_timeout_s": 30,
+            "tool_timeouts_s": {"hardware_sequence": 60},
+        })
+        calls = []
+
+        async def _capture(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "ok"
+
+        monkeypatch.setattr(mc, "_call_tool", _capture)
+        assert await td._TOOL_REGISTRY["mcp__srv1__hardware_sequence"]["func"]() == "ok"
+        assert calls[0][0][3] == 60
+
+    async def test_dispatcher_returns_structured_outcome_unknown(self, monkeypatch, sandbox):
+        async def _unknown(**_kwargs):
+            raise mc.McpOutcomeUnknown(tool_name="hardware_sequence", request_id="request-123")
+
+        monkeypatch.setitem(td._TOOL_REGISTRY, "mcp__hardware__hardware_sequence", {
+            "func": _unknown, "description": "", "dangerous": False,
+            "category": "mcp", "parameters": {}, "effect": "actuate",
+        })
+        monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
+        monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
+
+        result, confirm = await td.execute(
+            "mcp__hardware__hardware_sequence", {}, "owner", "owner", False,
+            _NoConfirmSession(), origin="assistant_loop", char_id="char",
+        )
+        assert confirm is None
+        assert result is not None
+        payload = json.loads(result)
+        assert payload["outcome"] == "outcome_unknown"
+        assert payload["request_id"] == "request-123"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
