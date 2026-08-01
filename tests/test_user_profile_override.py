@@ -84,6 +84,40 @@ async def test_pending_value_reset_on_different_new_value(sandbox):
     assert profile["_pending_overrides"]["interests"]["count"] == 1
 
 
+@pytest.mark.asyncio
+async def test_pending_count_is_persisted_below_threshold(sandbox, monkeypatch):
+    from core.memory import user_profile as _up
+
+    monkeypatch.setattr(_up, "_PENDING_OVERRIDE_THRESHOLD", 3)
+    _up.save("uid_count", {"interests": "跑步"})
+
+    await _up.update("uid_count", {"interests": "画画"})
+    await _up.update("uid_count", {"interests": "画画"})
+
+    profile = _up.load("uid_count")
+    assert profile["interests"] == "跑步"
+    assert profile["_pending_overrides"]["interests"] == {
+        "new_value": "画画",
+        "count": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_resolved_candidate_keeps_other_pending_fields(sandbox):
+    from core.memory import user_profile as _up
+
+    _up.save("uid_multi", {"name": "旧名", "interests": "跑步"})
+    await _up.update("uid_multi", {"name": "新名", "interests": "画画"})
+    await _up.update("uid_multi", {"name": "新名"})
+
+    profile = _up.load("uid_multi")
+    assert profile["name"] == "新名"
+    assert profile["interests"] == "跑步"
+    assert profile["_pending_overrides"] == {
+        "interests": {"new_value": "画画", "count": 1},
+    }
+
+
 # ---------------------------------------------------------------------------
 # 5. important_facts 去重追加行为不变
 # ---------------------------------------------------------------------------

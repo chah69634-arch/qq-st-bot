@@ -443,8 +443,10 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_I
                     profile[key] = value
             elif value and value != old_value:
                 # 非空旧值且新值不同：走 pending-override 计数
-                pending = profile.setdefault("_pending_overrides", {})
-                current = pending.get(key, {})
+                # _ProfileDocument 只跟踪顶层 mutation；复制后显式回写，避免
+                # 对已存在 nested dict 的原地修改在三方合并保存时被忽略。
+                pending = dict(profile.get("_pending_overrides") or {})
+                current = dict(pending.get(key) or {})
                 if current.get("new_value") == value:
                     current["count"] = current.get("count", 1) + 1
                 else:
@@ -456,12 +458,15 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_I
                     pending.pop(key, None)
                     if not pending:
                         profile.pop("_pending_overrides", None)
+                    else:
+                        profile["_pending_overrides"] = pending
                     logger.info(
                         f"[user_profile] {key} 覆盖更新：{old_value!r} → {value!r}"
                         f"（{current['count']} 次连续提取）"
                     )
                 else:
                     pending[key] = current
+                    profile["_pending_overrides"] = pending
                     logger.debug(
                         f"[user_profile] {key} pending override {current['count']}/{threshold}"
                         f"：候选值 {value!r}"
