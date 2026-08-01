@@ -15,7 +15,7 @@
 - [x] 130-G：修复用户画像 pending override 候选切换时的嵌套 mutation 丢失。
 - [x] 130-H：替换 desktop/device WebSocket 毫秒时间戳 ID，保证并发 action ACK 不碰撞；Desktop protocol commit `ad898b5`。
 - [x] 130-I：模型/视觉客户端热重载前关闭旧连接池，避免重复设置后的资源泄漏。
-- [ ] 130-J：清理本轮发现的失效测试契约，恢复测试门禁的可信度；不把 live backend 写生产数据造成的环境污染误判为产品缺陷。
+- [x] 130-J：清理本轮发现的失效测试契约，恢复测试门禁的可信度；不把 live backend 写生产数据造成的环境污染误判为产品缺陷。
 
 ## 验收
 

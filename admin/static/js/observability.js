@@ -270,6 +270,20 @@ async function loadObserveSpend(){
   }catch(e){el.innerHTML=`<div class="card">${observeEmpty('加载失败：'+e.message)}</div>`;}
 }
 
+async function runSpendCheck(){
+  const button=document.querySelector('[data-action="runSpendCheck"]');
+  if(button)button.disabled=true;
+  try{
+    await api('POST','/spend/check');
+    toast(t('dynamic.observe.spend_check_ok','余额检查已完成'),'ok');
+    await loadObserveSpend();
+  }catch(e){
+    toast(t('dynamic.observe.spend_check_failed','余额检查失败：{error}').replace('{error}',e.message),'err');
+  }finally{
+    if(button)button.disabled=false;
+  }
+}
+
 let _observeGroupSummaries = {};
 
 function _observeGroupCharacterLabel(groupId, charId) {

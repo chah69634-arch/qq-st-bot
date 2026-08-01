@@ -13,10 +13,12 @@ test_memeval.py（pytest 收集）与 run_memeval.py（脚本单跑）共用本�
 from __future__ import annotations
 
 import asyncio
+import calendar
 import inspect
 import json
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -79,9 +81,26 @@ def _fill_episodic_defaults(now: float, entry: dict) -> dict:
     mem = dict(_EPISODIC_DEFAULTS)
     mem.update(entry)
     assert "id" in mem, f"episodic 种子缺少 id: {entry}"
+    months_ago = mem.pop("occurred_months_ago", None)
     days_ago = mem.pop("occurred_days_ago", None)
     hours_ago = mem.pop("occurred_hours_ago", None)
-    if days_ago is not None:
+    assert sum(value is not None for value in (months_ago, days_ago, hours_ago)) <= 1, (
+        f"episodic 种子只能指定一种相对时间: {entry}"
+    )
+    if months_ago is not None:
+        month_offset = int(months_ago)
+        assert month_offset >= 0 and month_offset == float(months_ago)
+        current = datetime.fromtimestamp(now)
+        target_index = current.year * 12 + current.month - 1 - month_offset
+        target_year, target_month_zero_based = divmod(target_index, 12)
+        target_month = target_month_zero_based + 1
+        target_day = min(current.day, calendar.monthrange(target_year, target_month)[1])
+        occurred_at = current.replace(
+            year=target_year,
+            month=target_month,
+            day=target_day,
+        ).timestamp()
+    elif days_ago is not None:
         occurred_at = now - float(days_ago) * 86400
     elif hours_ago is not None:
         occurred_at = now - float(hours_ago) * 3600

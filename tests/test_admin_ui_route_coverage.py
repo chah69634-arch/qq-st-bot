@@ -41,6 +41,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/transcribe"): "语音转写，Emerald-client shared/voice/useVoiceInput.ts 消费",
     ("POST", "/coplay/arm"): "陪玩模式开关，Emerald-client CoplaySettingsPage 消费",
     ("POST", "/coplay/disarm"): "陪玩模式开关，Emerald-client CoplaySettingsPage 消费",
+    ("PUT", "/period"): "经期输入由 Emerald-client 健康设置页消费，管理面板不重复收集用户健康数据",
 
     # 外部 bridge / provider adapter 入口：由受限 integration token 的自动化进程调用；
     # 管理页只提供会走同一 Garden 提交逻辑的 manual_test，不暴露任意外部载荷编辑器。

@@ -6,13 +6,13 @@ seed:
       topic_keywords: ["报班", "摄影课"]
       raw_facts: ["用户上个月说报了一个摄影课"]
       narrative_summary: "用户上个月报名了摄影课"
-      occurred_days_ago: 35
+      occurred_months_ago: 1
       strength: 0.7
     - id: ep_tmp03_class_this_week
       topic_keywords: ["报班", "摄影课"]
       raw_facts: ["用户这周说摄影课换了老师"]
       narrative_summary: "用户这周说摄影课换了老师"
-      occurred_days_ago: 2
+      occurred_days_ago: 0
       strength: 0.7
 query: "上个月报名的摄影课后来怎么样了"
 expect:

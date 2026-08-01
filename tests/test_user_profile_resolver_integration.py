@@ -8,12 +8,12 @@ Covers:
 1.  load() reads from resolve_path(reality_scope, "profile")
 2.  save() writes to resolve_path(reality_scope, "profile")
 3.  clear() resets the resolver path file
-4.  get_period_info() reads from resolve_path(reality_scope, "profile")
+4.  uid-global period state reads from resolve_path(global_scope, "health_state")
 5.  Physical path identical to legacy user_memory_root / profile.json (P0 parity)
-6.  char_id=None → ValueError (fail-loud, no fallback yexuan)
-7.  char_id="" → ValueError (fail-loud, no fallback yexuan)
+6.  Profile char_id=None → ValueError (fail-loud, no fallback yexuan)
+7.  Profile char_id="" → ValueError (fail-loud, no fallback yexuan)
 8.  yexuan / character_b profile buckets are isolated
-9.  period info reads character_b bucket, not yexuan bucket
+9.  period info is uid-global and unaffected by character profile buckets
 """
 from __future__ import annotations
 
@@ -89,21 +89,18 @@ def test_clear_profile_resets_resolver_path(sandbox):
 
 
 # ---------------------------------------------------------------------------
-# 4. get_period_info() reads from resolve_path("profile")
+# 4. period state reads from resolve_path(global_scope, "health_state")
 # ---------------------------------------------------------------------------
 
-def test_get_period_info_reads_from_resolver_path(sandbox):
-    import core.memory.user_profile as _up
+def test_period_info_reads_from_global_health_state_path(sandbox):
+    from core.memory import health_state
 
-    scope = MemoryScope.reality_scope(_UID, "character_b")
-    expected_path = resolve_path(scope, "profile")
-    expected_path.parent.mkdir(parents=True, exist_ok=True)
-    expected_path.write_text(
-        json.dumps({"last_period_date": "2026-06-01"}),
-        encoding="utf-8",
-    )
+    scope = MemoryScope.global_scope(_UID)
+    expected_path = resolve_path(scope, "health_state")
+    health_state.set_period_date(_UID, "2026-06-01")
 
-    info = _up.get_period_info(_UID, char_id="character_b")
+    assert expected_path.exists()
+    info = health_state.get_period_info(_UID)
     assert info["last_period_date"] == "2026-06-01"
 
 
@@ -149,12 +146,6 @@ def test_clear_profile_char_id_none_raises(sandbox):
     import core.memory.user_profile as _up
     with pytest.raises((ValueError, TypeError)):
         _up.clear(_UID, char_id=None)  # type: ignore[arg-type]
-
-
-def test_get_period_info_char_id_none_raises(sandbox):
-    import core.memory.user_profile as _up
-    with pytest.raises((ValueError, TypeError)):
-        _up.get_period_info(_UID, char_id=None)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -215,20 +206,16 @@ def test_clear_character_b_does_not_affect_yexuan(sandbox):
 
 
 # ---------------------------------------------------------------------------
-# 9. period info reads character_b bucket, not yexuan bucket
+# 9. period info is uid-global, not character-isolated
 # ---------------------------------------------------------------------------
 
-def test_period_info_isolation(sandbox):
+def test_period_info_is_uid_global(sandbox):
+    from core.memory import health_state
     import core.memory.user_profile as _up
 
+    health_state.set_period_date(_UID, "2026-08-01")
     _up.save(_UID, {"last_period_date": "2026-01-01"}, char_id="yexuan")
     _up.save(_UID, {"last_period_date": "2026-06-01"}, char_id="character_b")
 
-    y_info = _up.get_period_info(_UID, char_id="yexuan")
-    h_info = _up.get_period_info(_UID, char_id="character_b")
-
-    assert y_info["last_period_date"] == "2026-01-01"
-    assert h_info["last_period_date"] == "2026-06-01"
-    assert y_info["last_period_date"] != h_info["last_period_date"], (
-        "period info must be isolated between yexuan and character_b buckets"
-    )
+    assert health_state.get_period_info(_UID)["last_period_date"] == "2026-08-01"
+    assert _up.get_period_info(_UID)["last_period_date"] == "2026-08-01"

@@ -70,6 +70,7 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
 
     profile_calls: list[dict] = []
     history_calls: list[dict] = []
+    probe_prompt_calls: list[dict] = []
 
     def _profile_load(uid, **kwargs):
         profile_calls.append(kwargs)
@@ -82,13 +83,27 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
     async def _chat(*args, **kwargs):
         return ""
 
+    def _probe_prompt(location, **kwargs):
+        probe_prompt_calls.append({"location": location, **kwargs})
+        return "probe"
+
     monkeypatch.setattr(user_profile, "load", _profile_load)
     monkeypatch.setattr(short_term, "load", _history_load)
     monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: [])
-    monkeypatch.setattr(tool_dispatcher, "get_probe_prompt", lambda location: "probe")
+    monkeypatch.setattr(tool_dispatcher, "get_probe_prompt", _probe_prompt)
     monkeypatch.setattr(llm_client, "chat", _chat)
     monkeypatch.setattr(llm_client, "parse_tool_call_response", lambda response: [])
 
-    assert await chat._probe_and_execute_tools("你好", "u1", char_id="frozen_char") is None
+    assert await chat._probe_and_execute_tools(
+        "你好",
+        "u1",
+        char_id="frozen_char",
+        provenance_channel="desktop",
+    ) is None
     assert profile_calls == [{"char_id": "frozen_char"}]
     assert history_calls == [{"char_id": "frozen_char"}]
+    assert probe_prompt_calls
+    assert all(
+        call == {"location": "杭州", "categories": ["info", "desktop"]}
+        for call in probe_prompt_calls
+    )
