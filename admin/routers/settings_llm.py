@@ -20,11 +20,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
+from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
 
 router = APIRouter()
@@ -87,11 +87,7 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("
     if body.frequency_penalty is not None and not (0.0 <= body.frequency_penalty <= 2.0):
         raise HTTPException(status_code=422, detail="frequency_penalty 必须在 0.0~2.0 之间")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
 
@@ -111,11 +107,7 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("
         llm_cfg.update(updates)
         target_params = llm_cfg
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
@@ -152,22 +144,14 @@ async def get_llm_debug_requests(_auth=Depends(require_scopes("admin"))):
 async def update_llm_debug_requests(body: LlmDebugRequestsUpdate, _auth=Depends(require_scopes("admin"))):
     if body.keep_days is not None and not 1 <= body.keep_days <= 7:
         raise HTTPException(status_code=422, detail="keep_days 必须在 1~7 之间")
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     target = full_cfg.setdefault("llm_debug_requests", {})
     for field in body.model_fields_set:
         setattr_value = getattr(body, field)
         if setattr_value is not None:
             target[field] = setattr_value
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -238,11 +222,7 @@ async def update_base_model(body: BaseModelUpdate, auth=Depends(require_scopes("
     if not updates:
         raise HTTPException(status_code=422, detail="至少提供 base_url / api_key / model 之一")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     preset_name = _resolve_base_chat_preset_name(full_cfg)
     if preset_name:
@@ -251,11 +231,7 @@ async def update_base_model(body: BaseModelUpdate, auth=Depends(require_scopes("
         target = full_cfg.setdefault("llm", {})
     target.update(updates)
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
@@ -312,19 +288,11 @@ async def update_embedding_settings(body: EmbeddingSettingsUpdate, auth=Depends(
     if not updates:
         raise HTTPException(status_code=422, detail="至少提供 base_url / api_key / model / dim 之一")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     full_cfg.setdefault("embedding", {}).update(updates)
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -387,11 +355,7 @@ async def get_vision_params(auth=Depends(require_scopes("admin"))):
 
 @router.put("/vision-params", summary="修改 Vision 配置并热重载")
 async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_scopes("admin"))):
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     vision_cfg = full_cfg.setdefault("vision", {})
     if body.enabled  is not None: vision_cfg["enabled"]  = body.enabled
@@ -400,11 +364,7 @@ async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_sc
     if body.model    is not None: vision_cfg["model"]    = body.model
     if body.base_url is not None: vision_cfg["base_url"] = body.base_url
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
@@ -434,11 +394,7 @@ async def update_phone_control_vision_params(
     body: PhoneControlVisionParamsUpdate,
     _auth=Depends(require_scopes("admin")),
 ):
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     dedicated = full_cfg.get("phone_control_vision")
     dedicated = dict(dedicated) if isinstance(dedicated, dict) else {}
@@ -455,11 +411,7 @@ async def update_phone_control_vision_params(
     else:
         full_cfg.pop("phone_control_vision", None)
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
 
@@ -570,11 +522,7 @@ class ActiveRoutingUpdate(BaseModel):
 
 def _persist_model_presets(full_cfg: dict) -> None:
     """Persist config and invalidate every cached model client."""
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
@@ -584,11 +532,7 @@ def _persist_model_presets(full_cfg: dict) -> None:
 @router.post("/model-presets/bootstrap", summary="从 legacy llm 配置初始化 model_presets")
 async def bootstrap_model_presets(auth=Depends(require_scopes("admin"))):
     """One-time migration used by the visual admin panel."""
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     if full_cfg.get("model_presets"):
         return {"message": "model_presets 已存在，无需初始化", "created": False}
@@ -627,11 +571,7 @@ async def get_desktop_model_routing(auth=Depends(require_scopes("persona"))):
 @router.put("/settings/model-routing", summary="桌面端切换已有模型路由")
 async def set_desktop_model_routing(body: ActiveRoutingUpdate, auth=Depends(require_scopes("persona"))):
     """Allow desktop selection without exposing preset secrets."""
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     mp = full_cfg.get("model_presets")
     if not mp:
@@ -665,11 +605,7 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
     """切换 active_routing（如 'default' → 'claude-main'）并热重载。
     只支持已有 model_presets 块的配置；legacy 模式下无意义，会返回 400。
     """
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     mp = full_cfg.get("model_presets")
     if not mp:
@@ -687,11 +623,7 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
 
     mp["active_routing"] = body.active_routing
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
@@ -746,11 +678,7 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
                 ),
             )
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     mp = _require_model_presets_block(full_cfg)
     presets = mp.setdefault("presets", {})
@@ -771,11 +699,7 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
     existing.update(update_data)
     presets[name] = existing
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
@@ -793,11 +717,7 @@ async def delete_preset(name: str, auth=Depends(require_scopes("admin"))):
     """删除指定 preset。仍被某个 routing profile 的任意 call_category 引用时拒绝（409），
     唯一剩余的 preset 也拒绝删除（409），避免路由解析无 preset 可用。
     """
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     mp = _require_model_presets_block(full_cfg)
     presets = mp.get("presets", {})
@@ -820,11 +740,7 @@ async def delete_preset(name: str, auth=Depends(require_scopes("admin"))):
 
     del presets[name]
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
@@ -847,11 +763,7 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
     if not body:
         raise HTTPException(status_code=422, detail="body 不能为空，至少提供一个 call_category")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     mp = _require_model_presets_block(full_cfg)
     presets = mp.get("presets", {})
@@ -864,11 +776,7 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
     profile.update(body)
     profiles[name] = profile
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()

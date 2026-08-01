@@ -5,11 +5,11 @@ deployment paths deliberately stay out of this generic endpoint.
 """
 from pathlib import Path
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
+from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
 
 router = APIRouter()
@@ -49,16 +49,11 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
     unknown = sorted(set(body.flags) - set(FLAGS))
     if unknown:
         raise HTTPException(status_code=422, detail=f"未知功能开关: {unknown}")
-    try:
-        with CONFIG_FILE.open("r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-        for name, enabled in body.flags.items():
-            section, key, _ = FLAGS[name]
-            full_cfg.setdefault(section, {})[key] = enabled
-        with CONFIG_FILE.open("w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"保存功能开关失败: {exc}") from exc
+    full_cfg = read_config_file(CONFIG_FILE)
+    for name, enabled in body.flags.items():
+        section, key, _ = FLAGS[name]
+        full_cfg.setdefault(section, {})[key] = enabled
+    write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader
     config_loader.reload_config()
     if "mcp_servers" in body.flags:

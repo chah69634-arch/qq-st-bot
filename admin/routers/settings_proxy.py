@@ -7,11 +7,11 @@ PUT /proxy  — 修改代理配置并热重载
 from pathlib import Path
 from typing import Optional
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
+from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
 
 router = APIRouter()
@@ -37,11 +37,7 @@ async def get_proxy(auth=Depends(require_scopes("admin"))):
 @router.put("/proxy", summary="修改代理配置并热重载")
 async def update_proxy(body: ProxyUpdate, auth=Depends(require_scopes("admin"))):
     """修改 proxy 字段，热重载 config + 重置 LLM 客户端"""
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     proxy_cfg = full_cfg.setdefault("proxy", {})
     if body.enabled is not None:
@@ -51,11 +47,7 @@ async def update_proxy(body: ProxyUpdate, auth=Depends(require_scopes("admin")))
     if body.https is not None:
         proxy_cfg["https"] = body.https
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()

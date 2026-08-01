@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 from urllib.parse import urlparse
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from admin.auth import require_scopes
+from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
 
 router = APIRouter()
@@ -141,19 +141,11 @@ def _normalize_tool_timeouts(raw: object) -> dict[str, float]:
 
 
 def _read_config() -> dict:
-    try:
-        with CONFIG_FILE.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {exc}") from exc
+    return read_config_file(CONFIG_FILE)
 
 
 def _write_config(cfg: dict) -> None:
-    try:
-        with CONFIG_FILE.open("w", encoding="utf-8") as fh:
-            yaml.dump(cfg, fh, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {exc}") from exc
+    write_config_file(CONFIG_FILE, cfg)
 
 
 def _safe_headers(headers: object) -> dict[str, str]:

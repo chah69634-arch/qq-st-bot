@@ -14,11 +14,11 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import yaml
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
+from admin.config_control import read_config_file, write_config_file
 from core.asset_registry import get_registry, reload_registry
 from core.config_loader import get_config
 from core.sandbox import get_paths
@@ -184,20 +184,12 @@ async def set_active_character(body: Dict[str, Any], auth=Depends(require_scopes
             detail=f"角色 {char_id!r} 是 template/example 资产，不能设为活跃角色。",
         )
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     # Write id (not filename) to config
     full_cfg.setdefault("character", {})["default"] = char_id
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     # Also persist to active_prompt_assets.json (runtime source of truth)
     import json as _json
@@ -425,13 +417,13 @@ async def rename_character(name: str, body: Dict[str, Any], auth=Depends(require
     old_id = Path(name).stem
     if current_id == old_id:
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                full_cfg = yaml.safe_load(f) or {}
+            full_cfg = read_config_file(CONFIG_FILE)
             full_cfg.setdefault("character", {})["default"] = new_id
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            write_config_file(CONFIG_FILE, full_cfg)
             from core import config_loader
             config_loader.reload_config()
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"更新配置失败: {e}")
     reload_registry()

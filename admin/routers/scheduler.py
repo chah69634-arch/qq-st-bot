@@ -5,13 +5,16 @@
 
 import re
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from admin.auth import require_scopes
+from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config, reload_config
 
 router = APIRouter()
+CONFIG_FILE = Path("config.yaml")
 
 # owner_id 合法字符集：与 config.example.yaml 注释、面板校验口径一致（Brief 95 §1）
 OWNER_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -49,14 +52,9 @@ def _sched_cfg() -> dict:
 
 def _save_sched_cfg(new_sched: dict):
     """将修改后的 scheduler 节写回 config.yaml"""
-    import yaml
-    from pathlib import Path
-    path = Path("config.yaml")
-    with open(path, "r", encoding="utf-8") as f:
-        full = yaml.safe_load(f) or {}
+    full = read_config_file(CONFIG_FILE)
     full["scheduler"] = new_sched
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(full, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    write_config_file(CONFIG_FILE, full)
     reload_config()
 
 

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
+from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
 
 router = APIRouter()
@@ -51,20 +52,12 @@ async def update_context_config(body: ContextConfigUpdate, auth=Depends(require_
     if not (1 <= body.max_turns <= 200):
         raise HTTPException(status_code=422, detail="max_turns 必须在 1~200 之间")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     # 写 memory.short_term_rounds（唯一真值 owner）
     full_cfg.setdefault("memory", {})["short_term_rounds"] = body.max_turns
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -110,11 +103,7 @@ async def update_sticker_config(body: StickerConfigUpdate, auth=Depends(require_
     if body.trigger_prob is not None and not (0.0 <= body.trigger_prob <= 1.0):
         raise HTTPException(status_code=422, detail="trigger_prob 必须在 0~1 之间")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     sticker_cfg = full_cfg.setdefault("sticker", {})
     if body.enabled is not None:
@@ -122,11 +111,7 @@ async def update_sticker_config(body: StickerConfigUpdate, auth=Depends(require_
     if body.trigger_prob is not None:
         sticker_cfg["trigger_prob"] = body.trigger_prob
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -172,11 +157,7 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
     if body.speed is not None and not (0.5 <= body.speed <= 2.0):
         raise HTTPException(status_code=422, detail="speed 必须在 0.5~2.0 之间")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     tts_cfg = full_cfg.setdefault("tts", {})
     if body.enabled is not None:
@@ -213,11 +194,7 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
             current[key] = value
         provider_blocks[provider] = current
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -269,22 +246,14 @@ async def get_desktop_tts(auth=Depends(require_scopes("persona"))):
 
 @router.post("/settings/tts-desktop", summary="切换桌面语音播放")
 async def update_desktop_tts(body: DesktopTtsUpdate, auth=Depends(require_scopes("persona"))):
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
     tts_cfg = full_cfg.setdefault("tts", {})
     tts_cfg["desktop_enabled"] = body.enabled
     # Keep the legacy endpoint and the per-scene control plane bidirectionally
     # compatible. Otherwise an old desktop client can silently desynchronise
     # the new desktop-pet setting.
     tts_cfg.setdefault("auto_play", {})["desktop_pet"] = body.enabled
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader
     config_loader.reload_config()
     return {"message": "桌面语音播放开关已更新", "enabled": body.enabled}
@@ -341,11 +310,7 @@ async def get_tts_auto_play(auth=Depends(require_scopes("persona"))):
 
 @router.post("/settings/tts-auto-play", summary="修改四个场景的自动播放语音开关")
 async def update_tts_auto_play(body: TtsAutoPlayUpdate, auth=Depends(require_scopes("persona"))):
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     tts_cfg = full_cfg.setdefault("tts", {})
     auto_play_cfg = tts_cfg.setdefault("auto_play", {})
@@ -357,11 +322,7 @@ async def update_tts_auto_play(body: TtsAutoPlayUpdate, auth=Depends(require_sco
     if "desktop_pet" in updates:
         tts_cfg["desktop_enabled"] = updates["desktop_pet"]
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -397,19 +358,11 @@ async def update_chat_mode(body: ChatModeUpdate, auth=Depends(require_scopes("pe
     if body.mode not in _VALID_MODES:
         raise HTTPException(status_code=422, detail="mode 只接受 'chat' 或 'roleplay'")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     full_cfg.setdefault("chat", {})["mode"] = body.mode
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -436,19 +389,11 @@ async def update_chat_style(body: ChatStyleUpdate, auth=Depends(require_scopes("
     if body.style not in _VALID_STYLES:
         raise HTTPException(status_code=422, detail="style 只接受 'chat' 或 'roleplay'")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     full_cfg.setdefault("chat", {})["style"] = body.style
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -466,19 +411,11 @@ async def get_multi_message(auth=Depends(require_scopes("persona"))):
 @router.put("/chat-multi-message", summary="切换分条发送开关")
 async def update_multi_message(body: dict, auth=Depends(require_scopes("persona"))):
     enabled = bool(body.get("enabled", False))
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     full_cfg.setdefault("chat", {})["multi_message"] = enabled
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -508,22 +445,14 @@ async def update_output_segment_enforce(
     if body.min_len is not None and not (1 <= body.min_len <= 5000):
         raise HTTPException(status_code=422, detail="min_len 必须在 1~5000 之间")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     segment_cfg = full_cfg.setdefault("output", {}).setdefault("segment_enforce", {})
     segment_cfg["enabled"] = body.enabled
     if body.min_len is not None:
         segment_cfg["min_len"] = body.min_len
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -638,11 +567,7 @@ async def update_mail_settings(body: MailSettingsUpdate, auth=Depends(require_sc
     if body.smtp_port is not None and not (1 <= body.smtp_port <= 65535):
         raise HTTPException(status_code=422, detail="smtp_port 必须在 1~65535 之间")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     mail_cfg = full_cfg.setdefault("mail", {})
     updates: dict = {}
@@ -656,11 +581,7 @@ async def update_mail_settings(body: MailSettingsUpdate, auth=Depends(require_sc
         raise HTTPException(status_code=422, detail="至少提供一个要修改的字段")
     mail_cfg.update(updates)
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -704,11 +625,7 @@ async def update_anniversaries(body: AnniversariesUpdate, auth=Depends(require_s
         except ValueError:
             raise HTTPException(status_code=422, detail=f"日期非法: {item.month:02d}-{item.day:02d}")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     saved = []
     for item in body.anniversaries:
@@ -722,11 +639,7 @@ async def update_anniversaries(body: AnniversariesUpdate, auth=Depends(require_s
         saved.append(entry)
     full_cfg["anniversaries"] = saved
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -755,19 +668,11 @@ async def update_diary_settings(body: DiarySettingsUpdate, auth=Depends(require_
     if not path:
         raise HTTPException(status_code=422, detail="obsidian_path 不能为空")
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     full_cfg.setdefault("diary", {})["obsidian_path"] = path
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
@@ -816,19 +721,11 @@ async def update_coplay_games(body: CoplayGamesUpdate, auth=Depends(require_scop
             entry["save_dir"] = item.save_dir.strip()
         saved.append(entry)
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            full_cfg = yaml.safe_load(f) or {}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+    full_cfg = read_config_file(CONFIG_FILE)
 
     full_cfg.setdefault("coplay", {})["game_whitelist"] = saved
 
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+    write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()

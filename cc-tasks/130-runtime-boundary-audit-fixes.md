@@ -7,7 +7,7 @@
 ## 子项
 
 - [x] 130-A：隔离 admin / QQ 长期任务故障；admin 端口绑定或 serve 异常不得拖垮其他运行时任务，并补生命周期测试。
-- [ ] 130-B：统一管理面配置写入边界；提供进程内串行、原子写入，并防止 `config.local.yaml` 覆盖导致接口假成功。
+- [x] 130-B：统一管理面配置写入边界；提供进程内串行、原子写入，并防止 `config.local.yaml` 覆盖导致接口假成功。
 - [ ] 130-C：补齐后台记忆、画像和梦境 LLM 调用的显式 `char_id`，保证 per-character model routing 对所有 category 生效。
 - [ ] 130-D：修正 QQ feature flag 的控制面契约；不能热启停的开关不得宣称或伪装为热生效。
 - [ ] 130-E：补齐 Dream Seed 桌面 TypeScript API 和测试，使已注册的 Tauri 命令真实可达。
