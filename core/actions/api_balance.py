@@ -1,14 +1,18 @@
 """Read-only API balance adapters. They never submit payment requests."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
+import json
 import logging
 import math
 import time
 import uuid
 from dataclasses import dataclass
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
@@ -116,6 +120,14 @@ def _record_aliyun_bss_call(*, started_at: float, ok: bool, output_hint: str) ->
     )
 
 
+def _request_aliyun_bss_direct(url: str, timeout_s: float) -> tuple[int, object]:
+    """Fetch one signed BSS RPC response without inheriting proxy settings."""
+    opener = urllib_request.build_opener(urllib_request.ProxyHandler({}))
+    request = urllib_request.Request(url, method="GET")
+    with opener.open(request, timeout=timeout_s) as response:
+        return int(response.getcode()), json.loads(response.read().decode("utf-8"))
+
+
 async def _fetch_aliyun_bss_balance(provider: dict) -> BalanceResult | None:
     credentials = _load_aliyun_bss_credentials()
     if credentials is None:
@@ -135,15 +147,14 @@ async def _fetch_aliyun_bss_balance(provider: dict) -> BalanceResult | None:
     query = "&".join(f"{_percent_encode(key)}={_percent_encode(value)}" for key, value in params.items())
     started_at = time.monotonic()
     try:
-        import aiohttp
-
-        timeout = aiohttp.ClientTimeout(total=float(provider.get("timeout_s", 10)))
-        async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
-            async with session.get(_ALIYUN_BSS_ENDPOINT + "?" + query) as response:
-                if response.status >= 400:
-                    _record_aliyun_bss_call(started_at=started_at, ok=False, output_hint="http_error")
-                    return None
-                payload = await response.json(content_type=None)
+        status, payload = await asyncio.to_thread(
+            _request_aliyun_bss_direct,
+            _ALIYUN_BSS_ENDPOINT + "?" + query,
+            float(provider.get("timeout_s", 10)),
+        )
+        if status >= 400:
+            _record_aliyun_bss_call(started_at=started_at, ok=False, output_hint="http_error")
+            return None
         result = _parse_aliyun_bss_payload(
             payload,
             balance_field=str(provider.get("balance_field") or "available_cash_amount"),
@@ -154,6 +165,9 @@ async def _fetch_aliyun_bss_balance(provider: dict) -> BalanceResult | None:
             output_hint="ok" if result is not None else "invalid_response",
         )
         return result
+    except urllib_error.HTTPError:
+        _record_aliyun_bss_call(started_at=started_at, ok=False, output_hint="http_error")
+        return None
     except Exception:
         # Do not include request URLs or exceptions: either can contain credential-derived data.
         _record_aliyun_bss_call(started_at=started_at, ok=False, output_hint="request_failed")

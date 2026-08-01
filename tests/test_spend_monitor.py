@@ -1,7 +1,5 @@
 import json
-import sys
 import time
-from types import SimpleNamespace
 from datetime import datetime
 
 import pytest
@@ -113,41 +111,19 @@ async def test_aliyun_bss_query_uses_only_query_account_balance_and_keeps_secret
     requested_urls = []
     api_call_rows = []
 
-    class Response:
-        status = 200
+    def request(url, timeout_s):
+        requested_urls.append(url)
+        assert timeout_s == 10
+        return 200, {
+            "Success": True,
+            "Data": {
+                "AvailableCashAmount": "12.50",
+                "AvailableAmount": "15.75",
+                "Currency": "CNY",
+            },
+        }
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            return False
-
-        async def json(self, **_kwargs):
-            return {
-                "Success": True,
-                "Data": {
-                    "AvailableCashAmount": "12.50",
-                    "AvailableAmount": "15.75",
-                    "Currency": "CNY",
-                },
-            }
-
-    class Session:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            return False
-
-        def get(self, url):
-            requested_urls.append(url)
-            return Response()
-
-    monkeypatch.setitem(
-        sys.modules,
-        "aiohttp",
-        SimpleNamespace(ClientTimeout=lambda **kwargs: kwargs, ClientSession=lambda **_kwargs: Session()),
-    )
+    monkeypatch.setattr(api_balance, "_request_aliyun_bss_direct", request)
     monkeypatch.setattr(api_balance, "_load_aliyun_bss_credentials", lambda: ("test-access-key-id", "test-access-key-secret"))
     monkeypatch.setattr("core.api_call_log.append", lambda **row: api_call_rows.append(row))
 
@@ -170,32 +146,53 @@ async def test_aliyun_bss_query_uses_only_query_account_balance_and_keeps_secret
 async def test_aliyun_bss_http_error_returns_no_balance(monkeypatch):
     from core.actions import api_balance
 
-    class Response:
-        status = 500
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            return False
-
-    class Session:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            return False
-
-        def get(self, _url):
-            return Response()
-
-    monkeypatch.setitem(
-        sys.modules,
-        "aiohttp",
-        SimpleNamespace(ClientTimeout=lambda **kwargs: kwargs, ClientSession=lambda **_kwargs: Session()),
-    )
+    monkeypatch.setattr(api_balance, "_request_aliyun_bss_direct", lambda *_args: (500, {}))
     monkeypatch.setattr(api_balance, "_load_aliyun_bss_credentials", lambda: ("test-access-key-id", "test-access-key-secret"))
     assert await api_balance._fetch_aliyun_bss_balance({"kind": "aliyun_bss"}) is None
+
+
+@pytest.mark.asyncio
+async def test_aliyun_bss_request_uses_empty_proxy_handler_despite_proxy_environment(monkeypatch):
+    from core.actions import api_balance
+
+    proxy_handlers = []
+    opened_urls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def getcode(self):
+            return 200
+
+        def read(self):
+            return b'{"Success": true, "Data": {"AvailableCashAmount": "12.50", "AvailableAmount": "15.75", "Currency": "CNY"}}'
+
+    class Opener:
+        def open(self, request, *, timeout):
+            opened_urls.append(request.full_url)
+            assert timeout == 10
+            return Response()
+
+    def proxy_handler(proxies):
+        proxy_handlers.append(dict(proxies))
+        return object()
+
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.invalid:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:8080")
+    monkeypatch.setenv("ALL_PROXY", "socks5://proxy.invalid:1080")
+    monkeypatch.setattr(api_balance.urllib_request, "ProxyHandler", proxy_handler)
+    monkeypatch.setattr(api_balance.urllib_request, "build_opener", lambda _handler: Opener())
+    monkeypatch.setattr(api_balance, "_load_aliyun_bss_credentials", lambda: ("test-access-key-id", "test-access-key-secret"))
+
+    result = await api_balance._fetch_aliyun_bss_balance({"kind": "aliyun_bss"})
+
+    assert result is not None and result.balance == 12.5
+    assert proxy_handlers == [{}]
+    assert len(opened_urls) == 1
 
 
 @pytest.mark.asyncio
