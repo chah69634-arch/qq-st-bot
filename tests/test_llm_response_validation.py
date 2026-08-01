@@ -78,4 +78,4 @@ def test_desktop_chat_maps_an_incompatible_gateway_response_to_502(monkeypatch):
         asyncio.run(chat.desktop_chat({"message": "hello"}, _auth="dummy"))
 
     assert exc.value.status_code == 502
-    assert "function calling" in exc.value.detail
+    assert "API 协议" in exc.value.detail

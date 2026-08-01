@@ -16,6 +16,7 @@ import httpx
 from openai import AsyncOpenAI
 
 from core.config_loader import get_config
+from core.llm_protocol import VALID_API_PROTOCOLS
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class ModelClient:
     prompt_style: str        # "narrative" | "xml"
     params: dict[str, Any]  # merged + whitelist-filtered generation params
     client: AsyncOpenAI
+    api_protocol: str = "chat_completions"
     reasoning_native: bool = False                       # Brief 32：preset 声明原生 reasoning 支持
     reasoning_extra_body: dict[str, Any] = field(default_factory=dict)  # 原样透传 extra_body，绕过参数白名单（逃生舱）
 
@@ -109,6 +111,7 @@ def _synth_legacy_presets(cfg: dict) -> dict:
         "api_key": llm.get("api_key", ""),
         "model": llm.get("model", ""),
         "tool_call_mode": llm.get("tool_call_mode", "function_calling"),
+        "api_protocol": "chat_completions",
         "params": {k: llm[k] for k in _known_params if k in llm},
     }
     _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform")
@@ -252,6 +255,13 @@ def _build_model_client(preset_name: str) -> ModelClient:
 
     prompt_style = preset.get("prompt_style") or profile["default_prompt_style"]
     tool_call_mode = preset.get("tool_call_mode", "function_calling")
+    api_protocol = preset.get("api_protocol", "chat_completions")
+    if api_protocol not in VALID_API_PROTOCOLS:
+        raise ValueError(
+            "[model_registry] invalid api_protocol "
+            f"for preset={preset_name!r} provider={kind!r} model={preset.get('model', '')!r}: "
+            f"{api_protocol!r}; expected one of {sorted(VALID_API_PROTOCOLS)}"
+        )
 
     params = resolve_params(
         mp.get("defaults", {}),
@@ -267,8 +277,8 @@ def _build_model_client(preset_name: str) -> ModelClient:
         http_client=http_client,
     )
     logger.info(
-        "[model_registry] built ModelClient '%s' kind=%s model=%s proxy=%s",
-        preset_name, kind, preset.get("model"), "on" if proxy_url else "off",
+        "[model_registry] built ModelClient '%s' kind=%s model=%s api_protocol=%s proxy=%s",
+        preset_name, kind, preset.get("model"), api_protocol, "on" if proxy_url else "off",
     )
     return ModelClient(
         name=preset_name,
@@ -278,6 +288,7 @@ def _build_model_client(preset_name: str) -> ModelClient:
         prompt_style=prompt_style,
         params=params,
         client=oa_client,
+        api_protocol=api_protocol,
         reasoning_native=bool(preset.get("reasoning_native", False)),
         reasoning_extra_body=dict(preset.get("reasoning_extra_body") or {}),
     )

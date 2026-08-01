@@ -218,6 +218,7 @@ class TestBackwardCompatSynth:
         assert "legacy" in mp["presets"]
         legacy = mp["presets"]["legacy"]
         assert legacy["provider_kind"] == "deepseek"
+        assert legacy["api_protocol"] == "chat_completions"
         assert legacy["model"] == "deepseek-chat"
         assert legacy["params"]["temperature"] == 1.0
         assert legacy["params"]["frequency_penalty"] == 0.3
@@ -253,6 +254,44 @@ class TestBackwardCompatSynth:
         assert mc.model == "deepseek-chat"
         assert mc.provider_kind == "deepseek"
         assert "temperature" in mc.params
+        assert mc.api_protocol == "chat_completions"
+
+
+class TestApiProtocol:
+    def test_explicit_responses_survives_routing_to_final_preset(self, monkeypatch):
+        import core.model_registry as reg
+
+        cfg = {
+            "model_presets": {
+                "active_routing": "default",
+                "defaults": {},
+                "presets": {
+                    "response-preset": {
+                        "provider_kind": "openai",
+                        "api_protocol": "responses",
+                        "model": "test-model",
+                    },
+                },
+                "routing_profiles": {"default": {"chat": "response-preset"}},
+            },
+        }
+        monkeypatch.setattr(reg, "_model_clients", {})
+        monkeypatch.setattr("core.model_registry.get_config", lambda: cfg)
+
+        assert reg.get_model_client("chat").api_protocol == "responses"
+
+    def test_invalid_protocol_fails_fast_with_preset_diagnostics(self, monkeypatch):
+        import core.model_registry as reg
+
+        cfg = {
+            "model_presets": {
+                "presets": {"bad": {"provider_kind": "openai", "model": "x", "api_protocol": "guessed"}},
+                "routing_profiles": {"default": {"chat": "bad"}},
+            },
+        }
+        monkeypatch.setattr("core.model_registry.get_config", lambda: cfg)
+        with pytest.raises(ValueError, match="api_protocol.*preset='bad'.*'guessed'"):
+            reg._build_model_client("bad")
 
 
 # ===========================================================================

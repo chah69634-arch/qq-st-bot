@@ -1195,7 +1195,11 @@ class Pipeline:
                         return
                     outcome = ("natural", turn.content)
                     return
-                loop_msgs.append(turn.assistant_message)
+                # The protocol adapter returns zero or more protocol-neutral
+                # continuation items. Chat Completions contributes one assistant
+                # message; Responses contributes function_call items keyed by the
+                # same call_id used by the tool result below.
+                loop_msgs.extend(turn.continuation_items or [turn.assistant_message])
                 used_tool = True
                 for _index, tc in enumerate(turn.tool_calls, start=1):
                     try:

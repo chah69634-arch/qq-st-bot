@@ -19,6 +19,7 @@ from core import thinking
 from core.config_loader import get_config
 from core.error_handler import log_error
 from core.model_registry import ModelClient, get_model_client, reload_registry
+from core.llm_protocol import UpstreamResponseFormatError, create as create_protocol_response, stream_text
 from core.prompt_layer import sanitize_messages
 from core.prompt_style import apply_prompt_style
 
@@ -164,10 +165,6 @@ def reload_client():
     logger.info("[llm_client] 客户端已重置，下次请求时按最新配置重建")
 
 
-class UpstreamResponseFormatError(RuntimeError):
-    """A model gateway did not return an OpenAI Chat Completions response."""
-
-
 def _first_chat_choice(
     response: Any,
     *,
@@ -285,7 +282,6 @@ async def chat(
     messages = sanitize_messages(messages)
 
     model = mc.model
-    client = mc.client
     mode = mc.tool_call_mode
     started_at = time.perf_counter()
 
@@ -299,81 +295,49 @@ async def chat(
     )
 
     try:
-        # ── function_calling 模式 ──────────────────────────────────────────
-        if mode == "function_calling" and tools:
-            _record_debug_request(
-                provider=mc.provider_kind, model=model, purpose=call_category,
-                messages=messages, tools=tools,
-                request_kwargs={"tool_choice": "auto", **_gen_kwargs},
-            )
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                **_gen_kwargs,
-            )
-            choice = _first_chat_choice(
-                response,
-                operation=f"chat[{call_category}]",
-                require_tool_fields=True,
-            )
-            if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
-                tool_calls = []
-                for tc in choice.message.tool_calls:
-                    tool_calls.append({
-                        "name": tc.function.name,
-                        "arguments": json.loads(tc.function.arguments),
-                    })
-                _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
-                return "__TOOL_CALL__:" + json.dumps(tool_calls, ensure_ascii=False)
-            _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
-            return thinking.strip_think_tags(choice.message.content) or ""
-
+        request_messages = messages
+        request_tools = tools if mode == "function_calling" and tools else None
+        request_debug: dict[str, Any] = dict(_gen_kwargs)
+        if request_tools:
+            request_debug["tool_choice"] = "auto"
         # ── xml_fallback 模式（不支持 FC 的模型）────────────────────────────
-        elif mode == "xml_fallback" and tools:
+        if mode == "xml_fallback" and tools:
             tool_desc = _build_xml_tool_desc(tools)
-            msgs = list(messages)
+            request_messages = list(messages)
             injected = False
-            for i, m in enumerate(msgs):
+            for i, m in enumerate(request_messages):
                 if m["role"] == "system":
-                    msgs[i] = {
+                    request_messages[i] = {
                         "role": "system",
                         "content": m["content"] + "\n\n" + tool_desc,
                     }
                     injected = True
                     break
             if not injected:
-                msgs.insert(0, {"role": "system", "content": tool_desc})
+                request_messages.insert(0, {"role": "system", "content": tool_desc})
+            request_debug["tool_encoding"] = "xml_fallback"
 
-            _record_debug_request(
-                provider=mc.provider_kind, model=model, purpose=call_category,
-                messages=msgs, tools=tools,
-                request_kwargs={"tool_encoding": "xml_fallback", **_gen_kwargs},
-            )
-            response = await client.chat.completions.create(
-                model=model,
-                messages=msgs,
-                **_gen_kwargs,
-            )
-            choice = _first_chat_choice(response, operation=f"chat[{call_category}]")
-            _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
-            return thinking.strip_think_tags(choice.message.content) or ""
-
-        # ── 普通对话（无工具）────────────────────────────────────────────────
-        else:
-            _record_debug_request(
-                provider=mc.provider_kind, model=model, purpose=call_category,
-                messages=messages, tools=None, request_kwargs=_gen_kwargs,
-            )
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                **_gen_kwargs,
-            )
-            choice = _first_chat_choice(response, operation=f"chat[{call_category}]")
-            _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
-            return thinking.strip_think_tags(choice.message.content) or ""
+        _record_debug_request(
+            provider=mc.provider_kind, model=mc.model, purpose=call_category,
+            messages=request_messages, tools=request_tools or (tools if mode == "xml_fallback" else None),
+            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), **request_debug},
+        )
+        normalized = await create_protocol_response(
+            mc,
+            request_messages,
+            tools=request_tools,
+            tool_choice="auto" if request_tools else None,
+            gen_kwargs=_gen_kwargs,
+        )
+        if request_tools and normalized.tool_calls:
+            tool_calls = [
+                {"name": call.name, "arguments": call.arguments}
+                for call in normalized.tool_calls
+            ]
+            _log_completed_call(provider=mc.provider_kind, model=mc.model, purpose=call_category, started_at=started_at)
+            return "__TOOL_CALL__:" + json.dumps(tool_calls, ensure_ascii=False)
+        _log_completed_call(provider=mc.provider_kind, model=mc.model, purpose=call_category, started_at=started_at)
+        return thinking.strip_think_tags(normalized.assistant_text) or ""
 
     except Exception as e:
         _record_api_call(
@@ -424,7 +388,8 @@ class ChatTurn:
 
     content: str                # 文本回复（""表示纯工具轮）
     tool_calls: list[dict]      # [{id, name, arguments}]，空表示自然终止
-    assistant_message: dict     # 原样 API assistant 消息（含 tool_calls），供回填 messages
+    assistant_message: dict     # Chat-compatible continuation for legacy callers
+    continuation_items: list[dict] | None = None  # protocol-neutral loop context
 
 
 # 全角竖线"｜"——DeepSeek 等模型的工具调用内部 special token（如
@@ -487,20 +452,10 @@ async def chat_turn(
             purpose=call_category,
             messages=prepared,
             tools=tools,
-            request_kwargs={"tool_choice": "auto", **gen_kwargs},
+            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "tool_choice": "auto", **gen_kwargs},
         )
-        response = await mc.client.chat.completions.create(
-            model=mc.model,
-            messages=prepared,
-            tools=tools,
-            tool_choice="auto",
-            **gen_kwargs,
-        )
-        choice = _first_chat_choice(
-            response,
-            operation=f"chat_turn[{call_category}]",
-            require_tool_fields=True,
-            require_serializable_message=True,
+        normalized = await create_protocol_response(
+            mc, prepared, tools=tools, tool_choice="auto", gen_kwargs=gen_kwargs,
         )
     except Exception as e:
         _record_api_call(
@@ -521,25 +476,21 @@ async def chat_turn(
         started_at=started_at,
     )
 
-    message = choice.message
-    assistant_message = message.model_dump(exclude_none=True)
+    continuation_items = list(normalized.continuation_items)
     # 铁律防线：思考内容不得经 assistant_message 混入 loop_msgs / 历史。
     # reasoning_content 字段（部分网关的原生 reasoning 扩展）整个丢弃；
     # content 里内联的 <think>/<thinking> 标签剥除。
-    assistant_message.pop("reasoning_content", None)
-    if assistant_message.get("content"):
-        assistant_message["content"] = thinking.strip_think_tags(assistant_message["content"])
+    for item in continuation_items:
+        item.pop("reasoning_content", None)
+        if isinstance(item.get("content"), str) and item["content"]:
+            item["content"] = thinking.strip_think_tags(item["content"])
 
-    tool_calls: list[dict] = []
-    if choice.finish_reason == "tool_calls" and message.tool_calls:
-        for tc in message.tool_calls:
-            tool_calls.append({
-                "id": tc.id,
-                "name": tc.function.name,
-                "arguments": json.loads(tc.function.arguments),
-            })
+    tool_calls = [
+        {"id": call.id, "name": call.name, "arguments": call.arguments}
+        for call in normalized.tool_calls
+    ]
 
-    content = thinking.strip_think_tags(message.content) or ""
+    content = thinking.strip_think_tags(normalized.assistant_text) or ""
     if not tool_calls and _looks_like_leaked_tool_call_markup(content):
         # 网关这一步没能把模型自己的工具调用内部 token 解析成结构化 tool_calls，
         # 原始 token 直接漏进了 content——不能把这个当成真的自然语言回复展示给
@@ -553,12 +504,18 @@ async def chat_turn(
             content[:200],
         )
         content = ""
-        assistant_message.pop("content", None)
+        for item in continuation_items:
+            item.pop("content", None)
 
     return ChatTurn(
         content=content,
         tool_calls=tool_calls,
-        assistant_message=assistant_message,
+        assistant_message=(
+            continuation_items[0]
+            if len(continuation_items) == 1
+            else {"role": "assistant"}
+        ),
+        continuation_items=continuation_items,
     )
 
 
@@ -619,13 +576,7 @@ async def chat_stream(
         purpose=call_category,
         messages=messages,
         tools=None,
-        request_kwargs={"stream": True, **_gen_kwargs},
-    )
-    stream = await mc.client.chat.completions.create(
-        model=mc.model,
-        messages=messages,
-        stream=True,
-        **_gen_kwargs,
+        request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "stream": True, **_gen_kwargs},
     )
 
     first_piece_seen = False
@@ -672,13 +623,7 @@ async def chat_stream(
         out, leak_buf = leak_buf, ""
         return out or None
 
-    async for chunk in stream:
-        if not chunk.choices:
-            continue
-        delta = chunk.choices[0].delta
-        piece = getattr(delta, "content", None)
-        if not piece:
-            continue
+    async for piece in stream_text(mc, messages, gen_kwargs=_gen_kwargs):
 
         if not first_piece_seen:
             first_piece_seen = True
@@ -866,17 +811,21 @@ async def summarize_turn(
             if is_trigger_turn
             else f"用户:{user_msg}\n回复:{reply}"
         )
-        response = await mc.client.chat.completions.create(
-            model=mc.model,
-            messages=[
+        response = await create_protocol_response(
+            mc,
+            [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
-            max_tokens=80 if is_group_projection else 40,
-            temperature=0.3,
-            timeout=_CALL_TIMEOUTS["summary"],
+            tools=None,
+            tool_choice=None,
+            gen_kwargs={
+                "max_tokens": 80 if is_group_projection else 40,
+                "temperature": 0.3,
+                "timeout": _CALL_TIMEOUTS["summary"],
+            },
         )
-        result = (response.choices[0].message.content or "").strip()
+        result = response.assistant_text.strip()
         result = result.strip('"\'"""''')
         result = result[:60 if is_group_projection else 30]
         if not result:
@@ -901,14 +850,18 @@ async def detect_emotion(text: str) -> str:
     )
     try:
         mc = get_model_client("detect_emotion")
-        response = await mc.client.chat.completions.create(
-            model=mc.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=10,
-            temperature=0.0,
-            timeout=_CALL_TIMEOUTS["detect_emotion"],
+        response = await create_protocol_response(
+            mc,
+            [{"role": "user", "content": prompt}],
+            tools=None,
+            tool_choice=None,
+            gen_kwargs={
+                "max_tokens": 10,
+                "temperature": 0.0,
+                "timeout": _CALL_TIMEOUTS["detect_emotion"],
+            },
         )
-        result = (response.choices[0].message.content or "").strip().lower()
+        result = response.assistant_text.strip().lower()
         if result in _VALID_EMOTIONS:
             return result
         # 小模型有时不严格按"只返回一个词"的指令走（夹带标点/多余文字/中文），
@@ -940,13 +893,18 @@ async def detect_affection(text: str) -> bool:
     )
     try:
         mc = get_model_client("detect_emotion")   # 复用轻量档，无需新模型
-        resp = await mc.client.chat.completions.create(
-            model=mc.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=3, temperature=0.0,
-            timeout=_CALL_TIMEOUTS["detect_emotion"],
+        resp = await create_protocol_response(
+            mc,
+            [{"role": "user", "content": prompt}],
+            tools=None,
+            tool_choice=None,
+            gen_kwargs={
+                "max_tokens": 3,
+                "temperature": 0.0,
+                "timeout": _CALL_TIMEOUTS["detect_emotion"],
+            },
         )
-        return (resp.choices[0].message.content or "").strip().lower().startswith("y")
+        return resp.assistant_text.strip().lower().startswith("y")
     except Exception as e:
         log_error("llm_client.detect_affection", e)
         return False

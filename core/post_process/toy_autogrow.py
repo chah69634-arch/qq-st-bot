@@ -111,14 +111,15 @@ async def _judge_turn(user_content: str, reply: str, char_name: str) -> str:
         # This is a low-frequency personal note, so use the chat/persona route
         # instead of the terse summary route that naturally produces minutes.
         mc = get_model_client("chat")
-        response = await mc.client.chat.completions.create(
-            model=mc.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=80,
-            temperature=0.9,
-            timeout=30.0,
+        from core.llm_protocol import create as create_protocol_response
+        response = await create_protocol_response(
+            mc,
+            [{"role": "user", "content": prompt}],
+            tools=None,
+            tool_choice=None,
+            gen_kwargs={"max_tokens": 80, "temperature": 0.9, "timeout": 30.0},
         )
-        result = (response.choices[0].message.content or "").strip()
+        result = response.assistant_text.strip()
         if not result or result.upper().startswith("SKIP"):
             return ""
         return result

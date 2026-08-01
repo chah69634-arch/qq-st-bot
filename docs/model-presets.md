@@ -14,6 +14,7 @@
 | 文件 | 职责 |
 |---|---|
 | `core/model_registry.py` | ModelClient 构建 + 缓存、路由解析、参数合并+白名单、向后兼容合成 |
+| `core/llm_protocol.py` | Chat Completions / Responses 请求转换、SDK 调用与统一结果归一化 |
 | `core/prompt_style.py` | prompt_style 转换钩子（narrative / xml） |
 | `core/llm_client.py` | 唯一 LLM 出口，调用 model_registry 路由，在 sanitize 前应用 prompt_style；可选记录高敏感调试快照 |
 | `admin/routers/settings_llm.py` | HTTP 接口：`/model-presets`、`/model-presets/active-routing`、`/llm-params` |
@@ -52,6 +53,7 @@ model_presets:
   presets:
     deepseek-default:
       provider_kind: deepseek    # 决定参数白名单 + 默认 prompt_style
+      api_protocol: chat_completions  # 省略时保持此旧行为
       base_url: https://api.deepseek.com
       api_key: sk-xxx
       model: deepseek-chat
@@ -81,6 +83,14 @@ model_presets:
       tool_call_mode: xml_fallback
       prompt_style: narrative
 
+    responses-example:           # 独立示例，不加入 routing_profiles 即不会生效
+      provider_kind: openai
+      api_protocol: responses
+      base_url: https://api.example.invalid/v1
+      api_key: YOUR_RESPONSES_API_KEY
+      model: gpt-5.5
+      tool_call_mode: function_calling
+
   routing_profiles:
     default:                     # 全 DeepSeek，等价旧行为
       chat:           deepseek-default
@@ -100,6 +110,30 @@ model_presets:
       consolidation:  deepseek-default
       perform:        deepseek-default
 ```
+
+### `api_protocol`
+
+`provider_kind` 表示服务商兼容类型，`tool_call_mode` 表示模型的工具能力；两者都不推导
+实际 wire API。每个 preset 的 `api_protocol` 独立指定为：
+
+| 值 | 行为 |
+|---|---|
+| `chat_completions`（默认） | 调用 `client.chat.completions.create(...)`，完整保持旧配置行为 |
+| `responses` | 调用 `client.responses.create(...)`，由适配层转换消息、工具和结果 |
+
+未知值会在该 preset 首次构建时 fail-fast，并在错误中包含 preset、provider、model 和非法值。
+legacy `llm:` 合成 preset 始终是 `chat_completions`。不根据模型名、`provider_kind` 或
+`tool_call_mode` 猜测协议，也不会在失败后静默换用另一个 API。
+
+Responses 分支将当前的 `system` / `developer` / `user` / `assistant` 上下文保持为结构化输入；
+工具定义从 Chat 的 `function` 包装转换为 Responses function schema。多步工具循环中，模型的
+`function_call` 和本地执行结果的 `function_call_output` 使用同一个 `call_id` 回填，绝不伪装成
+普通 user 文本。适配器统一产出 assistant text、`{id,name,arguments}` 工具调用、完成状态、可选
+usage 和仅当前请求可用的 raw response；raw response 不写入 memory 或持久化调试记录。
+
+主聊天已经消费 SDK 真流式输出。`responses` 因而消费 `response.output_text.delta`，并校验函数参数
+delta、output item 完成、`response.completed` 与失败/未完成事件；不会悄悄退化为非流式。Responses
+请求显式 `store: false`，不使用 `previous_response_id`，每轮上下文仍由 PresenceKit 自己维护。
 
 ### `tool_call_mode` 取值与 tool loop 的组合行为
 
@@ -223,7 +257,7 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 
 | 端点 | 说明 |
 |---|---|
-| `GET /model-presets` | 返回 presets（api_key 打码）、routing_profiles、active_routing；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
+| `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、active_routing；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
 | `PUT /model-presets/active-routing` | 切换 active_routing 并热重载（仅 model_presets 模式） |
 | `PUT /model-presets/presets/{name}` | 新增或更新一个 preset（合并更新；新建须提供 provider_kind；仅 model_presets 模式） |
 | `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile 引用或是唯一剩余 preset 时 409 |

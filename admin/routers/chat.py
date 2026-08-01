@@ -548,8 +548,8 @@ async def desktop_chat(body: dict, _auth=Depends(require_scopes("chat"))):
         raise HTTPException(
             status_code=502,
             detail=(
-                "模型服务返回了不兼容的响应格式，当前原生工具调用不可用。"
-                "请改用支持 function calling 的 preset，或将该 preset 设为 xml_fallback / 关闭 tool loop。"
+                "模型服务返回的格式与当前 preset 声明的 API 协议不兼容。"
+                "请检查 api_protocol、网关能力与工具调用配置。"
             ),
         ) from exc
 

@@ -555,6 +555,7 @@ function _renderPresetsTable(presets) {
       <tr>
         <td><strong>${name}</strong></td>
         <td><span class="badge badge-accent">${p.provider_kind || '?'}</span></td>
+        <td><span class="badge">${p.api_protocol || 'chat_completions'}</span></td>
         <td><code style="font-family:var(--mono);font-size:12px">${p.model || ''}</code></td>
         <td style="font-size:12px;color:var(--muted)">${p.base_url || ''}</td>
         <td style="white-space:nowrap">
@@ -563,11 +564,11 @@ function _renderPresetsTable(presets) {
           <button class="btn btn-ghost btn-sm" onclick="confirmDeletePreset('${name}')">删除</button>
         </td>
       </tr>
-      <tr id="mr-test-row-${name}" style="display:none"><td colspan="5" style="font-size:12px" id="mr-test-result-${name}"></td></tr>
+      <tr id="mr-test-row-${name}" style="display:none"><td colspan="6" style="font-size:12px" id="mr-test-result-${name}"></td></tr>
     `;
   }).join('');
   el.innerHTML = `<div class="tbl-wrap"><table>
-    <tr><th>名称</th><th>Provider</th><th>Model</th><th>Base URL</th><th></th></tr>
+    <tr><th>名称</th><th>Provider</th><th>Protocol</th><th>Model</th><th>Base URL</th><th></th></tr>
     ${rows}
   </table></div>`;
 }
@@ -620,6 +621,7 @@ function openPresetModal(name) {
     nameInput.value = name;
     nameInput.disabled = true;
     document.getElementById('mr-preset-kind').value = p.provider_kind || 'openai';
+    document.getElementById('mr-preset-api-protocol').value = p.api_protocol || 'chat_completions';
     document.getElementById('mr-preset-tool-mode').value = p.tool_call_mode || 'function_calling';
     document.getElementById('mr-preset-base-url').value = p.base_url || '';
     document.getElementById('mr-preset-api-key').value = '';
@@ -631,6 +633,7 @@ function openPresetModal(name) {
     nameInput.value = '';
     nameInput.disabled = false;
     document.getElementById('mr-preset-kind').value = 'openai';
+    document.getElementById('mr-preset-api-protocol').value = 'chat_completions';
     document.getElementById('mr-preset-tool-mode').value = 'function_calling';
     document.getElementById('mr-preset-base-url').value = '';
     document.getElementById('mr-preset-api-key').value = '';
@@ -653,6 +656,7 @@ async function submitPresetModal() {
 
   const body = {
     provider_kind: document.getElementById('mr-preset-kind').value,
+    api_protocol: document.getElementById('mr-preset-api-protocol').value,
     tool_call_mode: document.getElementById('mr-preset-tool-mode').value,
     base_url: document.getElementById('mr-preset-base-url').value.trim(),
     model: document.getElementById('mr-preset-model').value.trim(),

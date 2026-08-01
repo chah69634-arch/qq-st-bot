@@ -17,6 +17,7 @@ model_presets:
   presets:
     deepseek-default:
       provider_kind: deepseek
+      api_protocol: chat_completions
       base_url: https://api.deepseek.com
       api_key: YOUR_DEEPSEEK_API_KEY
       model: deepseek-chat
@@ -28,6 +29,7 @@ model_presets:
 
     claude-sonnet:
       provider_kind: anthropic_compat  # Claude 经 OpenAI 兼容层
+      api_protocol: chat_completions
       base_url: https://your-oneapi.example/v1
       api_key: YOUR_ONEAPI_KEY
       model: claude-sonnet-4-6
@@ -39,6 +41,7 @@ model_presets:
 
     local-qwen:
       provider_kind: local
+      api_protocol: chat_completions
       base_url: http://127.0.0.1:8000/v1
       api_key: none
       model: qwen2.5-72b-instruct
@@ -47,6 +50,7 @@ model_presets:
 
     deepseek-reasoner:              # 原生 reasoning 示例（Brief 32）；无 function_calling
       provider_kind: deepseek
+      api_protocol: chat_completions
       base_url: https://api.deepseek.com
       api_key: YOUR_DEEPSEEK_API_KEY
       model: deepseek-reasoner
@@ -55,6 +59,14 @@ model_presets:
       reasoning_extra_body: {}      # 原样经 OpenAI client 的 extra_body 透传，绕过参数白名单（逃生舱）；
                                      # 网关方言差异（o系 reasoning_effort、anthropic 网关 thinking budget
                                      # 等）自己按目标网关文档填，代码不做每家适配
+
+    responses-example:              # 独立示例，不影响现有 routing
+      provider_kind: openai
+      api_protocol: responses
+      base_url: https://api.example.invalid/v1
+      api_key: YOUR_RESPONSES_API_KEY
+      model: gpt-5.5
+      tool_call_mode: function_calling
 
   routing_profiles:
     default:                       # 全 DeepSeek，等价旧行为

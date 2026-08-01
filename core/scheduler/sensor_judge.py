@@ -134,13 +134,15 @@ async def judge(event: dict) -> dict:
 
     try:
         mc = get_model_client("intent")
-        response = await mc.client.chat.completions.create(
-            model=mc.model,
-            messages=messages,
-            max_tokens=80,
-            temperature=0.1,
+        from core.llm_protocol import create as create_protocol_response
+        response = await create_protocol_response(
+            mc,
+            messages,
+            tools=None,
+            tool_choice=None,
+            gen_kwargs={"max_tokens": 80, "temperature": 0.1},
         )
-        raw = (response.choices[0].message.content or "").strip()
+        raw = response.assistant_text.strip()
     except Exception as e:
         logger.warning(f"[sensor_judge] LLM 调用失败 event={event_type}: {e}")
         return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": None}

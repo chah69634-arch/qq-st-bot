@@ -705,6 +705,7 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
 
 class PresetUpsert(BaseModel):
     provider_kind: Optional[str] = None
+    api_protocol: Optional[str] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
@@ -734,6 +735,16 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
             status_code=422,
             detail=f"未知 provider_kind: {body.provider_kind!r}，可选: {sorted(PROVIDER_PROFILES)}",
         )
+    if body.api_protocol is not None:
+        from core.llm_protocol import VALID_API_PROTOCOLS
+        if body.api_protocol not in VALID_API_PROTOCOLS:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"未知 api_protocol: {body.api_protocol!r}，"
+                    f"可选: {sorted(VALID_API_PROTOCOLS)}"
+                ),
+            )
 
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -883,16 +894,18 @@ async def test_preset_connectivity(name: str, auth=Depends(require_scopes("admin
 
     t0 = _time.monotonic()
     try:
-        resp = await client.client.chat.completions.create(
-            model=client.model,
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-            timeout=15.0,
+        from core.llm_protocol import create as create_protocol_response
+        resp = await create_protocol_response(
+            client,
+            [{"role": "user", "content": "ping"}],
+            tools=None,
+            tool_choice=None,
+            gen_kwargs={"max_tokens": 1, "timeout": 15.0},
         )
         latency_ms = round((_time.monotonic() - t0) * 1000, 1)
         reply_preview = ""
         try:
-            reply_preview = (resp.choices[0].message.content or "")[:20]
+            reply_preview = resp.assistant_text[:20]
         except Exception:
             pass
         return {
