@@ -265,16 +265,15 @@ function _mcpPresetButtons(server) {
 function _mcpPolicyControl(server, tool, allowlisted) {
   const state = (server.tool_states || []).find(item => item.name === tool.name) || {};
   const suggestion = state.suggestion || _mcpSuggestion(tool);
-  const confirmed = state.policy_status === 'confirmed' || state.policy_status === 'legacy_allowed';
   const badge = _mcpEffectBadge(suggestion, state.policy_status || '');
-  if (!allowlisted || confirmed) return badge;
-  const selected = state.policy?.effect || suggestion.effect || 'write';
+  if (!allowlisted) return badge;
+  const selected = state.policy?.effect || state.effect || suggestion.effect || 'write';
   const options = ['read', 'write', 'actuate', 'emergency'].map(effect =>
     `<option value="${effect}" ${effect === selected ? 'selected' : ''}>${effect}</option>`
   ).join('');
   const args = escapeHtml(JSON.stringify([server.name, tool.name]));
   const selectId = `mcp-policy-effect-${server.name}-${tool.name}`;
-  return `${badge}<span style="display:flex;gap:6px;align-items:center;margin-top:4px"><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><button class="btn btn-ghost btn-sm" data-action="confirmMcpToolPolicy" data-action-args="${args}">确认</button></span>`;
+  return `${badge}<span style="display:flex;gap:6px;align-items:center;margin-top:4px"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.policy.mode', '模式'))}</span><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><button class="btn btn-ghost btn-sm" data-action="saveMcpToolPolicy" data-action-args="${args}">${escapeHtml(t('mcp.policy.save_mode', '保存模式'))}</button></span>`;
 }
 
 function _renderMcpServer(server) {
@@ -328,7 +327,7 @@ function _mcpPresetsFromCard(name) {
   return JSON.parse(card?.dataset.mcpPresets || '[]');
 }
 
-async function confirmMcpToolPolicy(name, toolName) {
+async function saveMcpToolPolicy(name, toolName) {
   try {
     const data = await api('GET', '/settings/mcp');
     const server = (data.servers || []).find(item => item.name === name);
@@ -337,10 +336,14 @@ async function confirmMcpToolPolicy(name, toolName) {
     const effectControl = document.getElementById(`mcp-policy-effect-${name}-${toolName}`);
     const effect = effectControl?.value || state.suggestion?.effect || 'write';
     const policy = { ...(server.tool_policy || {}) };
-    policy[toolName] = { effect };
-    if (state.suggestion?.high_risk) policy[toolName].require_confirm = true;
+    policy[toolName] = { ...(state.policy || {}), effect };
+    if (state.suggestion?.high_risk && policy[toolName].require_confirm === undefined) {
+      policy[toolName].require_confirm = true;
+    }
     const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { tool_policy: policy });
-    toast(result.reload_status === 'restart_required' ? '策略已保存，需要重启服务' : '工具策略已确认并热重载', result.reload_status === 'restart_required' ? 'err' : 'ok');
+    toast(result.reload_status === 'restart_required'
+      ? t('mcp.policy.restart_required', '模式已保存，需要重启服务')
+      : t('mcp.policy.saved', '工具模式已保存并热重载'), result.reload_status === 'restart_required' ? 'err' : 'ok');
     await loadMcpPage();
   } catch (e) { toast(e.message, 'err'); }
 }
