@@ -363,7 +363,8 @@ spend:
 practice:
   enabled: false
   daily_sessions: 1
-  reviewer_preset: practice_reviewer
+  reviewer_category: consolidation  # routing profile category；默认复用后台整合模型
+  # reviewer_preset: deepseek-default  # 可选：严格直连同名 preset；未知名字会明确失败
   help_proposer: true
 
 presence:

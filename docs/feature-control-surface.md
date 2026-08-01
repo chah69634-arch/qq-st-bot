@@ -2,6 +2,11 @@
 
 管理服务的设置面分三层：
 
+后台练习盲评不属于管理面热更新 API，但其模型选择遵循同一模型路由真值：
+`practice.reviewer_category` 是 routing profile category（默认 `consolidation`）；可选旧字段
+`practice.reviewer_preset` 是严格的直接 preset 名并优先于 category。未知 preset 会让该次
+练习明确失败并进入 scheduler 异常记录，不会静默回落 chat。
+
 所有写入 `config.yaml` 的设置端点统一经过 `admin.config_control`：写请求按进程内锁串行，
 用临时文件原子替换，并以读取时快照做三方合并，避免并发设置覆盖无关字段。若待修改字段
 在 `config.local.yaml` 中存在覆盖，接口返回 HTTP 409 且不改写 base config；管理面不得把

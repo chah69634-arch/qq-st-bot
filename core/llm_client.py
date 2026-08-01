@@ -207,6 +207,7 @@ async def chat(
     call_category: str = "chat",
     *,
     char_id: str | None = None,
+    preset_name: str | None = None,
     is_proactive: bool = False,
 ) -> str:
     """
@@ -218,6 +219,7 @@ async def chat(
         use_vision: 使用视觉模型处理图片
         call_category: 路由到对应 preset 的类别名
         char_id:  显式指定"替谁说话"时传（Brief 30）；None（默认）按活跃角色解析，与现状一致
+        preset_name: 直接选择 preset；给定时不经过 routing profile，未知名字明确失败
         is_proactive: 本次是否 scheduler 主动消息（Brief 32 · thinking.apply_to_proactive 用）
 
     返回:
@@ -269,7 +271,10 @@ async def chat(
                 log_error("llm_client.chat.vision", e)
                 return ""
 
-    mc: ModelClient = get_model_client(call_category, char_id=char_id)
+    if preset_name is None:
+        mc: ModelClient = get_model_client(call_category, char_id=char_id)
+    else:
+        mc = get_model_client(call_category, char_id=char_id, preset_name=preset_name)
 
     # Brief 32：monologue 路线在 prompt_style 转换前注入（作为普通 system 消息一并转换）；
     # native 路线不改 messages，只影响下面的 extra_body。

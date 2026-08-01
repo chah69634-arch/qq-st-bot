@@ -162,6 +162,9 @@ delta、output item 完成、`response.completed` 与失败/未完成事件；�
    `tests/test_model_presets.py::TestRoutingFallback`）。管理面板「配置」页 §1 的
    probe/summary 只读展示（`GET /character/{char_id}/model-routing` /
    `resolve_routing_info()`）读的就是这份真实解析结果，不是另一套展示专用逻辑。
+   少数明确声明“直接 preset 名”的配置可通过 `preset_name` 绕过这条回退链；显式 preset
+   不存在时抛 `ValueError`。`practice.reviewer_preset` 使用此严格语义；常规配置推荐用
+   `practice.reviewer_category: consolidation`，继续继承 per-character routing profile。
 3. `vision` 不进 routing_profiles：继续用独立的 `vision:` 块；手机自动化可选 `phone_control_vision:` 固定覆盖槽位，空字段继承通用 `vision`，不引入多 preset 或 profile。
 
 ModelClient 缓存（`core.model_registry._model_clients`）以**解析出的 preset 名**为 key，不是

@@ -304,16 +304,27 @@ def build_client_for_preset(name: str) -> ModelClient:
     return _build_model_client(name)
 
 
-def get_model_client(call_category: str, *, char_id: str | None = None) -> ModelClient:
-    """Resolve call_category → preset → ModelClient (cached per preset name).
+def get_model_client(
+    call_category: str,
+    *,
+    char_id: str | None = None,
+    preset_name: str | None = None,
+) -> ModelClient:
+    """Resolve a routing category or explicit preset to a cached ModelClient.
 
     char_id=None（默认）：按活跃角色解析，与现状完全一致。
     char_id 给定：按该角色卡自己的 model_routing 解析（Brief 30 · char 维度穿线）。
+    preset_name 给定：直接选择同名 preset，不经过 routing profile；不存在时明确抛错。
     """
-    preset_name = _resolve_preset_name(call_category, char_id=char_id)
-    if preset_name not in _model_clients:
-        _model_clients[preset_name] = _build_model_client(preset_name)
-    return _model_clients[preset_name]
+    if preset_name is not None:
+        resolved_name = preset_name.strip()
+        if not resolved_name:
+            raise ValueError("[model_registry] explicit preset name must not be empty")
+    else:
+        resolved_name = _resolve_preset_name(call_category, char_id=char_id)
+    if resolved_name not in _model_clients:
+        _model_clients[resolved_name] = _build_model_client(resolved_name)
+    return _model_clients[resolved_name]
 
 
 def reload_registry() -> None:

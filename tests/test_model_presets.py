@@ -258,6 +258,25 @@ class TestBackwardCompatSynth:
 
 
 class TestApiProtocol:
+    def test_explicit_preset_bypasses_routing_and_is_strict(self, monkeypatch):
+        import core.model_registry as reg
+
+        cfg = {
+            "model_presets": {
+                "presets": {
+                    "chat-model": {"provider_kind": "openai", "model": "chat"},
+                    "review-model": {"provider_kind": "openai", "model": "review"},
+                },
+                "routing_profiles": {"default": {"chat": "chat-model"}},
+            },
+        }
+        monkeypatch.setattr(reg, "_model_clients", {})
+        monkeypatch.setattr("core.model_registry.get_config", lambda: cfg)
+
+        assert reg.get_model_client("chat", preset_name="review-model").name == "review-model"
+        with pytest.raises(ValueError, match="preset 'missing' not found"):
+            reg.get_model_client("chat", preset_name="missing")
+
     def test_explicit_responses_survives_routing_to_final_preset(self, monkeypatch):
         import core.model_registry as reg
 

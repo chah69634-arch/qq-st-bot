@@ -66,9 +66,18 @@ def _json(text: str) -> dict | None:
 async def _review(work: str, interest: dict, *, char_id: str) -> dict | None:
     from core import llm_client
     from core.config_loader import get_config
-    preset=(get_config().get("practice",{}) or {}).get("reviewer_preset","practice_reviewer")
+    practice_cfg = get_config().get("practice", {}) or {}
+    preset = str(practice_cfg.get("reviewer_preset") or "").strip() or None
+    category = str(practice_cfg.get("reviewer_category") or "consolidation").strip()
+    if not category:
+        raise ValueError("practice.reviewer_category must not be empty")
     prompt=f"{REVIEW_RUBRIC}\n学习项目：{interest['name']}；level={interest['level']}。\n作品：\n{work}\n只输出 JSON：{{\"score\":0到10,\"strengths\":[\"...\"],\"one_improvement\":\"...\"}}"
-    obj=_json(await llm_client.chat([{"role":"user","content":prompt}],call_category=preset,char_id=char_id))
+    obj=_json(await llm_client.chat(
+        [{"role":"user","content":prompt}],
+        call_category=category,
+        char_id=char_id,
+        preset_name=preset,
+    ))
     if not obj or not isinstance(obj.get("score"),(int,float)) or not 0 <= float(obj["score"]) <= 10 or not isinstance(obj.get("one_improvement"),str): return None
     return obj
 
