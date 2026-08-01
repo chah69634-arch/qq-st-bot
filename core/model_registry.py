@@ -327,8 +327,10 @@ def get_model_client(
     return _model_clients[resolved_name]
 
 
-def reload_registry() -> None:
-    """Clear the client cache; next call rebuilds from current config."""
+def reload_registry() -> list[ModelClient]:
+    """Detach and return cached clients; next call rebuilds from current config."""
     global _model_clients
+    retired = list(_model_clients.values())
     _model_clients = {}
     logger.info("[model_registry] registry cleared, will rebuild on next request")
+    return retired

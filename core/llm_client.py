@@ -154,15 +154,35 @@ def _get_vision_client() -> AsyncOpenAI | None:
     return _vision_client
 
 
-def reload_client():
+async def reload_client() -> None:
     """
     重置所有 LLM 客户端（代理/API Key 配置变更后调用）。
     下次调用时将按最新 config 重建。
     """
     global _vision_client
+    retired_vision = _vision_client
     _vision_client = None
-    reload_registry()
-    logger.info("[llm_client] 客户端已重置，下次请求时按最新配置重建")
+    retired_models = reload_registry()
+
+    retired_clients = [mc.client for mc in retired_models]
+    if retired_vision is not None:
+        retired_clients.append(retired_vision)
+    seen: set[int] = set()
+    closed = 0
+    for client in retired_clients:
+        identity = id(client)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        try:
+            await client.close()
+            closed += 1
+        except Exception as exc:
+            logger.warning("[llm_client] 关闭旧客户端失败: %s", exc)
+    logger.info(
+        "[llm_client] 客户端已重置并关闭 %d 个旧连接池，下次请求按最新配置重建",
+        closed,
+    )
 
 
 def _first_chat_choice(

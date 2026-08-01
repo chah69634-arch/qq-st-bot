@@ -51,6 +51,6 @@ async def update_proxy(body: ProxyUpdate, auth=Depends(require_scopes("admin")))
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
 
     return {"message": "代理配置已更新并热重载", "proxy": proxy_cfg}

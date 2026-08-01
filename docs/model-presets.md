@@ -171,6 +171,11 @@ ModelClient 缓存（`core.model_registry._model_clients`）以**解析出的 pr
 call_category 或 profile 名——每次调用都重新走上面 0~2 步解析 preset 名，天然随角色切换取到
 正确的 client，无需额外失效逻辑。
 
+模型、路由、代理或 vision 配置热更新时，管理端点会 `await llm_client.reload_client()`：先把
+缓存与 vision singleton 从可解析集合摘除，再关闭所有旧 AsyncOpenAI/httpx 连接池；同一底层
+client 只关闭一次，单个 close 异常只记 warning，不把设置请求或后端进程带崩。下一次 LLM
+调用才按新配置惰性重建。
+
 第 0 步还支持**显式 char_id**（Brief 30，非活跃角色路径，如 Stage 群聊里非活跃角色说话）：
 调用方传 `char_id` 时只读该角色自己的卡 `presence_ext.model_routing`，不回落到活跃角色的
 override；`char_id=None`（默认）才走活跃角色卡逻辑。`core.model_registry._char_model_routing()`

@@ -23,7 +23,9 @@ def _patch(monkeypatch, path):
     monkeypatch.setattr(mod, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")) or {})
     from core import config_loader, llm_client
     monkeypatch.setattr(config_loader, "reload_config", lambda: None)
-    monkeypatch.setattr(llm_client, "reload_client", lambda: None)
+    async def no_reload():
+        return None
+    monkeypatch.setattr(llm_client, "reload_client", no_reload)
 
 
 # ── /settings/base-model — legacy llm: 块 ───────────────────────────────────

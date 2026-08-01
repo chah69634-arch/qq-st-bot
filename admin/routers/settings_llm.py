@@ -111,7 +111,7 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
     return {"message": "LLM 参数已更新", "params": {k: target_params[k] for k in updates if k in target_params}}
 
 
@@ -235,7 +235,7 @@ async def update_base_model(body: BaseModelUpdate, auth=Depends(require_scopes("
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
     return _base_model_view(get_config())
 
 
@@ -368,7 +368,7 @@ async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_sc
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
     return {"message": "Vision 配置已更新", "vision": vision_cfg}
 
 
@@ -520,13 +520,13 @@ class ActiveRoutingUpdate(BaseModel):
     active_routing: str
 
 
-def _persist_model_presets(full_cfg: dict) -> None:
+async def _persist_model_presets(full_cfg: dict) -> None:
     """Persist config and invalidate every cached model client."""
     write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
 
 
 @router.post("/model-presets/bootstrap", summary="从 legacy llm 配置初始化 model_presets")
@@ -539,7 +539,7 @@ async def bootstrap_model_presets(auth=Depends(require_scopes("admin"))):
 
     from core.model_registry import _synth_legacy_presets
     full_cfg["model_presets"] = _synth_legacy_presets(full_cfg)
-    _persist_model_presets(full_cfg)
+    await _persist_model_presets(full_cfg)
     return {"message": "已从 legacy llm 配置初始化 model_presets", "created": True}
 
 
@@ -580,7 +580,7 @@ async def set_desktop_model_routing(body: ActiveRoutingUpdate, auth=Depends(requ
         raise HTTPException(status_code=422, detail="未知 routing profile")
 
     mp["active_routing"] = body.active_routing
-    _persist_model_presets(full_cfg)
+    await _persist_model_presets(full_cfg)
     return {"message": "模型路由已切换", "active_routing": body.active_routing}
 
 
@@ -627,7 +627,7 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
     return {"message": f"已切换到路由方案 '{body.active_routing}'", "active_routing": body.active_routing}
 
 
@@ -703,7 +703,7 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
 
     return {
         "message": f"preset '{name}' 已{'创建' if is_new else '更新'}",
@@ -744,7 +744,7 @@ async def delete_preset(name: str, auth=Depends(require_scopes("admin"))):
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
 
     return {"message": f"preset {name!r} 已删除", "name": name}
 
@@ -780,7 +780,7 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
 
     from core import config_loader, llm_client
     config_loader.reload_config()
-    llm_client.reload_client()
+    await llm_client.reload_client()
 
     return {"message": f"routing profile '{name}' 已更新", "name": name, "profile": profile}
 
