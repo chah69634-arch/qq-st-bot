@@ -39,7 +39,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/upload/ingest"): "三端统一文件上传入口，管理面板不做上传 UI",
     ("POST", "/hardware/connect"): "硬件配对，Emerald-client shared/api/hardware.ts 消费",
     ("POST", "/transcribe"): "语音转写，Emerald-client shared/voice/useVoiceInput.ts 消费",
-    ("POST", "/garden/water"): "陪伴花园浇水，Emerald-client water_garden Tauri invoke 消费",
+    ("POST", "/garden/water"): "受控花园写接口；普通 Desktop/Mobile 花园 UI 只读，不暴露此操作",
     ("POST", "/coplay/arm"): "陪玩模式开关，Emerald-client CoplaySettingsPage 消费",
     ("POST", "/coplay/disarm"): "陪玩模式开关，Emerald-client CoplaySettingsPage 消费",
 

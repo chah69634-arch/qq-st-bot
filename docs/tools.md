@@ -312,7 +312,7 @@ fs_access:
 | `weather` | 用户问天气/温度/下雨 | `core/tools/weather.py` |
 | `web_search` | 确认信息/帮用户找资料；结果自动沉淀向量库（source="web"） | `core/tools/web_search.py`（DuckDuckGo）|
 | `add_reminder` | "提醒我X点做Y"/"帮我记" | `core/tools/reminder.py` |
-| `water_garden` | 用户催他浇花/问花园状态并暗示该浇水 | `core/tools/garden_tools.py` |
+| `water_garden` | 角色在花园相关对话上下文中决定维护花园 | `core/tools/garden_tools.py` |
 
 ### desktop 类（探针覆盖）
 
@@ -412,9 +412,9 @@ Path C 多步调用复用同一次探测结果。
 
 ### 花园工具
 
-`water_garden` 是 info 类工具，会被探针覆盖。它不接收参数，内部读取当前 `mood_state`，再调用 `garden_manager.force_water()` 给对应情绪花槽浇一次水。
+`water_garden` 是角色内部的 info 类工具，会被探针覆盖。它不接收参数，内部读取当前 `mood_state`，再调用 `garden_manager.force_water()` 给对应情绪花槽浇一次水。Desktop / Mobile 只读展示和刷新花园状态，不暴露这个写操作。
 
-触发关键词来自 `_TOOL_REGISTRY`：`浇花`、`花园`、`浇水`。工具结果只作为层10 `tool_result` 给 LLM 参考，不直接拼进最终回复。
+相关关键词来自 `_TOOL_REGISTRY`：`浇花`、`花园`、`浇水`。工具结果只作为层10 `tool_result` 给 LLM 参考，不直接拼进最终回复。
 
 ### web 搜索沉淀与自主召回（X3）
 

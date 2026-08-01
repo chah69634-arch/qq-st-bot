@@ -4,7 +4,7 @@
 
 ## 定位
 
-花园是一个独立于对话 prompt 的情绪伴生系统：调度器按当前 `mood_state` 给对应花槽自动浇水，用户催浇花时可走工具，被动/主动事件再通过调度器让他自然提一句。
+花园是一个独立于对话 prompt 的情绪伴生系统：调度器按当前 `mood_state` 给对应花槽自动浇水，角色也可通过内部工具维护花园；相关事件再通过调度器让他自然提一句。Desktop 和 Mobile 仅查看或刷新状态，不提供玩家写操作。
 
 当前花园状态**不会直接注入 prompt**；只有浇水工具结果、开花、采后处理、花瓶枯萎等事件会变成一次普通调度器消息。
 
@@ -17,7 +17,7 @@
 | 花园核心逻辑 | `core/garden/manager.py` |
 | 花种、阶段、概率常量 | `core/garden/constants.py` |
 | 数据路径 | `core/sandbox.py` → `DataPaths.garden()` |
-| 被动浇水工具 | `core/tools/garden_tools.py` |
+| 角色内部浇水工具 | `core/tools/garden_tools.py` |
 | 工具注册 | `core/tool_dispatcher.py` → `water_garden` |
 | 自动浇水触发器 | `core/scheduler/triggers/garden_water.py` |
 | 每日采后扫描触发器 | `core/scheduler/triggers/garden_daily.py` |
@@ -87,15 +87,15 @@ _check_garden_water()
 `propose_garden_bloom()` 报名，gating 选中后经统一 `execute_prompt()` 调用
 `_pipeline_send(..., trigger_name="garden_bloom")`。
 
-### 被动浇水工具
+### 角色内部浇水工具
 
-`water_garden` 注册为 `info` 类工具，因此会被 pre-pipeline 探针覆盖：
+`water_garden` 注册为 `info` 类工具，供角色在对话上下文中决定维护花园时使用；它会被 pre-pipeline 探针覆盖，但不是普通客户端的玩家操作：
 
-- 触发例句：`你今天去浇花了吗`、`快去浇花`、`花园里的花怎么样了`
+- 相关上下文：花园状态、角色是否已维护花园
 - 关键词：`浇花`、`花园`、`浇水`
 - 实现：`core/tools/garden_tools.py` → `garden_manager.force_water()`
 
-工具按当前心情选择槽位，返回一段状态描述给 LLM，最终由他自然回复。
+工具按当前心情选择槽位，返回一段状态描述给 LLM，最终由他自然回复。Desktop / Mobile 的花园页始终只读；浇水及其他写操作仅来自角色内部工具、自动调度或受控状态机。
 
 ---
 
@@ -141,7 +141,7 @@ _check_garden_water()
 
 ---
 
-## 管理面板接口
+## 客户端与受控接口
 
 `GET /garden/state`
 
@@ -153,7 +153,11 @@ _check_garden_water()
 - `history_recent`：`history` 列表最近 1 条（可能为空列表），G4 花园 presence 提示素材，
   免新建接口（Hard Rule 7）
 
-接口只读取和必要时初始化状态，不执行浇水。
+接口只读取和必要时初始化状态，不执行浇水。Desktop / Mobile 只使用该读取能力和本地刷新。
+
+`POST /garden/water` 保留给受控集成调用，要求 `chat` scope，并复用
+`garden_manager.force_water()`。它不属于普通客户端 UI，也不是调度器或角色工具的
+调用路径：后二者直接调用 manager。该边界避免把观察花园变成玩家直接改写花园状态的入口。
 
 ---
 

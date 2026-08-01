@@ -1,10 +1,9 @@
 """
 tests/test_garden_water_endpoint.py — W5: POST /garden/water
 
-管理面板此前只有 GET /garden/state（只读），浇水靠聊天触发 LLM probe，手机/桌面
-花园页只能看不能点。这组测试覆盖新增的 POST /garden/water，复用
-core.garden.manager.force_water 的逻辑（与被动浇水工具 core/tools/garden_tools.py
-共用同一底层函数）。
+Desktop / Mobile 花园页只读。这个保留的受控接口要求 `chat` scope，复用
+core.garden.manager.force_water 的逻辑；角色工具和调度状态机直接调用 manager，
+不依赖该 HTTP 路由。
 """
 
 import asyncio

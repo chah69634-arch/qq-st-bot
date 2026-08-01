@@ -1,4 +1,4 @@
-"""garden_tools — 被动浇水工具。用户催角色浇花时由探针/dispatcher 调用。"""
+"""garden_tools — 角色维护花园时使用的内部浇水工具。"""
 
 import logging
 
@@ -44,7 +44,7 @@ def _active_char_id() -> str | None:
 
 async def water_garden() -> str:
     """
-    用户催角色去浇花时调用。角色会根据当前心情选择花园里对应那一株来浇。
+    角色在对话上下文中决定维护花园时调用。角色会根据当前心情选择花园里对应那一株来浇。
     无参数，无冷却。返回一句给 LLM 的状态描述，角色基于这句话自然回复。
     """
     char = _char_name()
