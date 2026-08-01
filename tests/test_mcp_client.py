@@ -611,6 +611,31 @@ class TestCallTool:
         ) == "stopped"
         assert dead_session.call_log[0][2]["request_id"] == new_session.call_log[0][2]["request_id"]
 
+    async def test_unrestricted_idempotent_tool_retries_three_times_with_one_request_id(self, monkeypatch):
+        sessions = [
+            _FakeSession(call_results=[asyncio.TimeoutError()]),
+            _FakeSession(call_results=[asyncio.TimeoutError()]),
+            _FakeSession(call_results=[asyncio.TimeoutError()]),
+            _FakeSession(call_results=[SimpleNamespace(
+                content=[SimpleNamespace(text="recovered")], isError=False,
+            )]),
+        ]
+        self._install_handle("srv1", sessions[0], tool_names=["mcp__srv1__toolA"])
+        next_session = iter(sessions[1:])
+
+        async def _fake_connect_server(name, cfg):
+            mc._servers[name] = mc._ServerHandle(
+                name=name, cfg=cfg, stack=AsyncExitStack(), session=next(next_session),
+                tool_names=["mcp__srv1__toolA"],
+            )
+
+        monkeypatch.setattr(mc, "_connect_server", _fake_connect_server)
+        assert await mc._call_tool(
+            "srv1", "toolA", {}, 5, effect="unrestricted", idempotent=True,
+        ) == "recovered"
+        request_ids = [session.call_log[0][2]["request_id"] for session in sessions]
+        assert len(set(request_ids)) == 1
+
     async def test_sequence_uses_its_per_tool_timeout(self, monkeypatch):
         session = _FakeSession()
         session.tools_result = SimpleNamespace(tools=[

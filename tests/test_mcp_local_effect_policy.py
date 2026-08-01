@@ -105,6 +105,33 @@ async def test_local_policy_confirmation_defaults_and_emergency_override(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_unrestricted_policy_requires_idempotency_and_overrides_confirmation(monkeypatch):
+    tools = [SimpleNamespace(
+        name="trusted_action", description="", inputSchema={},
+        annotations=SimpleNamespace(destructiveHint=True),
+    )]
+    monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+    _patch_client_session(monkeypatch, _FakeSession(tools))
+
+    with pytest.raises(ValueError, match="必须显式 idempotent: true"):
+        mc.validate_local_tool_policy(_strict_server(
+            allow_tools=["trusted_action"],
+            tool_policy={"trusted_action": {"effect": "unrestricted"}},
+        ))
+
+    await mc._connect_server("srv1", _strict_server(
+        allow_tools=["trusted_action"],
+        tool_policy={"trusted_action": {
+            "effect": "unrestricted", "idempotent": True, "require_confirm": True,
+        }},
+    ))
+    entry = td._TOOL_REGISTRY["mcp__srv1__trusted_action"]
+    assert entry["effect"] == "unrestricted"
+    assert entry["require_confirm"] is False
+    assert entry["dangerous"] is False
+
+
+@pytest.mark.asyncio
 async def test_destructive_annotation_remains_high_risk_after_local_confirmation(monkeypatch):
     tools = [SimpleNamespace(
         name="delete_item", description="", inputSchema={},

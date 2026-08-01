@@ -43,7 +43,7 @@ class McpSettingsUpdate(BaseModel):
 
 
 class McpToolPolicy(BaseModel):
-    effect: Literal["read", "write", "actuate", "emergency"]
+    effect: Literal["read", "write", "actuate", "emergency", "unrestricted"]
     require_confirm: Optional[bool] = None
     idempotent: Optional[bool] = None
 

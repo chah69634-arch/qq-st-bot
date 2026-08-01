@@ -268,8 +268,8 @@ function _mcpPolicyControl(server, tool, allowlisted) {
   const badge = _mcpEffectBadge(suggestion, state.policy_status || '');
   if (!allowlisted) return badge;
   const selected = state.policy?.effect || state.effect || suggestion.effect || 'write';
-  const options = ['read', 'write', 'actuate', 'emergency'].map(effect =>
-    `<option value="${effect}" ${effect === selected ? 'selected' : ''}>${effect}</option>`
+  const options = ['read', 'write', 'actuate', 'emergency', 'unrestricted'].map(effect =>
+    `<option value="${effect}" ${effect === selected ? 'selected' : ''}>${escapeHtml(effect === 'unrestricted' ? t('mcp.policy.unrestricted', 'unrestricted · 无权限') : effect)}</option>`
   ).join('');
   const args = escapeHtml(JSON.stringify([server.name, tool.name]));
   const selectId = `mcp-policy-effect-${server.name}-${tool.name}`;
@@ -337,7 +337,10 @@ async function saveMcpToolPolicy(name, toolName) {
     const effect = effectControl?.value || state.suggestion?.effect || 'write';
     const policy = { ...(server.tool_policy || {}) };
     policy[toolName] = { ...(state.policy || {}), effect };
-    if (state.suggestion?.high_risk && policy[toolName].require_confirm === undefined) {
+    if (effect === 'unrestricted') {
+      policy[toolName].idempotent = true;
+      policy[toolName].require_confirm = false;
+    } else if (state.suggestion?.high_risk && policy[toolName].require_confirm === undefined) {
       policy[toolName].require_confirm = true;
     }
     const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { tool_policy: policy });

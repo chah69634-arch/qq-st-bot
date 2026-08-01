@@ -77,7 +77,7 @@ def _get_mcp_config() -> dict:
     return get_config().get("mcp_servers", {}) or {}
 
 
-_LOCAL_EFFECTS = frozenset({"read", "write", "actuate", "emergency"})
+_LOCAL_EFFECTS = frozenset({"read", "write", "actuate", "emergency", "unrestricted"})
 _READ_TOOL_WORDS = frozenset({"get", "list", "read", "search", "status"})
 _WRITE_TOOL_WORDS = frozenset({
     "create", "update", "set", "send", "delete", "remove", "stop",
@@ -166,10 +166,15 @@ def validate_local_tool_policy(
             raise ValueError(
                 f"MCP server '{name}' 工具 '{tool_name}' 的 idempotent 必须是 bool"
             )
-        if effect == "emergency":
+        if effect == "unrestricted" and not configured_idempotent:
+            raise ValueError(
+                f"MCP server '{name}' 工具 '{tool_name}' 的 unrestricted 模式必须显式 idempotent: true"
+            )
+        if effect in {"emergency", "unrestricted"}:
             if configured_confirm is True:
                 logger.warning(
-                    "[mcp_client] MCP emergency 工具忽略 require_confirm=true: server=%s tool=%s",
+                    "[mcp_client] MCP %s 工具忽略 require_confirm=true: server=%s tool=%s",
+                    effect,
                     name, tool_name,
                 )
             require_confirm = False
@@ -656,7 +661,7 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
                 name, tool.name, effect,
             )
         high_risk = bool(suggestion["high_risk"])
-        effective_require_confirm = require_confirm or high_risk
+        effective_require_confirm = False if effect == "unrestricted" else require_confirm or high_risk
         _TOOL_REGISTRY[reg_name] = {
             "func": _make_tool_func(
                 name,
@@ -760,6 +765,12 @@ def _retry_allowed(*, effect: str, idempotent: bool, tool_name: str) -> bool:
     return effect == "emergency" and idempotent and tool_name == "hardware_stop"
 
 
+def _retry_limit(*, effect: str, idempotent: bool, tool_name: str) -> int:
+    if effect == "unrestricted" and idempotent:
+        return 3
+    return 1 if _retry_allowed(effect=effect, idempotent=idempotent, tool_name=tool_name) else 0
+
+
 async def _call_tool(
     server_name: str,
     tool_name: str,
@@ -773,7 +784,7 @@ async def _call_tool(
     if handle is None:
         raise RuntimeError(f"MCP server '{server_name}' 未连接")
     started = time.perf_counter()
-    request_id = str(uuid.uuid4()) if effect in {"actuate", "emergency"} else ""
+    request_id = str(uuid.uuid4()) if effect in {"actuate", "emergency", "unrestricted"} else ""
     meta = {"request_id": request_id} if request_id else None
 
     async def _call_once(session):
@@ -783,32 +794,29 @@ async def _call_tool(
         )
 
     try:
-        try:
-            result = await _call_once(handle.session)
-        except BaseException as exc:
-            if effect in {"actuate", "emergency"} and not _retry_allowed(
-                effect=effect, idempotent=idempotent, tool_name=tool_name,
-            ):
-                raise McpOutcomeUnknown(tool_name=tool_name, request_id=request_id) from exc
-            if not _retry_allowed(effect=effect, idempotent=idempotent, tool_name=tool_name):
-                raise RuntimeError(f"MCP 工具调用失败: {exc}") from exc
-            logger.warning(
-                "[mcp_client] 调用 %s.%s 失败，按幂等策略重连重试一次: %s request_id=%s",
-                server_name, tool_name, exc, request_id or "-",
-            )
-            try:
-                await _reconnect_server(server_name)
-            except BaseException as reconnect_exc:
-                logger.warning("[mcp_client] 重连 %s 失败: %s", server_name, reconnect_exc)
-            handle = _servers.get(server_name)
-            if handle is None:
-                raise RuntimeError(f"MCP 工具调用失败且重连未恢复: {exc}") from exc
+        retry_limit = _retry_limit(effect=effect, idempotent=idempotent, tool_name=tool_name)
+        for attempt in range(retry_limit + 1):
             try:
                 result = await _call_once(handle.session)
-            except BaseException as retry_exc:
-                if effect in {"actuate", "emergency"}:
-                    raise McpOutcomeUnknown(tool_name=tool_name, request_id=request_id) from retry_exc
-                raise RuntimeError(f"MCP 工具调用失败: {retry_exc}") from retry_exc
+                break
+            except BaseException as exc:
+                if attempt >= retry_limit:
+                    if effect in {"actuate", "emergency", "unrestricted"}:
+                        raise McpOutcomeUnknown(tool_name=tool_name, request_id=request_id) from exc
+                    raise RuntimeError(f"MCP 工具调用失败: {exc}") from exc
+                logger.warning(
+                    "[mcp_client] 调用 %s.%s 失败，按幂等策略重连后重试（%d/%d）: %s request_id=%s",
+                    server_name, tool_name, attempt + 1, retry_limit, exc, request_id or "-",
+                )
+                try:
+                    await _reconnect_server(server_name)
+                except BaseException as reconnect_exc:
+                    logger.warning("[mcp_client] 重连 %s 失败: %s", server_name, reconnect_exc)
+                handle = _servers.get(server_name)
+                if handle is None:
+                    if effect in {"actuate", "emergency", "unrestricted"}:
+                        raise McpOutcomeUnknown(tool_name=tool_name, request_id=request_id) from exc
+                    raise RuntimeError(f"MCP 工具调用失败且重连未恢复: {exc}") from exc
         text = _format_result(result)
     except BaseException as exc:
         outcome_unknown = isinstance(exc, McpOutcomeUnknown)
