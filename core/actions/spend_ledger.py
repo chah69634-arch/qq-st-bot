@@ -9,7 +9,7 @@ from uuid import uuid4
 from core.safe_write import safe_append_jsonl
 from core.sandbox import get_paths
 
-_STATUSES = frozenset({"proposed", "notified", "confirmed", "rejected", "capped"})
+_STATUSES = frozenset({"proposed", "notified", "confirmed", "rejected", "capped", "observed", "check_failed"})
 
 
 def read_ledger(limit: int | None = None) -> list[dict]:

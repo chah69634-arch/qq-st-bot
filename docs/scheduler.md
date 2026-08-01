@@ -41,6 +41,58 @@ core/scheduler/triggers/         ← 各触发器独立文件
     dnd.py                       请勿打扰状态（已实现，R2-D 已接入 main.py）
 ```
 
+## 支出余额观测（Brief 57 / 127）
+
+`spend_monitor` 是每日 maintenance check，不具备支付、充值、下单或资源操作能力。Brief 127
+增加 `kind: aliyun_bss`：它只签名调用 BssOpenApi `QueryAccountBalance`，从
+`secrets.local.yaml` 的 `aliyun_bss.access_key_id` / `access_key_secret` 读取专用 RAM
+凭据。provider 配置中的任何凭据字段都不会被读取。
+
+专用 RAM 用户只附加以下自定义策略，且不要为该用户附加任何其他 RAM/BSS 策略：
+
+```json
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bssapi:QueryAccountBalance"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+这比 `AliyunBSSReadOnlyAccess` 更窄；后者仍包含账单、订单等其他读取能力。阿里云也接受
+兼容 action `bss:DescribeAcccount`，但本策略使用 API 名对应的 `bssapi:QueryAccountBalance`。
+
+开关、阈值和提醒金额应放在已忽略的 `config.local.yaml`：
+
+```yaml
+spend:
+  enabled: true
+  daily_cap: 100.00
+  monthly_cap: 100.00
+  payee_whitelist: [aliyun_bss]
+  balance_providers:
+    - name: aliyun_bss
+      kind: aliyun_bss
+      threshold: 50.00
+      balance_field: available_cash_amount
+      topup_amount: 100.00
+      timeout_s: 10
+```
+
+成功检查会在 `data/runtime/spend/ledger.jsonl` 写一条 `action=balance_check`、
+`status=observed` 记录，并保留 `AvailableCashAmount`、`AvailableAmount` 和服务端
+`Currency` 的非敏感观测值。低于阈值才接续原有 `proposed -> notified` 合同；它只是人工
+充值提醒，绝不执行付款。请求失败或响应格式无效写 `status=check_failed`，不产生 proposal。
+
+管理面提供 `POST /spend/check`（admin scope）强制执行一次只读检查，并返回不含余额、URL 或
+凭据的 provider outcome。之后用 `GET /spend/ledger` 确认 `observed` 或 `check_failed`
+记录，即可确认观察期 Day 1 已开始。通用 API 调用总账只记录固定 provider、耗时与
+`ok`/失败类别，不记录请求 URL、AccessKey 或 secret。
+
 ---
 
 ## 主循环

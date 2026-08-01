@@ -1,6 +1,6 @@
 """
 配置加载模块
-全局单例，读取 config.yaml，供所有模块使用
+全局单例，读取 config.yaml 及可选的 config.local.yaml，供所有模块使用
 """
 
 import os
@@ -9,14 +9,36 @@ from pathlib import Path
 
 _config: dict | None = None
 _CONFIG_PATH = Path("config.yaml")
-_config_mtime: float | None = None
+_CONFIG_LOCAL_PATH = Path("config.local.yaml")
+_config_mtime: tuple[float, float | None] | None = None
 _DATA_PREFIX_ENV = "YEXUAN_DATA_PREFIX"
+
+
+def _config_mtimes() -> tuple[float, float | None]:
+    """Return the tracked config mtimes; a local file is optional."""
+    main_mtime = _CONFIG_PATH.stat().st_mtime
+    try:
+        local_mtime = _CONFIG_LOCAL_PATH.stat().st_mtime
+    except FileNotFoundError:
+        local_mtime = None
+    return main_mtime, local_mtime
+
+
+def _merge_mapping(base: dict, override: dict) -> dict:
+    """Recursively merge the ignored local override without mutating either input."""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _merge_mapping(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def get_config() -> dict:
     """
     返回配置字典（单例，带 mtime 热加载）。
-    每次调用 stat() config.yaml；若 mtime 较上次加载时变化（或从未加载过），
+    每次调用 stat() 配置文件；若任一 mtime 较上次加载时变化（或从未加载过），
     自动 reload_config()。stat() 开销可忽略，使手改 config.yaml 对运行中进程即时生效
     （此前 _config 是永久缓存单例，手改磁盘文件从不被运行中进程读取）。
     stat 失败（如文件被临时替换的极短窗口）时 fail-open：沿用内存缓存，不抛出。
@@ -26,7 +48,7 @@ def get_config() -> dict:
         reload_config()
         return _config
     try:
-        mtime = _CONFIG_PATH.stat().st_mtime
+        mtime = _config_mtimes()
     except OSError:
         return _config
     if mtime != _config_mtime:
@@ -35,9 +57,9 @@ def get_config() -> dict:
 
 
 def reload_config() -> dict:
-    """重新从磁盘读取 config.yaml（admin 修改或磁盘 mtime 变化后调用）。
+    """重新从磁盘读取基础配置和可选本地覆盖（磁盘 mtime 变化后调用）。
 
-    读取顺序 env > config：`YEXUAN_DATA_PREFIX` 存在时覆盖 config.yaml 里的
+    读取顺序 env > config.local.yaml > config.yaml：`YEXUAN_DATA_PREFIX` 存在时覆盖配置里的
     `data_prefix` 字段（不改磁盘文件本身）。测试沙盒（run_test.py）借此声明
     自己的数据前缀，config.yaml 从此保持只读，不再被运行时脚本改写。
     """
@@ -45,7 +67,15 @@ def reload_config() -> dict:
     try:
         with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
             _config = yaml.safe_load(f) or {}
-        _config_mtime = _CONFIG_PATH.stat().st_mtime
+        if not isinstance(_config, dict):
+            raise RuntimeError(f"配置文件顶层必须是 mapping：{_CONFIG_PATH.absolute()}")
+        if _CONFIG_LOCAL_PATH.exists():
+            with open(_CONFIG_LOCAL_PATH, "r", encoding="utf-8") as f:
+                local_config = yaml.safe_load(f) or {}
+            if not isinstance(local_config, dict):
+                raise RuntimeError(f"本地配置顶层必须是 mapping：{_CONFIG_LOCAL_PATH.absolute()}")
+            _config = _merge_mapping(_config, local_config)
+        _config_mtime = _config_mtimes()
     except FileNotFoundError:
         raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
     except yaml.YAMLError as e:

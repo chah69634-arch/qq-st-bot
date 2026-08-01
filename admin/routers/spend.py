@@ -16,6 +16,13 @@ async def get_spend_budget(_auth=Depends(require_scopes("admin"))):
     return budget_usage()
 
 
+@router.post("/spend/check")
+async def run_spend_check(_auth=Depends(require_scopes("admin"))):
+    """Authenticated manual trigger for one read-only balance observation."""
+    from core.scheduler.triggers.spend_monitor import check_spend_monitor
+    return {"outcomes": await check_spend_monitor(force=True)}
+
+
 @router.get("/spend/mandates")
 async def get_spend_mandates(
     status: str = "",

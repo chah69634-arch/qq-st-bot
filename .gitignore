@@ -26,6 +26,7 @@ content/characters/yexuan/letter_samples/
 content/characters/yexuan/knowledge/
 # content/ (authored static) と defaults/ (seed) は track 対象 — ignore 除外不要
 config.yaml
+config.local.yaml
 # scripts/gen_config_example.py 的中间产物，人工审查无泄漏后手动覆盖 config.example.yaml
 config.yaml.example.generated
 # 本地密码本（Brief 22）—— 明文凭据，永远不要提交；模板见 secrets.example.yaml
