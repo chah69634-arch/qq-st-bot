@@ -196,7 +196,7 @@ mcp_servers:
   不注册工具也不写配置；删除会移除配置、关闭该 server 的 owner 并摘除动态工具。保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
   `headers` 的 `${ENV_VAR}` 会在连接时展开，缺失环境变量即连接失败；管理面仅显示环境变量
   占位符或“已配置”，不回显字面 token。
-- **受控手动调用**：桌面偏好内的 MCP Tool-call Console 只列出已连接、有效 allowlist、已注册并已通过
+- **受控手动调用**：后端管理面 MCP 页的 Tool-call Console 只列出已连接、有效 allowlist、已注册并已通过
   local policy 的工具；`POST /settings/mcp/console/invoke` 再次以 registry/config/runtime 交叉验证，并用
   inputSchema 校验 JSON 参数。它以 `admin_console` origin 复用 dispatcher；管理调用不受角色熟练度门控，
   但绝不绕过本地 effect、dangerous confirmation、模式与工具启用门。需要确认时只返回 120 秒一次性的

@@ -22,6 +22,27 @@
         <div id="mcp-import-result" class="admin-inline-133"></div>
       </div>
       <div class="card"><div class="card-header"><h3 data-i18n="mcp.servers_title">已配置 Servers</h3></div><div id="mcp-servers"><div class="loading" data-i18n="common.loading">加载中…</div></div></div>
+      <div class="card" id="mcp-console-card">
+        <div class="card-header"><h3 data-i18n="mcp.console.title">工具调用控制台</h3><button class="btn btn-ghost btn-sm" data-action="refreshMcpConsole" data-i18n="common.refresh">刷新</button></div>
+        <p class="admin-inline-144" data-i18n="mcp.console.notice">仅允许调用已连接、allowlisted 且已确认本地 policy 的工具。参数会按工具 schema 校验；高危调用需要二次确认。</p>
+        <div class="form-row">
+          <label class="field"><span data-i18n="mcp.console.server">MCP Server</span><select id="mcp-console-server" data-action="changeMcpConsoleServer"></select></label>
+          <label class="field"><span data-i18n="mcp.console.tool">Allowlisted Tool</span><select id="mcp-console-tool" data-action="changeMcpConsoleTool"></select></label>
+        </div>
+        <div id="mcp-console-tool-info" class="admin-inline-133"></div>
+        <div class="form-row col-1"><label class="field"><span data-i18n="mcp.console.arguments">JSON 参数</span><textarea id="mcp-console-arguments" rows="6" spellcheck="false">{}</textarea></label></div>
+        <details class="admin-inline-041"><summary data-i18n="mcp.console.schema">输入 schema</summary><pre id="mcp-console-schema" class="log-view admin-inline-133"></pre></details>
+        <div class="admin-inline-041">
+          <button class="btn btn-ghost" data-action="clearMcpConsole" data-i18n="mcp.console.clear">清除结果</button>
+          <button class="btn btn-primary" id="mcp-console-invoke" data-action="invokeMcpConsole" data-i18n="mcp.console.invoke">调用工具</button>
+        </div>
+        <div id="mcp-console-confirmation" class="admin-inline-133" hidden>
+          <p id="mcp-console-confirm-message"></p>
+          <button class="btn btn-danger btn-sm" data-action="confirmMcpConsole" data-i18n="mcp.console.confirm">确认执行</button>
+          <button class="btn btn-ghost btn-sm" data-action="clearMcpConsole" data-i18n="common.cancel">取消</button>
+        </div>
+        <pre id="mcp-console-result" class="log-view admin-inline-133"></pre>
+      </div>
       <div class="card">
         <div class="card-header"><h3 data-i18n="mcp.llm_debug.title">LLM 请求调试快照</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpDebugRequests" data-i18n="common.refresh">刷新</button></div>
         <p class="admin-inline-144" data-i18n="mcp.llm_debug.notice">仅用于短时排查：会记录发送给模型的 Prompt、工具 schema 与生成参数；密钥字段和图片数据会遮蔽。默认关闭，只有管理员可读。</p>

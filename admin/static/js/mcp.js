@@ -1,4 +1,6 @@
 let _mcpImport = null;
+let _mcpConsoleData = null;
+let _mcpConsolePending = null;
 const MCP_EXPANDED_SERVERS_STORAGE_KEY = 'qq_admin_mcp_expanded_servers_v1';
 
 function _loadMcpExpandedServers() {
@@ -73,9 +75,126 @@ async function loadMcpPage() {
       : '<div class="empty">尚未配置 MCP server。先填写 URL 并测试连接。</div>';
     bindPageActions(serversEl);
     _moveMcpSaveControls(serversEl);
+    _setMcpConsoleData(data);
     await _loadMcpRecentCalls(data.servers || []);
     await loadMcpDebugRequests();
   } catch (e) { serversEl.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+
+function _mcpConsoleEligibleTools(server) {
+  if (!server?.enabled || !server?.runtime?.connected) return [];
+  return (server.tool_states || []).filter(tool => tool.allowlisted && tool.registered
+    && (tool.policy_status === 'confirmed' || tool.policy_status === 'legacy_allowed'));
+}
+
+function _setMcpConsoleData(data) {
+  _mcpConsoleData = data || null;
+  _mcpConsolePending = null;
+  const serverSelect = document.getElementById('mcp-console-server');
+  if (!serverSelect) return;
+  const servers = (_mcpConsoleData?.servers || []).filter(server => server.enabled && server.runtime?.connected);
+  const selected = servers.some(server => server.name === serverSelect.value) ? serverSelect.value : (servers[0]?.name || '');
+  serverSelect.innerHTML = servers.length
+    ? servers.map(server => `<option value="${escapeHtml(server.name)}">${escapeHtml(server.name)}</option>`).join('')
+    : `<option value="">${escapeHtml(t('mcp.console.no_server', '没有可用的已连接 MCP server。'))}</option>`;
+  serverSelect.value = selected;
+  _renderMcpConsoleTool();
+  bindPageActions(document.getElementById('mcp-console-card'));
+}
+
+function _selectedMcpConsoleTool() {
+  const serverName = document.getElementById('mcp-console-server')?.value || '';
+  const toolName = document.getElementById('mcp-console-tool')?.value || '';
+  const server = (_mcpConsoleData?.servers || []).find(item => item.name === serverName);
+  return { server, tool: _mcpConsoleEligibleTools(server).find(item => item.name === toolName) };
+}
+
+function _renderMcpConsoleTool() {
+  const serverSelect = document.getElementById('mcp-console-server');
+  const toolSelect = document.getElementById('mcp-console-tool');
+  const info = document.getElementById('mcp-console-tool-info');
+  const schema = document.getElementById('mcp-console-schema');
+  const invoke = document.getElementById('mcp-console-invoke');
+  if (!serverSelect || !toolSelect || !info || !schema || !invoke) return;
+  const server = (_mcpConsoleData?.servers || []).find(item => item.name === serverSelect.value);
+  const tools = _mcpConsoleEligibleTools(server);
+  const selected = tools.some(tool => tool.name === toolSelect.value) ? toolSelect.value : (tools[0]?.name || '');
+  toolSelect.innerHTML = tools.length
+    ? tools.map(tool => `<option value="${escapeHtml(tool.name)}">${escapeHtml(tool.name)}</option>`).join('')
+    : `<option value="">${escapeHtml(t('mcp.console.no_tool', '该 server 没有可调用工具。'))}</option>`;
+  toolSelect.value = selected;
+  const tool = tools.find(item => item.name === selected);
+  info.textContent = tool
+    ? `${tool.description || t('mcp.console.no_description', '未提供工具说明')}\n` +
+      `effect: ${tool.effect || 'unclassified'}${tool.require_confirm ? ' · confirmation required' : ''}`
+    : t('mcp.console.no_tool', '该 server 没有可调用工具。');
+  schema.textContent = JSON.stringify(tool?.input_schema || {}, null, 2);
+  invoke.disabled = !_mcpConsoleData?.enabled || !tool;
+}
+
+function changeMcpConsoleServer() {
+  _mcpConsolePending = null;
+  _renderMcpConsoleTool();
+  clearMcpConsole();
+}
+
+function changeMcpConsoleTool() {
+  _mcpConsolePending = null;
+  clearMcpConsole();
+  _renderMcpConsoleTool();
+}
+
+function _showMcpConsoleResult(text) {
+  document.getElementById('mcp-console-result').textContent = text || '';
+}
+
+function clearMcpConsole() {
+  _mcpConsolePending = null;
+  document.getElementById('mcp-console-confirmation').hidden = true;
+  document.getElementById('mcp-console-confirm-message').textContent = '';
+  _showMcpConsoleResult('');
+}
+
+async function refreshMcpConsole() {
+  try {
+    _setMcpConsoleData(await api('GET', '/settings/mcp'));
+    toast(t('mcp.console.refreshed', 'MCP 工具状态已刷新'), 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function invokeMcpConsole() {
+  const { server, tool } = _selectedMcpConsoleTool();
+  if (!server || !tool) return;
+  let arguments_;
+  try {
+    arguments_ = JSON.parse(document.getElementById('mcp-console-arguments').value || '{}');
+    if (!arguments_ || Array.isArray(arguments_) || typeof arguments_ !== 'object') throw new Error(t('mcp.console.arguments_object', '参数必须是 JSON 对象'));
+  } catch (e) {
+    _showMcpConsoleResult(`${t('mcp.console.arguments_error', '参数 JSON 无效：')}${e.message}`);
+    return;
+  }
+  clearMcpConsole();
+  try {
+    const result = await api('POST', '/settings/mcp/console/invoke', { server: server.name, tool: tool.name, arguments: arguments_ });
+    if (result.status === 'confirmation_required') {
+      _mcpConsolePending = result;
+      document.getElementById('mcp-console-confirm-message').textContent = result.confirmation_message || '';
+      document.getElementById('mcp-console-confirmation').hidden = false;
+      _showMcpConsoleResult(`audit_id: ${result.audit_id}`);
+      return;
+    }
+    _showMcpConsoleResult(`audit_id: ${result.audit_id}\n\n${result.result || t('mcp.console.no_result', '调用完成，无文本结果。')}`);
+  } catch (e) { _showMcpConsoleResult(`${t('mcp.console.invoke_error', '调用被拒绝或失败：')}${e.message}`); }
+}
+
+async function confirmMcpConsole() {
+  if (!_mcpConsolePending?.confirmation_id) return;
+  const confirmationId = _mcpConsolePending.confirmation_id;
+  clearMcpConsole();
+  try {
+    const result = await api('POST', '/settings/mcp/console/confirm', { confirmation_id: confirmationId });
+    _showMcpConsoleResult(`audit_id: ${result.audit_id}\n\n${result.result || t('mcp.console.no_result', '调用完成，无文本结果。')}`);
+  } catch (e) { _showMcpConsoleResult(`${t('mcp.console.confirm_error', '确认调用失败：')}${e.message}`); }
 }
 
 function _moveMcpSaveControls(root) {
