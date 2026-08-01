@@ -85,6 +85,27 @@ def test_aliyun_bss_payload_parses_both_balances_and_currency():
     assert result.currency == "CNY"
 
 
+def test_aliyun_bss_credentials_come_from_config(monkeypatch):
+    from core.actions import api_balance
+
+    monkeypatch.setattr(
+        "core.config_loader.get_base_config",
+        lambda: {
+            "spend": {
+                "aliyun_bss": {
+                    "access_key_id": "test-access-key-id",
+                    "access_key_secret": "test-access-key-secret",
+                }
+            }
+        },
+    )
+
+    assert api_balance._load_aliyun_bss_credentials() == (
+        "test-access-key-id",
+        "test-access-key-secret",
+    )
+
+
 @pytest.mark.asyncio
 async def test_aliyun_bss_query_uses_only_query_account_balance_and_keeps_secret_out_of_url(monkeypatch):
     from core.actions import api_balance

@@ -332,9 +332,11 @@ spend:
   daily_cap: 0             # 0 = 全禁（fail-closed），不是无限额
   monthly_cap: 0           # 0 = 全禁（fail-closed），不是无限额
   payee_whitelist: []
-  # Put the following provider block in ignored config.local.yaml when enabling
-  # it. The AccessKey itself belongs only in ignored secrets.local.yaml under
-  # aliyun_bss. topup_amount is a reminder proposal only; it is never executed.
+  # Put the following block in config.yaml when enabling it.
+  # topup_amount is a reminder proposal only; it is never executed.
+  # aliyun_bss:
+  #   access_key_id: "YOUR_DEDICATED_RAM_ACCESS_KEY_ID"
+  #   access_key_secret: "YOUR_DEDICATED_RAM_ACCESS_KEY_SECRET"
   # balance_providers:
   #   - name: aliyun_bss
   #     kind: aliyun_bss

@@ -8,9 +8,11 @@ import yaml
 from pathlib import Path
 
 _config: dict | None = None
+_base_config: dict | None = None
 _CONFIG_PATH = Path("config.yaml")
 _CONFIG_LOCAL_PATH = Path("config.local.yaml")
 _config_mtime: tuple[float, float | None] | None = None
+_base_config_mtime: float | None = None
 _DATA_PREFIX_ENV = "YEXUAN_DATA_PREFIX"
 
 
@@ -56,6 +58,30 @@ def get_config() -> dict:
     return _config
 
 
+def get_base_config() -> dict:
+    """Return config.yaml without touching optional local overrides."""
+    global _base_config, _base_config_mtime
+    try:
+        mtime = _CONFIG_PATH.stat().st_mtime
+    except OSError:
+        if _base_config is None:
+            raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
+        return _base_config
+    if _base_config is None or mtime != _base_config_mtime:
+        try:
+            with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+                loaded = yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"配置文件格式错误：{e}")
+        if not isinstance(loaded, dict):
+            raise RuntimeError(f"配置文件顶层必须是 mapping：{_CONFIG_PATH.absolute()}")
+        _base_config = loaded
+        _base_config_mtime = mtime
+    return _base_config
+
+
 def reload_config() -> dict:
     """重新从磁盘读取基础配置和可选本地覆盖（磁盘 mtime 变化后调用）。
 
@@ -63,12 +89,13 @@ def reload_config() -> dict:
     `data_prefix` 字段（不改磁盘文件本身）。测试沙盒（run_test.py）借此声明
     自己的数据前缀，config.yaml 从此保持只读，不再被运行时脚本改写。
     """
-    global _config, _config_mtime
+    global _base_config, _base_config_mtime, _config, _config_mtime
     try:
         with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-            _config = yaml.safe_load(f) or {}
-        if not isinstance(_config, dict):
+            _base_config = yaml.safe_load(f) or {}
+        if not isinstance(_base_config, dict):
             raise RuntimeError(f"配置文件顶层必须是 mapping：{_CONFIG_PATH.absolute()}")
+        _config = _base_config
         if _CONFIG_LOCAL_PATH.exists():
             with open(_CONFIG_LOCAL_PATH, "r", encoding="utf-8") as f:
                 local_config = yaml.safe_load(f) or {}
@@ -76,6 +103,7 @@ def reload_config() -> dict:
                 raise RuntimeError(f"本地配置顶层必须是 mapping：{_CONFIG_LOCAL_PATH.absolute()}")
             _config = _merge_mapping(_config, local_config)
         _config_mtime = _config_mtimes()
+        _base_config_mtime = _config_mtime[0]
     except FileNotFoundError:
         raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
     except yaml.YAMLError as e:

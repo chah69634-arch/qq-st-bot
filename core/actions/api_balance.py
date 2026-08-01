@@ -9,17 +9,13 @@ import math
 import time
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from urllib.parse import quote
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
 _ALIYUN_BSS_ENDPOINT = "https://business.aliyuncs.com/"
 _ALIYUN_BSS_VERSION = "2017-12-14"
 _ALIYUN_CURRENCIES = frozenset({"CNY", "USD", "JPY"})
-_SECRETS_LOCAL_PATH = Path("secrets.local.yaml")
 
 
 @dataclass(frozen=True)
@@ -67,17 +63,18 @@ def _sign_aliyun_rpc_params(params: dict[str, str], access_key_secret: str) -> s
 
 
 def _load_aliyun_bss_credentials() -> tuple[str, str] | None:
-    """Read the dedicated RAM key locally; values never leave this module."""
-    try:
-        data = yaml.safe_load(_SECRETS_LOCAL_PATH.read_text(encoding="utf-8")) or {}
-        block = data.get("aliyun_bss") if isinstance(data, dict) else None
-        if not isinstance(block, dict):
-            return None
-        access_key_id = str(block.get("access_key_id") or "").strip()
-        access_key_secret = str(block.get("access_key_secret") or "").strip()
-        return (access_key_id, access_key_secret) if access_key_id and access_key_secret else None
-    except Exception:
+    """Read the dedicated RAM key from config.yaml via the runtime loader."""
+    from core.config_loader import get_base_config
+
+    spend = get_base_config().get("spend")
+    if not isinstance(spend, dict):
         return None
+    block = spend.get("aliyun_bss")
+    if not isinstance(block, dict):
+        return None
+    access_key_id = str(block.get("access_key_id") or "").strip()
+    access_key_secret = str(block.get("access_key_secret") or "").strip()
+    return (access_key_id, access_key_secret) if access_key_id and access_key_secret else None
 
 
 def _parse_aliyun_bss_payload(payload: object, *, balance_field: str = "available_cash_amount") -> BalanceResult | None:

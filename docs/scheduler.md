@@ -44,9 +44,10 @@ core/scheduler/triggers/         ← 各触发器独立文件
 ## 支出余额观测（Brief 57 / 127）
 
 `spend_monitor` 是每日 maintenance check，不具备支付、充值、下单或资源操作能力。Brief 127
-增加 `kind: aliyun_bss`：它只签名调用 BssOpenApi `QueryAccountBalance`，从
-`secrets.local.yaml` 的 `aliyun_bss.access_key_id` / `access_key_secret` 读取专用 RAM
-凭据。provider 配置中的任何凭据字段都不会被读取。
+增加 `kind: aliyun_bss`：它只签名调用 BssOpenApi `QueryAccountBalance`，从有效运行时配置的
+`spend.aliyun_bss.access_key_id` / `access_key_secret` 读取专用 RAM 凭据。将这个块放进
+`config.yaml`；`secrets.local.yaml` 是管理面密码本，不参与此读取链。provider 配置中的任何
+凭据字段都不会被读取。
 
 专用 RAM 用户只附加以下自定义策略，且不要为该用户附加任何其他 RAM/BSS 策略：
 
@@ -66,10 +67,13 @@ core/scheduler/triggers/         ← 各触发器独立文件
 这比 `AliyunBSSReadOnlyAccess` 更窄；后者仍包含账单、订单等其他读取能力。阿里云也接受
 兼容 action `bss:DescribeAcccount`，但本策略使用 API 名对应的 `bssapi:QueryAccountBalance`。
 
-开关、阈值和提醒金额应放在已忽略的 `config.local.yaml`：
+开关、阈值和提醒金额应放在 `config.yaml`：
 
 ```yaml
 spend:
+  aliyun_bss:
+    access_key_id: "YOUR_DEDICATED_RAM_ACCESS_KEY_ID"
+    access_key_secret: "YOUR_DEDICATED_RAM_ACCESS_KEY_SECRET"
   enabled: true
   daily_cap: 100.00
   monthly_cap: 100.00

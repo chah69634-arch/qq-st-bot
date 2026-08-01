@@ -21,7 +21,9 @@ def _isolated_config(tmp_path, monkeypatch):
     monkeypatch.setattr(cl, "_CONFIG_PATH", cfg_path)
     monkeypatch.setattr(cl, "_CONFIG_LOCAL_PATH", tmp_path / "config.local.yaml")
     monkeypatch.setattr(cl, "_config", None)
+    monkeypatch.setattr(cl, "_base_config", None)
     monkeypatch.setattr(cl, "_config_mtime", None)
+    monkeypatch.setattr(cl, "_base_config_mtime", None)
     return cl, cfg_path
 
 
@@ -120,3 +122,15 @@ def test_config_local_yaml_deeply_overrides_base_config(_isolated_config):
         "max_daily_proactive": 4,
     }
     assert cfg["spend"] == {"enabled": True}
+    assert cl.get_base_config() == {
+        "scheduler": {"global_proactive_min_gap_seconds": 100},
+    }
+
+
+def test_get_base_config_does_not_read_local_override(_isolated_config):
+    cl, cfg_path = _isolated_config
+    cfg_path.with_name("config.local.yaml").write_text("[not a mapping", encoding="utf-8")
+
+    assert cl.get_base_config() == {
+        "scheduler": {"global_proactive_min_gap_seconds": 100},
+    }
