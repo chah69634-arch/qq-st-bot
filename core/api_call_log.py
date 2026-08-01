@@ -38,6 +38,7 @@ def append(
     ok: bool,
     output_hint: str = "",
     request_id: str = "",
+    audit_id: str = "",
 ) -> None:
     try:
         now = time.time()
@@ -52,6 +53,7 @@ def append(
             "ok": bool(ok),
             "output_hint": str(output_hint)[:120],
             "request_id": str(request_id)[:128],
+            "audit_id": str(audit_id)[:128],
         })
         _prune_daily_logs(get_paths().api_call_log(), now)
     except Exception:

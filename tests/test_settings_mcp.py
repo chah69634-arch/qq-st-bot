@@ -377,3 +377,146 @@ def test_delete_missing_server_returns_not_found(tmp_path, monkeypatch):
         asyncio.run(mod.delete_mcp_server("missing", _auth=None))
 
     assert exc.value.status_code == 404
+
+
+def _install_console_tool(monkeypatch, *, require_local_policy=False):
+    from core import mcp_client, tool_dispatcher
+
+    config = {
+        "scheduler": {"owner_id": "owner"},
+        "mcp_servers": {
+            "enabled": True,
+            "require_local_policy": require_local_policy,
+            "servers": [{
+                "name": "cedar_toy",
+                "enabled": True,
+                "allow_tools": ["toy_status"],
+                "tool_policy": {"toy_status": {"effect": "read"}},
+            }],
+        },
+    }
+    monkeypatch.setattr(mod, "get_config", lambda: config)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": True, "tools": []})
+    monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY, "mcp__cedar_toy__toy_status", {
+        "category": "mcp",
+        "mcp_server": "cedar_toy",
+        "mcp_tool": "toy_status",
+        "parameters": {
+            "type": "object",
+            "properties": {"verbose": {"type": "boolean"}},
+            "required": ["verbose"],
+            "additionalProperties": False,
+        },
+        "effect": "read",
+        "require_confirm": False,
+    })
+    return config
+
+
+def test_console_rejects_non_allowlisted_tool(tmp_path, monkeypatch):
+    _install_console_tool(monkeypatch)
+    with pytest.raises(HTTPException) as exc:
+        mod._resolve_console_tool("cedar_toy", "other_tool")
+    assert exc.value.status_code == 403
+
+
+def test_console_rejects_pending_local_policy(monkeypatch):
+    config = _install_console_tool(monkeypatch, require_local_policy=True)
+    config["mcp_servers"]["servers"][0]["tool_policy"] = {}
+    with pytest.raises(HTTPException) as exc:
+        mod._resolve_console_tool("cedar_toy", "toy_status")
+    assert exc.value.status_code == 409
+
+
+def test_console_schema_validation_redacts_argument_value(monkeypatch):
+    _install_console_tool(monkeypatch)
+    _, info = mod._resolve_console_tool("cedar_toy", "toy_status")
+    with pytest.raises(HTTPException) as exc:
+        mod._validate_console_arguments({"verbose": "secret-value"}, info["parameters"])
+    assert exc.value.status_code == 422
+    assert "secret-value" not in str(exc.value.detail)
+
+
+def test_console_confirmation_reuses_ticket_arguments_and_audit_id(monkeypatch):
+    _install_console_tool(monkeypatch)
+    mod._console_confirmations.clear()
+    calls = []
+
+    async def fake_run(*, registered_name, arguments, audit_id, confirmed):
+        calls.append((registered_name, arguments, audit_id, confirmed))
+        if not confirmed:
+            return None, "确认后执行"
+        return "工具已执行：mcp__cedar_toy__toy_status，结果：ok", None
+
+    monkeypatch.setattr(mod, "_run_console_tool", fake_run)
+    initial = asyncio.run(mod.invoke_mcp_console(
+        mod.McpConsoleInvoke(server="cedar_toy", tool="toy_status", arguments={"verbose": True}),
+        _auth=None,
+    ))
+    assert initial["status"] == "confirmation_required"
+    result = asyncio.run(mod.confirm_mcp_console(
+        mod.McpConsoleConfirm(confirmation_id=initial["confirmation_id"]), _auth=None,
+    ))
+
+    assert result == {
+        "status": "completed",
+        "audit_id": initial["audit_id"],
+        "result": "工具已执行：mcp__cedar_toy__toy_status，结果：ok",
+    }
+    assert calls == [
+        ("mcp__cedar_toy__toy_status", {"verbose": True}, initial["audit_id"], False),
+        ("mcp__cedar_toy__toy_status", {"verbose": True}, initial["audit_id"], True),
+    ]
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(mod.confirm_mcp_console(
+            mod.McpConsoleConfirm(confirmation_id=initial["confirmation_id"]), _auth=None,
+        ))
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_console_origin_runs_through_dispatcher(monkeypatch, sandbox):
+    from core import tool_dispatcher as td
+
+    async def tool_func(**_kwargs):
+        return "ok"
+
+    monkeypatch.setitem(td._TOOL_REGISTRY, "mcp__cedar_toy__toy_status", {
+        "func": tool_func,
+        "description": "", "dangerous": False, "category": "mcp",
+        "parameters": {}, "effect": "read", "mcp_server": "cedar_toy", "mcp_tool": "toy_status",
+    })
+    monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: False)
+    monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
+    result, ask = await td.execute(
+        "mcp__cedar_toy__toy_status", {}, "owner", "owner", False,
+        mod._ConsoleSessionState(), origin="admin_console", char_id="char",
+    )
+    assert ask is None
+    assert result == "工具已执行：mcp__cedar_toy__toy_status，结果：ok"
+
+
+@pytest.mark.asyncio
+async def test_console_runner_uses_dispatcher_confirmation(monkeypatch, sandbox):
+    _install_console_tool(monkeypatch)
+    from core import tool_dispatcher as td
+
+    async def tool_func(**_kwargs):
+        return "ok"
+
+    monkeypatch.setitem(td._TOOL_REGISTRY, "mcp__cedar_toy__toy_status", {
+        "func": tool_func,
+        "description": "", "dangerous": True, "category": "mcp",
+        "parameters": {}, "effect": "write", "mcp_server": "cedar_toy", "mcp_tool": "toy_status",
+    })
+    monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
+    result, ask = await mod._run_console_tool(
+        registered_name="mcp__cedar_toy__toy_status", arguments={}, audit_id="audit", confirmed=False,
+    )
+    assert result is None
+    assert ask is not None
+    result, ask = await mod._run_console_tool(
+        registered_name="mcp__cedar_toy__toy_status", arguments={}, audit_id="audit", confirmed=True,
+    )
+    assert ask is None
+    assert result == "工具已执行：mcp__cedar_toy__toy_status，结果：ok"

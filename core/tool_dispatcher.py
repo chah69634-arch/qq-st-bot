@@ -1346,7 +1346,7 @@ def parse_tail_brace(text: str) -> tuple[str, str | None]:
 
 
 _EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({
-    "user_live", "assistant_loop", "assistant_loop_relay",
+    "user_live", "assistant_loop", "assistant_loop_relay", "admin_console",
 })
 _OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
     "toy_vibrate",
@@ -1499,7 +1499,7 @@ async def execute(
 
     # Brief 61 defensive gate. A blocked hallucinated MCP call is not an action,
     # so it deliberately leaves no action_trace record and reveals no level data.
-    if tool_name.startswith("mcp__"):
+    if tool_name.startswith("mcp__") and origin != "admin_console":
         from core.growth.mcp_proficiency import NEUTRAL_REFUSAL, is_tool_allowed
         if not is_tool_allowed(tool_name, char_id=char_id):
             logger.warning("[tool_dispatcher] MCP proficiency gate denied tool=%s char_id=%s", tool_name, char_id)

@@ -154,9 +154,11 @@ desktop/mobile ↔ backend 的客户端协议，不是 Interaction/Event kind，
 外接记忆库会绕过 prompt 层注入与固化链，裂成两套真相；MCP 在这套架构里只承担"给主 LLM
 多几个可调用的外部工具"这一件事。
 
-MCP 调用的唯一允许形态是 owner private turn 中已激活的 Path C：
+MCP 常规调用形态是 owner private turn 中已激活的 Path C：
 `Path C tool loop → tool_dispatcher → local tool 或 MCP dynamic tool → MCP client/session →
-external MCP server → bounded ToolResult → 当前轮 tool-result 边界`。scheduler、stimulus/trigger、
+external MCP server → bounded ToolResult → 当前轮 tool-result 边界`。此外，admin-only 的 MCP Tool-call
+Console 可在排障时走 `admin router → tool_dispatcher.execute(origin="admin_console") → MCP dynamic tool`
+这一受限路径；它不直连 MCP session，也不能绕过 allowlist、本地 policy、effect/确认门或超时。scheduler、stimulus/trigger、
 Dream、Stage 不会隐式升级为 MCP 调用；MCP 结果不重新进入 `perceive_event`，不成为 stimulus，
 也不拥有直接 memory writer 权限。`hardware_gateway` 只是外部 MCP Server 的一种实现，不是
 PresenceKit 核心模块。
@@ -194,6 +196,11 @@ mcp_servers:
   不注册工具也不写配置；删除会移除配置、关闭该 server 的 owner 并摘除动态工具。保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
   `headers` 的 `${ENV_VAR}` 会在连接时展开，缺失环境变量即连接失败；管理面仅显示环境变量
   占位符或“已配置”，不回显字面 token。
+- **受控手动调用**：桌面偏好内的 MCP Tool-call Console 只列出已连接、有效 allowlist、已注册并已通过
+  local policy 的工具；`POST /settings/mcp/console/invoke` 再次以 registry/config/runtime 交叉验证，并用
+  inputSchema 校验 JSON 参数。它以 `admin_console` origin 复用 dispatcher；管理调用不受角色熟练度门控，
+  但绝不绕过本地 effect、dangerous confirmation、模式与工具启用门。需要确认时只返回 120 秒一次性的
+  ticket，`/confirm` 只能重放 ticket 内的 server/tool/arguments；policy 或连接变化会在确认时重新拒绝。
 - **本地 effect 策略**：`require_local_policy: true` 时，管理面更新 `allow_tools` 必须同时提交完整的
   `tool_policy`。每个白名单工具都要显式标为 `read`、`write`、`actuate` 或 `emergency`；校验失败不会
   写入配置或热重载。像删除远端帖子这样的操作应标为 `write`，不根据远端工具描述自动推断。
@@ -228,7 +235,8 @@ mcp_servers:
   码；注册条目不声明 `trace_args`，参数不落痕（防外部 server 的敏感入参入盘）。
 - **调用观测**：每次 MCP 工具调用额外写入既有 `api_call_log`，caller 固定为
   `mcp__{server}__{tool}`，只记录成功/失败、时长与无敏感的结果提示，不记录 arguments 或
-  外部返回正文；管理面按工具展示最近一条调用记录。
+  外部返回正文；管理面按工具展示最近一条调用记录。控制台调用额外携带 `audit_id`，使 UI 返回值能关联
+  到同一条总账记录；`request_id` 仍用于动作超时/结果不明的 MCP 侧关联。
 - **探针不覆盖 mcp 类**：`get_probe_prompt()` 只拼 info/desktop 两类，MCP 工具只经 tool
   loop（Path C）暴露——角色卡 `presence_ext.tool_categories` 不含 `"mcp"` 就永远看不到这
   些工具，这是"本我接 MCP、角色扮演不受影响"的实现方式。

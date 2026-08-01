@@ -25,6 +25,8 @@ sync_mcp_servers 现在都只是把信号丢进对应 server 的队列（_send_c
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from contextvars import ContextVar
 import ipaddress
 import json
 import logging
@@ -80,6 +82,19 @@ _READ_TOOL_WORDS = frozenset({"get", "list", "read", "search", "status"})
 _WRITE_TOOL_WORDS = frozenset({
     "create", "update", "set", "send", "delete", "remove", "stop",
 })
+
+
+_MCP_AUDIT_ID: ContextVar[str] = ContextVar("mcp_audit_id", default="")
+
+
+@contextmanager
+def audit_context(audit_id: str):
+    """Attach an admin-console audit id to MCP API-call ledger entries."""
+    token = _MCP_AUDIT_ID.set(str(audit_id)[:128])
+    try:
+        yield
+    finally:
+        _MCP_AUDIT_ID.reset(token)
 
 
 class McpOutcomeUnknown(RuntimeError):
@@ -804,6 +819,7 @@ async def _call_tool(
             model=tool_name, duration_ms=int((time.perf_counter() - started) * 1000), ok=False,
             output_hint="MCP action outcome unknown" if outcome_unknown else "MCP call failed",
             request_id=request_id,
+            audit_id=_MCP_AUDIT_ID.get(),
         )
         if isinstance(exc, Exception):
             raise
@@ -815,6 +831,7 @@ async def _call_tool(
         model=tool_name, duration_ms=int((time.perf_counter() - started) * 1000), ok=True,
         output_hint="MCP call succeeded",
         request_id=request_id,
+        audit_id=_MCP_AUDIT_ID.get(),
     )
     return text
 

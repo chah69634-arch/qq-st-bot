@@ -519,9 +519,11 @@ class TestCallTool:
         rows = []
         monkeypatch.setattr("core.api_call_log.append", lambda **kwargs: rows.append(kwargs))
 
-        assert await mc._call_tool("srv1", "toolA", {"secret": "never-log"}, 5) == "ok"
+        with mc.audit_context("audit-console"):
+            assert await mc._call_tool("srv1", "toolA", {"secret": "never-log"}, 5) == "ok"
         assert rows[0]["caller"] == "mcp__srv1__toolA"
         assert "secret" not in str(rows[0])
+        assert rows[0]["audit_id"] == "audit-console"
         assert mc.server_runtime("srv1")["last_call_ok"] is True
 
     async def test_actuate_timeout_does_not_retry_and_has_a_stable_request_id(self, monkeypatch):
