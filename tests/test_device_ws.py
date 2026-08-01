@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import importlib
 
 import pytest
 
@@ -89,6 +90,43 @@ async def test_device_ws_action_ack_timeout(monkeypatch):
 
     assert ok is False
     assert err == "timeout"
+
+
+@pytest.mark.parametrize("module_name", ["channels.desktop_ws", "channels.device_ws"])
+async def test_concurrent_actions_have_distinct_ack_ids(module_name, monkeypatch):
+    """同一毫秒发出的 action 不能覆盖彼此的 pending future。"""
+    ws_module = importlib.import_module(module_name)
+    ws_module._current_ws = object()
+    ws_module._pending_acks.clear()
+    sent = []
+
+    async def fake_send(payload):
+        sent.append(payload)
+        return True
+
+    monkeypatch.setattr(ws_module, "_send_json", fake_send)
+    first = asyncio.create_task(ws_module.push_action_and_wait({"type": "first"}, timeout=1))
+    second = asyncio.create_task(ws_module.push_action_and_wait({"type": "second"}, timeout=1))
+    try:
+        for _ in range(10):
+            if len(sent) == 2:
+                break
+            await asyncio.sleep(0)
+
+        ids = [payload["msg_id"] for payload in sent]
+        assert len(ids) == 2
+        assert len(set(ids)) == 2
+        assert all(len(msg_id) == 32 for msg_id in ids)
+
+        for msg_id in ids:
+            await ws_module._handle_message({"type": "ack", "msg_id": msg_id, "ok": True})
+        assert await asyncio.gather(first, second) == [(True, None), (True, None)]
+    finally:
+        for task in (first, second):
+            if not task.done():
+                task.cancel()
+        ws_module._pending_acks.clear()
+        ws_module._current_ws = None
 
 
 async def test_device_ws_hello_and_pong_handled(monkeypatch):

@@ -135,6 +135,9 @@ provenance 是 `mobile`（prompt、probe 与观测），实时来源也是 `mobi
 - 普通消息：`push_message()` 发送 `channel_message`，不等 ack。
 - 叙事分段：`turn_sink` 在普通消息之后并行发送 `message_segments`，不等 ack。
 - 桌面动作：`push_action_and_wait()` 发送 `action`，最多等 5 秒 ack。
+- 所有自动生成的 `msg_id` 使用 UUID hex，是不透明字符串；客户端/固件不得按数字或时间戳解析。
+  并发 action 各自持有唯一 ID，避免 `_pending_acks` 互相覆盖；需要关联流式帧与 canonical
+  消息时仍由调用方显式复用同一个 ID。
 - 梦境邀请：desktop 工具推送 `dream_invite` action；PresenceKit-desktop 收到并 ack 后打开 Dream 窗口。
 - 玩耍邀请：desktop 工具推送 `toy_invite` action；PresenceKit-desktop 在「玩耍模式」开关开启时打开 ToyWindow，关闭时忽略并正常回 ack。
 - 心跳：服务端每 20 秒发 `ping`，超过约 70 秒没有 `pong` 会断开。

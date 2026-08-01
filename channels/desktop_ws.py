@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import time
+from uuid import uuid4
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -35,7 +36,7 @@ def get_connect_time() -> float:
 
 
 def _new_msg_id() -> str:
-    return str(int(time.time() * 1000))
+    return uuid4().hex
 
 
 async def _send_json(payload: dict) -> bool:
