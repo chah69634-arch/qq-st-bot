@@ -140,8 +140,9 @@ override；`char_id=None`（默认）才走活跃角色卡逻辑。`core.model_r
 是这条路径的实现；`core.stage.views.StageCharacterView` 的所有生成方法都显式传 `char_id`。
 
 角色卡的 `model_routing` 绑定由 `GET/PATCH /character/{char_id}/model-routing` 管理
-（Brief 87 §1，见下方「Admin 接口」），可选 profile 清单由
-`GET /model-presets/routing-profiles` 提供。
+（Brief 87 §1，见下方「Admin 接口」）。只有 `null` 或字段缺失表示跟随全局
+`active_routing`；字符串值（包括名为 `default` 的 profile）都是显式固定绑定。可选 profile
+清单由 `GET /model-presets/routing-profiles` 提供。
 
 ### `reasoning_native` / `reasoning_extra_body`（Brief 32 · 内部思考链）
 
@@ -222,7 +223,7 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 
 | 端点 | 说明 |
 |---|---|
-| `GET /model-presets` | 返回 presets（api_key 打码）、routing_profiles、active_routing |
+| `GET /model-presets` | 返回 presets（api_key 打码）、routing_profiles、active_routing；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
 | `PUT /model-presets/active-routing` | 切换 active_routing 并热重载（仅 model_presets 模式） |
 | `PUT /model-presets/presets/{name}` | 新增或更新一个 preset（合并更新；新建须提供 provider_kind；仅 model_presets 模式） |
 | `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile 引用或是唯一剩余 preset 时 409 |

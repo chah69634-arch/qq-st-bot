@@ -15,6 +15,8 @@ PUT    /model-presets/routing-profiles/{name} — 新增或更新一个 routing 
 POST   /model-presets/presets/{name}/test     — 连通性测试：发一条 1 token ping，返回延迟/错误
 """
 
+import json
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +29,7 @@ from core.config_loader import get_config
 
 router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +490,63 @@ def _mask_presets(presets: dict) -> dict:
     return masked
 
 
+def _active_character_id_for_routing_warning() -> str | None:
+    """Read the selected character without making a failed admin read fatal."""
+    try:
+        from core.sandbox import get_paths
+
+        active_id = json.loads(
+            get_paths().active_prompt_assets().read_text(encoding="utf-8")
+        ).get("active_character")
+        if isinstance(active_id, str) and active_id:
+            return active_id
+    except Exception as exc:
+        logger.debug("[model-routing] unable to read active prompt assets: %s", exc)
+
+    raw = get_config().get("character", {}).get("default")
+    if not isinstance(raw, str) or not raw:
+        return None
+    return Path(raw).stem
+
+
+def _active_character_routing_override() -> dict | None:
+    """Return the active card's valid explicit routing binding for admin display.
+
+    This is deliberately fail-soft: model routing remains readable even while an
+    authored card or active prompt asset file is temporarily unavailable.
+    """
+    char_id = _active_character_id_for_routing_warning()
+    if not char_id:
+        return None
+
+    try:
+        from core.character_loader import load as load_character
+        from core.model_registry import resolve_routing_info
+
+        character = load_character(char_id)
+        routing = resolve_routing_info(char_id)
+    except Exception as exc:
+        logger.debug("[model-routing] unable to resolve active character %r: %s", char_id, exc)
+        return None
+
+    model_routing = routing.get("model_routing")
+    effective_profile = routing.get("effective_profile")
+    if not isinstance(model_routing, str) or not model_routing:
+        return None
+    if model_routing != effective_profile:
+        # A stale card binding already falls back to the global route. Do not
+        # claim that it still overrides the global selection.
+        return None
+
+    return {
+        "char_id": char_id,
+        "label": character.name or char_id,
+        "model_routing": model_routing,
+        "effective_profile": effective_profile,
+        "resolved_chat_preset": routing.get("resolved_chat_preset", ""),
+    }
+
+
 @router.get("/model-presets", summary="获取多模型 preset 配置")
 async def get_model_presets(auth=Depends(require_scopes("admin"))):
     """返回 presets 列表（api_key 打码）、routing_profiles、active_routing。
@@ -500,6 +560,7 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
         "routing_profiles":  mp.get("routing_profiles", {}),
         "defaults":          mp.get("defaults", {}),
         "is_legacy_synth":   "model_presets" not in get_config(),
+        "active_character_routing": _active_character_routing_override(),
     }
 
 

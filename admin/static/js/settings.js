@@ -478,6 +478,30 @@ const MR_CATEGORY_DESC = {
   monologue:      '说话前的内心独白/思考草稿（仅开启思考链功能时用到）',
 };
 
+function _renderActiveCharacterRoutingWarning(override) {
+  const el = document.getElementById('mr-active-character-routing-warning');
+  if (!el) return;
+  if (!override || !override.model_routing) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+
+  const character = String(override.label || override.char_id || '');
+  const profile = String(override.effective_profile || override.model_routing || '');
+  const preset = String(override.resolved_chat_preset || '');
+  el.textContent = t(
+    'dynamic.routing.active_character_override',
+    'Active character {character} is pinned to routing profile {profile} (chat -> {preset}).',
+    { character, profile, preset },
+  );
+  el.style.display = '';
+}
+
+window.addEventListener('admin-language-changed', () => {
+  _renderActiveCharacterRoutingWarning(_mrData.active_character_routing);
+});
+
 async function loadModelRouting() {
   loadVisionParams();
   loadPhoneControlVisionParams();
@@ -493,10 +517,12 @@ async function loadModelRouting() {
       `<option value="${name}" ${name === data.active_routing ? 'selected' : ''}>${name}</option>`
     ).join('');
     document.getElementById('mr-active-routing-current').textContent = `当前: ${data.active_routing}`;
+    _renderActiveCharacterRoutingWarning(data.active_character_routing);
 
     _renderPresetsTable(data.presets || {});
     _renderProfilesTable(data.routing_profiles || {}, data.presets || {});
   } catch (e) {
+    _renderActiveCharacterRoutingWarning(null);
     document.getElementById('mr-presets-body').innerHTML = `<div class="empty">加载失败: ${e.message}</div>`;
     document.getElementById('mr-profiles-body').innerHTML = '';
   }

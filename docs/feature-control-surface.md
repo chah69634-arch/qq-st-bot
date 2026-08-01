@@ -14,8 +14,8 @@
 `/settings/model-routing` 切的是**全局** active_routing；per-角色覆盖是另一条入口：
 `GET/PATCH /character/{char_id}/model-routing`（persona 级，Brief 87）读写角色卡
 `presence_ext.model_routing`，绑定对象是 routing profile 整体（不支持绑定单个 preset），
-`null` 清除声明回落全局。可选 profile 清单走 `GET /model-presets/routing-profiles`
-（persona 级，不含 api_key/base_url）。跨群一致——不做 per-group override。
+`null` 或字段缺失才表示清除声明、回落全局；`"default"` 是一个真实的 profile 名，和其他字符串 profile 一样会固定绑定角色。可选 profile 清单走 `GET /model-presets/routing-profiles`
+（persona 级，不含 api_key/base_url）。管理面 `GET /model-presets` 会附带当前活动角色的有效固定绑定（若有），在切换全局路由时明确提示该角色不受影响。跨群一致——不做 per-group override。
 
 `presence_ext.tool_loop` 是角色卡级 Path C 覆写，不经设置 API：`"on"` 在全局
 `tool_loop.enabled=false` 时仍为该卡开启多步工具循环，`"off"` 强制关闭，缺失或非法值回落全局。
