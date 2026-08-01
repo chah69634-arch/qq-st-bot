@@ -51,7 +51,7 @@ async def generate_summary(
         return
 
     dialogue = _format_dialogue(turns)
-    data = await _llm_strip_scene(dialogue, llm_client)
+    data = await _llm_strip_scene(dialogue, llm_client, char_id=char_id)
 
     # Read frozen_world for depth-defense vocab strip
     try:
@@ -119,7 +119,9 @@ def _format_dialogue(turns: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-async def _llm_strip_scene(dialogue: str, llm_client) -> dict[str, Any]:
+async def _llm_strip_scene(
+    dialogue: str, llm_client, *, char_id: str = DEFAULT_CHAR_ID
+) -> dict[str, Any]:
     """Call LLM to strip scene/action, keep emotional register. Up to 3 attempts."""
     for attempt in range(3):
         try:
@@ -129,6 +131,7 @@ async def _llm_strip_scene(dialogue: str, llm_client) -> dict[str, Any]:
                     {"role": "user", "content": f"梦境对话：\n{dialogue[:2000]}"},
                 ],
                 max_tokens_override=400,
+                char_id=char_id,
             )
             cleaned = re.sub(r"```json|```", "", raw).strip()
             data = json.loads(cleaned)

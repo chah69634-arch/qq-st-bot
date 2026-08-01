@@ -172,6 +172,8 @@ call_category 或 profile 名——每次调用都重新走上面 0~2 步解析 
 调用方传 `char_id` 时只读该角色自己的卡 `presence_ext.model_routing`，不回落到活跃角色的
 override；`char_id=None`（默认）才走活跃角色卡逻辑。`core.model_registry._char_model_routing()`
 是这条路径的实现；`core.stage.views.StageCharacterView` 的所有生成方法都显式传 `char_id`。
+后台记忆固化（profile / episodic / identity）和梦境 summary / impression 同样使用任务入队或
+session 冻结的 `char_id` 直传最终 LLM 调用，不能在执行时重新读取当前活跃角色。
 
 角色卡的 `model_routing` 绑定由 `GET/PATCH /character/{char_id}/model-routing` 管理
 （Brief 87 §1，见下方「Admin 接口」）。只有 `null` 或字段缺失表示跟随全局

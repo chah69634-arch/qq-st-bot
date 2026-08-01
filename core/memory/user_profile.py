@@ -336,7 +336,7 @@ def load(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
     return _load_unlocked(user_id, char_id=char_id)
 
 
-async def _compress_facts(facts: list) -> list:
+async def _compress_facts(facts: list, *, char_id: str = DEFAULT_CHAR_ID) -> list:
     """
     调用 LLM 对 important_facts 列表做合并去重，
     返回不超过 30 条的精简版本。失败时原样返回。
@@ -354,7 +354,11 @@ async def _compress_facts(facts: list) -> list:
             "只输出JSON数组，不要其他内容：\n"
             + _json.dumps([_normalize_fact(f) for f in facts], ensure_ascii=False)
         )
-        raw = await llm_client.chat([{"role": "user", "content": prompt}], max_tokens_override=2000)
+        raw = await llm_client.chat(
+            [{"role": "user", "content": prompt}],
+            max_tokens_override=2000,
+            char_id=char_id,
+        )
         raw = raw.strip()
         # 清理各种markdown代码块格式
         raw = re.sub(r"```json\s*", "", raw)
@@ -428,7 +432,7 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_I
                 logger.info(
                     f"[user_profile] important_facts 已达 {len(existing)} 条，触发 LLM 压缩"
                 )
-                existing = await _compress_facts(existing)
+                existing = await _compress_facts(existing, char_id=char_id)
 
             profile["important_facts"] = existing
         else:
@@ -572,7 +576,7 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
         from core import llm_client
         import json as _json
 
-        raw = await llm_client.chat(prompt_messages)
+        raw = await llm_client.chat(prompt_messages, char_id=char_id)
         # 清理可能的 markdown 代码块
         raw = raw.strip().strip("```json").strip("```").strip()
         raw = (raw

@@ -870,6 +870,7 @@ async def reflect_to_episodic(
                 messages=[{"role": "user", "content": prompt_system + "\n\n" + base_user + suffix}],
                 max_tokens_override=400,
                 call_category="consolidation",
+                char_id=char_id,
             )
             try:
                 cleaned = re.sub(r"```json|```", "", _last_raw or "").strip()
@@ -1133,6 +1134,8 @@ async def _synthesize_identity(
     new_episodes: list[dict],
     user_profile_data: dict,
     llm_client,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
 ) -> tuple[dict, list] | None:
     """
     输入旧 identity + 待固化 episodic 列表，调 LLM 输出新 identity dict。
@@ -1194,6 +1197,7 @@ async def _synthesize_identity(
             ],
             max_tokens_override=2000,
             call_category="consolidation",
+            char_id=char_id,
         )
         _last_raw = (_last_raw or "").strip()
         try:
@@ -1288,7 +1292,12 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
 
     # LLM 合成（锁外）
     _synth = await _synthesize_identity(
-        uid, decayed_identity, new_episodes, user_profile_data, llm_client
+        uid,
+        decayed_identity,
+        new_episodes,
+        user_profile_data,
+        llm_client,
+        char_id=char_id,
     )
 
     if _synth is None:

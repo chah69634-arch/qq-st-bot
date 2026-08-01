@@ -133,7 +133,13 @@ async def _distill(
     except Exception:
         char_name = char_id
     dialogue = _format_dialogue(turns)
-    data = await _llm_distill(dialogue, llm_client, char_name=char_name, mode=mode)
+    data = await _llm_distill(
+        dialogue,
+        llm_client,
+        char_name=char_name,
+        mode=mode,
+        char_id=char_id,
+    )
 
     impression_text = (data.get("impression_text") or "").strip().strip('"')
     if not impression_text:
@@ -221,7 +227,12 @@ def _format_dialogue(turns: list[dict[str, Any]]) -> str:
 
 
 async def _llm_distill(
-    dialogue: str, llm_client, *, char_name: str = "(角色未加载)", mode: str = "sandbox"
+    dialogue: str,
+    llm_client,
+    *,
+    char_name: str = "(角色未加载)",
+    mode: str = "sandbox",
+    char_id: str = DEFAULT_CHAR_ID,
 ) -> dict[str, Any]:
     system = _DISTILL_SYSTEM.replace("叶瑄", char_name)
     if mode == "mirror":
@@ -234,6 +245,7 @@ async def _llm_distill(
                     {"role": "user", "content": f"梦境对话：\n{dialogue[:1500]}"},
                 ],
                 max_tokens_override=500,
+                char_id=char_id,
             )
             cleaned = re.sub(r"```json|```", "", raw).strip()
             data = json.loads(cleaned)
