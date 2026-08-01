@@ -151,6 +151,7 @@ async def run_owner_chat_turn(
         # 保持非流式，确保完整消息语义。
         from channels import desktop_ws as _dws
         from channels import ui_push as _ui_push
+        _tool_status_observer = _dws.push_tool_status if _dws.is_connected() else None
 
         _t_first_delta = None
         _t_stream = None
@@ -182,6 +183,7 @@ async def run_owner_chat_turn(
                 _stream_source = await pipeline.run_agentic_loop(
                     messages, uid=user_id, char_id=_frozen_scope.character_id,
                     session_state=_loop_session_state, is_group=False, stream=True,
+                    tool_event_observer=_tool_status_observer,
                 )
             else:
                 _stream_source = pipeline.run_llm_stream(
@@ -215,6 +217,7 @@ async def run_owner_chat_turn(
                 reply = await pipeline.run_agentic_loop(
                     messages, uid=user_id, char_id=_frozen_scope.character_id,
                     session_state=_loop_session_state, is_group=False,
+                    tool_event_observer=_tool_status_observer,
                 )
             else:
                 reply = await pipeline.run_llm(messages)

@@ -1021,7 +1021,7 @@ class Pipeline:
             waiting_task: asyncio.Task | None = None
             terminal = False
 
-            async def _emit(kind: str, *, attempt: int = 1) -> None:
+            async def _emit(kind: str, *, attempt: int = 1, ui_label: str = "工具") -> None:
                 nonlocal terminal, waiting_task
                 if terminal:
                     return
@@ -1034,6 +1034,7 @@ class Pipeline:
                     status_id=status_id,
                     kind=kind,
                     tool_name=tool_name,
+                    ui_label=ui_label,
                     index=index,
                     total=total,
                     attempt=attempt,
@@ -1049,9 +1050,14 @@ class Pipeline:
                 except asyncio.CancelledError:
                     return
 
-            async def _dispatcher_status(kind: str, *, attempt: int = 1) -> None:
+            async def _dispatcher_status(
+                kind: str,
+                *,
+                attempt: int = 1,
+                ui_label: str = "工具",
+            ) -> None:
                 nonlocal waiting_task
-                await _emit(kind, attempt=attempt)
+                await _emit(kind, attempt=attempt, ui_label=ui_label)
                 if kind == "queued" and waiting_task is None:
                     waiting_task = asyncio.create_task(_delayed_waiting())
                 elif kind == "waiting" and waiting_task is not None:

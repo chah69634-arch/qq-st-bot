@@ -605,9 +605,13 @@ async def handle_message(message: dict):
         # ── 步骤6：调用主 LLM ────────────────────────────────────────────────
         logger.info("[handle_message] 调用主 LLM...")
         if _loop_active:
+            from channels import desktop_ws as _desktop_ws
             raw_reply = await _pipeline.run_agentic_loop(
                 messages, uid=user_id, char_id=_char_id, session_state=state, is_group=is_group,
                 exclude_tools=_fast_path_exclude_tools,
+                tool_event_observer=(
+                    _desktop_ws.push_tool_status if _desktop_ws.is_connected() else None
+                ),
             )
         else:
             raw_reply = await _pipeline.run_llm(messages)

@@ -46,6 +46,7 @@ class McpToolPolicy(BaseModel):
     effect: Literal["read", "write", "actuate", "emergency", "unrestricted"]
     require_confirm: Optional[bool] = None
     idempotent: Optional[bool] = None
+    ui_label: Optional[str] = Field(default=None, min_length=1, max_length=48)
 
 
 class McpServerUpdate(BaseModel):
@@ -242,6 +243,7 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
             "input_schema": registry_info.get("parameters") or {},
             "effect": registry_info.get("effect") or "",
             "require_confirm": bool(registry_info.get("require_confirm", False)),
+            "ui_label": str(registry_info.get("ui_label") or "外部工具"),
         })
     return {
         "name": name,

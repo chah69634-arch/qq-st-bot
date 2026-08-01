@@ -1495,7 +1495,11 @@ async def execute(
         if tool_status_observer is None:
             return
         try:
-            value = tool_status_observer(kind, attempt=attempt)
+            value = tool_status_observer(
+                kind,
+                attempt=attempt,
+                ui_label=str(tool_info.get("ui_label") or "工具"),
+            )
             if inspect.isawaitable(value):
                 await value
         except Exception:

@@ -167,6 +167,16 @@ def validate_local_tool_policy(
             raise ValueError(
                 f"MCP server '{name}' 工具 '{tool_name}' 的 idempotent 必须是 bool"
             )
+        configured_ui_label = entry.get("ui_label", "")
+        if configured_ui_label is not None and not isinstance(configured_ui_label, str):
+            raise ValueError(
+                f"MCP server '{name}' 工具 '{tool_name}' 的 ui_label 必须是字符串"
+            )
+        ui_label = str(configured_ui_label or "").strip()
+        if len(ui_label) > 48:
+            raise ValueError(
+                f"MCP server '{name}' 工具 '{tool_name}' 的 ui_label 最多 48 字符"
+            )
         if effect == "unrestricted" and not configured_idempotent:
             raise ValueError(
                 f"MCP server '{name}' 工具 '{tool_name}' 的 unrestricted 模式必须显式 idempotent: true"
@@ -187,6 +197,7 @@ def validate_local_tool_policy(
             "effect": effect,
             "require_confirm": require_confirm,
             "idempotent": configured_idempotent,
+            "ui_label": ui_label,
         }
 
     extras = sorted(set(raw_policy) - set(allow_tools))
@@ -648,11 +659,13 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
             # inferred from a remote tool name or annotation.
             effect = "write"
             require_confirm = False
+            ui_label = "外部工具"
         else:
             policy = local_policy[tool.name]
             effect = policy["effect"]
             require_confirm = policy["require_confirm"]
             idempotent = policy["idempotent"]
+            ui_label = policy["ui_label"] or "外部工具"
         if local_policy is None:
             idempotent = False
         if claimed_read_only and effect != "read":
@@ -683,6 +696,7 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
             "mcp_policy_legacy": local_policy is None,
             "mcp_idempotent": idempotent,
             "mcp_high_risk": high_risk,
+            "ui_label": ui_label,
             # MCP annotations are optional.  Keep the read-only declaration so
             # the tool-loop can safely point models at server-provided docs /
             # inspection tools without guessing from a tool's name.

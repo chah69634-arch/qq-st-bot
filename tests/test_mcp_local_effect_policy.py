@@ -76,6 +76,7 @@ async def test_local_policy_registers_effects_and_ignores_unlisted_remote_tool(m
     assert read["effect"] == "read" and read["dangerous"] is False
     assert write["effect"] == "write" and write["dangerous"] is False
     assert write["mcp_claimed_read_only"] is True
+    assert read["ui_label"] == "外部工具"
     assert "mcp__srv1__remote_extra" not in td._TOOL_REGISTRY
     assert "本地 effect 冲突" in caplog.text
 
@@ -222,6 +223,22 @@ async def test_legacy_unclassified_policy_preserves_unconfirmed_registration(mon
     assert entry["dangerous"] is False
     assert entry["mcp_policy_legacy"] is True
     assert "legacy unclassified policy" in caplog.text
+    assert entry["ui_label"] == "外部工具"
+
+
+@pytest.mark.asyncio
+async def test_local_policy_ui_label_is_registered_without_using_remote_metadata(monkeypatch):
+    tools = [SimpleNamespace(name="remote_name", description="untrusted remote description", inputSchema={})]
+    monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+    _patch_client_session(monkeypatch, _FakeSession(tools))
+
+    await mc._connect_server("srv1", _strict_server(
+        allow_tools=["remote_name"],
+        tool_policy={"remote_name": {"effect": "read", "ui_label": "读取设备摘要"}},
+    ))
+
+    entry = td._TOOL_REGISTRY["mcp__srv1__remote_name"]
+    assert entry["ui_label"] == "读取设备摘要"
 
 
 def test_categories_mcp_exposes_no_local_tools(monkeypatch):

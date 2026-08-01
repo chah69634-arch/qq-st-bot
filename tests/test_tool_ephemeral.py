@@ -98,7 +98,7 @@ async def test_waiting_is_emitted_once_after_threshold(monkeypatch):
 
     assert result == "自然收尾"
     assert [event.kind for event in observed] == ["queued", "waiting", "finished"]
-    assert observed[0].display_text == "我先处理一下。"
+    assert observed[0].display_text == ""
     assert observed[0].tts_allowed is False
 
 
@@ -191,7 +191,8 @@ def test_expired_status_is_not_deliverable():
     from core.tool_ephemeral import ToolEphemeralEvent
 
     event = ToolEphemeralEvent(
-        status_id="status", kind="waiting", tool_name="mcp__demo__call", index=1, total=1,
+        status_id="status", kind="waiting", tool_name="mcp__demo__call", ui_label="外部工具",
+        index=1, total=1,
         emitted_at=100.0, ttl_s=2.0,
     )
 
@@ -236,3 +237,28 @@ async def test_dispatcher_confirmation_and_invalid_args_do_not_queue(monkeypatch
     assert result is None
     assert ask
     assert statuses == ["pending_confirmation"]
+
+
+@pytest.mark.asyncio
+async def test_desktop_tool_status_uses_only_ephemeral_contract_fields(monkeypatch):
+    from channels import desktop_ws
+    from core.tool_ephemeral import ToolEphemeralEvent
+
+    sent = []
+
+    async def _send(payload):
+        sent.append(payload)
+        return True
+
+    monkeypatch.setattr(desktop_ws, "_send_json", _send)
+    event = ToolEphemeralEvent(
+        status_id="status-1", kind="queued", tool_name="mcp__server__secret_remote_name",
+        ui_label="查询设备状态", index=1, total=2, attempt=1, ttl_s=20,
+    )
+
+    assert await desktop_ws.push_tool_status(event) is True
+    assert sent == [{
+        "type": "tool_status", "status_id": "status-1", "kind": "queued",
+        "label": "查询设备状态", "index": 1, "total": 2, "attempt": 1,
+        "ttl_ms": 20_000,
+    }]

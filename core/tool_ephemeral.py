@@ -35,7 +35,7 @@ TOOL_EPHEMERAL_KINDS = frozenset({
 DEFAULT_TTL_S = 20.0
 _DISPLAY_TEXT = {
     "pending_confirmation": "",
-    "queued": "我先处理一下。",
+    "queued": "",
     "waiting": "还在等回应，稍等我一下。",
     "finished": "",
     "failed": "",
@@ -51,6 +51,7 @@ class ToolEphemeralEvent:
     status_id: str
     kind: ToolEphemeralKind
     tool_name: str
+    ui_label: str
     index: int
     total: int
     attempt: int = 1
@@ -63,6 +64,8 @@ class ToolEphemeralEvent:
             raise ValueError(f"unsupported tool ephemeral kind: {self.kind}")
         if self.index < 1 or self.total < self.index:
             raise ValueError("tool ephemeral index/total must describe a serial batch")
+        if not self.ui_label or len(self.ui_label) > 48:
+            raise ValueError("tool ephemeral ui label must contain 1-48 characters")
         if self.attempt < 1:
             raise ValueError("tool ephemeral attempt must be positive")
         if self.ttl_s <= 0:

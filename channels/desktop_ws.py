@@ -112,6 +112,27 @@ async def push_segments(
     return await _send_json(payload)
 
 
+async def push_tool_status(event) -> bool:
+    """Push an in-memory tool status for the desktop NOW panel.
+
+    This is deliberately not a channel_message: it has no chat correlation,
+    no acknowledgement, and no durable fallback. The client must discard it at
+    its TTL instead of replaying a stale "working" state after reconnect.
+    """
+    if not event.should_deliver():
+        return False
+    return await _send_json({
+        "type": "tool_status",
+        "status_id": event.status_id,
+        "kind": event.kind,
+        "label": event.ui_label,
+        "index": event.index,
+        "total": event.total,
+        "attempt": event.attempt,
+        "ttl_ms": int(event.ttl_s * 1000),
+    })
+
+
 async def push_stream_start(
     msg_id: str,
     *,

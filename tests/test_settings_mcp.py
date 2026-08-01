@@ -336,6 +336,39 @@ def test_strict_policy_accepts_complete_whitelist_and_policy(tmp_path, monkeypat
     assert calls == ["cedar_toy"]
 
 
+def test_tool_policy_ui_label_is_persisted_and_returned(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n"
+        "      allow_tools: [toy_status]\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    async def reload(_name):
+        return True
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": True,
+        "tools": [{"name": "toy_status", "description": "remote status"}],
+    })
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy",
+        mod.McpServerUpdate(tool_policy={
+            "toy_status": mod.McpToolPolicy(effect="read", ui_label="查看设备状态"),
+        }),
+        _auth=None,
+    ))
+
+    assert result["server"]["tool_policy"]["toy_status"] == {
+        "effect": "read", "ui_label": "查看设备状态",
+    }
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert stored["mcp_servers"]["servers"][0]["tool_policy"]["toy_status"]["ui_label"] == "查看设备状态"
+
+
 def test_selecting_named_tool_preset_updates_runtime_allowlist(tmp_path, monkeypatch):
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: [toy_status]\n      tool_presets:\n        - name: 只读\n          tools: [toy_status]\n        - name: 对局\n          tools: [toy_status, play]\n")
     _patch_config(monkeypatch, path)
