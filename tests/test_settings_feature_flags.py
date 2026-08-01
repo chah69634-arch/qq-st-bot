@@ -40,6 +40,10 @@ def test_qq_and_mail_channel_toggles_are_allowlisted(tmp_path, monkeypatch):
     )
     assert result["flags"]["qq"]["enabled"] is True
     assert result["flags"]["mail"]["enabled"] is True
+    assert result["flags"]["qq"]["apply_mode"] == "restart_required"
+    assert result["flags"]["mail"]["apply_mode"] == "hot_reload"
+    assert result["reload_status"] == "restart_required"
+    assert result["restart_required"] == ["qq"]
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert cfg["qq"]["enabled"] is True
     assert cfg["mail"]["enabled"] is True
@@ -65,8 +69,34 @@ def test_private_exchange_toggle_is_exposed_and_consumed(tmp_path, monkeypatch):
         )
     )
 
-    assert result["flags"]["private_exchange"] == {
-        "enabled": False,
-        "label": "角色私下往来",
-    }
+    assert result["flags"]["private_exchange"]["enabled"] is False
+    assert result["flags"]["private_exchange"]["label"] == "角色私下往来"
+    assert result["flags"]["private_exchange"]["apply_mode"] == "hot_reload"
+    assert result["reload_status"] == "reloaded"
     assert private_exchange._cfg()["enabled"] is False
+
+
+def test_unchanged_qq_flag_does_not_claim_restart_is_needed(tmp_path, monkeypatch):
+    path = tmp_path / "config.yaml"
+    path.write_text("qq:\n  enabled: true\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "CONFIG_FILE", path)
+    monkeypatch.setattr(mod, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
+    from core import config_loader
+    monkeypatch.setattr(config_loader, "reload_config", lambda: None)
+
+    result = asyncio.run(
+        mod.update_feature_flags(mod.FeatureFlagsUpdate(flags={"qq": True}), auth=None)
+    )
+
+    assert result["reload_status"] == "reloaded"
+    assert result["restart_required"] == []
+
+
+def test_admin_ui_consumes_feature_flag_restart_contract():
+    from pathlib import Path
+
+    source = (Path(__file__).parent.parent / "admin" / "static" / "js" / "settings.js").read_text(
+        encoding="utf-8"
+    )
+    assert "item.restart_required" in source
+    assert "result.reload_status === 'restart_required'" in source

@@ -246,8 +246,8 @@ function _atErrMsg(e) {
 
 // ── 通道开关（Brief 93 §4；复用 /settings/feature-flags，读写 qq.enabled / mail.enabled）──
 const CHANNEL_TOGGLES = {
-  qq:   { label: 'QQ 通道',  restart: true  },
-  mail: { label: '邮件通道', restart: false },
+  qq:   { label: 'QQ 通道' },
+  mail: { label: '邮件通道' },
 };
 
 async function loadChannelToggles() {
@@ -260,7 +260,7 @@ async function loadChannelToggles() {
       const item = flags[name] || { enabled: false };
       return `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px;display:inline-flex;margin-right:10px">
         <input type="checkbox" data-channel-toggle="${name}" ${item.enabled ? 'checked' : ''} onchange="saveChannelToggle('${name}', this.checked)">
-        <span>${meta.label}${meta.restart ? ' <small style="color:var(--muted)">（重启后生效）</small>' : ''}</span>
+        <span>${meta.label}${item.restart_required ? ' <small style="color:var(--muted)">（重启后生效）</small>' : ''}</span>
       </label>`;
     }).join('');
   } catch (e) { el.innerHTML = `<div class="empty">加载失败: ${e.message}</div>`; }
@@ -269,11 +269,12 @@ async function loadChannelToggles() {
 async function saveChannelToggle(name, enabled) {
   const meta = CHANNEL_TOGGLES[name];
   try {
-    await api('PUT', '/settings/feature-flags', { flags: { [name]: enabled } });
+    const result = await api('PUT', '/settings/feature-flags', { flags: { [name]: enabled } });
+    const restartRequired = (result.restart_required || []).includes(name);
     toast(t('dynamic.channel.saved', '{label}已{state}{restart}', {
       label: t('flag.' + name, meta.label),
       state: t(enabled ? 'dynamic.channel.on' : 'dynamic.channel.off', enabled ? '开启' : '关闭'),
-      restart: meta.restart ? t('dynamic.channel.restart_suffix', '，重启后生效') : '',
+      restart: restartRequired ? t('dynamic.channel.restart_suffix', '，重启后生效') : '',
     }), 'ok');
   } catch (e) {
     toast(e.message, 'err');
@@ -461,10 +462,10 @@ let _featureFlags = {};
 async function loadFeatureFlags() {
   const el = document.getElementById('feature-flags-grid'); if (!el) return;
   try { const d = await api('GET', '/settings/feature-flags'); _featureFlags = d.flags || {};
-    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}</small>${name === 'visual_perception' ? `<small style="display:block;color:var(--warning,#c77)">${escapeHtml(t('flag.visual_perception_hint', '此闸打开后，还需在桌宠客户端「设置→视觉观察」里单独打开本地开关，两处都开才会真正截图'))}</small>` : ''}</span></label>`).join('');
+    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}${item.restart_required ? ` ${escapeHtml(t('dynamic.tokens.restart_effect', '（重启后生效）'))}` : ''}</small>${name === 'visual_perception' ? `<small style="display:block;color:var(--warning,#c77)">${escapeHtml(t('flag.visual_perception_hint', '此闸打开后，还需在桌宠客户端「设置→视觉观察」里单独打开本地开关，两处都开才会真正截图'))}</small>` : ''}</span></label>`).join('');
   } catch (e) { el.innerHTML = `<div class="empty">${e.message}</div>`; }
 }
-async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { await api('PUT', '/settings/feature-flags', { flags }); toast(t('common.saved', '已保存'), 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
+async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { const result = await api('PUT', '/settings/feature-flags', { flags }); toast(result.message || t('common.saved', '已保存'), result.reload_status === 'restart_required' ? 'err' : 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
 const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue'];
 const MR_CATEGORY_DESC = {

@@ -31,6 +31,7 @@ FLAGS = {
     "performance_mapping": ("performance_mapping", "enabled", "表演标注映射"),
     "private_exchange": ("private_exchange", "enabled", "角色私下往来"),
 }
+RESTART_REQUIRED_FLAGS = frozenset({"qq"})
 
 
 class FeatureFlagsUpdate(BaseModel):
@@ -40,18 +41,28 @@ class FeatureFlagsUpdate(BaseModel):
 @router.get("/settings/feature-flags", summary="读取功能开关白名单")
 async def get_feature_flags(auth=Depends(require_scopes("admin"))):
     cfg = get_config()
-    return {"flags": {name: {"enabled": bool(cfg.get(section, {}).get(key, False)), "label": label}
-                      for name, (section, key, label) in FLAGS.items()}}
+    return {"flags": {
+        name: {
+            "enabled": bool(cfg.get(section, {}).get(key, False)),
+            "label": label,
+            "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
+            "restart_required": name in RESTART_REQUIRED_FLAGS,
+        }
+        for name, (section, key, label) in FLAGS.items()
+    }}
 
 
-@router.put("/settings/feature-flags", summary="批量更新功能开关并热重载")
+@router.put("/settings/feature-flags", summary="批量更新功能开关并返回实际生效方式")
 async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_scopes("admin"))):
     unknown = sorted(set(body.flags) - set(FLAGS))
     if unknown:
         raise HTTPException(status_code=422, detail=f"未知功能开关: {unknown}")
     full_cfg = read_config_file(CONFIG_FILE)
+    changed = set()
     for name, enabled in body.flags.items():
         section, key, _ = FLAGS[name]
+        if bool(full_cfg.get(section, {}).get(key, False)) != enabled:
+            changed.add(name)
         full_cfg.setdefault(section, {})[key] = enabled
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader
@@ -59,4 +70,15 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
     if "mcp_servers" in body.flags:
         from core import mcp_client
         await mcp_client.sync_mcp_servers()
-    return await get_feature_flags(auth)
+    result = await get_feature_flags(auth)
+    restart_required = sorted(changed & RESTART_REQUIRED_FLAGS)
+    result.update({
+        "reload_status": "restart_required" if restart_required else "reloaded",
+        "restart_required": restart_required,
+        "message": (
+            "设置已保存；QQ 通道需要重启后端后生效"
+            if restart_required
+            else "设置已保存并热生效"
+        ),
+    })
+    return result
