@@ -55,7 +55,10 @@ def test_close_distills_seed_and_closes_session(sandbox, monkeypatch):
     dream_seed.append_turn(UID, session.session_id, "user", "去海边", char_id=CHAR)
     dream_seed.append_turn(UID, session.session_id, "assistant", "我们等日出。", char_id=CHAR)
 
+    captured = {}
+
     async def fake_chat(*args, **kwargs):
+        captured.update(kwargs)
         return "清晨的海边，我们并肩等第一束日光。"
 
     from core import llm_client
@@ -68,6 +71,28 @@ def test_close_distills_seed_and_closes_session(sandbox, monkeypatch):
     assert closed is not None and closed.status == "closed"
     assert closed.state["seed_text"] == seed
     assert dream_seed.load_seed(UID, char_id=CHAR) == seed
+    assert captured["call_category"] == "dream_seed_distill"
+    assert captured["char_id"] == CHAR
+
+
+def test_generate_reply_uses_character_model_routing(sandbox, monkeypatch):
+    session = dream_seed.start_session(UID, char_id=CHAR)
+    captured = {}
+
+    async def fake_chat(*args, **kwargs):
+        captured.update(kwargs)
+        return "清晨去海边怎么样？"
+
+    from core import llm_client
+    monkeypatch.setattr(llm_client, "chat", fake_chat)
+
+    reply = asyncio.run(dream_seed.generate_reply(
+        UID, session.session_id, "想去海边", char_id=CHAR,
+    ))
+
+    assert reply == "清晨去海边怎么样？"
+    assert captured["call_category"] == "activity_dream_seed"
+    assert captured["char_id"] == CHAR
 
 
 def test_close_requires_at_least_two_transcript_entries(sandbox):

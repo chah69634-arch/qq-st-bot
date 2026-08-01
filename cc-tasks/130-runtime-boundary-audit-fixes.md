@@ -10,7 +10,7 @@
 - [x] 130-B：统一管理面配置写入边界；提供进程内串行、原子写入，并防止 `config.local.yaml` 覆盖导致接口假成功。
 - [x] 130-C：补齐后台记忆、画像和梦境 LLM 调用的显式 `char_id`，保证 per-character model routing 对所有 category 生效。
 - [x] 130-D：修正 QQ feature flag 的控制面契约；不能热启停的开关不得宣称或伪装为热生效。
-- [ ] 130-E：补齐 Dream Seed 桌面 TypeScript API 和测试，使已注册的 Tauri 命令真实可达。
+- [x] 130-E：补齐 Dream Seed 桌面 TypeScript API、可用界面和测试，使已注册的 Tauri 命令真实可达；Desktop commit `283dd76`。
 - [ ] 130-F：修正 `practice.reviewer_preset` 语义，使配置直接选择 preset，或改成真实的 routing category 契约；不得静默回退 chat。
 - [ ] 130-G：修复用户画像 pending override 候选切换时的嵌套 mutation 丢失。
 - [ ] 130-H：替换 desktop/device WebSocket 毫秒时间戳 ID，保证并发 action ACK 不碰撞。

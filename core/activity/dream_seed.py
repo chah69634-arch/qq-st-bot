@@ -114,6 +114,7 @@ async def generate_reply(uid: str, session_id: str, user_msg: str, *, char_id: s
     return (await llm_client.chat(
         messages,
         call_category="activity_dream_seed",
+        char_id=char_id,
         max_tokens_override=120,
     ) or "").strip()
 
@@ -151,6 +152,7 @@ async def close_session(uid: str, session_id: str, *, char_id: str) -> Optional[
     seed_text = (await llm_client.chat(
         [{"role": "user", "content": prompt}],
         call_category="dream_seed_distill",
+        char_id=char_id,
         max_tokens_override=120,
     ) or "").strip()
     if not seed_text:
