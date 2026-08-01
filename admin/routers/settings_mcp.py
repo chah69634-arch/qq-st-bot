@@ -117,7 +117,7 @@ def _validate_draft(draft: McpServerDraft) -> dict:
             if draft.tool_policy is not None else {}
         ),
         "enabled": bool(draft.enabled),
-        "tool_timeout_s": max(1, min(300, float(draft.tool_timeout_s))),
+        "tool_timeout_s": max(1, min(660, float(draft.tool_timeout_s))),
         "tool_timeouts_s": _normalize_tool_timeouts(draft.tool_timeouts_s),
     }
 
@@ -133,8 +133,8 @@ def _normalize_tool_timeouts(raw: object) -> dict[str, float]:
             value = float(timeout_s)
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=422, detail="tool_timeouts_s 的值必须是秒数") from exc
-        if not 1 <= value <= 300:
-            raise HTTPException(status_code=422, detail="tool_timeouts_s 的值必须在 1-300 秒")
+        if not 1 <= value <= 660:
+            raise HTTPException(status_code=422, detail="tool_timeouts_s 的值必须在 1-660 秒")
         normalized[tool_name] = value
     return normalized
 
@@ -563,7 +563,7 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
             raise HTTPException(status_code=422, detail="headers 的键和值都必须是非空字符串")
         server["headers"] = dict(body.headers)
     if body.tool_timeout_s is not None:
-        server["tool_timeout_s"] = max(1, min(300, float(body.tool_timeout_s)))
+        server["tool_timeout_s"] = max(1, min(660, float(body.tool_timeout_s)))
     if body.use_proxy is not None:
         server["use_proxy"] = bool(body.use_proxy)
     _prune_tool_policy(server)

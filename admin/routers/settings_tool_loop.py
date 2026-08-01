@@ -84,7 +84,7 @@ async def update_tool_loop(body: ToolLoopUpdate, auth=Depends(require_scopes("pe
     if body.exclude_tools is not None:
         tl["exclude_tools"] = body.exclude_tools
     if body.total_timeout_s is not None:
-        tl["total_timeout_s"] = max(5, min(600, body.total_timeout_s))
+        tl["total_timeout_s"] = max(5, min(720, body.total_timeout_s))
     if body.nudge_hint is not None:
         tl["nudge_hint"] = body.nudge_hint[:1000]
 

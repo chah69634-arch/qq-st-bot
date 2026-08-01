@@ -715,8 +715,8 @@ def _tool_timeout_s(configured_timeouts: dict, tool_name: str, default_timeout_s
     except (TypeError, ValueError):
         logger.warning("[mcp_client] 工具超时无效，回退 server 默认值: tool=%s", tool_name)
         return default_timeout_s
-    if not 1 <= timeout_s <= 300:
-        logger.warning("[mcp_client] 工具超时超出 1-300 秒，回退 server 默认值: tool=%s", tool_name)
+    if not 1 <= timeout_s <= 660:
+        logger.warning("[mcp_client] 工具超时超出 1-660 秒，回退 server 默认值: tool=%s", tool_name)
         return default_timeout_s
     return timeout_s
 

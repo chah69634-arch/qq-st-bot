@@ -661,6 +661,10 @@ class TestCallTool:
         assert await td._TOOL_REGISTRY["mcp__srv1__hardware_sequence"]["func"]() == "ok"
         assert calls[0][0][3] == 60
 
+    def test_per_tool_timeout_allows_660_seconds_and_rejects_larger_values(self):
+        assert mc._tool_timeout_s({"hardware_sequence": 660}, "hardware_sequence", 30) == 660
+        assert mc._tool_timeout_s({"hardware_sequence": 661}, "hardware_sequence", 30) == 30
+
     async def test_dispatcher_returns_structured_outcome_unknown(self, monkeypatch, sandbox):
         async def _unknown(**_kwargs):
             raise mc.McpOutcomeUnknown(tool_name="hardware_sequence", request_id="request-123")

@@ -222,7 +222,7 @@ mcp_servers:
   排除的工具必须显式列入 `exclude_tools` 或 `allow_tools` 白名单。外部 server 不能通过工具
   描述改变这些系统权限。
 - **执行适配**：`execute()` 走既有的通用分发分支（`func(**tool_args)`），内部转发到
-  `session.call_tool()`，默认超时 `tool_timeout_s`（管理面限制为 1–300 秒），可由
+  `session.call_tool()`，默认超时 `tool_timeout_s`（管理面限制为 1–660 秒），可由
   `tool_timeouts_s.<tool_name>` 仅覆盖一项。重试按本地 effect/idempotency 策略执行：`read`
   可重连重试一次，`write` 必须显式 `idempotent: true`，`actuate` 不重试；`emergency` 仅
   显式幂等的 `hardware_stop` 可带同一 request_id 受控重试；`unrestricted` 仅显式幂等且管理员

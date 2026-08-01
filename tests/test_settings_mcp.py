@@ -238,12 +238,18 @@ def test_update_server_persists_per_tool_timeout_and_returns_it(tmp_path, monkey
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
     monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
     result = asyncio.run(mod.update_mcp_server(
-        "cedar_toy", mod.McpServerUpdate(tool_timeouts_s={"hardware_sequence": 60}), _auth=None,
+        "cedar_toy", mod.McpServerUpdate(tool_timeouts_s={"hardware_sequence": 660}), _auth=None,
     ))
 
-    assert result["server"]["tool_timeouts_s"] == {"hardware_sequence": 60.0}
+    assert result["server"]["tool_timeouts_s"] == {"hardware_sequence": 660.0}
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert stored["mcp_servers"]["servers"][0]["tool_timeouts_s"] == {"hardware_sequence": 60.0}
+    assert stored["mcp_servers"]["servers"][0]["tool_timeouts_s"] == {"hardware_sequence": 660.0}
+
+
+def test_per_tool_timeout_rejects_values_above_660_seconds():
+    assert mod._normalize_tool_timeouts({"hardware_sequence": 660}) == {"hardware_sequence": 660.0}
+    with pytest.raises(HTTPException, match="1-660 秒"):
+        mod._normalize_tool_timeouts({"hardware_sequence": 661})
 
 
 def test_update_server_reports_restart_when_owner_reload_fails(tmp_path, monkeypatch):

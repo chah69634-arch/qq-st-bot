@@ -373,7 +373,7 @@ action_trace:
 tool_loop:
   enabled: false
   max_steps: 5               # 单轮最多调用工具的步数，前端可调 1-8
-  total_timeout_s: 300       # 整个 loop 墙钟超时，超时按步数耗尽处理
+  total_timeout_s: 720       # 整个 loop 墙钟超时，超时按步数耗尽处理
   categories: ["info", "desktop", "memory"]
   exclude_tools: ["toy_vibrate", "toy_stop", "toy_pattern", "write_toy_file"]  # 硬件写类默认排除
   nudge_hint: true           # 首步注入"别凭记忆编造，需要就调工具"的软提示（Brief 29 · 5）
@@ -431,6 +431,7 @@ mcp_servers:
         - hardware_status
         - hardware_pulse
         - hardware_stop
+        - hardware_sequence
       tool_policy:
         hardware_status:
           effect: read
@@ -439,6 +440,8 @@ mcp_servers:
           require_confirm: true
         hardware_stop:
           effect: emergency
+      tool_timeouts_s:
+        hardware_sequence: 660  # 600s 最长序列 + 连接/收尾余量
 
   # 兼容模式：删除/设为 false 后保留旧 MCP 注册行为，但会记录 legacy unclassified policy 警告。
 
