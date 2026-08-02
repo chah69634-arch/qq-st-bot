@@ -226,6 +226,29 @@ textarea { resize: vertical; min-height: 72px; }
 .runtime-signal-context { color: var(--muted); font-family: var(--mono); font-size: 11px; max-width: 280px; overflow-wrap: anywhere; }
 .runtime-signal-error { color: var(--danger); }
 
+/* ── Autonomy observability ── */
+.autonomy-page .observe-toolbar { align-items: end; gap: 8px; }
+.autonomy-test-source { width: 130px; }
+.autonomy-test-source span { font-size: 11px; color: var(--muted); }
+.autonomy-trigger-note { color: var(--muted); font-size: 12px; line-height: 1.55; margin: -4px 0 16px; }
+.autonomy-trigger-note strong { color: var(--text); }
+.autonomy-overview { min-height: 88px; margin-bottom: 16px; }
+.autonomy-overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
+.autonomy-overview .stat { margin: 0; min-height: 96px; }
+.autonomy-overview .stat .val { font-size: 20px; overflow-wrap: anywhere; }
+.autonomy-overview .stat .detail { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: 5px; }
+.autonomy-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.autonomy-source-grid .card { margin-bottom: 0; }
+.autonomy-hint { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: -10px; margin-bottom: 14px; }
+.autonomy-controls { align-items: end; }
+.autonomy-controls .checkbox-row { padding: 9px 0; }
+.autonomy-page em { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border: 1px solid var(--muted); border-radius: 50%; color: var(--muted); cursor: help; font-size: 10px; font-style: normal; }
+.autonomy-state-running { color: var(--accent); }
+.autonomy-state-attention { color: var(--warn); }
+.autonomy-state-off { color: var(--muted); }
+.autonomy-run-tools { color: var(--muted); font-size: 12px; max-width: 220px; overflow-wrap: anywhere; }
+@media (max-width: 767px) { .autonomy-page .observe-toolbar { align-items: stretch; flex-wrap: wrap; justify-content: flex-start; } .autonomy-test-source { width: 100%; } .autonomy-source-grid { grid-template-columns: 1fr; } }
+
 /* ── Toast ── */
 #toast {
   position: fixed; bottom: 28px; right: 28px;

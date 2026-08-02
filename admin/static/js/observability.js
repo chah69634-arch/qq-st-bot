@@ -166,16 +166,16 @@ async function loadObserveRuntime() {
 //  内置唤醒状态（独立 autonomy job/run store，不是 scheduler proposal）
 // ══════════════════════════════════════════════════════════
 async function loadObserveAutonomy() {
-  const statusEl = document.getElementById('autonomy-status');
+  const overviewEl = document.getElementById('autonomy-overview');
   const runsEl = document.getElementById('autonomy-runs');
-  if (!statusEl) return;
+  if (!overviewEl) return;
   try {
     const [status, config, runs, tools] = await Promise.all([
       api('GET', '/admin/autonomy/status'), api('GET', '/admin/autonomy/config'),
       api('GET', '/admin/autonomy/runs'), api('GET', '/admin/autonomy/tools'),
     ]);
-    statusEl.textContent = JSON.stringify(status, null, 2);
-    runsEl.textContent = JSON.stringify(runs.runs || [], null, 2);
+    _renderAutonomyOverview(overviewEl, status, config);
+    _renderAutonomyRuns(runsEl, runs.runs || []);
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
     document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
@@ -193,12 +193,82 @@ async function loadObserveAutonomy() {
     document.getElementById('autonomy-window-end').value = (schedule.window || [])[1] || '';
     document.getElementById('autonomy-miss-policy').value = schedule.restart_miss_policy || 'skip';
     const host = document.getElementById('autonomy-tools');
-    host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>effect</th><th>风险</th><th>允许</th></tr></thead><tbody>${(tools.tools || []).map(item => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.effect)}</td><td>${escapeHtml(item.risk)}</td><td><input type="checkbox" data-autonomy-tool="${escapeHtml(item.name)}" ${item.enabled ? 'checked' : ''}></td></tr>`).join('')}</tbody></table>`;
-    host.querySelectorAll('[data-autonomy-tool]').forEach(el => el.addEventListener('change', async () => {
-      try { await api('PATCH', '/admin/autonomy/tools', {name: el.dataset.autonomyTool, enabled: el.checked, mcp_explicit: el.checked}); }
-      catch (e) { alert('保存失败：' + e.message); el.checked = !el.checked; }
-    }));
-  } catch (e) { statusEl.textContent = '加载失败：' + e.message; }
+    _renderAutonomyTools(host, tools.tools || []);
+  } catch (e) { overviewEl.innerHTML = `<div class="empty">读取唤醒状态失败：${escapeHtml(e.message)}</div>`; }
+}
+
+function _autonomyTime(value) {
+  if (!value) return '—';
+  const date = new Date(Number(value) * 1000);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+}
+
+function _autonomyStateLabel(status) {
+  return { '空闲': '空闲', '排队': '已有活动等待处理', '运行': '正在进行自主活动', '冷却': '等待下一次可评估时间', '熔断': '连续失败后暂时暂停' }[status] || status || '未知';
+}
+
+function _autonomyTalkLabel(talk) {
+  const reasons = {
+    suppressed_unanswered_cap: '等待用户回复后再试', suppressed_dnd: '勿扰时段',
+    suppressed_proactive_off: '主动发言已关闭', suppressed_daily_budget: '今日主动发言预算已用完',
+    blocked_dream: '梦境中', blocked_dream_uncertain: '梦境状态未确认',
+    gap_not_elapsed: '距离上次主动消息太近', daily_budget_exceeded: '今日主动发言预算已用完',
+  };
+  if (!talk?.available) return `暂不可用${talk?.reason ? `：${reasons[talk.reason] || '当前条件不允许'}` : ''}`;
+  return '可主动发言';
+}
+
+function _renderAutonomyOverview(host, status, config) {
+  const daily = status.daily || {};
+  const talk = status.talk || {};
+  const last = status.last_run || {};
+  const state = _autonomyStateLabel(status.runtime_state);
+  const stateClass = !config.enabled ? 'autonomy-state-off' : ['熔断', '冷却'].includes(status.runtime_state) ? 'autonomy-state-attention' : 'autonomy-state-running';
+  const cards = [
+    ['内置唤醒', config.enabled ? '已启用' : '已关闭', config.enabled ? '满足条件时才创建自主活动机会' : '不会创建新的自主活动机会'],
+    ['当前状态', state, status.current_run_id ? `当前运行：${String(status.current_run_id).slice(0, 8)}` : '没有正在进行的活动'],
+    ['下一次间隔检查', _autonomyTime(status.next_due_at), config.interval?.enabled ? '按上一次完成评估计算' : '间隔唤醒未启用'],
+    ['今日评估', `${Number(daily.evaluations || 0)} / ${Number(config.daily_evaluation_budget || 0)}`, `工具 ${Number(daily.tools || 0)} 次；Talk ${Number(daily.talks || 0)} 次`],
+    ['Talk 状态', _autonomyTalkLabel(talk), `连续未回复主动发言：${Number(talk.consecutive_unanswered_talks || 0)} / 2`],
+    ['最近一次运行', _autonomyRunLabel(last), last.finished_at ? _autonomyTime(last.finished_at) : '尚无记录'],
+  ];
+  host.innerHTML = `<div class="autonomy-overview-grid">${cards.map(([label, value, detail], index) => `<div class="stat"><div class="val ${index === 1 ? stateClass : ''}">${escapeHtml(value)}</div><div class="lbl">${escapeHtml(label)}</div><div class="detail">${escapeHtml(detail)}</div></div>`).join('')}</div>`;
+}
+
+function _autonomyRunLabel(run) {
+  const disposition = String(run?.disposition || '');
+  const labels = {
+    completed_no_op: '安静结束', completed_tools_only: '完成工具活动', completed_talk_sent: '已主动发言', completed_tools_and_talk_sent: '活动后已发言',
+    talk_canceled: '取消发言', talk_soft_blocked_then_canceled: '因时机不佳取消发言', talk_soft_blocked_then_sent: '确认后已发言',
+    blocked_dream: '梦境中，未运行', blocked_dream_uncertain: '梦境状态不确定，未运行', blocked_user_active: '用户正在互动，未运行',
+    suppressed_unanswered_cap: '等待用户回复', suppressed_dnd: '勿扰时段，未发言', suppressed_proactive_off: '主动功能已关闭', suppressed_daily_budget: '今日预算用完',
+    canceled_by_user_activity: '用户开始互动，已停止', timeout: '运行超时', tool_failed: '工具未完成', tool_outcome_unknown: '工具结果不明确', llm_failed: '判断服务失败', circuit_open: '熔断保护中', expired: '已过期', duplicate: '重复机会已合并', lease_lost: '运行租约已失效',
+  };
+  return labels[disposition] || (disposition ? disposition.replaceAll('_', ' ') : '尚无记录');
+}
+
+function _renderAutonomyTools(host, tools) {
+  // This is intentionally driven by the effective autonomy allowlist. It does
+  // not name or hide MCP tools by hand: inactive/unavailable entries simply
+  // are not part of the current autonomy surface.
+  const active = tools.filter(item => item.enabled);
+  if (!active.length) {
+    host.innerHTML = '<div class="empty">当前没有已启用的自主工具。角色仍可安静结束或在允许时主动 Talk。</div>';
+    return;
+  }
+  host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>动作类型</th><th>风险</th><th>可重试</th></tr></thead><tbody>${active.map(item => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.effect === 'read' ? '读取' : '受限写入')}</td><td>${escapeHtml(item.risk === 'high' ? '高（当前不会自动执行）' : '低')}</td><td>${item.idempotent ? '可安全重试' : '失败后停止并记录'}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function _renderAutonomyRuns(host, runs) {
+  if (!runs.length) {
+    host.innerHTML = '<div class="empty">还没有运行记录。可以用上方“排队一次测试”验证流程。</div>';
+    return;
+  }
+  host.innerHTML = `<table><thead><tr><th>完成时间</th><th>触发方式</th><th>结果</th><th>执行过的工具</th><th>Talk</th><th>耗时</th></tr></thead><tbody>${runs.map(run => {
+    const duration = run.finished_at && run.started_at ? `${Math.max(0, Number(run.finished_at) - Number(run.started_at)).toFixed(1)} 秒` : '—';
+    const talk = run.talk_sent ? '已发送' : run.talk_soft_blocked ? '时机不佳，未发送' : '未尝试';
+    return `<tr><td>${escapeHtml(_autonomyTime(run.finished_at || run.started_at))}</td><td>${escapeHtml({manual:'手动测试', overflow:'Overflow', schedule:'定时', interval:'间隔'}[run.source] || run.source || '—')}</td><td><span class="badge ${String(run.disposition || '').includes('completed') || run.talk_sent ? 'badge-success' : 'badge-warn'}">${escapeHtml(_autonomyRunLabel(run))}</span></td><td class="autonomy-run-tools">${escapeHtml((run.tool_names || []).join('、') || '无')}</td><td>${escapeHtml(talk)}</td><td>${escapeHtml(duration)}</td></tr>`;
+  }).join('')}</tbody></table>`;
 }
 
 async function saveAutonomyConfig() {
@@ -206,7 +276,7 @@ async function saveAutonomyConfig() {
     const weekdays = document.getElementById('autonomy-schedule-weekdays').value.split(',').map(x => x.trim()).filter(Boolean).map(Number);
     const start = document.getElementById('autonomy-window-start').value;
     const end = document.getElementById('autonomy-window-end').value;
-    await api('PATCH', '/admin/autonomy/config', {
+    const config = await api('PATCH', '/admin/autonomy/config', {
       enabled: document.getElementById('autonomy-enabled').checked,
       talk_enabled: document.getElementById('autonomy-talk').checked,
       daily_evaluation_budget: Number(document.getElementById('autonomy-daily').value),
@@ -216,12 +286,17 @@ async function saveAutonomyConfig() {
       schedule: {enabled: document.getElementById('autonomy-schedule-enabled').checked, time: document.getElementById('autonomy-schedule-time').value, timezone: document.getElementById('autonomy-schedule-timezone').value || 'local', weekdays, window: start && end ? [start, end] : [], restart_miss_policy: document.getElementById('autonomy-miss-policy').value},
     });
     await loadObserveAutonomy();
-  } catch (e) { alert('保存失败：' + e.message); }
+    const enabled = config.enabled ? '已启用内置唤醒' : '已关闭内置唤醒';
+    const overflow = config.overflow?.enabled ? `Overflow 已启用（阈值 ${config.overflow.threshold}）` : 'Overflow 已关闭';
+    const schedule = config.schedule?.enabled ? `定时唤醒已启用（${config.schedule.time}）` : '定时唤醒已关闭';
+    const interval = config.interval?.enabled ? `间隔唤醒已启用（${config.interval.seconds} 秒）` : '间隔唤醒已关闭';
+    toast(`${enabled}；${overflow}；${schedule}；${interval}`, 'ok');
+  } catch (e) { toast('保存失败：' + e.message, 'err'); }
 }
 
 async function enqueueAutonomyTest() {
-  try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: document.getElementById('autonomy-test-source').value}); alert(`已排队：${r.job_id}`); await loadObserveAutonomy(); }
-  catch (e) { alert('排队失败：' + e.message); }
+  try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: document.getElementById('autonomy-test-source').value}); toast(`已排队一次测试（任务 ${String(r.job_id).slice(0, 8)}）`, 'ok'); await loadObserveAutonomy(); }
+  catch (e) { toast('排队失败：' + e.message, 'err'); }
 }
 
 window.loadObserveAutonomy = loadObserveAutonomy;
