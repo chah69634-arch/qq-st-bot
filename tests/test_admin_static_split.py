@@ -39,6 +39,12 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     assert "window.AdminI18n?.applyI18n(container)" in source
 
 
+def test_tools_dynamic_preset_buttons_are_bound_after_rendering():
+    tools_source = (STATIC / "js" / "tools.js").read_text(encoding="utf-8")
+    assert "root.innerHTML =" in tools_source
+    assert "bindPageActions(root);" in tools_source
+
+
 def test_removed_legacy_pet_and_chat_panels_have_no_static_entrypoint():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
 
