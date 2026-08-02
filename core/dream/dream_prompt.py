@@ -110,7 +110,7 @@ def _log_dream_prompt_stats(
                 f"  #{i + 1} insertion_order={order}{kw_str}  content={len(entry_text)} chars"
             )
 
-    _dream_token_logger.info("\n".join(lines))
+    _dream_token_logger.debug("\n".join(lines))
 
 
 # ── D1: identity_core (LOCKED — never reorder below D2) ──────────────────────

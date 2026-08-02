@@ -1455,11 +1455,15 @@ async def handler_summarize_to_midterm(payload: dict) -> None:
         else None
     )
     if _echo_reason:
-        logger.info(
-            "[fixation] handler_summarize_to_midterm skipped (%s=True): "
-            "turn_id=%s uid=%s",
-            _echo_reason, payload.get("turn_id"), payload.get("uid"),
+        from core.runtime_signal_observability import record
+
+        record(
+            category="boundary_invariants",
+            code="midterm_write_skipped_for_isolated_source",
+            status="ok",
+            context={"source": _echo_reason},
         )
+        logger.debug("[fixation] handler_summarize_to_midterm skipped (%s=True)", _echo_reason)
         return
     scope = _get_scope_from_payload(payload, "handler_summarize_to_midterm")
     kwargs = {

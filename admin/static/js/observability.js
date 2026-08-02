@@ -1298,6 +1298,62 @@ async function loadTriggerCatalog() {
 //  资源完整性/功能状态检查（observe-resource-completeness，2026-07-25）
 // ══════════════════════════════════════════════════════════
 
+function _runtimeSignalText(kind, value) {
+  return t(`runtime_signals.${kind}.${value}`, value);
+}
+
+function _runtimeSignalTime(value) {
+  if (!value) return '—';
+  return new Date(Number(value) * 1000).toLocaleString();
+}
+
+async function loadRuntimeSignals() {
+  const el = document.getElementById('runtime-signals-content');
+  if (!el) return;
+  el.innerHTML = `<div class="loading">${escapeHtml(t('runtime_signals.loading'))}</div>`;
+  try {
+    const data = await api('GET', '/observability/runtime-signals');
+    const summary = data.summary || {};
+    const signals = data.signals || [];
+    let html = `<div class="runtime-signal-summary">
+      <span class="badge badge-success">${escapeHtml(t('runtime_signals.status.ok'))} × ${Number(summary.ok || 0)}</span>
+      <span class="badge badge-warn">${escapeHtml(t('runtime_signals.status.attention'))} × ${Number(summary.attention || 0)}</span>
+      <span class="runtime-signal-scope">${escapeHtml(t('runtime_signals.process_scope'))}: ${escapeHtml(_runtimeSignalTime(data.started_at))}</span>
+    </div>`;
+    if (!signals.length) {
+      el.innerHTML = html + `<div class="empty">${escapeHtml(t('runtime_signals.empty'))}</div>`;
+      return;
+    }
+    html += `<div class="card tbl-wrap"><table><thead><tr>
+      <th>${escapeHtml(t('runtime_signals.category'))}</th>
+      <th>${escapeHtml(t('runtime_signals.signal'))}</th>
+      <th>${escapeHtml(t('runtime_signals.state'))}</th>
+      <th>${escapeHtml(t('runtime_signals.count'))}</th>
+      <th>${escapeHtml(t('runtime_signals.contexts'))}</th>
+      <th>${escapeHtml(t('runtime_signals.last_seen'))}</th>
+      <th>${escapeHtml(t('runtime_signals.context'))}</th>
+    </tr></thead><tbody>`;
+    for (const signal of signals) {
+      const attention = signal.status === 'attention';
+      const context = Object.entries(signal.latest_context || {})
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(', ') || '—';
+      html += `<tr>
+        <td>${escapeHtml(_runtimeSignalText('category', signal.category || 'uncategorized'))}</td>
+        <td>${escapeHtml(_runtimeSignalText('code', signal.code || 'unknown'))}</td>
+        <td><span class="badge ${attention ? 'badge-warn' : 'badge-success'}">${escapeHtml(t(`runtime_signals.status.${attention ? 'attention' : 'ok'}`))}</span></td>
+        <td>${Number(signal.count || 0)}</td>
+        <td>${Number(signal.unique_contexts || 0)}</td>
+        <td>${escapeHtml(_runtimeSignalTime(signal.last_seen))}</td>
+        <td class="runtime-signal-context">${escapeHtml(context)}</td>
+      </tr>`;
+    }
+    el.innerHTML = html + '</tbody></table></div>';
+  } catch (error) {
+    el.innerHTML = `<div class="empty runtime-signal-error">${escapeHtml(t('runtime_signals.load_error', { error: error.message }))}</div>`;
+  }
+}
+
 const _RC_STATUS_BADGE = {
   ok:            { bg: '#1a3a1a', color: '#86efac', text: '正常' },
   off:           { bg: '#2d2d2d', color: '#9ca3af', text: '开关关闭' },

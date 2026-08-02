@@ -176,6 +176,7 @@ async function goto(page) {
     'observe-provenance':      () => loadProvenance(),
     'observe-resource-completeness': () => loadResourceCompleteness(),
     'observe-api-contract':          () => loadApiContractCheck(),
+    'observe-runtime-signals':       () => loadRuntimeSignals(),
     'observe-char-permissions':      () => initObserveCharacters('obs-charperm-char', loadCharPermissions),
   };
   if (page !== 'scheduler') _stopWatchStatusPoller();

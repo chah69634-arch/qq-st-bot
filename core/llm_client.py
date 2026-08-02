@@ -902,7 +902,19 @@ async def detect_emotion(text: str) -> str:
                     label, result,
                 )
                 return label
-        logger.info("[detect_emotion] 输出无法解析为合法情绪，降级 neutral: 原始输出=%r", result)
+        from core.runtime_signal_observability import record
+
+        reason = "empty" if not result else "unrecognized"
+        is_new = record(
+            category="model_quality",
+            code="emotion_output_invalid",
+            status="attention",
+            context={"purpose": "detect_emotion", "reason": reason, "model": mc.name},
+        )
+        if is_new:
+            logger.warning("[detect_emotion] 输出无法解析为合法情绪，降级 neutral: reason=%s", reason)
+        else:
+            logger.debug("[detect_emotion] repeated invalid output, downgraded neutral: reason=%s", reason)
         return "neutral"
     except Exception as e:
         log_error("llm_client.detect_emotion", e)

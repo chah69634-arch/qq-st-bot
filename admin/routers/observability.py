@@ -25,6 +25,16 @@ async def api_calls(caller: str = "", provider: str = "", limit: int = Query(100
 
 
 @router.get(
+    "/observability/runtime-signals",
+    summary="读取进程内聚合运行信号（不含正文、prompt、密钥、路径或用户标识）",
+)
+async def runtime_signals(_auth=Depends(require_scopes("state.read"))):
+    from core.runtime_signal_observability import snapshot
+
+    return snapshot()
+
+
+@router.get(
     "/observability/llm-debug-requests",
     summary="读取 LLM 请求调试快照（高敏感）",
     description="仅当 llm_debug_requests.enabled 为真时才会产生快照；内容含 prompt 与工具 schema。",

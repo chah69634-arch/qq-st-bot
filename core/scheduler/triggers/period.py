@@ -13,7 +13,15 @@ def _days_elapsed(uid: str, today: _date | None = None) -> int | None:
     info = get_period_info(uid)
     last_date_str = info.get("last_period_date")
     if not last_date_str:
-        logger.info("[period] missing_period_date")
+        from core.runtime_signal_observability import record
+
+        record(
+            category="scheduler_configuration",
+            code="period_date_missing",
+            status="attention",
+            context={"trigger": "period"},
+        )
+        logger.debug("[period] missing_period_date")
         return None
     last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
     return ((today or _date.today()) - last_date).days

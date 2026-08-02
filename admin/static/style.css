@@ -108,6 +108,7 @@ main {
 .page.active { display: block; }
 
 h1.page-title { font-size: 20px; margin-bottom: 20px; }
+.page-subtitle { color: var(--muted); font-size: 12px; font-weight: 400; }
 
 /* ── Cards & panels ── */
 .card {
@@ -216,6 +217,14 @@ textarea { resize: vertical; min-height: 72px; }
 /* ── Empty / loading ── */
 .empty { text-align: center; padding: 40px; color: var(--muted); }
 .loading { color: var(--muted); font-style: italic; font-size: 13px; padding: 12px 0; }
+
+/* ── Runtime signal observability ── */
+.observe-toolbar { display: flex; justify-content: flex-end; margin: -10px 0 12px; }
+.runtime-signals-content { min-height: 80px; }
+.runtime-signal-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.runtime-signal-scope { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.runtime-signal-context { color: var(--muted); font-family: var(--mono); font-size: 11px; max-width: 280px; overflow-wrap: anywhere; }
+.runtime-signal-error { color: var(--danger); }
 
 /* ── Toast ── */
 #toast {

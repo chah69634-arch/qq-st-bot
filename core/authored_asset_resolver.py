@@ -45,7 +45,22 @@ def _observe(logical_asset: str, item: LayeredAsset) -> None:
         ]
         if item.shadowed_source is not None:
             fields.append(f"shadowed_source={item.shadowed_source}")
-        logger.info("[authored-resolver] %s", " ".join(fields))
+        from core.runtime_signal_observability import record
+
+        is_new = record(
+            category="authored_assets",
+            code="layered_asset_resolution",
+            status="ok",
+            context={
+                "asset": logical_asset,
+                "source": item.source,
+                "shadowed": item.shadowed_source or "",
+            },
+        )
+        if is_new:
+            logger.info("[authored-resolver] %s", " ".join(fields))
+        else:
+            logger.debug("[authored-resolver] repeated %s", " ".join(fields))
 
 
 def resolve_layered_files(

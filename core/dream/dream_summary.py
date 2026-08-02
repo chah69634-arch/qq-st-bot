@@ -138,7 +138,18 @@ async def _llm_strip_scene(
             if isinstance(data, dict):
                 return data
         except Exception as e:
-            logger.warning(f"[dream_summary] LLM attempt {attempt + 1} failed: {e}")
+            from core.runtime_signal_observability import record
+
+            is_new = record(
+                category="model_quality",
+                code="dream_summary_attempt_failed",
+                status="attention",
+                context={"attempt": attempt + 1, "error_type": type(e).__name__},
+            )
+            if is_new:
+                logger.warning("[dream_summary] LLM attempt %s failed: %s", attempt + 1, e)
+            else:
+                logger.debug("[dream_summary] repeated LLM attempt %s failure: %s", attempt + 1, type(e).__name__)
     return {}
 
 

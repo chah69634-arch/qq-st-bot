@@ -18,6 +18,10 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
+# MCP startup can make HTTP requests before ``core.llm_client`` is imported.
+# Keep request URLs out of ordinary console logs from the very beginning; a URL
+# may itself contain a credential when an external server was configured badly.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 from admin.log_filter import install_asyncio_proactor_noise_filter

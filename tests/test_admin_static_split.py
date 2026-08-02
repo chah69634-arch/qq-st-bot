@@ -27,7 +27,7 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     fragments = sorted(PAGES.glob("*.html"))
 
-    assert len(fragments) == 33
+    assert len(fragments) == 34
     for fragment in fragments:
         page = fragment.stem
         assert f'id="page-{page}" data-page-fragment="{page}"' in index
@@ -72,7 +72,7 @@ def test_page_fragments_are_served_as_static_html():
     from admin.admin_server import app
 
     client = TestClient(app)
-    for page in ("status", "observe-tools", "observe-resource-completeness"):
+    for page in ("status", "observe-tools", "observe-resource-completeness", "observe-runtime-signals"):
         response = client.get(f"/static/pages/{page}.html")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/html")

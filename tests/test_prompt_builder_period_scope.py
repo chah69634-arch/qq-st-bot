@@ -81,11 +81,15 @@ def test_legacy_period_conflict_uses_active_character_and_warns(sandbox, monkeyp
 
 def test_period_proposer_and_legacy_check_read_health_state(sandbox, monkeypatch, caplog):
     from core.memory import health_state
+    from core.runtime_signal_observability import _reset_for_tests, snapshot
     from core.scheduler.triggers import period
 
+    _reset_for_tests()
     with caplog.at_level(logging.INFO):
         assert period.propose({"uid": "missing-owner", "today": date.today()}) is None
-    assert "missing_period_date" in caplog.text
+    assert "missing_period_date" not in caplog.text
+    signal = next(item for item in snapshot()["signals"] if item["code"] == "period_date_missing")
+    assert signal["status"] == "attention" and signal["count"] == 1
 
     health_state.set_period_date("owner1", date.today().isoformat())
     assert period.propose({"uid": "owner1", "today": date.today()}) is not None

@@ -948,11 +948,25 @@ class Pipeline:
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
         if len(tools) > 20:
-            logger.warning(
-                "[pipeline.run_agentic_loop] 暴露了 %d 个工具 schema，超过建议上限 20；"
-                "请收窄 tool_categories 或 exclude_tools",
-                len(tools),
+            from core.runtime_signal_observability import record
+
+            is_new = record(
+                category="tool_loop_capacity",
+                code="tool_schema_over_budget",
+                status="attention",
+                context={
+                    "tool_count": len(tools),
+                    "category_count": len(categories) if isinstance(categories, (list, tuple, set)) else 1,
+                },
             )
+            if is_new:
+                logger.warning(
+                    "[pipeline.run_agentic_loop] 暴露了 %d 个工具 schema，超过建议上限 20；"
+                    "请收窄 tool_categories 或 exclude_tools",
+                    len(tools),
+                )
+            else:
+                logger.debug("[pipeline.run_agentic_loop] repeated tool schema over-budget: %d", len(tools))
 
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
