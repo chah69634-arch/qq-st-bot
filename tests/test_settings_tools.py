@@ -86,7 +86,11 @@ def test_tool_page_hides_transient_mcp_tools_and_reports_only_global_state(tmp_p
 
     cfg = _config()
     cfg["mcp_servers"] = {"enabled": True}
-    cfg["tool_loop"]["tool_presets"] = [{"name": "mixed", "tools": ["builtin", "dynamic"]}]
+    cfg["tool_loop"].update({
+        "tool_presets": [{"name": "mixed", "tools": ["builtin", "dynamic"]}],
+        "categories": ["info", "mcp"],
+        "exclude_tools": [],
+    })
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     monkeypatch.setattr(st, "CONFIG_FILE", path)
@@ -104,3 +108,32 @@ def test_tool_page_hides_transient_mcp_tools_and_reports_only_global_state(tmp_p
     assert result["mcp_enabled"] is True
     assert [tool["name"] for tool in result["tools"]] == ["builtin"]
     assert result["tool_presets"] == [{"name": "mixed", "tools": ["builtin"]}]
+    assert result["global_default_tools"] == ["builtin"]
+
+
+def test_global_default_tools_compile_to_categories_and_exclusions_without_touching_unmanaged_categories(tmp_path, monkeypatch):
+    import admin.routers.settings_tools as st
+    from core import tool_dispatcher
+
+    cfg = _config()
+    cfg["tool_loop"].update({"categories": ["mcp", "info"], "exclude_tools": ["legacy_dynamic"]})
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
+    monkeypatch.setattr(st, "CONFIG_FILE", path)
+    monkeypatch.setattr("admin.auth.get_admin_secret", lambda: VALID_TOKEN)
+    monkeypatch.setattr(st, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
+    monkeypatch.setattr(tool_dispatcher, "_TOOL_REGISTRY", {
+        "read_one": {"category": "info", "description": "read one"},
+        "read_two": {"category": "info", "description": "read two"},
+        "dynamic": {"category": "mcp", "description": "dynamic"},
+    })
+
+    app = FastAPI()
+    app.include_router(st.router)
+    with patch("core.config_loader.reload_config", return_value=None):
+        response = TestClient(app).put("/settings/tools", headers=_auth(), json={"global_default_tools": ["read_one"]})
+
+    assert response.status_code == 200
+    saved = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert saved["tool_loop"]["categories"] == ["mcp", "info"]
+    assert saved["tool_loop"]["exclude_tools"] == ["legacy_dynamic", "read_two"]

@@ -45,6 +45,15 @@ def test_tools_dynamic_preset_buttons_are_bound_after_rendering():
     assert "bindPageActions(root);" in tools_source
 
 
+def test_tools_page_exposes_editable_global_default_mode():
+    page = (PAGES / "tools.html").read_text(encoding="utf-8")
+    tools_source = (STATIC / "js" / "tools.js").read_text(encoding="utf-8")
+
+    assert 'id="tools-save-preset"' in page
+    assert "global_default_tools" in tools_source
+    assert "saveGlobalToolDefault" in tools_source
+
+
 def test_removed_legacy_pet_and_chat_panels_have_no_static_entrypoint():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
 

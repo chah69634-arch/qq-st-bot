@@ -31,6 +31,7 @@ class ToolControlUpdate(BaseModel):
     tool_presets: Optional[list[ToolPresetInput]] = None
     model_bindings: Optional[dict[str, Optional[str]]] = None
     execution_enabled: Optional[dict[str, bool]] = None
+    global_default_tools: Optional[list[str]] = None
 
 
 def _static_tool_enabled(name: str, tools_config: dict) -> bool:
@@ -64,13 +65,24 @@ def _registry_rows(cfg: dict) -> list[dict]:
 def _response(cfg: dict) -> dict:
     tool_loop = cfg.get("tool_loop", {})
     model_presets = cfg.get("model_presets", {}).get("presets", {})
-    builtin_names = {row["name"] for row in _registry_rows(cfg)}
+    rows = _registry_rows(cfg)
+    builtin_names = {row["name"] for row in rows}
+    global_categories = tool_loop.get("categories", ["info", "desktop", "memory"])
+    global_excluded = tool_loop.get("exclude_tools", [])
+    if not isinstance(global_categories, list):
+        global_categories = []
+    if not isinstance(global_excluded, list):
+        global_excluded = []
+    global_default_tools = [
+        row["name"] for row in rows
+        if row["category"] in global_categories and row["name"] not in global_excluded
+    ]
     tool_presets = [
         {"name": item["name"], "tools": [tool for tool in item["tools"] if tool in builtin_names]}
         for item in normalize_tool_presets(tool_loop.get("tool_presets"))
     ]
     return {
-        "tools": _registry_rows(cfg),
+        "tools": rows,
         "tool_presets": tool_presets,
         "model_bindings": {
             name: preset.get("tool_preset")
@@ -80,6 +92,9 @@ def _response(cfg: dict) -> dict:
         "model_presets": sorted(model_presets),
         "legacy_mode": "model_presets" not in cfg,
         "mcp_enabled": bool(cfg.get("mcp_servers", {}).get("enabled", False)),
+        "global_default_tools": global_default_tools,
+        "global_categories": global_categories,
+        "global_exclude_tools": global_excluded,
     }
 
 
@@ -159,6 +174,39 @@ async def update_tool_controls(body: ToolControlUpdate, auth=Depends(require_sco
                 current["enabled"] = enabled
             else:
                 tools_config[name] = {"enabled": enabled}
+
+    if body.global_default_tools is not None:
+        selected = set(body.global_default_tools)
+        unknown = selected - builtin_names
+        if unknown:
+            raise HTTPException(status_code=422, detail=f"全局默认含未注册工具: {', '.join(sorted(unknown))}")
+        # Keep categories not represented by this built-in-only panel intact
+        # (for example a currently enabled external category), without making
+        # MCP a special case in the tool-control contract.
+        builtin_categories = {row["category"] for row in rows}
+        previous_categories = tool_loop.get("categories", ["info", "desktop", "memory"])
+        if not isinstance(previous_categories, list):
+            previous_categories = []
+        preserved_categories = [
+            category for category in previous_categories
+            if category not in builtin_categories
+        ]
+        selected_categories = [
+            category for category in dict.fromkeys(row["category"] for row in rows)
+            if any(row["category"] == category and row["name"] in selected for row in rows)
+        ]
+        tool_loop["categories"] = preserved_categories + selected_categories
+
+        previous_excluded = tool_loop.get("exclude_tools", [])
+        if not isinstance(previous_excluded, list):
+            previous_excluded = []
+        preserved_excluded = [name for name in previous_excluded if name not in builtin_names]
+        selected_category_set = set(selected_categories)
+        derived_excluded = [
+            row["name"] for row in rows
+            if row["category"] in selected_category_set and row["name"] not in selected
+        ]
+        tool_loop["exclude_tools"] = list(dict.fromkeys(preserved_excluded + derived_excluded))
 
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader

@@ -24,7 +24,7 @@ function _toolsPresetButtons() {
     const klass = item.name === active ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
     return `<span style="display:inline-flex;gap:4px;margin:2px"><button class="${klass}" data-action="selectToolPreset" data-action-args="${args}">${escapeHtml(item.name)}</button><button class="btn btn-ghost btn-sm" data-action="editToolPreset" data-action-args="${args}" title="${escapeHtml(t('common.edit', '编辑'))}">✎</button><button class="btn btn-danger btn-sm" data-action="deleteToolPreset" data-action-args="${args}" title="${escapeHtml(t('common.delete', '删除'))}">×</button></span>`;
   }).join('');
-  root.innerHTML = `<span style="font-size:12px;color:var(--muted);margin-right:6px">${escapeHtml(t('tools.preset', '工具预设'))}</span><button class="${active ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}" data-action="selectToolPreset" data-action-args='[""]'>${escapeHtml(t('tools.custom', '自定义'))}</button>${buttons || `<span style="font-size:12px;color:var(--muted);margin-left:6px">${escapeHtml(t('tools.no_presets', '尚无预设'))}</span>`}`;
+  root.innerHTML = `<span style="font-size:12px;color:var(--muted);margin-right:6px">${escapeHtml(t('tools.preset', '工具预设'))}</span><button class="${active ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}" data-action="selectToolPreset" data-action-args='[""]'>${escapeHtml(t('tools.global_default', '全局默认'))}</button>${buttons || `<span style="font-size:12px;color:var(--muted);margin-left:6px">${escapeHtml(t('tools.no_presets', '尚无预设'))}</span>`}`;
   // These controls are rendered after the page fragment has received its
   // initial binding, so bind the newly-created action buttons explicitly.
   bindPageActions(root);
@@ -35,7 +35,7 @@ function _renderToolsRegistry() {
   if (!root || !_toolsControl) return;
   const presetName = _toolCurrentPreset();
   const preset = (_toolsControl.tool_presets || []).find(item => item.name === presetName);
-  const exposed = new Set(preset?.tools || []);
+  const exposed = new Set(preset ? preset.tools : (_toolsControl.global_default_tools || []));
   const rows = (_toolsControl.tools || []).map(tool => {
     const execution = `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(t('tools.execution_enabled', '全局执行'))}</span></label>`;
     return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(tool.description || '')}</div></td><td>${escapeHtml(tool.category)}</td><td>${execution}</td><td><label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label></td></tr>`;
@@ -60,7 +60,11 @@ function _renderToolsPage() {
   const bound = _toolCurrentPreset();
   if (note) note.textContent = bound
     ? t('tools.bound_note', '当前模型绑定工具预设：{name}', { name: bound })
-    : t('tools.unbound_note', '未绑定工具预设：沿用原有的分类/排除规则。');
+    : t('tools.global_note', '当前模型使用全局默认：可在此勾选并保存。');
+  const saveButton = document.getElementById('tools-save-preset');
+  if (saveButton) saveButton.textContent = bound
+    ? t('tools.save_preset', '保存当前勾选')
+    : t('tools.save_global_default', '保存全局默认');
   if (mcpStatus) mcpStatus.textContent = _toolsControl.mcp_enabled
     ? t('tools.mcp_status_enabled', 'MCP 全局状态：已启用（只读）')
     : t('tools.mcp_status_disabled', 'MCP 全局状态：未启用（只读）');
@@ -102,9 +106,17 @@ async function createToolPreset() {
 
 async function saveToolPreset() {
   const name = _toolCurrentPreset();
-  if (!name) return createToolPreset();
+  if (!name) return saveGlobalToolDefault();
   try { await _saveNamedToolPreset(name, name); toast(t('tools.preset_saved', '工具预设已保存并应用到当前模型'), 'ok'); }
   catch (error) { toast(error.message, 'err'); }
+}
+
+async function saveGlobalToolDefault() {
+  try {
+    _toolsControl = await api('PUT', '/settings/tools', { global_default_tools: _toolCheckedNames() });
+    toast(t('tools.global_saved', '全局默认工具已保存并热更新'), 'ok');
+    _renderToolsPage();
+  } catch (error) { toast(error.message, 'err'); }
 }
 
 async function editToolPreset(name) {
