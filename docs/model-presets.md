@@ -14,7 +14,7 @@
 | 文件 | 职责 |
 |---|---|
 | `core/model_registry.py` | ModelClient 构建 + 缓存、路由解析、参数合并+白名单、向后兼容合成 |
-| `core/llm_protocol.py` | Chat Completions / Responses 请求转换、SDK 调用与统一结果归一化 |
+| `core/llm_protocol.py` | Chat Completions / Responses / Anthropic Messages 请求转换、调用与统一结果归一化 |
 | `core/prompt_style.py` | prompt_style 转换钩子（narrative / xml） |
 | `core/llm_client.py` | 唯一 LLM 出口，调用 model_registry 路由，在 sanitize 前应用 prompt_style；可选记录高敏感调试快照 |
 | `admin/routers/settings_llm.py` | HTTP 接口：`/model-presets`、`/model-presets/active-routing`、`/llm-params` |
@@ -70,10 +70,24 @@ model_presets:
       api_key: sk-xxx
       model: claude-sonnet-4-6
       tool_call_mode: function_calling
+      # 可选：仅暴露命名工具预设中的 schema；预设目录归 tool_loop.tool_presets 所有
+      tool_preset: claude-minimal
       # prompt_style 省略 → anthropic_compat 默认 xml
       params:
         temperature: 0.8
         # frequency_penalty / presence_penalty 被白名单过滤，不会发给 API
+
+    claude-native-relay:
+      provider_kind: anthropic_compat
+      api_protocol: anthropic_messages
+      # 根地址、.../v1、.../v1/messages 三种形式都可；适配层最终请求 /v1/messages。
+      base_url: https://your-claude-relay.example
+      api_key: sk-xxx
+      # 官方 Anthropic API 选 x_api_key；Claude Code 示例中的
+      # ANTHROPIC_AUTH_TOKEN 中转通常选 bearer。
+      anthropic_auth_mode: bearer
+      model: claude-sonnet-4-6
+      tool_call_mode: function_calling
 
     local-qwen:
       provider_kind: local
@@ -120,10 +134,16 @@ model_presets:
 |---|---|
 | `chat_completions`（默认） | 调用 `client.chat.completions.create(...)`，完整保持旧配置行为 |
 | `responses` | 调用 `client.responses.create(...)`，由适配层转换消息、工具和结果 |
+| `anthropic_messages` | 调用 Anthropic 原生 `POST /v1/messages`，转换 system、tool_use/tool_result 与 SSE 文本流 |
 
 未知值会在该 preset 首次构建时 fail-fast，并在错误中包含 preset、provider、model 和非法值。
 legacy `llm:` 合成 preset 始终是 `chat_completions`。不根据模型名、`provider_kind` 或
 `tool_call_mode` 猜测协议，也不会在失败后静默换用另一个 API。
+
+`anthropic_messages` 的认证头由 `anthropic_auth_mode` 明确指定：`x_api_key`（默认，官方
+Anthropic API）发送 `x-api-key`，`bearer` 发送 `Authorization: Bearer ...`，用于采用
+`ANTHROPIC_AUTH_TOKEN` 约定的 Claude Code 中转。两种模式都会发送
+`anthropic-version: 2023-06-01`。该选项对 Chat Completions 和 Responses preset 无效。
 
 Responses 分支将当前的 `system` / `developer` / `user` / `assistant` 上下文保持为结构化输入；
 工具定义从 Chat 的 `function` 包装转换为 Responses function schema。多步工具循环中，模型的
@@ -134,6 +154,17 @@ usage 和仅当前请求可用的 raw response；raw response 不写入 memory �
 主聊天已经消费 SDK 真流式输出。`responses` 因而消费 `response.output_text.delta`，并校验函数参数
 delta、output item 完成、`response.completed` 与失败/未完成事件；不会悄悄退化为非流式。Responses
 请求显式 `store: false`，不使用 `previous_response_id`，每轮上下文仍由 PresenceKit 自己维护。
+
+Anthropic Messages 分支把内部 `system` / `developer` 消息合并到顶层 `system`，把 OpenAI 形状的
+function schema 转为 `input_schema`，并把模型的 `tool_use` 与本地执行结果的 `tool_result` 以同一
+调用 ID 往返。它消费 `content_block_delta.text_delta` 和 `message_stop`；内部 thinking block 不展示、
+不写入历史。
+
+### 三个彼此独立的选择
+
+- `api_protocol`：网关收什么 HTTP 路径与 JSON/SSE 形状（Chat Completions、Responses、Anthropic Messages）。
+- `tool_call_mode`：模型是否采用结构化函数调用；`function_calling` 在三种 wire protocol 都可用，`xml_fallback` 才会把工具描述和调用退化成文本标签。
+- `prompt_style`：system prompt 用自然段还是 XML 包装；它不决定 HTTP 协议，也不把 function calling 变成 XML。
 
 ### `tool_call_mode` 取值与 tool loop 的组合行为
 

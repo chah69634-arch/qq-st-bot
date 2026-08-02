@@ -1,11 +1,19 @@
 """Responses API adapter coverage using local fake SDK objects only."""
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
-from core.llm_protocol import UpstreamResponseFormatError, create, responses_input, stream_text
+from core.llm_protocol import (
+    UpstreamResponseFormatError,
+    anthropic_messages_input,
+    create,
+    responses_input,
+    stream_text,
+)
 from core.model_registry import ModelClient
 
 
@@ -53,6 +61,22 @@ def _responses_mc(client):
         params={"temperature": 0.2, "max_tokens": 64, "presence_penalty": 1.0},
         client=client,
         api_protocol="responses",
+    )
+
+
+def _anthropic_mc(client, *, auth_mode="bearer"):
+    return ModelClient(
+        name="anthropic-test",
+        provider_kind="anthropic_compat",
+        model="claude-test",
+        tool_call_mode="function_calling",
+        prompt_style="xml",
+        params={},
+        client=client,
+        api_protocol="anthropic_messages",
+        base_url="https://relay.example",
+        api_key="test-secret",
+        anthropic_auth_mode=auth_mode,
     )
 
 
@@ -210,3 +234,128 @@ async def test_responses_tool_loop_second_step_receives_function_call_output(mon
     assert second.content == "The weather is clear."
     second_input = client.calls[1]["input"]
     assert {"type": "function_call_output", "call_id": "call_9", "output": "clear"} in second_input
+
+
+@pytest.mark.asyncio
+async def test_anthropic_messages_converts_system_tools_and_bearer_auth():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["headers"] = dict(request.headers)
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(200, json={
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "hello"}],
+            "usage": {"input_tokens": 3, "output_tokens": 2},
+        })
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        result = await create(
+            _anthropic_mc(client),
+            [{"role": "system", "content": "be concise"}, {"role": "user", "content": "hi"}],
+            tools=[{"type": "function", "function": {
+                "name": "weather", "description": "weather", "parameters": {"type": "object"},
+            }}],
+            tool_choice="auto",
+            gen_kwargs={"max_tokens": 64, "temperature": 0.2, "timeout": 8},
+        )
+    finally:
+        await client.aclose()
+
+    assert result.assistant_text == "hello"
+    assert result.usage == {"input_tokens": 3, "output_tokens": 2}
+    assert captured["path"] == "/v1/messages"
+    assert captured["headers"]["authorization"] == "Bearer test-secret"
+    assert captured["headers"]["anthropic-version"] == "2023-06-01"
+    assert captured["json"]["system"] == "be concise"
+    assert captured["json"]["tools"] == [{
+        "name": "weather", "description": "weather", "input_schema": {"type": "object"},
+    }]
+    assert captured["json"]["tool_choice"] == {"type": "auto"}
+    assert "timeout" not in captured["json"]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_messages_tool_call_round_trips_into_tool_result():
+    requests: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        if len(requests) == 1:
+            return httpx.Response(200, json={
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "toolu_1", "name": "weather", "input": {"city": "Hangzhou"}}],
+            })
+        return httpx.Response(200, json={
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "sunny"}],
+        })
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    mc = _anthropic_mc(client, auth_mode="x_api_key")
+    tools = [{"type": "function", "function": {"name": "weather", "parameters": {"type": "object"}}}]
+    try:
+        first = await create(mc, [{"role": "user", "content": "weather"}], tools=tools, tool_choice="auto", gen_kwargs={})
+        second = await create(
+            mc,
+            first.continuation_items + [{"role": "tool", "tool_call_id": "toolu_1", "content": "clear"}],
+            tools=tools,
+            tool_choice="auto",
+            gen_kwargs={},
+        )
+    finally:
+        await client.aclose()
+
+    assert [(call.id, call.name, call.arguments) for call in first.tool_calls] == [
+        ("toolu_1", "weather", {"city": "Hangzhou"}),
+    ]
+    assert second.assistant_text == "sunny"
+    assert requests[1]["messages"] == [
+        {"role": "assistant", "content": [{
+            "type": "tool_use", "id": "toolu_1", "name": "weather", "input": {"city": "Hangzhou"},
+        }]},
+        {"role": "user", "content": [{
+            "type": "tool_result", "tool_use_id": "toolu_1", "content": "clear",
+        }]},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_messages_stream_yields_text_and_requires_message_stop():
+    sse = (
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hel"}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"lo"}}\n\n'
+        'event: message_stop\n'
+        'data: {"type":"message_stop"}\n\n'
+    )
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=sse, headers={"content-type": "text/event-stream"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        pieces = [piece async for piece in stream_text(
+            _anthropic_mc(client), [{"role": "user", "content": "hi"}], gen_kwargs={},
+        )]
+    finally:
+        await client.aclose()
+    assert "".join(pieces) == "hello"
+
+
+def test_anthropic_messages_input_groups_tool_results_as_a_user_message():
+    system, messages = anthropic_messages_input([
+        {"role": "system", "content": "one"},
+        {"role": "developer", "content": "two"},
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "x", "input": {}}]},
+        {"role": "tool", "tool_call_id": "t1", "content": "done"},
+    ])
+    assert system == "one\n\ntwo"
+    assert messages[-1] == {"role": "user", "content": [{
+        "type": "tool_result", "tool_use_id": "t1", "content": "done",
+    }]}

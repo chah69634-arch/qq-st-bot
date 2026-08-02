@@ -852,3 +852,26 @@ async def test_relay_prompt_covers_current_loop_categories_including_mcp(monkeyp
     assert execute_calls[0]["tool_name"] == "mcp__turtle_soup__ask"
     probe_system = next(c for c in relay_calls if c["call_category"] == "probe")["messages"][0]["content"]
     assert "mcp__turtle_soup__ask" in probe_system
+
+
+@pytest.mark.asyncio
+async def test_model_tool_preset_narrows_schema_for_its_chat_preset(monkeypatch):
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[], tool_presets=[{
+        "name": "claude-minimal", "tools": ["web_search"],
+    }])
+    _patch_tools_schema(monkeypatch, ["get_time", "web_search"])
+    monkeypatch.setattr("core.model_registry._get_preset_config", lambda: {
+        "presets": {"claude-pig": {"tool_preset": "claude-minimal"}},
+    })
+    monkeypatch.setattr("core.model_registry._resolve_preset_name", lambda *args, **kwargs: "claude-pig")
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="done", tool_calls=[], assistant_message={"role": "assistant", "content": "done"}),
+    ])
+    _script_execute(monkeypatch, [])
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id="c1", session_state=None,
+    )
+
+    assert result == "done"
+    assert [tool["function"]["name"] for tool in chat_turn_calls[0]["tools"]] == ["web_search"]

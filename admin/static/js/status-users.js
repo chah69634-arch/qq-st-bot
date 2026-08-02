@@ -6,7 +6,6 @@ async function loadStatus() {
   } catch(e) {
     toast(t('status.error.load', '获取状态失败: {error}', {error: e.message}), 'err');
   }
-  loadToolRegistry();
   loadProxy();
   loadContextConfig();
   loadLlmParams();

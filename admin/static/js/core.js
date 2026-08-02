@@ -151,6 +151,7 @@ async function goto(page) {
     'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
     'model-routing': loadModelRouting,
     mcp:             loadMcpPage,
+    tools:           loadToolsPage,
     'relationship-facts': loadRelationshipFactsPage,
     character:       loadCharacterPage,
     lorebook:        () => { loadLorebook(); loadJbEntries(); },

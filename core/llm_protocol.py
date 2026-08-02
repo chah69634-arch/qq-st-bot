@@ -1,4 +1,4 @@
-"""Protocol boundary for OpenAI Chat Completions and Responses API calls.
+"""Protocol boundary for OpenAI and Anthropic Messages API calls.
 
 The rest of PresenceKit consumes normalized assistant text and tool calls.  This
 module is the only place that knows either wire format.
@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 
-VALID_API_PROTOCOLS = frozenset({"chat_completions", "responses"})
+VALID_API_PROTOCOLS = frozenset({"chat_completions", "responses", "anthropic_messages"})
+VALID_ANTHROPIC_AUTH_MODES = frozenset({"x_api_key", "bearer"})
 
 
 class UpstreamResponseFormatError(RuntimeError):
@@ -238,6 +239,206 @@ def responses_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] 
     return result
 
 
+def anthropic_messages_input(messages: list[dict[str, Any]]) -> tuple[str | None, list[dict[str, Any]]]:
+    """Convert the internal chat-shaped history to Anthropic Messages input.
+
+    Anthropic keeps system instructions in a dedicated top-level field and
+    represents tool results as user content blocks.  Keeping this conversion in
+    the protocol boundary means the pipeline can continue to use its existing
+    Chat/Responses-neutral loop context.
+    """
+    system_parts: list[str] = []
+    result: list[dict[str, Any]] = []
+    pending_tool_results: list[dict[str, Any]] = []
+
+    def flush_tool_results() -> None:
+        nonlocal pending_tool_results
+        if pending_tool_results:
+            result.append({"role": "user", "content": pending_tool_results})
+            pending_tool_results = []
+
+    for message in messages:
+        role = message.get("role")
+        content = message.get("content")
+        if role in {"system", "developer"}:
+            if not isinstance(content, str):
+                raise ValueError("Anthropic system/developer message content must be text")
+            system_parts.append(content)
+            continue
+        if role == "tool":
+            call_id = message.get("tool_call_id")
+            if not isinstance(call_id, str) or not call_id:
+                raise ValueError("Anthropic tool history is missing tool_call_id")
+            if not isinstance(content, str):
+                raise ValueError("Anthropic tool history content must be text")
+            pending_tool_results.append({
+                "type": "tool_result", "tool_use_id": call_id, "content": content,
+            })
+            continue
+
+        flush_tool_results()
+        if role not in {"user", "assistant"}:
+            raise ValueError(f"unsupported message role for Anthropic Messages API: {role!r}")
+        if not isinstance(content, (str, list)):
+            raise ValueError("Anthropic user/assistant message content must be text or content blocks")
+        result.append({"role": role, "content": content})
+
+    flush_tool_results()
+    if not result:
+        raise ValueError("Anthropic Messages API requires at least one user or assistant message")
+    return ("\n\n".join(part for part in system_parts if part), result)
+
+
+def anthropic_messages_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    """Translate the existing OpenAI function schema to Anthropic's tool schema."""
+    if not tools:
+        return None
+    result: list[dict[str, Any]] = []
+    for tool in tools:
+        function = tool.get("function", tool)
+        name = function.get("name")
+        parameters = function.get("parameters")
+        if not isinstance(name, str) or not name or not isinstance(parameters, dict):
+            raise ValueError("invalid function tool schema")
+        item: dict[str, Any] = {"name": name, "input_schema": parameters}
+        if "description" in function:
+            item["description"] = function["description"]
+        if "strict" in function:
+            item["strict"] = function["strict"]
+        result.append(item)
+    return result
+
+
+def _anthropic_message_url(mc: Any) -> str:
+    base_url = str(getattr(mc, "base_url", "") or "").rstrip("/")
+    if not base_url:
+        raise _format_error(mc, "Anthropic Messages API requires base_url")
+    if base_url.endswith("/v1/messages"):
+        return base_url
+    if base_url.endswith("/v1"):
+        return f"{base_url}/messages"
+    return f"{base_url}/v1/messages"
+
+
+def _anthropic_headers(mc: Any) -> dict[str, str]:
+    key = str(getattr(mc, "api_key", "") or "")
+    auth_mode = str(getattr(mc, "anthropic_auth_mode", "x_api_key") or "x_api_key")
+    if auth_mode not in VALID_ANTHROPIC_AUTH_MODES:
+        raise _format_error(mc, f"unknown anthropic_auth_mode {auth_mode!r}")
+    headers = {
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
+    }
+    if auth_mode == "bearer":
+        headers["authorization"] = f"Bearer {key}"
+    else:
+        headers["x-api-key"] = key
+    return headers
+
+
+def _anthropic_tool_choice(value: str | None) -> dict[str, str] | None:
+    if value is None:
+        return None
+    mapping = {"auto": "auto", "none": "none", "required": "any"}
+    if value not in mapping:
+        raise ValueError(f"unsupported Anthropic tool_choice: {value!r}")
+    return {"type": mapping[value]}
+
+
+def _anthropic_messages_request(
+    mc: Any,
+    messages: list[dict[str, Any]],
+    *,
+    tools: list[dict[str, Any]] | None,
+    tool_choice: str | None,
+    gen_kwargs: dict[str, Any],
+    stream: bool = False,
+) -> tuple[str, dict[str, str], dict[str, Any], Any]:
+    system, converted_messages = anthropic_messages_input(messages)
+    kwargs = dict(gen_kwargs)
+    timeout = kwargs.pop("timeout", None)
+    max_tokens = kwargs.pop("max_tokens", 1024)
+    extra_body = kwargs.pop("extra_body", None)
+    if not isinstance(max_tokens, int) or max_tokens <= 0:
+        raise ValueError("Anthropic max_tokens must be a positive integer")
+    if extra_body is not None and not isinstance(extra_body, dict):
+        raise ValueError("Anthropic extra_body must be an object")
+
+    payload: dict[str, Any] = {
+        "model": mc.model,
+        "max_tokens": max_tokens,
+        "messages": converted_messages,
+        **kwargs,
+    }
+    if system:
+        payload["system"] = system
+    converted_tools = anthropic_messages_tools(tools)
+    if converted_tools:
+        payload["tools"] = converted_tools
+        payload["tool_choice"] = _anthropic_tool_choice(tool_choice or "auto")
+    if extra_body:
+        # `reasoning_extra_body` is intentionally a provider escape hatch.  For
+        # native Anthropic presets it carries native Anthropic fields directly.
+        payload.update(extra_body)
+    if stream:
+        payload["stream"] = True
+    return _anthropic_message_url(mc), _anthropic_headers(mc), payload, timeout
+
+
+def _normalize_anthropic_messages(mc: Any, response: Any) -> NormalizedResponse:
+    if not isinstance(response, dict):
+        raise _format_error(mc, "Anthropic Messages response is not a JSON object", response)
+    content = response.get("content")
+    status = response.get("stop_reason")
+    if not isinstance(content, list):
+        raise _format_error(mc, "Anthropic Messages response has invalid content", response)
+    if not isinstance(status, str) or not status:
+        raise _format_error(mc, "Anthropic Messages response is missing stop_reason", response)
+
+    text_parts: list[str] = []
+    tool_calls: list[NormalizedToolCall] = []
+    continuation_content: list[dict[str, Any]] = []
+    for block in content:
+        if not isinstance(block, dict):
+            raise _format_error(mc, "Anthropic Messages content block is invalid", response)
+        block_type = block.get("type")
+        if block_type == "text":
+            text = block.get("text")
+            if not isinstance(text, str):
+                raise _format_error(mc, "Anthropic text block is not text", response)
+            text_parts.append(text)
+            continuation_content.append({"type": "text", "text": text})
+        elif block_type == "tool_use":
+            call_id = block.get("id")
+            name = block.get("name")
+            arguments = block.get("input")
+            if not isinstance(call_id, str) or not call_id or not isinstance(name, str) or not name:
+                raise _format_error(mc, "Anthropic tool_use block is missing id or name", response)
+            if not isinstance(arguments, dict):
+                raise _format_error(mc, "Anthropic tool_use input must be an object", response)
+            tool_calls.append(NormalizedToolCall(id=call_id, name=name, arguments=dict(arguments)))
+            continuation_content.append({
+                "type": "tool_use", "id": call_id, "name": name, "input": dict(arguments),
+            })
+        elif block_type in {"thinking", "redacted_thinking"}:
+            # Internal reasoning is neither rendered nor carried into the local
+            # loop history.  This matches the system-wide no-thought-persistence
+            # boundary used by the OpenAI-compatible protocols.
+            continue
+        else:
+            raise _format_error(mc, f"Anthropic Messages content has unknown block type {block_type!r}", response)
+    if not continuation_content:
+        raise _format_error(mc, "Anthropic Messages response has no text or tool call", response)
+    return NormalizedResponse(
+        assistant_text="".join(text_parts),
+        tool_calls=tool_calls,
+        status=status,
+        usage=_usage(response.get("usage")),
+        continuation_items=[{"role": "assistant", "content": continuation_content}],
+        raw_response=response,
+    )
+
+
 def _responses_kwargs(gen_kwargs: dict[str, Any]) -> dict[str, Any]:
     result = dict(gen_kwargs)
     if "max_tokens" in result:
@@ -339,6 +540,20 @@ async def create(
             kwargs.update(tools=tools, tool_choice=tool_choice or "auto")
         response = await mc.client.chat.completions.create(model=mc.model, messages=messages, **kwargs)
         return _normalize_chat_completion(mc, response)
+    if protocol == "anthropic_messages":
+        url, headers, payload, timeout = _anthropic_messages_request(
+            mc, messages, tools=tools, tool_choice=tool_choice, gen_kwargs=gen_kwargs,
+        )
+        response = await mc.client.post(url, headers=headers, json=payload, timeout=timeout)
+        try:
+            response.raise_for_status()
+        except Exception as exc:
+            raise _format_error(mc, "Anthropic Messages API returned an HTTP error", response) from exc
+        try:
+            payload = response.json()
+        except Exception as exc:
+            raise _format_error(mc, "Anthropic Messages API returned invalid JSON", response) from exc
+        return _normalize_anthropic_messages(mc, payload)
     if protocol != "responses":
         raise _format_error(mc, "unknown api_protocol")
     responses = getattr(mc.client, "responses", None)
@@ -376,6 +591,47 @@ async def stream_text(
             text = getattr(delta, "content", None)
             if text:
                 yield text
+        return
+    if _protocol(mc) == "anthropic_messages":
+        url, headers, payload, timeout = _anthropic_messages_request(
+            mc, messages, tools=None, tool_choice=None, gen_kwargs=gen_kwargs, stream=True,
+        )
+        completed = False
+        async with mc.client.stream("POST", url, headers=headers, json=payload, timeout=timeout) as response:
+            try:
+                response.raise_for_status()
+            except Exception as exc:
+                raise _format_error(mc, "Anthropic Messages stream returned an HTTP error", response) from exc
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                raw_data = line[5:].strip()
+                if not raw_data:
+                    continue
+                if raw_data == "[DONE]":
+                    completed = True
+                    continue
+                try:
+                    event = json.loads(raw_data)
+                except json.JSONDecodeError as exc:
+                    raise _format_error(mc, "Anthropic Messages stream contains invalid JSON", response) from exc
+                event_type = event.get("type") if isinstance(event, dict) else None
+                if event_type == "content_block_delta":
+                    delta = event.get("delta") or {}
+                    if delta.get("type") == "text_delta":
+                        text = delta.get("text")
+                        if not isinstance(text, str):
+                            raise _format_error(mc, "Anthropic text stream delta is not text", response)
+                        if text:
+                            yield text
+                elif event_type == "message_stop":
+                    completed = True
+                elif event_type == "error":
+                    raise _format_error(mc, "Anthropic Messages stream terminated with error", response)
+                # message_start/content_block_start/message_delta/content_block_stop
+                # carry lifecycle or non-rendered thinking data only.
+        if not completed:
+            raise _format_error(mc, "Anthropic Messages stream ended before message_stop")
         return
     if _protocol(mc) != "responses":
         raise _format_error(mc, "unknown api_protocol")

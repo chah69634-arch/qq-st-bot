@@ -16,7 +16,7 @@ import httpx
 from openai import AsyncOpenAI
 
 from core.config_loader import get_config
-from core.llm_protocol import VALID_API_PROTOCOLS
+from core.llm_protocol import VALID_ANTHROPIC_AUTH_MODES, VALID_API_PROTOCOLS
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ PROVIDER_PROFILES: dict[str, dict] = {
         "default_prompt_style": "narrative",
     },
     "anthropic_compat": {
-        # Claude via OpenAI-compat layer: penalty params commonly rejected or silently dropped
+        # Claude native Messages or OpenAI-compatible layer: penalty params are commonly rejected.
         "params": {"temperature", "top_p", "max_tokens"},
         "default_prompt_style": "xml",
     },
@@ -56,8 +56,11 @@ class ModelClient:
     tool_call_mode: str
     prompt_style: str        # "narrative" | "xml"
     params: dict[str, Any]  # merged + whitelist-filtered generation params
-    client: AsyncOpenAI
+    client: Any
     api_protocol: str = "chat_completions"
+    base_url: str = ""
+    api_key: str = ""
+    anthropic_auth_mode: str = "x_api_key"
     reasoning_native: bool = False                       # Brief 32：preset 声明原生 reasoning 支持
     reasoning_extra_body: dict[str, Any] = field(default_factory=dict)  # 原样透传 extra_body，绕过参数白名单（逃生舱）
 
@@ -262,6 +265,13 @@ def _build_model_client(preset_name: str) -> ModelClient:
             f"for preset={preset_name!r} provider={kind!r} model={preset.get('model', '')!r}: "
             f"{api_protocol!r}; expected one of {sorted(VALID_API_PROTOCOLS)}"
         )
+    anthropic_auth_mode = preset.get("anthropic_auth_mode", "x_api_key")
+    if anthropic_auth_mode not in VALID_ANTHROPIC_AUTH_MODES:
+        raise ValueError(
+            "[model_registry] invalid anthropic_auth_mode "
+            f"for preset={preset_name!r} provider={kind!r} model={preset.get('model', '')!r}: "
+            f"{anthropic_auth_mode!r}; expected one of {sorted(VALID_ANTHROPIC_AUTH_MODES)}"
+        )
 
     params = resolve_params(
         mp.get("defaults", {}),
@@ -271,11 +281,19 @@ def _build_model_client(preset_name: str) -> ModelClient:
 
     proxy_url = _get_proxy_url()
     http_client = _make_http_client(proxy_url)
-    oa_client = AsyncOpenAI(
-        api_key=preset.get("api_key", ""),
-        base_url=preset.get("base_url", "") or None,
-        http_client=http_client,
-    )
+    base_url = preset.get("base_url", "")
+    api_key = preset.get("api_key", "")
+    # Native Anthropic Messages calls use httpx directly; Chat Completions and
+    # Responses retain the OpenAI SDK client.  Both own the same pool lifecycle.
+    client: Any
+    if api_protocol == "anthropic_messages":
+        client = http_client
+    else:
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url or None,
+            http_client=http_client,
+        )
     logger.info(
         "[model_registry] built ModelClient '%s' kind=%s model=%s api_protocol=%s proxy=%s",
         preset_name, kind, preset.get("model"), api_protocol, "on" if proxy_url else "off",
@@ -287,8 +305,11 @@ def _build_model_client(preset_name: str) -> ModelClient:
         tool_call_mode=tool_call_mode,
         prompt_style=prompt_style,
         params=params,
-        client=oa_client,
+        client=client,
         api_protocol=api_protocol,
+        base_url=base_url,
+        api_key=api_key,
+        anthropic_auth_mode=anthropic_auth_mode,
         reasoning_native=bool(preset.get("reasoning_native", False)),
         reasoning_extra_body=dict(preset.get("reasoning_extra_body") or {}),
     )

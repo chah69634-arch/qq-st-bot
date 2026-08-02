@@ -57,6 +57,8 @@ MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /s
 
 每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；新白名单工具会从 MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述获得仅供建议的 effect。管理员确认或修改后才写入 `tool_policy`，缺少确认的白名单工具保持 `pending_confirmation`，不会注册或调用。已有显式策略保持不变；保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
 
+管理面「运维 → 工具」经 admin-only `GET/PUT /settings/tools` 统一观察已注册工具、保存命名的 `tool_loop.tool_presets`，并把预设绑定到 `model_presets.presets.<name>.tool_preset`。该预设只收窄该聊天模型收到的 function schema；它不替代 `tools.<name>.enabled` 全局执行闸门，也不替代 MCP server 的连接、allowlist 或本地 policy。删除工具预设会同步清除引用它的模型绑定；未绑定模型继续使用既有 categories/exclude_tools 语义。
+
 LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admin-only 的
 `GET/PUT /llm-debug-requests` 控制 `llm_debug_requests.enabled` 与 `keep_days`（1–7，默认关闭/1 天）。
 开启后，`core/llm_client.py` 会在实际请求发出前记录 messages、tools 与生成参数；疑似密钥字段和

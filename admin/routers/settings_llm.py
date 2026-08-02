@@ -638,6 +638,7 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
 class PresetUpsert(BaseModel):
     provider_kind: Optional[str] = None
     api_protocol: Optional[str] = None
+    anthropic_auth_mode: Optional[str] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
@@ -646,6 +647,7 @@ class PresetUpsert(BaseModel):
     params: Optional[dict] = None
     reasoning_native: Optional[bool] = None
     reasoning_extra_body: Optional[dict] = None
+    tool_preset: Optional[str] = None
 
 
 def _require_model_presets_block(full_cfg: dict) -> dict:
@@ -675,6 +677,16 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
                 detail=(
                     f"未知 api_protocol: {body.api_protocol!r}，"
                     f"可选: {sorted(VALID_API_PROTOCOLS)}"
+                ),
+            )
+    if body.anthropic_auth_mode is not None:
+        from core.llm_protocol import VALID_ANTHROPIC_AUTH_MODES
+        if body.anthropic_auth_mode not in VALID_ANTHROPIC_AUTH_MODES:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"未知 anthropic_auth_mode: {body.anthropic_auth_mode!r}，"
+                    f"可选: {sorted(VALID_ANTHROPIC_AUTH_MODES)}"
                 ),
             )
 
@@ -828,6 +840,8 @@ async def test_preset_connectivity(name: str, auth=Depends(require_scopes("admin
         }
     finally:
         try:
-            await client.client.close()
+            close = getattr(client.client, "close", None) or getattr(client.client, "aclose", None)
+            if callable(close):
+                await close()
         except Exception:
             pass

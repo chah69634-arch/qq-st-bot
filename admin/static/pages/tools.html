@@ -1,0 +1,24 @@
+<h1 class="page-title" data-i18n="tools.title">工具</h1>
+
+<div class="card">
+  <p data-i18n="tools.notice">这里管理已注册工具的运行开关，以及每个聊天模型实际收到的工具 schema。MCP server 的连接、白名单和策略仍在 MCP 页面管理。</p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="tools.binding_title">模型工具预设</h3><button class="btn btn-ghost btn-sm" data-action="loadToolsPage" data-i18n="common.refresh">刷新</button></div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="tools.model">聊天模型 preset</span><select id="tools-model-preset" onchange="changeToolsModelPreset(this.value)"></select></label>
+  </div>
+  <p id="tools-binding-note" style="color:var(--muted);font-size:12px"></p>
+  <div id="tools-preset-buttons"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    <button class="btn btn-primary btn-sm" data-action="saveToolPreset" data-i18n="tools.save_preset">保存当前勾选</button>
+    <button class="btn btn-ghost btn-sm" data-action="createToolPreset" data-i18n="tools.create_preset">新建预设</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="tools.registry_title">已注册工具</h3><span id="tools-exposure-count" class="badge"></span></div>
+  <p data-i18n="tools.registry_hint" style="color:var(--muted);font-size:12px">“在此模型中暴露”只影响工具循环传给当前聊天模型的 schema；全局执行开关关闭后，任何模型都不能调用该内置工具。</p>
+  <div id="tools-registry-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
+</div>

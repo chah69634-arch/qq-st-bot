@@ -175,7 +175,10 @@ async def reload_client() -> None:
             continue
         seen.add(identity)
         try:
-            await client.close()
+            close = getattr(client, "close", None) or getattr(client, "aclose", None)
+            if not callable(close):
+                raise TypeError(f"client {type(client).__name__} has no async close method")
+            await close()
             closed += 1
         except Exception as exc:
             logger.warning("[llm_client] 关闭旧客户端失败: %s", exc)

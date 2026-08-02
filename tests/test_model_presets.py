@@ -10,6 +10,7 @@ Coverage (per task spec §9):
 """
 
 import types
+import httpx
 import pytest
 
 
@@ -107,6 +108,34 @@ class TestPromptStyleResolution:
     def test_explicit_narrative_overrides_anthropic_default(self):
         style = self._build({"prompt_style": "narrative"}, kind="anthropic_compat")
         assert style == "narrative"
+
+
+@pytest.mark.asyncio
+async def test_native_anthropic_preset_uses_httpx_client_and_keeps_auth_mode(monkeypatch):
+    import core.model_registry as registry
+
+    monkeypatch.setattr(registry, "_get_preset_config", lambda: {
+        "defaults": {},
+        "presets": {
+            "claude-native": {
+                "provider_kind": "anthropic_compat",
+                "api_protocol": "anthropic_messages",
+                "anthropic_auth_mode": "bearer",
+                "base_url": "https://relay.example",
+                "api_key": "test-key",
+                "model": "claude-test",
+            },
+        },
+    })
+    monkeypatch.setattr(registry, "_get_proxy_url", lambda: None)
+
+    client = registry._build_model_client("claude-native")
+    try:
+        assert isinstance(client.client, httpx.AsyncClient)
+        assert client.base_url == "https://relay.example"
+        assert client.anthropic_auth_mode == "bearer"
+    finally:
+        await client.client.aclose()
 
 
 # ===========================================================================

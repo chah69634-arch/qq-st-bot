@@ -947,6 +947,25 @@ class Pipeline:
             t for t in _filter_growth_tools(get_tools_schema(categories=categories), char_id=char_id)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
+        # A named tool preset is a final, model-specific *exposure* filter.  It
+        # cannot bypass category, per-character, MCP proficiency, or global
+        # execution gates above; it only makes this model receive fewer schemas.
+        from core.model_registry import _get_preset_config, _resolve_preset_name
+        from core.tool_presets import resolve_tool_allowlist
+
+        model_presets = _get_preset_config()
+        chat_preset_name = _resolve_preset_name("chat", char_id=char_id)
+        model_preset = model_presets.get("presets", {}).get(chat_preset_name, {})
+        allowed_tool_names, applied_tool_preset = resolve_tool_allowlist(cfg, model_preset)
+        if allowed_tool_names is not None:
+            tools = [
+                tool for tool in tools
+                if (tool.get("function") or tool).get("name") in allowed_tool_names
+            ]
+            logger.info(
+                "[pipeline.run_agentic_loop] applied tool preset=%r model_preset=%r exposed=%d",
+                applied_tool_preset, chat_preset_name, len(tools),
+            )
         if len(tools) > 20:
             from core.runtime_signal_observability import record
 

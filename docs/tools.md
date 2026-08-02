@@ -66,6 +66,8 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
     绝不退回远端工具名、description、参数或结果。
     - 暴露面：categories（默认 info/desktop/memory）减去 exclude_tools
       （默认排除 toy_vibrate/toy_stop/toy_pattern/write_toy_file），前端设置页可调
+    - 模型专属预设：若 chat model preset 绑定了 `tool_preset`，再按
+      `tool_loop.tool_presets` 的同名白名单收窄；未绑定时保持上述旧语义。
 
   与路径A互斥表：
     | 场景                                  | 路径A探针 | 路径C loop |
@@ -111,6 +113,15 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
 - `tool_loop`：仅接受 `"on"` / `"off"`。`"on"` 允许这张卡在全局默认关闭时启用 Path C；
   `"off"` 关闭 Path C；字段缺失或非法值回落全局 `tool_loop.enabled`。它不会绕过 owner 私聊
   或 `function_calling` preset 两道硬闸。`examples/assistant.example.json` 是人机直连组合示例。
+
+### 模型专属工具预设
+
+管理面「运维 → 工具」将运行时注册表作为只读观测清单，并提供两层独立控制：
+
+- `tools.<name>.enabled` 是内置工具的全局执行闸门；关闭后 schema 不会暴露，直接执行也会被拒绝。
+- `tool_loop.tool_presets` 是命名 schema 白名单；`model_presets.presets.<model>.tool_preset` 仅为该聊天模型选用其中一项。它只能在类别、角色权限、MCP proficiency 与全局执行闸门之后继续收窄，不能扩大权限。
+
+未绑定 `tool_preset` 时保持 categories/exclude_tools 语义。引用已删除预设时运行时 fail-closed 为零个工具并记录 warning；面板删除预设会同步清除已有模型绑定。MCP 动态工具的执行权仍由 MCP server 的连接、allowlist 与本地 policy 管理；工具页只能决定它是否被某个模型收到。
 - 另外四个钩子（`disabled_layers` / `model_routing` / `proactive` / `tool_loop`）分别见
   `docs/prompt-layers.md`、`docs/model-presets.md`、`docs/scheduler.md`。
 

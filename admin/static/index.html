@@ -68,6 +68,7 @@
       <a data-page="scheduler" data-action="goto" data-action-args='["scheduler"]'><span class="icon">⏰</span><span data-i18n="nav.scheduler">调度器</span></a>
       <a data-page="auth-tokens" data-action="goto" data-action-args='["auth-tokens"]'><span class="icon">🔑</span><span data-i18n="nav.auth_tokens">Token</span></a>
       <a data-page="model-routing" data-action="goto" data-action-args='["model-routing"]'><span class="icon">🔀</span><span data-i18n="nav.model_routing">模型路由</span></a>
+      <a data-page="tools" data-action="goto" data-action-args='["tools"]'><span class="icon">🧰</span><span data-i18n="nav.tools">工具</span></a>
       <a data-page="relationship-facts" data-action="goto" data-action-args='["relationship-facts"]'><span class="icon">📌</span><span data-i18n="nav.relationship_facts">关系事实</span></a>
     </div>
 
@@ -132,6 +133,8 @@
 
     <!-- ── MCP 管理（Brief 110） ── -->
     <div class="page" id="page-mcp" data-page-fragment="mcp"></div>
+
+    <div class="page" id="page-tools" data-page-fragment="tools"></div>
 
     <!-- ── 系统状态 ── -->
     <div class="page active" id="page-status" data-page-fragment="status"></div>
@@ -212,7 +215,7 @@
             <select id="mr-preset-kind">
               <option value="openai">openai（OpenAI 官方 / 兼容 OpenAI 协议的中转、代理）</option>
               <option value="deepseek">deepseek（DeepSeek 官方 / 兼容 DeepSeek 协议）</option>
-              <option value="anthropic_compat">anthropic_compat（Claude 官方 / 兼容 Claude 协议的中转）</option>
+              <option value="anthropic_compat" data-i18n="routing.preset.provider_anthropic">anthropic_compat（Claude 模型；协议由 api_protocol 指定）</option>
               <option value="local">local（自己本地部署，如 Ollama/vLLM）</option>
             </select>
           </label>
@@ -228,6 +231,14 @@
             <select id="mr-preset-api-protocol">
               <option value="chat_completions">chat_completions</option>
               <option value="responses">responses</option>
+              <option value="anthropic_messages" data-i18n="routing.preset.protocol_anthropic_messages">anthropic_messages（Claude 原生 /v1/messages）</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="routing.preset.anthropic_auth_label">anthropic_auth_mode（仅 anthropic_messages：认证头）</span>
+            <select id="mr-preset-anthropic-auth-mode">
+              <option value="x_api_key" data-i18n="routing.preset.anthropic_auth_x_api_key">x_api_key（官方 Anthropic API）</option>
+              <option value="bearer" data-i18n="routing.preset.anthropic_auth_bearer">bearer（ANTHROPIC_AUTH_TOKEN 类中转）</option>
             </select>
           </label>
         </div>
@@ -563,6 +574,7 @@
 <script src="/static/js/core.js?v=admin-ui-mcp-policy-console-1"></script>
 <script src="/static/js/setup.js"></script>
 <script src="/static/js/mcp.js?v=admin-ui-mcp-policy-console-1"></script>
+<script src="/static/js/tools.js?v=admin-ui-tool-control-1"></script>
 <script src="/static/js/status-users.js?v=admin-ui-existence-1"></script>
 <script src="/static/js/lorebook.js"></script>
 <script src="/static/js/settings.js?v=admin-ui-external-tools-1"></script>

@@ -137,7 +137,7 @@ def test_put_updates_existing_preset_merges_params(admin_client):
     assert preset["base_url"] == "https://api.deepseek.com"
 
 
-def test_put_preset_accepts_responses_protocol_and_rejects_unknown_value(admin_client):
+def test_put_preset_accepts_explicit_protocols_and_rejects_unknown_value(admin_client):
     client, temp_cfg = admin_client
     _write_cfg(temp_cfg)
 
@@ -150,12 +150,30 @@ def test_put_preset_accepts_responses_protocol_and_rejects_unknown_value(admin_c
     saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
     assert saved["model_presets"]["presets"]["deepseek-default"]["api_protocol"] == "responses"
 
+    anthropic = client.put(
+        "/model-presets/presets/deepseek-default",
+        json={"api_protocol": "anthropic_messages", "anthropic_auth_mode": "bearer"},
+        headers=_auth(),
+    )
+    assert anthropic.status_code == 200
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    preset = saved["model_presets"]["presets"]["deepseek-default"]
+    assert preset["api_protocol"] == "anthropic_messages"
+    assert preset["anthropic_auth_mode"] == "bearer"
+
     bad = client.put(
         "/model-presets/presets/deepseek-default",
         json={"api_protocol": "inferred"},
         headers=_auth(),
     )
     assert bad.status_code == 422
+
+    bad_auth = client.put(
+        "/model-presets/presets/deepseek-default",
+        json={"anthropic_auth_mode": "basic"},
+        headers=_auth(),
+    )
+    assert bad_auth.status_code == 422
 
 
 def test_put_preset_legacy_mode_rejected(admin_client):
