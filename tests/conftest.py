@@ -113,6 +113,7 @@ def reset_proactive_ledger():
         "daily_count": 0,
         "daily_logical_day": "",
         "recent": [],
+        "continuity_by_uid": {},
     }
     _ledger._loaded = True  # skip disk load; state above is authoritative for the test
     _ledger._loaded_path_token = str(get_paths().root_dir().resolve())
