@@ -156,9 +156,8 @@ def test_cursor_commit_failure_keeps_already_received_event_pending(bridge_env, 
     "active_window_filtered",
     "dnd_filtered",
     "global_gap_filtered",
-    "daily_budget_filtered",
-    "state_filtered",
-    "proactive_off",
+        "daily_budget_filtered",
+        "state_filtered",
 ])
 def test_temporary_gate_rejections_are_pending_not_dropped(bridge_env, sandbox, monkeypatch, gate_reason):
     from core.wake_bridge import PENDING, WakeBridge
@@ -172,6 +171,21 @@ def test_temporary_gate_rejections_are_pending_not_dropped(bridge_env, sandbox, 
     assert result.status == "gated" and result.reason == gate_reason
     assert record["status"] == PENDING
     assert record["next_attempt_at"] > record["last_attempt_at"]
+
+
+def test_proactive_off_is_terminal_not_retried(bridge_env, sandbox, monkeypatch):
+    """Long-lived speech permission closure must not resurrect a stale external event."""
+    from core.wake_bridge import CONSUMED, WakeBridge
+
+    async def reject(uid, proposals, *, dry_run):
+        return None, "proactive_off", None
+
+    monkeypatch.setattr("core.scheduler.gating.decide_and_execute_event", reject)
+    result = _run(WakeBridge().submit_mapping(_event()))
+    record = _only_record(_state(sandbox)[1])
+    assert result.reason == "proactive_off"
+    assert record["status"] == CONSUMED
+    assert record["last_disposition"] == "proactive_off"
 
 
 def test_pending_survives_restart_and_processing_lease_recovers(bridge_env, sandbox, monkeypatch):

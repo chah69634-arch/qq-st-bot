@@ -990,6 +990,18 @@ async def _loop():
                         exc_info=exc,
                     )
 
+                # Internal autonomy shares this scheduler tick only.  Its durable
+                # store/runner has independent semantics and never enters the
+                # trigger-only _pipeline_send outlet.
+                if oid:
+                    try:
+                        from core.autonomy.runner import tick as _autonomy_tick
+                        _autonomy_char = _active_char_id_or_none()
+                        if _autonomy_char:
+                            await _autonomy_tick(oid, _autonomy_char)
+                    except Exception as exc:
+                        logger.error("[scheduler] autonomy tick failed: %s", exc, exc_info=True)
+
                 _trigger_names = [
                     "morning", "night", "random_message", "weather",
                     "reminders", "period", "diary_reminder", "diary_inject",

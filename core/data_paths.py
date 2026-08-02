@@ -330,6 +330,10 @@ class DataPaths:
     def proactive_ledger(self) -> Path:
         return self._p("runtime", "proactive_ledger.json")
 
+    def autonomy_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Durable internal-autonomy state, isolated per character and owner."""
+        return self._p("runtime", "autonomy", safe_user_id(char_id), safe_user_id(user_id), "state.json")
+
     def wake_delivery_ledger(self, user_id: str | int) -> Path:
         return self._p("wake_delivery", f"{safe_user_id(user_id)}.json")
 

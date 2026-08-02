@@ -381,6 +381,11 @@ class WakeBridge:
             return WakeBridgeResult(status="source_error", provider=scope.provider, external_id_hash=stimulus.external_id_hash, reason="temporary execution failure")
 
         if picked is None:
+            if reason in {"suppressed_unanswered_cap", "proactive_off"}:
+                await self._settle(
+                    scope, record_key, claim_token, status=CONSUMED, disposition=reason,
+                )
+                return WakeBridgeResult(status="gated", provider=scope.provider, external_id_hash=stimulus.external_id_hash, reason=reason)
             await self._settle_pending(scope, record_key, claim_token, reason)
             return WakeBridgeResult(status="gated", provider=scope.provider, external_id_hash=stimulus.external_id_hash, reason=reason)
         perceive_status = str(outcome.get("perceive_status") or "")

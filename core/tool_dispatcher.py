@@ -1347,7 +1347,7 @@ def parse_tail_brace(text: str) -> tuple[str, str | None]:
 
 
 _EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({
-    "user_live", "assistant_loop", "assistant_loop_relay", "admin_console",
+    "user_live", "assistant_loop", "assistant_loop_relay", "autonomy_loop", "admin_console",
 })
 _OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
     "toy_vibrate",

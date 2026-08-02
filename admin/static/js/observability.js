@@ -162,6 +162,48 @@ async function loadObserveRuntime() {
   }
 }
 
+// ══════════════════════════════════════════════════════════
+//  内置唤醒状态（独立 autonomy job/run store，不是 scheduler proposal）
+// ══════════════════════════════════════════════════════════
+async function loadObserveAutonomy() {
+  const statusEl = document.getElementById('autonomy-status');
+  const runsEl = document.getElementById('autonomy-runs');
+  if (!statusEl) return;
+  try {
+    const [status, config, runs, tools] = await Promise.all([
+      api('GET', '/admin/autonomy/status'), api('GET', '/admin/autonomy/config'),
+      api('GET', '/admin/autonomy/runs'), api('GET', '/admin/autonomy/tools'),
+    ]);
+    statusEl.textContent = JSON.stringify(status, null, 2);
+    runsEl.textContent = JSON.stringify(runs.runs || [], null, 2);
+    document.getElementById('autonomy-enabled').checked = !!config.enabled;
+    document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
+    document.getElementById('autonomy-interval').value = (config.interval || {}).seconds || 60;
+    const host = document.getElementById('autonomy-tools');
+    host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>effect</th><th>风险</th><th>允许</th></tr></thead><tbody>${(tools.tools || []).map(item => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.effect)}</td><td>${escapeHtml(item.risk)}</td><td><input type="checkbox" data-autonomy-tool="${escapeHtml(item.name)}" ${item.enabled ? 'checked' : ''}></td></tr>`).join('')}</tbody></table>`;
+    host.querySelectorAll('[data-autonomy-tool]').forEach(el => el.addEventListener('change', async () => {
+      try { await api('PATCH', '/admin/autonomy/tools', {name: el.dataset.autonomyTool, enabled: el.checked, mcp_explicit: el.checked}); }
+      catch (e) { alert('保存失败：' + e.message); el.checked = !el.checked; }
+    }));
+  } catch (e) { statusEl.textContent = '加载失败：' + e.message; }
+}
+
+async function saveAutonomyConfig() {
+  try {
+    await api('PATCH', '/admin/autonomy/config', {enabled: document.getElementById('autonomy-enabled').checked, talk_enabled: document.getElementById('autonomy-talk').checked, interval: {seconds: Number(document.getElementById('autonomy-interval').value)}});
+    await loadObserveAutonomy();
+  } catch (e) { alert('保存失败：' + e.message); }
+}
+
+async function enqueueAutonomyTest() {
+  try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: 'manual'}); alert(`已排队：${r.job_id}`); await loadObserveAutonomy(); }
+  catch (e) { alert('排队失败：' + e.message); }
+}
+
+window.loadObserveAutonomy = loadObserveAutonomy;
+window.saveAutonomyConfig = saveAutonomyConfig;
+window.enqueueAutonomyTest = enqueueAutonomyTest;
+
 // ── 检视器当前快照（导出 MD 用）──
 let _obsPromptCurrent      = null;
 let _obsDreamPromptCurrent = null;

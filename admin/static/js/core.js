@@ -178,6 +178,7 @@ async function goto(page) {
     'observe-resource-completeness': () => loadResourceCompleteness(),
     'observe-api-contract':          () => loadApiContractCheck(),
     'observe-runtime-signals':       () => loadRuntimeSignals(),
+    'observe-autonomy':              loadObserveAutonomy,
     'observe-char-permissions':      () => initObserveCharacters('obs-charperm-char', loadCharPermissions),
   };
   if (page !== 'scheduler') _stopWatchStatusPoller();

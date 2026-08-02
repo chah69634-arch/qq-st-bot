@@ -68,6 +68,8 @@ async def run_owner_chat_turn(
 
         mark_user_active()
         notify_owner_turn(user_id)
+        from core.scheduler.proactive_ledger import record_user_message
+        record_user_message(user_id)
     except Exception:
         logger.exception("[owner_chat] trigger state notify_owner_turn 失败")
 

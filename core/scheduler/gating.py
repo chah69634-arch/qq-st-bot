@@ -258,12 +258,14 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     ledger_reasons: set[str] = set()
     for p in cooldown_allowed:
         priority = "emergency" if (p.time_sensitive_external_turn or _policy_ledger_exempt(p.trigger_name)) else "normal"
-        allowed, reason = _ledger_can_send(p.trigger_name, priority=priority)
+        allowed, reason = _ledger_can_send(p.trigger_name, priority=priority, uid=uid)
         if allowed:
             ledger_allowed.append(p)
         else:
             ledger_reasons.add(reason)
     if not ledger_allowed:
+        if ledger_reasons == {"unanswered_cap"}:
+            return None, "suppressed_unanswered_cap", candidates
         # Preserve the pre-existing "global_gap_filtered" reason string for the
         # gap case (observability/verification tooling greps for it); budget
         # exhaustion gets its own distinguishable reason.
