@@ -4,6 +4,7 @@ import logging
 import sys
 
 import pytest
+from uvicorn.logging import AccessFormatter
 
 from admin.log_filter import (
     DropSuccessfulAccessFilter,
@@ -272,3 +273,15 @@ def test_url_redaction_filter_and_formatter_cover_rendered_records():
     rendered = RedactingFormatter("%(message)s").format(record)
     assert "not-for-logs" not in rendered
     assert "api_key=***" in rendered
+
+
+def test_url_redaction_filter_preserves_uvicorn_access_formatter_contract():
+    record = _access_record(200)
+    record.args = ("127.0.0.1:12345", "GET", "/mcp?token=not-for-logs&safe=ok", "1.1", 200)
+
+    assert UrlRedactionFilter().filter(record)
+    rendered = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s').format(record)
+
+    assert "not-for-logs" not in rendered
+    assert "token=***" in rendered
+    assert "safe=ok" in rendered

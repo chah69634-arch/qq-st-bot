@@ -28,6 +28,27 @@ _SENSITIVE_QUERY_KEYS = frozenset({
 })
 
 
+def _redact_url_value(raw: str) -> str:
+    """Redact an absolute URL or an access-log relative path."""
+    try:
+        parsed = urlsplit(raw)
+    except ValueError:
+        return _JWT_RE.sub("***", raw)
+
+    query_parts: list[str] = []
+    for item in parsed.query.split("&"):
+        key, separator, _raw_value = item.partition("=")
+        if key.lower() in _SENSITIVE_QUERY_KEYS:
+            query_parts.append(f"{key}{separator}***" if separator else f"{key}=***")
+        else:
+            query_parts.append(item)
+    safe_path = _JWT_RE.sub("***", parsed.path)
+    safe_netloc = parsed.netloc
+    if "@" in safe_netloc:
+        safe_netloc = "***@" + safe_netloc.rsplit("@", 1)[1]
+    return urlunsplit((parsed.scheme, safe_netloc, safe_path, "&".join(query_parts), parsed.fragment))
+
+
 def redact_log_text(value: object) -> str:
     """Redact URL-embedded and header-style secrets from rendered log text."""
     text = str(value)
@@ -38,23 +59,7 @@ def redact_log_text(value: object) -> str:
         while raw and raw[-1] in ".,;:)]":
             suffix = raw[-1] + suffix
             raw = raw[:-1]
-        try:
-            parsed = urlsplit(raw)
-        except ValueError:
-            return _JWT_RE.sub("***", raw) + suffix
-
-        query_parts: list[str] = []
-        for item in parsed.query.split("&"):
-            key, separator, raw_value = item.partition("=")
-            if key.lower() in _SENSITIVE_QUERY_KEYS:
-                query_parts.append(f"{key}{separator}***" if separator else f"{key}=***")
-            else:
-                query_parts.append(item)
-        safe_path = _JWT_RE.sub("***", parsed.path)
-        safe_netloc = parsed.netloc
-        if "@" in safe_netloc:
-            safe_netloc = "***@" + safe_netloc.rsplit("@", 1)[1]
-        return urlunsplit((parsed.scheme, safe_netloc, safe_path, "&".join(query_parts), parsed.fragment)) + suffix
+        return _redact_url_value(raw) + suffix
 
     text = _URL_RE.sub(_redact_url, text)
     text = _JWT_RE.sub("***", text)
@@ -66,6 +71,14 @@ class UrlRedactionFilter(logging.Filter):
     """Render and redact a record before any standard handler formats it."""
 
     def filter(self, record: logging.LogRecord) -> bool:
+        # Uvicorn's AccessFormatter does not format record.getMessage().  It
+        # requires exactly five positional args (client, method, path, HTTP
+        # version, status), so redact only the path and preserve that contract.
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple) and len(record.args) >= 5:
+            args = list(record.args)
+            args[2] = _redact_url_value(str(args[2]))
+            record.args = tuple(args)
+            return True
         record.msg = redact_log_text(record.getMessage())
         record.args = ()
         return True
