@@ -233,7 +233,10 @@ def test_suppress_auth_failure_flushes_summary_after_window():
     _time.sleep(0.1)
     record = _access_record(401)
     assert f.filter(record) is True
-    assert record.args[-1] == 1  # 上一窗口抑制了 1 次
+    assert len(record.args) == 5
+    assert "已抑制 1 次" in record.args[2]
+    rendered = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s').format(record)
+    assert "已抑制 1 次" in rendered
 
 
 def test_install_auth_failure_dedup_filter_idempotent():

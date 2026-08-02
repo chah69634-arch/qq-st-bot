@@ -200,8 +200,14 @@ class SuppressRepeatedAuthFailureFilter(logging.Filter):
             suppressed = entry["suppressed"] if entry else 0
             self._state[key] = {"window_start": now, "suppressed": 0}
             if suppressed > 0:
-                record.msg = "%s - 上一窗口内状态 %s 重复，已抑制 %d 次"
-                record.args = (client_addr, status, suppressed)
+                # AccessFormatter still owns the message template and needs
+                # its five positional fields.  Carry the aggregation as part
+                # of the request path rather than replacing the record shape.
+                args = list(record.args)
+                args[2] = (
+                    f"{args[2]} [上一窗口状态 {status} 重复，已抑制 {suppressed} 次]"
+                )
+                record.args = tuple(args)
             return True
 
         entry["suppressed"] += 1
