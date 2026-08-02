@@ -50,7 +50,9 @@ class Job:
     dedupe_key: str = ""
     status: str = "pending"
     lease_until: float = 0.0
+    lease_token: str = ""
     attempts: int = 0
+    next_attempt_at: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)

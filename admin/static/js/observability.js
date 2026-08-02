@@ -178,7 +178,20 @@ async function loadObserveAutonomy() {
     runsEl.textContent = JSON.stringify(runs.runs || [], null, 2);
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
+    document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
+    document.getElementById('autonomy-min-interval').value = config.min_interval_seconds || 0;
     document.getElementById('autonomy-interval').value = (config.interval || {}).seconds || 60;
+    document.getElementById('autonomy-interval-enabled').checked = !!(config.interval || {}).enabled;
+    document.getElementById('autonomy-overflow-enabled').checked = !!(config.overflow || {}).enabled;
+    document.getElementById('autonomy-overflow-threshold').value = (config.overflow || {}).threshold || 1.6;
+    const schedule = config.schedule || {};
+    document.getElementById('autonomy-schedule-enabled').checked = !!schedule.enabled;
+    document.getElementById('autonomy-schedule-time').value = schedule.time || '12:00';
+    document.getElementById('autonomy-schedule-timezone').value = schedule.timezone || 'local';
+    document.getElementById('autonomy-schedule-weekdays').value = (schedule.weekdays || []).join(',');
+    document.getElementById('autonomy-window-start').value = (schedule.window || [])[0] || '';
+    document.getElementById('autonomy-window-end').value = (schedule.window || [])[1] || '';
+    document.getElementById('autonomy-miss-policy').value = schedule.restart_miss_policy || 'skip';
     const host = document.getElementById('autonomy-tools');
     host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>effect</th><th>风险</th><th>允许</th></tr></thead><tbody>${(tools.tools || []).map(item => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.effect)}</td><td>${escapeHtml(item.risk)}</td><td><input type="checkbox" data-autonomy-tool="${escapeHtml(item.name)}" ${item.enabled ? 'checked' : ''}></td></tr>`).join('')}</tbody></table>`;
     host.querySelectorAll('[data-autonomy-tool]').forEach(el => el.addEventListener('change', async () => {
@@ -190,13 +203,24 @@ async function loadObserveAutonomy() {
 
 async function saveAutonomyConfig() {
   try {
-    await api('PATCH', '/admin/autonomy/config', {enabled: document.getElementById('autonomy-enabled').checked, talk_enabled: document.getElementById('autonomy-talk').checked, interval: {seconds: Number(document.getElementById('autonomy-interval').value)}});
+    const weekdays = document.getElementById('autonomy-schedule-weekdays').value.split(',').map(x => x.trim()).filter(Boolean).map(Number);
+    const start = document.getElementById('autonomy-window-start').value;
+    const end = document.getElementById('autonomy-window-end').value;
+    await api('PATCH', '/admin/autonomy/config', {
+      enabled: document.getElementById('autonomy-enabled').checked,
+      talk_enabled: document.getElementById('autonomy-talk').checked,
+      daily_evaluation_budget: Number(document.getElementById('autonomy-daily').value),
+      min_interval_seconds: Number(document.getElementById('autonomy-min-interval').value),
+      interval: {enabled: document.getElementById('autonomy-interval-enabled').checked, seconds: Number(document.getElementById('autonomy-interval').value)},
+      overflow: {enabled: document.getElementById('autonomy-overflow-enabled').checked, threshold: Number(document.getElementById('autonomy-overflow-threshold').value)},
+      schedule: {enabled: document.getElementById('autonomy-schedule-enabled').checked, time: document.getElementById('autonomy-schedule-time').value, timezone: document.getElementById('autonomy-schedule-timezone').value || 'local', weekdays, window: start && end ? [start, end] : [], restart_miss_policy: document.getElementById('autonomy-miss-policy').value},
+    });
     await loadObserveAutonomy();
   } catch (e) { alert('保存失败：' + e.message); }
 }
 
 async function enqueueAutonomyTest() {
-  try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: 'manual'}); alert(`已排队：${r.job_id}`); await loadObserveAutonomy(); }
+  try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: document.getElementById('autonomy-test-source').value}); alert(`已排队：${r.job_id}`); await loadObserveAutonomy(); }
   catch (e) { alert('排队失败：' + e.message); }
 }
 

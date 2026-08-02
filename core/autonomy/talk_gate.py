@@ -25,7 +25,7 @@ def check(uid: str, *, allow_soft: bool = True) -> tuple[str, str]:
     except Exception: return "hard", Disposition.BLOCKED_DREAM_UNCERTAIN.value
     if guard == DreamGuardStatus.BLOCK_UNCERTAIN: return "hard", Disposition.BLOCKED_DREAM_UNCERTAIN.value
     if guard != DreamGuardStatus.ALLOW: return "hard", Disposition.BLOCKED_DREAM.value
-    allowed, why = can_send("autonomy", priority="normal")
+    allowed, why = can_send("autonomy", priority="normal", uid=uid)
     if not allowed:
         if why == "daily_budget_exceeded": return "hard", Disposition.SUPPRESSED_DAILY_BUDGET.value
         return ("soft" if allow_soft else "hard"), why
@@ -34,12 +34,22 @@ def check(uid: str, *, allow_soft: bool = True) -> tuple[str, str]:
 
 async def send(uid: str, char_id: str, text: str, *, source: str, run_id: str, bypass_soft_once: bool = False) -> tuple[bool, str]:
     text = str(text or "").strip()
+    if not text or len(text) > 600: return False, "empty_text"
+    # Reality output sanitation is intentionally applied before deciding that
+    # this is a legal talk. A tool loop cannot turn markup/narration into a
+    # visible proactive message merely by calling this capability.
+    from core.response_processor import strip_render_tags
+    from core.reality_output_scrubber import scrub_reality_output_text
+    text = (scrub_reality_output_text(strip_render_tags(text)) or "").strip()
     if not text: return False, "empty_text"
     mode, reason = check(uid, allow_soft=True)
     if mode == "hard" or (mode == "soft" and not bypass_soft_once): return False, reason
     from core import pipeline_registry
     pipeline = pipeline_registry.get()
     if pipeline is None: return False, "pipeline_unavailable"
+    from channels.registry import get_active
+    if not get_active():
+        return False, "no_delivery_channel"
     from core.turn_sink import TurnSource, record_assistant_turn
     result = await record_assistant_turn(
         pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,

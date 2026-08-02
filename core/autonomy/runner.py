@@ -9,13 +9,22 @@ from core.autonomy import policy, store, talk_gate
 from core.autonomy.models import Disposition, Job, Run
 
 
-def _system_prompt(*, talk_available: bool) -> str:
+def _system_prompt(*, talk_available: bool, character=None) -> str:
     talk_note = "talk_owner is available only for a deliberate final message." if talk_available else "用户尚未回应最近两次主动发言，本轮不可继续向用户发送消息。你仍可以进行其他允许的自主活动，也可以选择什么都不做。"
+    identity = ""
+    if character is not None:
+        name = str(getattr(character, "name", "") or "")
+        pieces = [
+            str(getattr(character, "system_prompt", "") or ""),
+            str(getattr(character, "personality", "") or ""),
+            str(getattr(character, "scenario", "") or ""),
+        ]
+        identity = f" You are {name}. " + "\n".join(part for part in pieces if part)[:4000]
     return (
         "You are running an internal autonomous opportunity. This is not a chat turn. "
         "Your ordinary text is private and will never be delivered. You may call allowed tools, "
         "then either explicitly call talk_owner once or finish silently. Do not narrate tool calls. " + talk_note
-    )
+    ) + identity
 
 
 async def run_job(job: Job) -> Run:
@@ -28,8 +37,24 @@ async def run_job(job: Job) -> Run:
     lock = conversation_lock(job.uid)
     if lock.locked():
         run.disposition = Disposition.BLOCKED_USER_ACTIVE.value; run.finished_at = time.time(); return run
-    async with lock:
-        return await _run_locked(job, state, run)
+    lease_lost = asyncio.Event()
+
+    async def _keep_lease() -> None:
+        while True:
+            await asyncio.sleep(20)
+            if not store.renew(job):
+                lease_lost.set()
+                return
+
+    keeper = asyncio.create_task(_keep_lease())
+    try:
+        async with lock:
+            result = await _run_locked(job, state, run)
+        if lease_lost.is_set():
+            result.disposition = Disposition.LEASE_LOST.value
+        return result
+    finally:
+        keeper.cancel()
 
 
 async def _run_locked(job: Job, state: dict, run: Run) -> Run:
@@ -40,14 +65,17 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     talk_available = bool(state["config"].get("talk_enabled", True) and mode != "hard")
     if talk_available:
         tools.append(talk_gate.schema())
-    messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available), "_layer": "autonomy_policy"}, {"role": "user", "content": f"Autonomy opportunity source: {job.source}. Decide what to do, if anything."}]
+    messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy"}, {"role": "user", "content": f"Autonomy opportunity source: {job.source}. Decide what to do, if anything."}]
     cfg = state["config"]
     max_steps = max(1, min(int(cfg.get("max_steps") or 4), 8))
     max_tools = max(0, min(int(cfg.get("max_tools") or 4), 8))
+    max_write_tools = max(0, min(int(cfg.get("max_write_tools") or 0), max_tools))
     session = _AutonomySession()
     saw_tool = False
     pending_talk_text = ""
     confirm_available = False
+    write_tool_count = 0
+    deadline = time.monotonic() + max(1.0, float(cfg.get("total_timeout_seconds") or 120))
     try:
         from core import llm_client
         for _ in range(max_steps):
@@ -55,8 +83,16 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 run.disposition = Disposition.CANCELED_BY_USER_ACTIVITY.value; break
             active_tools = list(tools)
             if confirm_available:
-                active_tools = [t for t in active_tools if (t.get("function") or t).get("name") != "talk_owner"] + [talk_gate.confirm_schema()]
-            turn = await asyncio.wait_for(llm_client.chat_turn(messages, active_tools, char_id=job.char_id, is_proactive=True), timeout=float(cfg.get("total_timeout_seconds") or 120))
+                # A soft timing block is one explicit re-decision, not another
+                # chance to continue autonomous tool work before speaking.
+                active_tools = [talk_gate.confirm_schema()]
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise asyncio.TimeoutError
+            turn = await asyncio.wait_for(
+                llm_client.chat_turn(messages, active_tools, char_id=job.char_id, is_proactive=True),
+                timeout=remaining,
+            )
             if not turn.tool_calls:
                 run.disposition = Disposition.COMPLETED_TOOLS_ONLY.value if saw_tool else Disposition.COMPLETED_NO_OP.value
                 break
@@ -91,9 +127,17 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     return _finish(run)
                 if len(run.tool_names) >= max_tools:
                     run.disposition = Disposition.COMPLETED_TOOLS_ONLY.value if saw_tool else Disposition.COMPLETED_NO_OP.value; return _finish(run)
+                if _is_write_tool(name) and write_tool_count >= max_write_tools:
+                    messages.append({"role": "tool", "tool_call_id": call["id"], "content": "write tool budget exhausted for this autonomy run"})
+                    continue
                 result, outcome = await _execute_tool(name, args, job, session, cfg)
                 saw_tool = True; run.tool_names.append(name)
                 if outcome == "outcome_unknown": run.disposition = Disposition.TOOL_OUTCOME_UNKNOWN.value; return _finish(run)
+                if outcome == "failed":
+                    run.disposition = Disposition.TOOL_FAILED.value
+                    return _finish(run)
+                if _is_write_tool(name):
+                    write_tool_count += 1
                 messages.append({"role": "tool", "tool_call_id": call["id"], "content": (result or "tool failed")[:1200]})
             if run.disposition == Disposition.CANCELED_BY_USER_ACTIVITY.value: break
         else:
@@ -113,6 +157,25 @@ def _finish(run: Run) -> Run:
 def _user_became_active(uid: str) -> bool:
     from core.scheduler.loop import _user_active_recently
     return bool(_user_active_recently())
+
+
+def _is_write_tool(name: str) -> bool:
+    from core.tool_dispatcher import _TOOL_REGISTRY, get_tool_effect, is_side_effect_tool
+    info = _TOOL_REGISTRY.get(name, {})
+    return (get_tool_effect(name) or ("write" if is_side_effect_tool(name) else "read")) != "read"
+
+
+def _character_for(char_id: str):
+    """Read the intended character without creating a new Pipeline or prompt audit."""
+    try:
+        from core import pipeline_registry
+        pipeline = pipeline_registry.get()
+        if pipeline is not None and getattr(pipeline, "_active_character_id", None) == char_id:
+            return pipeline.character
+        from core.character_loader import load
+        return load(char_id)
+    except Exception:
+        return None
 
 
 async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict) -> tuple[str | None, str]:
@@ -166,7 +229,35 @@ def _schedule_due(cfg: dict, now: float, last: float) -> bool:
     if not cfg.get("enabled"): return False
     try: hour, minute = (int(x) for x in str(cfg.get("time") or "").split(":"))
     except Exception: return False
-    local = time.localtime(now)
-    if local.tm_wday not in set(cfg.get("weekdays") or []): return False
-    due = local.tm_hour == hour and local.tm_min == minute
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        zone_name = str(cfg.get("timezone") or "local")
+        local = datetime.fromtimestamp(now, None if zone_name == "local" else ZoneInfo(zone_name))
+    except Exception:
+        return False
+    if local.weekday() not in set(cfg.get("weekdays") or []): return False
+    if not _inside_schedule_window(local.hour, local.minute, cfg.get("window") or []): return False
+    due = local.hour == hour and local.minute == minute
+    # Default restart policy is skip: exact-minute scheduling deliberately does
+    # not replay all missed slots. One bounded catch-up is possible only when
+    # explicitly requested and a slot was missed in the immediately preceding
+    # window.
+    if not due and cfg.get("restart_miss_policy") == "catch_up_once":
+        scheduled = local.replace(hour=hour, minute=minute, second=0, microsecond=0).timestamp()
+        due = 0 < now - scheduled <= 60 * 60 and last < scheduled
     return due and now - last > 55
+
+
+def _inside_schedule_window(hour: int, minute: int, window: list | tuple) -> bool:
+    if not window:
+        return True
+    if not isinstance(window, (list, tuple)) or len(window) != 2:
+        return False
+    try:
+        def value(raw):
+            h, m = (int(x) for x in str(raw).split(":")); return h * 60 + m
+        start, end, current = value(window[0]), value(window[1]), hour * 60 + minute
+    except Exception:
+        return False
+    return start <= current <= end if start <= end else current >= start or current <= end

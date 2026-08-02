@@ -23,6 +23,13 @@ from core.sandbox import get_paths, safe_user_id
 
 logger = logging.getLogger(__name__)
 
+# These dispositions are final user-speech decisions, not transient scheduler
+# gates. Retrying them after a lease backoff would resurrect stale external
+# events once a user later replies or re-enables proactive speech.
+_TERMINAL_TALK_DISPOSITIONS = frozenset({
+    "suppressed_unanswered_cap", "proactive_off", "talk_canceled", "expired_before_talk",
+})
+
 MAX_TITLE_CHARS = 240
 MAX_CONTENT_CHARS = 1600
 MAX_AUTHOR_CHARS = 160
@@ -381,7 +388,7 @@ class WakeBridge:
             return WakeBridgeResult(status="source_error", provider=scope.provider, external_id_hash=stimulus.external_id_hash, reason="temporary execution failure")
 
         if picked is None:
-            if reason in {"suppressed_unanswered_cap", "proactive_off"}:
+            if reason in _TERMINAL_TALK_DISPOSITIONS:
                 await self._settle(
                     scope, record_key, claim_token, status=CONSUMED, disposition=reason,
                 )
@@ -400,6 +407,10 @@ class WakeBridge:
         if sent:
             await self._settle(scope, record_key, claim_token, status=CONSUMED, disposition="sent")
             return WakeBridgeResult(status="accepted", provider=scope.provider, external_id_hash=stimulus.external_id_hash, reason="consumed", sent=True)
+        terminal = str(outcome.get("terminal_disposition") or "")
+        if terminal in _TERMINAL_TALK_DISPOSITIONS:
+            await self._settle(scope, record_key, claim_token, status=CONSUMED, disposition=terminal)
+            return WakeBridgeResult(status="gated", provider=scope.provider, external_id_hash=stimulus.external_id_hash, reason=terminal)
         await self._settle_pending(scope, record_key, claim_token, "no_reply_or_execution_blocked")
         return WakeBridgeResult(status="gated", provider=scope.provider, external_id_hash=stimulus.external_id_hash, reason="no successful assistant turn")
 
@@ -434,6 +445,10 @@ class WakeBridge:
             return WakeBridgeResult(status="source_error", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="temporary execution failure")
 
         if picked is None:
+            if reason in _TERMINAL_TALK_DISPOSITIONS:
+                await self._settle(scope, record_key, claim_token, status=CONSUMED, disposition=reason)
+                _log_garden_event(hint, event="drain_finished", disposition=reason)
+                return WakeBridgeResult(status="gated", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason=reason)
             await self._settle_pending(scope, record_key, claim_token, reason)
             _log_garden_event(hint, event="gate", disposition=reason)
             _log_garden_event(hint, event="drain_finished", disposition="deferred")
@@ -455,6 +470,11 @@ class WakeBridge:
             await self._settle(scope, record_key, claim_token, status=CONSUMED, disposition="sent")
             _log_garden_event(hint, event="drain_finished", disposition="consumed")
             return WakeBridgeResult(status="accepted", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="consumed", sent=True)
+        terminal = str(outcome.get("terminal_disposition") or "")
+        if terminal in _TERMINAL_TALK_DISPOSITIONS:
+            await self._settle(scope, record_key, claim_token, status=CONSUMED, disposition=terminal)
+            _log_garden_event(hint, event="drain_finished", disposition=terminal)
+            return WakeBridgeResult(status="gated", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason=terminal)
         await self._settle_pending(scope, record_key, claim_token, "no_reply_or_execution_blocked")
         _log_garden_event(hint, event="drain_finished", disposition="deferred")
         return WakeBridgeResult(status="gated", provider=GARDEN_PROVIDER, external_id_hash=hint.reason_hash, reason="no successful assistant turn")

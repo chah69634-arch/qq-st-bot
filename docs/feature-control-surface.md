@@ -68,3 +68,5 @@ LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admi
 排查，关闭后不再产生新快照，既有快照按保留期自动轮转清理。
 
 降级路径：关闭对应功能布尔值时保留其余配置；tool loop 回到普通单次回复，thinking 回到无前置思考，桌面 TTS 回到纯文字，生成后段落兜底关闭后直接发送清理后的模型原文，模型可切回稳定 routing profile。
+
+内置唤醒由 `GET/PATCH /admin/autonomy/config` 与 `GET/PATCH /admin/autonomy/tools` 控制，配置和有限运行记录按 owner/角色写入独立 autonomy state，不写入 `config.yaml`。默认关闭；启用后的 job 仍只由现有 scheduler tick 消费。只有逐项允许的只读工具、经代码审查的 sandboxed write（当前为花园浇水）以及同时声明 `mcp_explicit=true`、`outcome_unknown=fail_closed` 的 MCP 工具可进入 autonomy loop。关闭开关会停止新的 autonomy run，不会改变普通聊天 tool loop、Wake Bridge 或现有 scheduler trigger 的行为。
