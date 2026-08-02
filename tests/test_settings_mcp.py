@@ -50,6 +50,24 @@ def test_remote_transport_validation_keeps_legacy_http_alias_and_rejects_unknown
         mod.McpServerDraft(**invalid)
 
 
+def test_server_view_redacts_literal_url_path_but_keeps_variable_binding(monkeypatch):
+    from core import mcp_client
+
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
+    literal = mod._server_view({
+        "name": "cedar_toy", "transport": "streamable-http",
+        "url": "https://gateway.test/mcp/a-literal-path-credential?token=also-secret",
+    })
+    template = mod._server_view({
+        "name": "cedar_toy", "transport": "streamable-http",
+        "url": "https://gateway.test/mcp/${MCP_URL_TOKEN}",
+    })
+
+    assert literal["url"] == "https://gateway.test/••••已配置"
+    assert "credential" not in literal["url"]
+    assert template["url"] == "https://gateway.test/mcp/${MCP_URL_TOKEN}"
+
+
 def test_import_tests_before_write_and_hot_reloads(tmp_path, monkeypatch):
     """Brief 115 根治：MCP 连接生命周期已改成专属常驻 task 持有、管理面只发信号，
     不再跨 task 直接碰 AsyncExitStack，导入接口的热重载可以安全恢复。"""

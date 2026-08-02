@@ -246,6 +246,19 @@ class TestHttpHeadersAndProbe:
         with pytest.raises(ValueError, match="MCP_MISSING_TOKEN"):
             mc._expand_headers({"Authorization": "Bearer ${MCP_MISSING_TOKEN}"})
 
+    def test_transport_url_expands_environment_variable_path_segment(self, monkeypatch):
+        monkeypatch.setenv("MCP_URL_TOKEN", "path-secret")
+        assert mc._transport_url(
+            {"url": "https://gateway.test/mcp/${MCP_URL_TOKEN}"}, "streamable-http",
+        ) == "https://gateway.test/mcp/path-secret"
+
+    def test_transport_url_missing_environment_variable_fails_closed(self, monkeypatch):
+        monkeypatch.delenv("MCP_URL_TOKEN", raising=False)
+        with pytest.raises(ValueError, match="MCP_URL_TOKEN"):
+            mc._transport_url(
+                {"url": "https://gateway.test/mcp/${MCP_URL_TOKEN}"}, "streamable-http",
+            )
+
     async def test_probe_lists_tools_without_registering_them(self, monkeypatch):
         session = _FakeSession()
         session.tools_result = SimpleNamespace(tools=[

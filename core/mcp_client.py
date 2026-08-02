@@ -214,6 +214,18 @@ def _validated_local_tool_policy(server_cfg: dict) -> dict[str, dict] | None:
     return validate_local_tool_policy(server_cfg)
 
 
+def _expand_env_refs(value: str, *, field: str) -> str:
+    """Expand local environment references without ever persisting their value."""
+    def _replace(match: re.Match[str]) -> str:
+        env_name = match.group(1)
+        env_value = os.environ.get(env_name)
+        if env_value is None:
+            raise ValueError(f"{field} 环境变量未设置: {env_name}")
+        return env_value
+
+    return _ENV_REF_RE.sub(_replace, value)
+
+
 def _expand_headers(raw_headers: object) -> dict[str, str] | None:
     """展开 HTTP MCP headers 中的 ${ENV_VAR}，缺失变量 fail-closed。"""
     if raw_headers is None:
@@ -225,14 +237,7 @@ def _expand_headers(raw_headers: object) -> dict[str, str] | None:
         if not isinstance(key, str) or not key.strip() or not isinstance(value, str):
             raise ValueError("headers 的键和值都必须是非空字符串")
 
-        def _replace(match: re.Match[str]) -> str:
-            env_name = match.group(1)
-            env_value = os.environ.get(env_name)
-            if env_value is None:
-                raise ValueError(f"headers 环境变量未设置: {env_name}")
-            return env_value
-
-        resolved[key.strip()] = _ENV_REF_RE.sub(_replace, value)
+        resolved[key.strip()] = _expand_env_refs(value, field="headers")
     return resolved
 
 
@@ -465,7 +470,10 @@ def _transport_url(server_cfg: dict, transport: str) -> str:
     url = server_cfg.get("url")
     if not isinstance(url, str) or not url.strip():
         raise ValueError(f"{transport} transport 需要非空 url")
-    return url.strip()
+    # Some compatible gateways authenticate with a path segment instead of an
+    # HTTP header.  Keep that protocol shape, but resolve the secret only at
+    # connection time from the protected local environment.
+    return _expand_env_refs(url.strip(), field=f"{transport} transport URL")
 
 
 def is_local_mcp_url(url: str) -> bool:

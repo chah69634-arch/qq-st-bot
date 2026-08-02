@@ -158,6 +158,27 @@ def _safe_headers(headers: object) -> dict[str, str]:
     }
 
 
+def _safe_url(url: object) -> str:
+    """Expose only an endpoint identity, never a literal URL-path credential."""
+    if not isinstance(url, str) or not url:
+        return ""
+    # A variable reference is safe and useful to show: it lets the operator
+    # confirm the binding without disclosing the value.
+    if "${" in url:
+        return url
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return "••••已配置"
+    host = parsed.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    # An arbitrary gateway path can itself be its credential.  The MCP page
+    # does not edit it after import, so retaining only the host is sufficient.
+    return f"{parsed.scheme}://{host}" + ("/••••已配置" if parsed.path or parsed.query else "")
+
+
 def _normalize_tool_presets(raw: object) -> list[dict[str, object]]:
     """Validate the per-server named allowlist presets stored in config.yaml."""
     if raw is None:
@@ -240,7 +261,7 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
     return {
         "name": name,
         "transport": server_cfg.get("transport", "stdio"),
-        "url": server_cfg.get("url", ""),
+        "url": _safe_url(server_cfg.get("url")),
         "use_proxy": bool(server_cfg.get("use_proxy", False)),
         "is_local_url": is_local_mcp_url(str(server_cfg.get("url") or "")),
         "headers": _safe_headers(server_cfg.get("headers")),
