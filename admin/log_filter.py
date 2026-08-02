@@ -10,8 +10,90 @@ sensitive params with *** before the AccessFormatter formats the record.
 import logging
 import re
 import time
+from urllib.parse import urlsplit, urlunsplit
 
 _SENSITIVE = re.compile(r'(?i)((?:token|secret)=)[^&\s#]*')
+
+# Request URLs are not a safe place for credentials, but an external MCP
+# service may already have been configured that way.  This must protect every
+# console handler, not just uvicorn's access formatter: httpx/httpcore format
+# their own request lines before the access logger is involved.
+_URL_RE = re.compile(r"https?://[^\s<>\"']+")
+_JWT_RE = re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+_BEARER_RE = re.compile(r"(?i)(\b(?:authorization|proxy-authorization)\s*:\s*bearer\s+)[^\s,;]+")
+_KEY_VALUE_RE = re.compile(r"(?i)(\b(?:api[_-]?key|token|secret|password|credential)\s*[=:]\s*)[^\s,;&]+")
+_SENSITIVE_QUERY_KEYS = frozenset({
+    "api_key", "apikey", "auth", "authorization", "credential", "key",
+    "password", "secret", "signature", "sig", "token", "access_token",
+})
+
+
+def redact_log_text(value: object) -> str:
+    """Redact URL-embedded and header-style secrets from rendered log text."""
+    text = str(value)
+
+    def _redact_url(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        suffix = ""
+        while raw and raw[-1] in ".,;:)]":
+            suffix = raw[-1] + suffix
+            raw = raw[:-1]
+        try:
+            parsed = urlsplit(raw)
+        except ValueError:
+            return _JWT_RE.sub("***", raw) + suffix
+
+        query_parts: list[str] = []
+        for item in parsed.query.split("&"):
+            key, separator, raw_value = item.partition("=")
+            if key.lower() in _SENSITIVE_QUERY_KEYS:
+                query_parts.append(f"{key}{separator}***" if separator else f"{key}=***")
+            else:
+                query_parts.append(item)
+        safe_path = _JWT_RE.sub("***", parsed.path)
+        safe_netloc = parsed.netloc
+        if "@" in safe_netloc:
+            safe_netloc = "***@" + safe_netloc.rsplit("@", 1)[1]
+        return urlunsplit((parsed.scheme, safe_netloc, safe_path, "&".join(query_parts), parsed.fragment)) + suffix
+
+    text = _URL_RE.sub(_redact_url, text)
+    text = _JWT_RE.sub("***", text)
+    text = _BEARER_RE.sub(r"\1***", text)
+    return _KEY_VALUE_RE.sub(r"\1***", text)
+
+
+class UrlRedactionFilter(logging.Filter):
+    """Render and redact a record before any standard handler formats it."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = redact_log_text(record.getMessage())
+        record.args = ()
+        return True
+
+
+class RedactingFormatter(logging.Formatter):
+    """Also covers exception text appended by ``logging.Formatter``."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_log_text(super().format(record))
+
+
+def install_url_redaction_filter() -> None:
+    """Install a process-wide console safety net before any outbound startup I/O."""
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if not any(isinstance(item, UrlRedactionFilter) for item in handler.filters):
+            handler.addFilter(UrlRedactionFilter())
+        if not isinstance(handler.formatter, RedactingFormatter):
+            previous = handler.formatter
+            handler.setFormatter(RedactingFormatter(
+                fmt=previous._style._fmt if previous else None,
+                datefmt=previous.datefmt if previous else None,
+            ))
+    for name in ("httpx", "httpcore", "mcp", "uvicorn.access"):
+        logger = logging.getLogger(name)
+        if not any(isinstance(item, UrlRedactionFilter) for item in logger.filters):
+            logger.addFilter(UrlRedactionFilter())
 
 
 class QuerySanitizeFilter(logging.Filter):

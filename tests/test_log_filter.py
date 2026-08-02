@@ -7,12 +7,15 @@ import pytest
 
 from admin.log_filter import (
     DropSuccessfulAccessFilter,
+    RedactingFormatter,
     SuppressRepeatedAuthFailureFilter,
+    UrlRedactionFilter,
     _IgnoreWin10054ProactorFilter,
     install_access_noise_filter,
     install_asyncio_proactor_noise_filter,
     install_auth_failure_dedup_filter,
     install_console_quiet_mode,
+    redact_log_text,
 )
 
 _MSG = "Exception in callback _ProactorBasePipeTransport._call_connection_lost()"
@@ -240,3 +243,32 @@ def test_install_auth_failure_dedup_filter_idempotent():
     count = sum(1 for f in lg.filters if isinstance(f, SuppressRepeatedAuthFailureFilter))
     assert count == 1
     lg.filters = [f for f in lg.filters if not isinstance(f, SuppressRepeatedAuthFailureFilter)]
+
+
+def test_url_redaction_masks_query_path_and_header_credentials():
+    opaque = "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0.signaturepart"
+    rendered = redact_log_text(
+        f"request https://example.test/mcp/{opaque}?token=secret-value&safe=ok "
+        "Authorization: Bearer header-secret"
+    )
+
+    assert opaque not in rendered
+    assert "secret-value" not in rendered
+    assert "header-secret" not in rendered
+    assert "https://example.test/mcp/***?token=***&safe=ok" in rendered
+
+
+def test_url_redaction_filter_and_formatter_cover_rendered_records():
+    record = logging.LogRecord(
+        name="httpx",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="HTTP Request: %s",
+        args=("https://example.test/mcp?api_key=not-for-logs",),
+        exc_info=None,
+    )
+    assert UrlRedactionFilter().filter(record)
+    rendered = RedactingFormatter("%(message)s").format(record)
+    assert "not-for-logs" not in rendered
+    assert "api_key=***" in rendered

@@ -544,13 +544,30 @@ async def desktop_chat(body: dict, _auth=Depends(require_scopes("chat"))):
 
         if not isinstance(exc, UpstreamResponseFormatError):
             raise
-        logger.warning("[desktop_chat] model gateway returned an incompatible completion: %s", exc)
+        upstream_status = exc.http_status
+        category = exc.category
+        logger.warning(
+            "[desktop_chat] model gateway failure category=%s upstream_status=%s: %s",
+            category, upstream_status if upstream_status is not None else "-", exc,
+        )
+        if upstream_status == 404:
+            status_code = 404
+            detail = "当前模型未在中转站账号组中开通，或 preset 的模型/端点名称不存在。"
+        elif upstream_status == 429:
+            status_code = 429
+            detail = "模型中转站当前限流，请稍后重试或切换模型。"
+        elif upstream_status in (408, 504):
+            status_code = 504
+            detail = "模型中转站响应超时，请稍后重试。"
+        else:
+            status_code = 502
+            detail = (
+                "模型服务返回的格式与当前 preset 声明的 API 协议不兼容，"
+                "或中转站拒绝了该请求。请检查 api_protocol、网关能力与模型配置。"
+            )
         raise HTTPException(
-            status_code=502,
-            detail=(
-                "模型服务返回的格式与当前 preset 声明的 API 协议不兼容。"
-                "请检查 api_protocol、网关能力与工具调用配置。"
-            ),
+            status_code=status_code,
+            detail=detail,
         ) from exc
 
     from core.scheduler.sensor_events import notify_chat_happened

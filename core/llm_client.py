@@ -900,27 +900,40 @@ async def detect_emotion(text: str) -> str:
         # （原样输出中包含某个合法标签即可），仍失败才降级 neutral，但两种情况都留痕。
         for label in _VALID_EMOTIONS:
             if label in result:
-                logger.info(
+                logger.debug(
                     "[detect_emotion] 严格匹配未命中，宽松匹配到 %r（原始输出=%r）",
                     label, result,
                 )
                 return label
-        from core.runtime_signal_observability import record
+        from core.runtime_signal_observability import record_counts
 
         reason = "empty" if not result else "unrecognized"
-        is_new = record(
+        _, _, preset_count = record_counts(
             category="model_quality",
             code="emotion_output_invalid",
             status="attention",
             context={"purpose": "detect_emotion", "reason": reason, "model": mc.name},
         )
-        if is_new:
+        if preset_count == 1 or preset_count % 20 == 0:
             logger.warning("[detect_emotion] 输出无法解析为合法情绪，降级 neutral: reason=%s", reason)
         else:
             logger.debug("[detect_emotion] repeated invalid output, downgraded neutral: reason=%s", reason)
         return "neutral"
     except Exception as e:
-        log_error("llm_client.detect_emotion", e)
+        from core.runtime_signal_observability import record_counts
+
+        preset = getattr(locals().get("mc"), "name", "unresolved")
+        _, _, preset_count = record_counts(
+            category="model_quality",
+            code="emotion_output_invalid",
+            status="attention",
+            context={"purpose": "detect_emotion", "reason": "request_error", "model": preset},
+        )
+        if preset_count == 1 or preset_count % 20 == 0:
+            logger.warning(
+                "[detect_emotion] request failed; downgraded neutral: preset=%s error_type=%s count=%s",
+                preset, type(e).__name__, preset_count,
+            )
         return "neutral"
 
 

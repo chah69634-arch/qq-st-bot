@@ -35,6 +35,8 @@ class _Signal:
     last_seen: float
     latest_context: dict[str, Any] = field(default_factory=dict)
     contexts: set[str] = field(default_factory=set)
+    context_counts: dict[str, int] = field(default_factory=dict)
+    context_values: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 _signals: dict[tuple[str, str], _Signal] = {}
@@ -64,14 +66,14 @@ def _safe_context(context: Mapping[str, Any] | None) -> dict[str, Any]:
     return cleaned
 
 
-def record(
+def _record(
     *,
     category: str,
     code: str,
     status: SignalStatus,
     context: Mapping[str, Any] | None = None,
-) -> bool:
-    """Record one redacted runtime signal and return whether its context is new.
+) -> tuple[bool, int, int]:
+    """Record one redacted runtime signal and return new/total/context counts.
 
     Callers use the boolean to emit one console line for a new condition while
     still counting every recurrence for the read-only admin observability view.
@@ -99,10 +101,38 @@ def record(
         signal.last_seen = now
         signal.status = status
         signal.latest_context = clean_context
-        if context_key in signal.contexts or len(signal.contexts) >= _MAX_CONTEXTS_PER_SIGNAL:
-            return False
+        if context_key in signal.context_counts:
+            signal.context_counts[context_key] += 1
+            return False, signal.count, signal.context_counts[context_key]
+        if len(signal.contexts) >= _MAX_CONTEXTS_PER_SIGNAL:
+            return False, signal.count, 0
         signal.contexts.add(context_key)
-        return True
+        signal.context_counts[context_key] = 1
+        signal.context_values[context_key] = clean_context
+        return True, signal.count, 1
+
+
+def record(
+    *,
+    category: str,
+    code: str,
+    status: SignalStatus,
+    context: Mapping[str, Any] | None = None,
+) -> bool:
+    """Record one redacted runtime signal and return whether its context is new."""
+    is_new, _, _ = _record(category=category, code=code, status=status, context=context)
+    return is_new
+
+
+def record_counts(
+    *,
+    category: str,
+    code: str,
+    status: SignalStatus,
+    context: Mapping[str, Any] | None = None,
+) -> tuple[bool, int, int]:
+    """Record a signal and return ``(is_new, total_count, context_count)``."""
+    return _record(category=category, code=code, status=status, context=context)
 
 
 def snapshot() -> dict[str, Any]:
@@ -115,6 +145,10 @@ def snapshot() -> dict[str, Any]:
                 "status": item.status,
                 "count": item.count,
                 "unique_contexts": len(item.contexts),
+                "context_counts": [
+                    {"context": dict(item.context_values[key]), "count": count}
+                    for key, count in sorted(item.context_counts.items())
+                ],
                 "first_seen": item.first_seen,
                 "last_seen": item.last_seen,
                 "latest_context": dict(item.latest_context),

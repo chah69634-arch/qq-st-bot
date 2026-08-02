@@ -21,10 +21,14 @@ logging.basicConfig(
 # MCP startup can make HTTP requests before ``core.llm_client`` is imported.
 # Keep request URLs out of ordinary console logs from the very beginning; a URL
 # may itself contain a credential when an external server was configured badly.
+from admin.log_filter import install_asyncio_proactor_noise_filter, install_url_redaction_filter
+
+install_url_redaction_filter()
 logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("mcp").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-from admin.log_filter import install_asyncio_proactor_noise_filter
 install_asyncio_proactor_noise_filter()
 
 # ── 工作目录：切换到 main.py 所在目录，保证相对路径正确 ──────────────────────
@@ -73,6 +77,24 @@ def _check_admin_auth_startup(secret: str, has_tokens: bool) -> None:
     sys.exit(1)
 
 
+def _validate_data_root_contract(cfg: dict, *, sandbox_mode: str) -> None:
+    """Reject a production process that advertises a test sandbox as its data root."""
+    configured_mode = str(cfg.get("mode") or "production").strip().lower()
+    prefix = str(cfg.get("data_prefix") or "data").replace("\\", "/").rstrip("/").lower()
+    is_test_prefix = prefix == "data/test_sandbox" or prefix.startswith("data/test_sandbox/")
+
+    # run_test.py initializes the sandbox before importing this module.  Its
+    # environment override is deliberate even when the base config remains
+    # production, so validate the effective sandbox instead of blocking tests.
+    if sandbox_mode == "test":
+        return
+    if configured_mode == "production" and is_test_prefix:
+        raise RuntimeError(
+            "mode=production cannot use data/test_sandbox; "
+            "set data_prefix to data or start through run_test.py."
+        )
+
+
 def _fast_path_match(user_msg: str) -> tuple[str, str] | None:
     """快速路径关键词匹配（N7 可观测版）。
 
@@ -108,10 +130,12 @@ def _init_modules():
     from admin.token_registry import list_records as _list_auth_tokens
     _check_admin_auth_startup(_get_admin_secret(), bool(_list_auth_tokens()))
 
-    if cfg.get("mode") == "production" and "test_sandbox" in str(cfg.get("data_prefix", "")):
-        logger.error("=" * 60)
-        logger.error("  [启动警告] mode=production 但 data_prefix 指向 test_sandbox")
-        logger.error("=" * 60)
+    from core.sandbox import get_paths as _get_paths
+    try:
+        _validate_data_root_contract(cfg, sandbox_mode=_get_paths().mode)
+    except RuntimeError as exc:
+        logger.critical("[startup blocked] %s", exc)
+        sys.exit(1)
 
     # v0.1 发布门禁：gating_shadow 必须开启，否则主动触发全部失效
     _gs_enabled = cfg.get("scheduler", {}).get("gating_shadow", {}).get("enabled", True)

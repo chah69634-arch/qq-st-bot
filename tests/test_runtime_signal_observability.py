@@ -34,6 +34,38 @@ def test_runtime_signal_snapshot_is_process_local_aggregated_and_redacted():
     assert signal[0]["count"] == 2
     assert signal[0]["unique_contexts"] == 1
     assert signal[0]["latest_context"] == {"purpose": "detect_emotion", "reason": "empty"}
+    assert signal[0]["context_counts"] == [{
+        "context": {"purpose": "detect_emotion", "reason": "empty"}, "count": 2,
+    }]
+
+
+def test_emotion_invalid_output_is_aggregated_by_preset_and_warning_rate_limited(monkeypatch, caplog):
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    import core.llm_client as llm_client
+    from core.runtime_signal_observability import _reset_for_tests, snapshot
+
+    _reset_for_tests()
+    monkeypatch.setattr(llm_client, "get_model_client", lambda _purpose: SimpleNamespace(name="emotion-small"))
+    monkeypatch.setattr(
+        llm_client,
+        "create_protocol_response",
+        AsyncMock(return_value=SimpleNamespace(assistant_text="")),
+    )
+
+    with caplog.at_level("WARNING", logger="core.llm_client"):
+        for _ in range(20):
+            assert asyncio.run(llm_client.detect_emotion("hello")) == "neutral"
+
+    warnings = [item.message for item in caplog.records if "reason=empty" in item.message]
+    assert len(warnings) == 2
+    signal = snapshot()["signals"][0]
+    assert signal["context_counts"] == [{
+        "context": {"model": "emotion-small", "purpose": "detect_emotion", "reason": "empty"},
+        "count": 20,
+    }]
 
 
 def test_runtime_signals_endpoint_requires_state_read_and_returns_snapshot(sandbox, monkeypatch):

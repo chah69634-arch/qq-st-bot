@@ -17,6 +17,17 @@ VALID_ANTHROPIC_AUTH_MODES = frozenset({"x_api_key", "bearer"})
 class UpstreamResponseFormatError(RuntimeError):
     """The gateway response does not match the preset's declared protocol."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        http_status: int | None = None,
+        category: str = "protocol_incompatible",
+    ) -> None:
+        super().__init__(message)
+        self.http_status = http_status
+        self.category = category
+
 
 def _protocol(mc: Any) -> str:
     """Keep older test doubles and external callers on the legacy default."""
@@ -50,8 +61,34 @@ def _diagnostic(mc: Any, response: Any = None) -> str:
     )
 
 
-def _format_error(mc: Any, message: str, response: Any = None) -> UpstreamResponseFormatError:
-    return UpstreamResponseFormatError(f"{message}; {_diagnostic(mc, response)}")
+def _http_error_category(status: int | None) -> str:
+    if status == 404:
+        return "upstream_not_found"
+    if status in (401, 403):
+        return "upstream_auth_failed"
+    if status == 429:
+        return "upstream_rate_limited"
+    if status is not None and 400 <= status < 500:
+        return "upstream_request_rejected"
+    if status is not None and status >= 500:
+        return "upstream_unavailable"
+    return "protocol_incompatible"
+
+
+def _format_error(
+    mc: Any,
+    message: str,
+    response: Any = None,
+    *,
+    category: str | None = None,
+) -> UpstreamResponseFormatError:
+    status = getattr(response, "status_code", None)
+    normalized_status = status if isinstance(status, int) else None
+    return UpstreamResponseFormatError(
+        f"{message}; {_diagnostic(mc, response)}",
+        http_status=normalized_status,
+        category=category or _http_error_category(normalized_status),
+    )
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
