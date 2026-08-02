@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 
 # ── 日志基础配置 ──────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -947,6 +948,12 @@ async def main():
 
     _init_modules()
 
+    # Private-state backups only proceed when this lifecycle marker confirms
+    # that the service is offline.  It is removed on normal shutdown and is
+    # explicitly excluded from snapshots as ephemeral process state.
+    from core.runtime_service_state import mark_running as _mark_service_running
+    _mark_service_running(installation_root=Path.cwd())
+
     from core.config_loader import get_config
     cfg = get_config()
 
@@ -1040,9 +1047,14 @@ async def main():
     finally:
         await _slow_queue.shutdown()
         await mcp_client.shutdown_mcp_servers()
+        from core.runtime_service_state import clear_marker as _clear_service_marker
+        _clear_service_marker()
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "backup-state":
+        from core.backup_state import main as backup_state_main
+        sys.exit(backup_state_main(sys.argv[2:]))
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

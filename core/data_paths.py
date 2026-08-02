@@ -323,6 +323,10 @@ class DataPaths:
     def scheduler_user_state(self) -> Path:
         return self._p("runtime", "scheduler_user_state.json")
 
+    def service_state(self) -> Path:
+        """Lifecycle-owned PID marker used only for fail-closed offline backups."""
+        return self._p("runtime", "service_state.json")
+
     def proactive_ledger(self) -> Path:
         return self._p("runtime", "proactive_ledger.json")
 

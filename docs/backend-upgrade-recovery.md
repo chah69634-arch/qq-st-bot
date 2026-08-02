@@ -19,14 +19,17 @@ conversion.
 
 ## Moving from preview v0.x to v1
 
-1. Stop PresenceKit and make independent copies of `data/`, `userdata/`,
-   `config.yaml`, `config.local.yaml` (if present), and `secrets.local.yaml`
-   (if present).
+1. Stop PresenceKit and create/verify an independent private-state snapshot as
+   documented in [offline-state-backup.md](offline-state-backup.md).  The
+   updater's rollback copy is not a substitute.  The snapshot covers `data/`,
+   `userdata/`, `config.yaml`, `config.local.yaml` (if present), and
+   `secrets.local.yaml` (if present), plus classified legacy private assets.
 2. Install v1 into a **new empty directory**. Do not overlay the v0.x program
    directory.
-3. Copy only those protected roots/files into the new v1 directory. Do not copy
-   old program assets or environments: `characters/`, `content/`, `defaults/`,
-   `examples/`, `core/`, `scripts/`, or `.venv/`.
+3. There is currently no restore command or restore drill.  Any manual
+   migration from the snapshot must be operator-reviewed and limited to its
+   declared private files; do not copy old program assets or environments such
+   as `defaults/`, `examples/`, `core/`, `scripts/`, or `.venv/`.
 4. Before relying on legacy authored fallback, run the read-only C1.3 check:
 
    ```bash

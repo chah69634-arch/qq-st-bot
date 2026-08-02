@@ -84,6 +84,16 @@ def test_resource_completeness_requires_auth_and_returns_shape(sandbox, monkeypa
         assert g["id"] and g["label"] and g["source"]
 
 
+def test_backup_service_state_is_authenticated_and_non_sensitive(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+    assert client.get("/observability/backup-service-state").status_code == 401
+
+    from core.backup_state import ServiceState
+    monkeypatch.setattr("core.backup_state.service_state", lambda _root: ServiceState.OFFLINE)
+    assert client.get("/observability/backup-service-state", headers=_headers()).json() == {"service_state": "offline"}
+
+
 def test_resource_completeness_single_check_failure_is_isolated(sandbox, monkeypatch):
     """单项检查抛异常时，只影响那一项（status=unknown），不得拖垮整体接口。"""
     _active(sandbox)

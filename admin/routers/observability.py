@@ -1,8 +1,20 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from admin.auth import require_scopes
 
 router = APIRouter()
+
+
+@router.get(
+    "/observability/backup-service-state",
+    summary="读取离线备份使用的服务状态判定（不暴露 PID 或路径）",
+)
+async def backup_service_state(_auth=Depends(require_scopes("state.read"))):
+    from core.backup_state import service_state
+
+    return {"service_state": service_state(Path.cwd()).value}
 
 
 @router.get("/observability/api-calls", summary="读取外部 API 调用总账")
