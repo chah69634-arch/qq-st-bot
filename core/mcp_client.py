@@ -342,6 +342,8 @@ def server_runtime(name: str) -> dict:
 
 
 async def init_mcp_servers() -> None:
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("mcp_init")
     """启动时为每个已启用 server 起专属常驻 task，各自建立 session + list_tools 并注册工具。
 
     单 server 失败隔离：某个 server 连不上只跳过它，log warning，不影响其他 server 或主流程。
@@ -801,6 +803,8 @@ async def _call_tool(
     idempotent: bool = False,
     status_observer: Callable[..., Awaitable[None] | None] | None = None,
 ) -> str:
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("mcp_tool")
     handle = _servers.get(server_name)
     if handle is None:
         raise RuntimeError(f"MCP server '{server_name}' 未连接")

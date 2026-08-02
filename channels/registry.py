@@ -35,6 +35,8 @@ async def broadcast(
     exclude_channels: set[str] | None = None,
 ) -> dict[str, str]:
     """广播到所有活跃通道。返回失败通道到错误文本的映射。"""
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("channel_fanout")
     excluded = exclude_channels or set()
     active = [channel for channel in get_active() if channel.name not in excluded]
     if not active:

@@ -71,8 +71,7 @@ being guessed at or deleted.
 `verify` validates the manifest/checksum, supported schema, layout metadata,
 root inventory, required config entry, every declared size/hash, safe relative
 paths, reparse points, readability, and unexpected files.  It validates backup
-integrity only.  No restore drill has been implemented, so a verified snapshot
-must not be represented as a verified recovery solution.
+integrity only.
 
 ## Not supported
 
@@ -80,3 +79,25 @@ This command does not restore in place, modify live data, stop/start the
 service, back up while it runs, upload to cloud storage, copy to a network
 drive, or automatically delete old snapshots.  Retention is deliberately left
 separate until restore and operator storage policies are designed and tested.
+
+## Restore and recovery drill
+
+Restore verifies the source snapshot first and publishes only to a nonexistent
+or completely empty directory outside the live installation and snapshot:
+
+```powershell
+python main.py backup-state restore <snapshot> --target <new-empty-directory>
+```
+
+It rejects unsafe/absolute paths, reparse points, Windows case collisions,
+ADS/device names, excessive path lengths, file-count/size limits, and hash
+mismatches. Every restored file is re-hashed. The default read-only startup
+check parses config/auth, loads active character/assets and Lore/Pipeline, and
+parses JSON state without starting services. A no-outbound guard blocks LLM,
+MCP, QQ, channel fanout, scheduler, web/search/weather, and hardware calls.
+No queue is consumed and no runtime memory/state is written.
+
+The restored directory receives a secret-safe
+`.presencekit-recovery/recovery-report.json`. `--no-startup-check` is only for
+diagnostics, not recommended recovery. Final cutover remains manual; there is
+no automatic rollback, online restore, or implicit cross-version migration.

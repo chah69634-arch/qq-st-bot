@@ -84,6 +84,8 @@ async def send_message(target_id: str, content: str, is_group: bool = False):
         content:   消息文本内容
         is_group:  True=群聊，False=私聊
     """
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("qq_send")
     if _ws is None or _ws.closed:
         logger.error("[qq_adapter] WebSocket 未连接，无法发送消息")
         return
@@ -303,6 +305,8 @@ async def connect_and_listen():
 
     断线后自动重连（每5秒重试一次）
     """
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("qq_connect")
     global _ws, _self_id
 
     _load_blacklist()

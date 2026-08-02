@@ -47,6 +47,8 @@ def get_devices() -> list[dict]:
 
 
 async def ensure_connected() -> bool:
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("hardware_gateway")
     """Connect and scan once when needed. Fail closed while hardware is disabled."""
     global _last_connect_attempt
 

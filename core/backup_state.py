@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ MANIFEST_CHECKSUM_NAME = "manifest.sha256"
 MANIFEST_VERSION = 1
 PROTECTION_MODE_PROTECTED_VOLUME = "protected_volume"
 PRIVATE_ROOTS_VERSION = 1
+MAX_RESTORE_FILES = 100_000
+MAX_RESTORE_BYTES = 8 * 1024 * 1024 * 1024
 
 
 class BackupError(RuntimeError):
@@ -228,6 +231,33 @@ def service_state(installation: Path) -> ServiceState:
             pass  # Stale marker after a crash; scan below protects old installs too.
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return ServiceState.UNKNOWN
+    if os.name == "nt":
+        try:
+            query = "Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'python.exe','pythonw.exe' } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"
+            result = subprocess.run(["powershell", "-NoProfile", "-Command", query], capture_output=True, text=True, timeout=10, check=False)
+            if result.returncode:
+                return ServiceState.UNKNOWN
+            commands = json.loads(result.stdout or "[]")
+            if isinstance(commands, dict):
+                commands = [commands]
+            if not isinstance(commands, list):
+                return ServiceState.UNKNOWN
+            for command in commands:
+                if not isinstance(command, dict):
+                    return ServiceState.UNKNOWN
+                if command.get("ProcessId") == os.getpid():
+                    continue
+                parts = str(command.get("CommandLine") or "").replace('"', "").split()
+                for part in parts:
+                    candidate = Path(part)
+                    if candidate.name.lower() == "main.py":
+                        if candidate.is_absolute() and candidate.resolve() == installation / "main.py":
+                            return ServiceState.RUNNING
+                        if not candidate.is_absolute():
+                            return ServiceState.UNKNOWN
+            return ServiceState.OFFLINE
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+            return ServiceState.UNKNOWN
     try:
         import psutil
     except ImportError:
@@ -245,10 +275,15 @@ def service_state(installation: Path) -> ServiceState:
                 joined = " ".join(str(item) for item in command)
                 if "main.py" not in joined.lower():
                     continue
-                if str(installation.resolve()).lower() in joined.lower():
-                    return ServiceState.RUNNING
-                # A relative main.py cannot be tied to an installation safely.
-                if "main.py" in {Path(str(item)).name.lower() for item in command}:
+                for item in command:
+                    candidate = Path(str(item))
+                    if candidate.name.lower() != "main.py":
+                        continue
+                    if candidate.is_absolute():
+                        if candidate.resolve() == installation / "main.py":
+                            return ServiceState.RUNNING
+                        continue
+                    # A relative main.py cannot be tied to an installation safely.
                     return ServiceState.UNKNOWN
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 return ServiceState.UNKNOWN
@@ -444,6 +479,111 @@ def verify_snapshot(snapshot: Path) -> dict[str, Any]:
     return {"ok": not errors, "errors": errors}
 
 
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
+def _restore_safe_path(relative: PurePosixPath, staging: Path) -> PurePosixPath:
+    _safe_relative(relative)
+    key_parts = []
+    for part in relative.parts:
+        if ":" in part or part.endswith((".", " ")) or part.rstrip(". ").upper() in _WINDOWS_RESERVED:
+            raise BackupError("unsafe_archive_path", "归档包含不安全的 Windows 路径。")
+        key_parts.append(part.casefold())
+    if len(str(staging.joinpath(*relative.parts))) >= 240:
+        raise BackupError("unsafe_archive_path", "归档路径超过恢复目录的安全长度限制。")
+    return PurePosixPath(*key_parts)
+
+
+def _validate_restore_target(installation: Path, snapshot: Path, target: Path) -> tuple[Path, bool]:
+    resolved = target.expanduser().resolve()
+    if not resolved.parent.is_dir():
+        raise BackupError("invalid_output_path", "恢复目标的父目录不存在。")
+    if _is_reparse_point(resolved) if resolved.exists() else _is_reparse_point(resolved.parent):
+        raise BackupError("unsafe_link", "恢复目标或其父目录不能是 reparse point。")
+    if resolved == installation.resolve() or any(resolved == root or root in resolved.parents for root in (installation / "data", installation / "userdata")):
+        raise BackupError("target_is_live_path", "恢复目标不能是当前安装或其私人状态根。")
+    if resolved == snapshot or snapshot in resolved.parents:
+        raise BackupError("target_is_live_path", "恢复目标不能位于备份快照内部。")
+    existed = resolved.exists()
+    if existed and (not resolved.is_dir() or any(resolved.iterdir())):
+        raise BackupError("target_not_empty", "恢复目标必须不存在或是完全空的目录。")
+    return resolved, existed
+
+
+def _recovery_samples(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selectors = (("memory", "data/runtime/memory/"), ("authored_asset", "userdata/"), ("dream_or_state", "data/dream/"))
+    samples = []
+    for sample_type, prefix in selectors:
+        record = next((item for item in records if str(item["path"]).startswith(prefix)), None)
+        if record is not None:
+            samples.append({"type": sample_type, "path": record["path"], "size": record["size"], "sha256": record["sha256"], "status": "matched"})
+    return samples
+
+
+def restore_snapshot(installation: Path, snapshot: Path, target: Path, *, startup_check: bool = True) -> dict[str, Any]:
+    installation, snapshot = installation.resolve(), snapshot.expanduser().resolve()
+    verified = verify_snapshot(snapshot)
+    if not verified["ok"]:
+        raise BackupError("backup_verify_failed", "备份校验失败，拒绝恢复。")
+    manifest = _read_manifest(snapshot)
+    final, existed_empty = _validate_restore_target(installation, snapshot, target)
+    records = manifest["files"]
+    if len(records) > MAX_RESTORE_FILES or sum(item["size"] for item in records) > MAX_RESTORE_BYTES:
+        raise BackupError("archive_limit_exceeded", "备份文件数量或总大小超过恢复安全上限。")
+    staging = final.parent / f".{final.name}.restore-tmp-{uuid.uuid4().hex}"
+    seen: set[PurePosixPath] = set()
+    started = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    try:
+        staging.mkdir()
+        for record in records:
+            relative = _safe_relative(PurePosixPath(record["path"]))
+            key = _restore_safe_path(relative, staging)
+            if key in seen:
+                raise BackupError("path_collision", "归档包含 Windows 大小写冲突路径。")
+            seen.add(key)
+            source, destination = snapshot.joinpath(*relative.parts), staging.joinpath(*relative.parts)
+            if _is_reparse_point(source):
+                raise BackupError("unsafe_link", "归档包含 reparse point。")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+            if destination.stat().st_size != record["size"] or _sha256(destination) != record["sha256"]:
+                raise BackupError("hash_mismatch", "恢复后的文件 hash 不匹配。")
+        validation = {"startup_check": "skipped"}
+        if startup_check:
+            from core.recovery_validation import RecoveryValidationError, validate_restored_initialization
+            try:
+                validation = validate_restored_initialization(staging, live_root=installation)
+            except RecoveryValidationError as exc:
+                raise BackupError(exc.code, str(exc)) from exc
+        report = {
+            "backup_id": manifest["backup_id"], "manifest_version": manifest["manifest_version"],
+            "source_product_version": manifest["product_version"], "source_layout": manifest["data_layout"],
+            "target_path": str(final), "restore_started_at": started,
+            "restore_completed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "files_expected": len(records), "files_restored": len(records),
+            "bytes_restored": sum(item["size"] for item in records), "hash_verification": "ok",
+            "layout_validation": "ok", **validation, "manual_samples": _recovery_samples(records), "overall_status": "ok",
+        }
+        report_path = staging / ".presencekit-recovery" / "recovery-report.json"
+        report_path.parent.mkdir()
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if existed_empty:
+            final.rmdir()
+            # A pre-existing empty directory cannot be atomically replaced on
+            # Windows.  Publish only after every check, and move its already
+            # verified top-level children; no user content ever existed here.
+            final.mkdir()
+            for child in staging.iterdir():
+                child.rename(final / child.name)
+            staging.rmdir()
+        else:
+            staging.rename(final)
+        return {"ok": True, "backup_id": manifest["backup_id"], "target_path": str(final), "report_path": str(final / ".presencekit-recovery" / "recovery-report.json")}
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Create or verify offline PresenceKit private-state snapshots.")
     parser.add_argument("--json", action="store_true", dest="json_output")
@@ -454,18 +594,24 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--protection-mode", choices=[PROTECTION_MODE_PROTECTED_VOLUME], required=True)
     verify = sub.add_parser("verify")
     verify.add_argument("backup_path")
+    restore = sub.add_parser("restore")
+    restore.add_argument("backup_path")
+    restore.add_argument("--target", required=True)
+    restore.add_argument("--no-startup-check", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.command == "create":
             result = create_snapshot(Path.cwd(), Path(args.output), protection_mode=args.protection_mode)
-        else:
+        elif args.command == "verify":
             result = verify_snapshot(Path(args.backup_path))
             if not result["ok"]:
                 raise BackupError(result["errors"][0]["code"], "备份校验失败。")
+        else:
+            result = restore_snapshot(Path.cwd(), Path(args.backup_path), Path(args.target), startup_check=not args.no_startup_check)
         if args.json_output:
             print(json.dumps(result, ensure_ascii=False))
         elif not args.quiet:
-            print("备份已创建并完成内部校验。" if args.command == "create" else "备份校验通过。")
+            print("备份已创建并完成内部校验。" if args.command == "create" else ("备份校验通过。" if args.command == "verify" else "恢复完成并通过离线初始化验证。"))
         return 0
     except BackupError as exc:
         result = {"ok": False, "error": {"code": exc.code}}

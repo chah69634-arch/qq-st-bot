@@ -21,6 +21,8 @@ async def search(query: str, uid: str | None = None, char_id: str | None = None)
     uid / char_id: 如果提供，搜索结果会异步写入 vector_store（source="web"），
     供后续语义召回使用。
     """
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("web_search")
     proxy = get_aiohttp_proxy()
     started_at = time.perf_counter()
 

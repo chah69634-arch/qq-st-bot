@@ -1062,6 +1062,8 @@ async def _loop():
 
 
 def start() -> asyncio.Task:
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("scheduler_start")
     """启动调度器后台 Task，返回 Task 对象供 main.py 管理"""
     global _scheduler_task
     _ensure_persistent_state_loaded()

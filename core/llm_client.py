@@ -246,6 +246,8 @@ async def chat(
         模型生成的文本字符串
         function_calling 模式下如果模型调用了工具，返回序列化后的工具调用 JSON
     """
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("llm")
     _timeout = _CALL_TIMEOUTS.get(call_category, _DEFAULT_CALL_TIMEOUT)
 
     # vision 模式走独立 vision client，不经过 preset 路由

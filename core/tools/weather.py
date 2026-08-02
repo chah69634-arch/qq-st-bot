@@ -13,6 +13,8 @@ from core.proxy_config import get_aiohttp_proxy
 
 async def get_weather(city: str) -> str:
     """查询指定城市的当前天气，返回一行天气描述文本"""
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("weather")
     url = f"https://wttr.in/{city}?format=3&lang=zh"
     proxy = get_aiohttp_proxy()
     try:
@@ -49,6 +51,8 @@ async def get_weather_detail(city: str) -> dict:
     }
     失败时返回空字典。
     """
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed("weather")
     url = f"https://wttr.in/{city}?format=j1&lang=zh"
     proxy = get_aiohttp_proxy()
     try:
