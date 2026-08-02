@@ -40,6 +40,11 @@ def _patch_tool_loop_config(monkeypatch, **overrides):
     }
     cfg["tool_loop"].update(overrides)
     monkeypatch.setattr("core.config_loader.get_config", lambda: cfg)
+    # model_registry imports get_config at module scope.  Isolate these loop
+    # tests from any local model-specific tool preset in ignored config.yaml;
+    # tests that exercise a binding replace these two fakes explicitly.
+    monkeypatch.setattr("core.model_registry._get_preset_config", lambda: {"presets": {}})
+    monkeypatch.setattr("core.model_registry._resolve_preset_name", lambda *args, **kwargs: "legacy")
     return cfg
 
 
@@ -875,3 +880,28 @@ async def test_model_tool_preset_narrows_schema_for_its_chat_preset(monkeypatch)
 
     assert result == "done"
     assert [tool["function"]["name"] for tool in chat_turn_calls[0]["tools"]] == ["web_search"]
+
+
+@pytest.mark.asyncio
+async def test_model_tool_preset_does_not_recatalogue_dynamic_mcp_tools(monkeypatch):
+    from core import tool_dispatcher as td
+
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[], tool_presets=[{
+        "name": "builtin-only", "tools": ["web_search"],
+    }])
+    _patch_tools_schema(monkeypatch, ["web_search", "dynamic_mcp_tool"])
+    monkeypatch.setitem(td._TOOL_REGISTRY, "dynamic_mcp_tool", {"category": "mcp"})
+    monkeypatch.setattr("core.model_registry._get_preset_config", lambda: {
+        "presets": {"claude-pig": {"tool_preset": "builtin-only"}},
+    })
+    monkeypatch.setattr("core.model_registry._resolve_preset_name", lambda *args, **kwargs: "claude-pig")
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="done", tool_calls=[], assistant_message={"role": "assistant", "content": "done"}),
+    ])
+    _script_execute(monkeypatch, [])
+
+    await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id="c1", session_state=None,
+    )
+
+    assert [tool["function"]["name"] for tool in chat_turn_calls[0]["tools"]] == ["web_search", "dynamic_mcp_tool"]

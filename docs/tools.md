@@ -119,9 +119,9 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
 管理面「运维 → 工具」将运行时注册表作为只读观测清单，并提供两层独立控制：
 
 - `tools.<name>.enabled` 是内置工具的全局执行闸门；关闭后 schema 不会暴露，直接执行也会被拒绝。
-- `tool_loop.tool_presets` 是命名 schema 白名单；`model_presets.presets.<model>.tool_preset` 仅为该聊天模型选用其中一项。它只能在类别、角色权限、MCP proficiency 与全局执行闸门之后继续收窄，不能扩大权限。
+- `tool_loop.tool_presets` 是内置工具的命名 schema 白名单；`model_presets.presets.<model>.tool_preset` 仅为该聊天模型选用其中一项。它只能在类别、角色权限与全局执行闸门之后继续收窄，不能扩大权限。
 
-未绑定 `tool_preset` 时保持 categories/exclude_tools 语义。引用已删除预设时运行时 fail-closed 为零个工具并记录 warning；面板删除预设会同步清除已有模型绑定。MCP 动态工具的执行权仍由 MCP server 的连接、allowlist 与本地 policy 管理；工具页只能决定它是否被某个模型收到。
+未绑定 `tool_preset` 时保持 categories/exclude_tools 语义。引用已删除预设时运行时 fail-closed 为零个内置工具并记录 warning；面板删除预设会同步清除已有模型绑定。MCP 只在工具页显示全局启用状态，不列入这份瞬态注册表或工具预设。
 - 另外四个钩子（`disabled_layers` / `model_routing` / `proactive` / `tool_loop`）分别见
   `docs/prompt-layers.md`、`docs/model-presets.md`、`docs/scheduler.md`。
 

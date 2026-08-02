@@ -1,7 +1,7 @@
 """Admin control plane for registered tool exposure presets.
 
-This page is deliberately separate from MCP server management: it controls
-which already-authorized tool schemas reach a particular chat model preset.
+It controls built-in registered tools and the schemas that reach a particular
+chat model preset.  MCP remains an independent subsystem.
 """
 from __future__ import annotations
 
@@ -48,24 +48,30 @@ def _registry_rows(cfg: dict) -> list[dict]:
     tools_config = cfg.get("tools", {})
     rows: list[dict] = []
     for name, info in _TOOL_REGISTRY.items():
-        is_mcp = name.startswith("mcp__")
+        # Dynamic MCP registration is necessarily incomplete while servers are
+        # offline.  Do not present that transient subset as a tool catalogue.
+        if info.get("category") == "mcp":
+            continue
         rows.append({
             "name": name,
             "description": (info.get("description") or info.get("desc") or "").strip(),
             "category": info.get("category") or "other",
-            "source": "mcp" if is_mcp else "builtin",
-            # Dynamic MCP execution authority belongs to its server and policy.
-            "execution_enabled": None if is_mcp else _static_tool_enabled(name, tools_config),
+            "execution_enabled": _static_tool_enabled(name, tools_config),
         })
-    return sorted(rows, key=lambda item: (item["source"], item["category"], item["name"]))
+    return sorted(rows, key=lambda item: (item["category"], item["name"]))
 
 
 def _response(cfg: dict) -> dict:
     tool_loop = cfg.get("tool_loop", {})
     model_presets = cfg.get("model_presets", {}).get("presets", {})
+    builtin_names = {row["name"] for row in _registry_rows(cfg)}
+    tool_presets = [
+        {"name": item["name"], "tools": [tool for tool in item["tools"] if tool in builtin_names]}
+        for item in normalize_tool_presets(tool_loop.get("tool_presets"))
+    ]
     return {
         "tools": _registry_rows(cfg),
-        "tool_presets": normalize_tool_presets(tool_loop.get("tool_presets")),
+        "tool_presets": tool_presets,
         "model_bindings": {
             name: preset.get("tool_preset")
             for name, preset in model_presets.items()
@@ -73,6 +79,7 @@ def _response(cfg: dict) -> dict:
         },
         "model_presets": sorted(model_presets),
         "legacy_mode": "model_presets" not in cfg,
+        "mcp_enabled": bool(cfg.get("mcp_servers", {}).get("enabled", False)),
     }
 
 
@@ -95,7 +102,7 @@ def _validate_presets(raw: list[ToolPresetInput], registry_names: set[str]) -> l
         if len(preset.tools) > _MAX_TOOLS_PER_PRESET:
             raise HTTPException(status_code=422, detail=f"预设 {name} 最多包含 {_MAX_TOOLS_PER_PRESET} 个工具")
         tools = list(dict.fromkeys(tool.strip() for tool in preset.tools if tool.strip()))
-        unknown = [tool for tool in tools if tool not in registry_names and not tool.startswith("mcp__")]
+        unknown = [tool for tool in tools if tool not in registry_names]
         if unknown:
             raise HTTPException(status_code=422, detail=f"预设 {name} 含未注册工具: {', '.join(unknown)}")
         names.add(name)
@@ -109,7 +116,7 @@ async def update_tool_controls(body: ToolControlUpdate, auth=Depends(require_sco
     cfg_for_validation = get_config()
     rows = _registry_rows(cfg_for_validation)
     registry_names = {row["name"] for row in rows}
-    builtin_names = {row["name"] for row in rows if row["source"] == "builtin"}
+    builtin_names = {row["name"] for row in rows}
 
     tool_loop = full_cfg.setdefault("tool_loop", {})
     if body.tool_presets is not None:

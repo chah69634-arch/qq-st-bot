@@ -908,6 +908,7 @@ class Pipeline:
             get_tools_schema,
             get_tool_loop_relay_prompt,
             parse_tail_brace,
+            _TOOL_REGISTRY,
         )
         from core.tools.tool_result import frame_tool_message
         from core.tool_ephemeral import DEFAULT_TTL_S, ToolEphemeralEvent, notify as _notify_tool_event
@@ -960,7 +961,11 @@ class Pipeline:
         if allowed_tool_names is not None:
             tools = [
                 tool for tool in tools
-                if (tool.get("function") or tool).get("name") in allowed_tool_names
+                # MCP is configured by its own server lifecycle/allowlist.
+                # The built-in tool page must not turn currently connected
+                # dynamic entries into an incomplete, persistent MCP catalogue.
+                if _TOOL_REGISTRY.get((tool.get("function") or tool).get("name", ""), {}).get("category") == "mcp"
+                or (tool.get("function") or tool).get("name") in allowed_tool_names
             ]
             logger.info(
                 "[pipeline.run_agentic_loop] applied tool preset=%r model_preset=%r exposed=%d",

@@ -34,12 +34,10 @@ function _renderToolsRegistry() {
   const preset = (_toolsControl.tool_presets || []).find(item => item.name === presetName);
   const exposed = new Set(preset?.tools || []);
   const rows = (_toolsControl.tools || []).map(tool => {
-    const execution = tool.execution_enabled === null
-      ? `<span class="badge">${escapeHtml(t('tools.mcp_managed', '由 MCP server 管理'))}</span>`
-      : `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(t('tools.execution_enabled', '全局执行'))}</span></label>`;
-    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(tool.description || '')}</div></td><td>${escapeHtml(tool.category)}</td><td>${tool.source === 'mcp' ? 'MCP' : escapeHtml(t('tools.builtin', '内置'))}</td><td>${execution}</td><td><label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label></td></tr>`;
+    const execution = `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(t('tools.execution_enabled', '全局执行'))}</span></label>`;
+    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(tool.description || '')}</div></td><td>${escapeHtml(tool.category)}</td><td>${execution}</td><td><label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label></td></tr>`;
   }).join('');
-  root.innerHTML = rows ? `<div class="tbl-wrap"><table><thead><tr><th>${escapeHtml(t('tools.name', '工具'))}</th><th>${escapeHtml(t('tools.category', '分类'))}</th><th>${escapeHtml(t('tools.source', '来源'))}</th><th>${escapeHtml(t('tools.execution', '执行'))}</th><th>${escapeHtml(t('tools.exposure', '模型暴露'))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${escapeHtml(t('tools.empty', '没有已注册工具'))}</div>`;
+  root.innerHTML = rows ? `<div class="tbl-wrap"><table><thead><tr><th>${escapeHtml(t('tools.name', '工具'))}</th><th>${escapeHtml(t('tools.category', '分类'))}</th><th>${escapeHtml(t('tools.execution', '执行'))}</th><th>${escapeHtml(t('tools.exposure', '模型暴露'))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${escapeHtml(t('tools.empty', '没有已注册工具'))}</div>`;
   const count = document.getElementById('tools-exposure-count');
   if (count) {
     const n = exposed.size;
@@ -55,10 +53,14 @@ function _renderToolsPage() {
   if (!_toolsTargetModel || !(_toolsControl.model_presets || []).includes(_toolsTargetModel)) _toolsTargetModel = (_toolsControl.model_presets || [])[0] || '';
   selector.innerHTML = (_toolsControl.model_presets || []).map(name => `<option value="${escapeHtml(name)}" ${name === _toolsTargetModel ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
   const note = document.getElementById('tools-binding-note');
+  const mcpStatus = document.getElementById('tools-mcp-status');
   const bound = _toolCurrentPreset();
   if (note) note.textContent = bound
     ? t('tools.bound_note', '当前模型绑定工具预设：{name}', { name: bound })
     : t('tools.unbound_note', '未绑定工具预设：沿用原有的分类/排除规则。');
+  if (mcpStatus) mcpStatus.textContent = _toolsControl.mcp_enabled
+    ? t('tools.mcp_status_enabled', 'MCP 全局状态：已启用（只读）')
+    : t('tools.mcp_status_disabled', 'MCP 全局状态：未启用（只读）');
   _toolsPresetButtons();
   _renderToolsRegistry();
 }
