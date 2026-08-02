@@ -159,7 +159,7 @@ Brief 104 §3 已落地两块基础设施，供后续判断：
 ## 用户动作（代码侧无事可做）
 
 - SEC-AUTH-2 P4 后半：各持有方切换新 token；ESP32 重烧录；Watch Shortcut 与管理面板换值；全部确认后再轮换 legacy secret。
-- `data/runtime/auth/audit.jsonl` 约 200 条 `ip=testclient` 测试噪音：由用户决定是否手动清空，本工单不删除数据。
+- `data/runtime/auth/audit.jsonl` 的历史 `ip=testclient` 噪音不作为当前问题：不删除既有审计记录；2026-08-02 已补回归测试，测试环境的真实 401 审计必须落在活动测试沙箱，不能再写生产台账。
 
 ## 本轮已核对关闭
 
