@@ -176,6 +176,7 @@ async function loadObserveAutonomy() {
     ]);
     _renderAutonomyOverview(overviewEl, status, config);
     _renderAutonomyRuns(runsEl, runs.runs || []);
+    if ((runs.runs || []).length) await loadAutonomyPrompt(runs.runs[0].id);
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
     document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
@@ -314,6 +315,19 @@ function _renderAutonomyRuns(host, runs) {
     const talk = run.talk_sent ? '已发送' : run.talk_soft_blocked ? '时机不佳，未发送' : '未尝试';
     return `<tr><td>${escapeHtml(_autonomyTime(run.finished_at || run.started_at))}</td><td>${escapeHtml({manual:'手动测试', overflow:'Overflow', schedule:'定时', interval:'间隔'}[run.source] || run.source || '—')}</td><td><span class="badge ${String(run.disposition || '').includes('completed') || run.talk_sent ? 'badge-success' : 'badge-warn'}">${escapeHtml(_autonomyRunLabel(run))}</span></td><td class="autonomy-run-tools">${escapeHtml((run.tool_names || []).join('、') || '无')}</td><td>${escapeHtml(talk)}</td><td>${escapeHtml(duration)}</td></tr>`;
   }).join('')}</tbody></table>`;
+}
+
+async function loadAutonomyPrompt(runId) {
+  const host = document.getElementById('autonomy-prompt');
+  if (!host || !runId) return;
+  host.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const data = await api('GET', `/admin/autonomy/runs/${encodeURIComponent(runId)}/prompt`);
+    const text = (data.messages || []).map(item => `[${item.role}${item._layer ? ` / ${item._layer}` : ''}]\n${item.content || ''}`).join('\n\n');
+    host.innerHTML = `<pre class="autonomy-prompt-view">${escapeHtml(text || 'No snapshot for this run.')}</pre>`;
+  } catch (error) {
+    host.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 async function saveAutonomyConfig() {

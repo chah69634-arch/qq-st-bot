@@ -248,6 +248,7 @@ textarea { resize: vertical; min-height: 72px; }
 .autonomy-state-attention { color: var(--warn); }
 .autonomy-state-off { color: var(--muted); }
 .autonomy-run-tools { color: var(--muted); font-size: 12px; max-width: 220px; overflow-wrap: anywhere; }
+.autonomy-prompt-view { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 520px; overflow: auto; margin: 0; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
 @media (max-width: 767px) { .autonomy-page .observe-toolbar { align-items: stretch; flex-wrap: wrap; justify-content: flex-start; } .autonomy-test-source { width: 100%; } .autonomy-source-grid { grid-template-columns: 1fr; } }
 
 /* ── Toast ── */

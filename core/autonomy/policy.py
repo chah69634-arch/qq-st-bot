@@ -157,17 +157,23 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
         self_capability, agent_selected_state = capability_effective(capability_id, uid, char_id) if capability_id else (False, None)
         grant = (capability_state.get("grants") or {}).get(capability_id) if capability_id else None
         explicitly_enabled = bool(configured_policy.get("enabled"))
-        final_schema = bool(
-            explicitly_enabled and eligible and name in schemas and connected and registered and mcp_policy_ok
+        direct_mcp_read = bool(
+            is_mcp and effect == "read" and self_capability and name in schemas
+            and connected and registered and mcp_policy_ok and not info.get("dangerous")
+            and not info.get("require_confirm")
         )
+        final_schema = bool(direct_mcp_read or (
+            explicitly_enabled and eligible and self_capability and name in schemas
+            and connected and registered and mcp_policy_ok
+        ))
         denial = ""
         if not _is_tool_enabled(name):
             denial = "globally_disabled"
         elif not self_capability:
             denial = "self_capability_disabled"
-        elif not explicitly_enabled:
+        elif not explicitly_enabled and not direct_mcp_read:
             denial = "autonomy_allowlist_disabled"
-        elif not eligible:
+        elif not eligible and not direct_mcp_read:
             denial = eligibility_reason
         elif not connected:
             denial = "mcp_server_disconnected"

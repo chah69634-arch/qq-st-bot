@@ -46,6 +46,10 @@
     <div class="card-header"><div><h3 data-i18n="autonomy.runs.title">最近运行</h3><p class="autonomy-hint" data-i18n="autonomy.runs.hint">只记录“做了什么类型的事”和结果，不记录 prompt、工具参数或完整结果。</p></div></div>
     <div id="autonomy-runs" class="tbl-wrap" data-i18n="common.loading">加载中…</div>
   </div>
+  <div class="card">
+    <div class="card-header"><div><h3>最新自主行动 Prompt</h3><p class="autonomy-hint">显示最近一次完成运行的完整快照，仅管理员可查看。</p></div></div>
+    <div id="autonomy-prompt" class="tbl-wrap"><div class="empty">尚无运行记录。</div></div>
+  </div>
   <div class="card" id="self-management-panel">
     <div class="card-header"><h3 data-i18n="autonomy.self.title">Self Capability</h3><button class="btn btn-ghost btn-sm" data-action="loadSelfManagement" data-i18n="autonomy.self.refresh">Refresh</button></div>
     <p class="autonomy-hint" data-i18n="autonomy.self.notice">Capability IDs and safe state only. Connection URLs and credentials are never shown here.</p>

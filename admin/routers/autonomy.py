@@ -104,7 +104,18 @@ async def patch_config(body: dict, auth=Depends(require_scopes("admin"))):
 async def runs(limit: int = 30, auth=Depends(require_scopes("state.read"))):
     from core.autonomy import store
     uid, char_id = _scope(); data = store.load(uid, char_id).get("runs", [])
-    return {"runs": list(reversed(data[-max(1, min(limit, 100)):]))}
+    rows = list(reversed(data[-max(1, min(limit, 100)):]))
+    return {"runs": [{key: value for key, value in row.items() if key != "prompt_snapshot"} for row in rows]}
+
+
+@router.get("/admin/autonomy/runs/{run_id}/prompt", summary="Read one autonomy prompt snapshot")
+async def run_prompt(run_id: str, auth=Depends(require_scopes("admin"))):
+    from core.autonomy import store
+    uid, char_id = _scope()
+    run = next((row for row in reversed(store.load(uid, char_id).get("runs", [])) if row.get("id") == run_id), None)
+    if run is None:
+        raise HTTPException(status_code=404, detail="autonomy run not found")
+    return {"run_id": run_id, "messages": run.get("prompt_snapshot") or []}
 
 
 @router.get("/admin/autonomy/tools", summary="读取自主工具 allowlist")

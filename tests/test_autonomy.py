@@ -59,6 +59,8 @@ def test_tools_only_run_never_imports_or_calls_turn_sink(sandbox, monkeypatch):
     run = asyncio.run(runner._run_locked(Job(uid="owner", char_id="char", source="manual"), state, runner.Run(uid="owner", char_id="char", source="manual", job_id="job")))
     assert run.disposition == "completed_tools_only"
     assert run.talk_sent is False
+    assert run.prompt_snapshot
+    assert run.prompt_snapshot[-1]["role"] == "user"
 
 
 def test_soft_block_allows_only_one_confirm_decision(sandbox, monkeypatch):

@@ -79,6 +79,7 @@ class Run:
     tool_names: list[str] = field(default_factory=list)
     events: list[dict] = field(default_factory=list)
     self_capability_changes: list[dict] = field(default_factory=list)
+    prompt_snapshot: list[dict] = field(default_factory=list)
     talk_sent: bool = False
     talk_soft_blocked: bool = False
 

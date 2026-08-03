@@ -14,17 +14,35 @@ def _system_prompt(*, talk_available: bool, character=None) -> str:
     identity = ""
     if character is not None:
         name = str(getattr(character, "name", "") or "")
-        pieces = [
-            str(getattr(character, "system_prompt", "") or ""),
-            str(getattr(character, "personality", "") or ""),
-            str(getattr(character, "scenario", "") or ""),
-        ]
-        identity = f" You are {name}. " + "\n".join(part for part in pieces if part)[:4000]
+        description = str(getattr(character, "description", "") or "").strip()
+        identity = f" You are {name}." + (f" {description[:1200]}" if description else "")
     return (
         "You are running an internal autonomous opportunity. This is not a chat turn. "
         "Your ordinary text is private and will never be delivered. You may call allowed tools, "
         "then either explicitly call talk_owner once or finish silently. Do not narrate tool calls. " + talk_note
     ) + identity
+
+
+def _context_messages(uid: str, char_id: str) -> list[dict]:
+    """Read-only, bounded memory and history for an autonomy opportunity."""
+    messages: list[dict] = []
+    try:
+        from core.memory import short_term, user_profile, mid_term
+        profile = user_profile.load(uid, char_id=char_id)
+        profile_text = "; ".join(
+            f"{key}: {value}" for key, value in profile.items()
+            if isinstance(value, (str, int, float)) and str(value).strip()
+        )[:1200]
+        mid_term_text = mid_term.format_for_prompt(uid, char_id=char_id)[:1800]
+        if profile_text or mid_term_text:
+            messages.append({"role": "system", "content": "Read-only memory recall. Use it naturally; do not mention this source. " + (f"User profile: {profile_text}\n" if profile_text else "") + (f"Mid-term recall: {mid_term_text}" if mid_term_text else ""), "_layer": "autonomy_memory_recall"})
+        for item in short_term.get_history(uid, max_turns=5, char_id=char_id):
+            role, content = str(item.get("role") or ""), str(item.get("content") or "").strip()
+            if item.get("_source") != "trigger_stub" and role in {"user", "assistant"} and content:
+                messages.append({"role": role, "content": content[:1200], "_layer": "autonomy_recent_history"})
+    except Exception:
+        pass
+    return messages
 
 
 async def run_job(job: Job) -> Run:
@@ -66,9 +84,11 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     if talk_available:
         tools.append(talk_gate.schema())
     messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy"}]
+    messages.extend(_context_messages(job.uid, job.char_id))
     if self_context is not None:
         messages.append(_self_context_message(self_context))
     messages.append({"role": "user", "content": f"Autonomy opportunity source: {job.source}. Decide what to do, if anything."})
+    run.prompt_snapshot = [{key: value for key, value in message.items() if key in {"role", "content", "_layer"}} for message in messages]
     cfg = state["config"]
     max_steps = max(1, min(int(cfg.get("max_steps") or 4), 8))
     max_tools = max(0, min(int(cfg.get("max_tools") or 4), 8))
