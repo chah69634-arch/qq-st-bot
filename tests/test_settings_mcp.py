@@ -114,7 +114,7 @@ def test_import_rejects_unknown_whitelist_without_writing(tmp_path, monkeypatch)
     assert path.read_text(encoding="utf-8") == before
 
 
-def test_reimport_preserves_existing_explicit_policy_and_marks_new_tool_pending(tmp_path, monkeypatch):
+def test_reimport_preserves_explicit_policy_and_fills_new_tool_default(tmp_path, monkeypatch):
     path = _write(
         tmp_path,
         "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
@@ -149,9 +149,12 @@ def test_reimport_preserves_existing_explicit_policy_and_marks_new_tool_pending(
 
     states = {item["name"]: item for item in result["server"]["tool_states"]}
     assert states["toy_status"]["policy_status"] == "confirmed"
-    assert states["send_message"]["policy_status"] == "pending_confirmation"
+    assert states["send_message"]["policy_status"] == "confirmed"
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
-    assert stored["tool_policy"] == {"toy_status": {"effect": "read"}}
+    assert stored["tool_policy"] == {
+        "toy_status": {"effect": "read"},
+        "send_message": {"effect": "write"},
+    }
 
 
 def test_existing_explicit_policy_is_read_as_confirmed_without_config_migration(tmp_path, monkeypatch):
@@ -178,7 +181,7 @@ def test_existing_explicit_policy_is_read_as_confirmed_without_config_migration(
     assert path.read_text(encoding="utf-8") == before
 
 
-def test_strict_import_keeps_new_allowlist_tools_pending_confirmation(tmp_path, monkeypatch):
+def test_strict_import_fills_default_policy_for_each_allowlisted_tool(tmp_path, monkeypatch):
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -198,9 +201,38 @@ def test_strict_import_keeps_new_allowlist_tools_pending_confirmation(tmp_path, 
     result = asyncio.run(mod.import_mcp_server(_draft(), _auth=None))
 
     assert result["reload_status"] == "reloaded"
-    assert result["server"]["tool_states"][0]["policy_status"] == "pending_confirmation"
+    assert result["server"]["tool_states"][0]["policy_status"] == "confirmed"
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert "tool_policy" not in stored["mcp_servers"]["servers"][0]
+    assert stored["mcp_servers"]["servers"][0]["tool_policy"] == {
+        "toy_status": {"effect": "read"},
+    }
+
+
+def test_strict_import_defaults_unknown_tool_to_confirmed_write_with_confirmation(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers: []\n")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    async def probe(_cfg):
+        return [{"name": "request_access", "description": ""}]
+
+    async def reload(_name):
+        return True
+
+    monkeypatch.setattr(mcp_client, "test_server_config", probe)
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": True,
+        "tools": [{"name": "request_access", "description": ""}],
+    })
+
+    result = asyncio.run(mod.import_mcp_server(_draft(allow_tools=["request_access"]), _auth=None))
+
+    assert result["server"]["tool_states"][0]["policy_status"] == "confirmed"
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert stored["mcp_servers"]["servers"][0]["tool_policy"] == {
+        "request_access": {"effect": "write", "require_confirm": True},
+    }
 
 
 def test_global_toggle_writes_config_and_hot_syncs(tmp_path, monkeypatch):

@@ -217,6 +217,38 @@ def _prune_tool_policy(server: dict) -> None:
         server.pop("tool_policy", None)
 
 
+def _fill_import_tool_policy_defaults(server: dict, tools: list[dict]) -> None:
+    """Persist conservative local policies for newly imported tools.
+
+    Discovery metadata is advisory only. Unknown tools therefore get the
+    conservative ``write`` effect and require an execution confirmation;
+    explicit policies from a re-import are never overwritten.
+    """
+    from core.mcp_client import suggest_tool_policy
+
+    allowed = set(server.get("allow_tools") or [])
+    policy = dict(server.get("tool_policy") or {})
+    for tool in tools:
+        tool_name = str(tool.get("name") or "")
+        if not tool_name or tool_name not in allowed or tool_name in policy:
+            continue
+        suggestion = tool.get("suggestion")
+        if not isinstance(suggestion, dict):
+            suggestion = suggest_tool_policy(tool_name, str(tool.get("description") or ""))
+        effect = suggestion.get("effect")
+        if effect not in {"read", "write", "actuate", "emergency", "unrestricted"}:
+            effect = "write"
+            require_confirm = True
+        else:
+            require_confirm = bool(suggestion.get("require_confirm", False))
+        entry: dict[str, object] = {"effect": effect}
+        if require_confirm:
+            entry["require_confirm"] = True
+        policy[tool_name] = entry
+    if policy:
+        server["tool_policy"] = policy
+
+
 def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dict:
     from core.mcp_client import is_local_mcp_url, server_runtime, suggest_tool_policy
     from core.tool_dispatcher import _TOOL_REGISTRY
@@ -502,7 +534,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        tools = await mcp_client.test_server_config(server_cfg)
+        tools = await mcp_client.test_server_config(dict(server_cfg))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"MCP 连接测试失败，未写入配置: {exc}") from exc
     discovered_names = {item["name"] for item in tools}
@@ -510,7 +542,13 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
     if unknown:
         raise HTTPException(status_code=422, detail=f"allow_tools 含未发现工具: {unknown}")
 
+    _fill_import_tool_policy_defaults(server_cfg, tools)
     _prune_tool_policy(server_cfg)
+    if bool(mcp_cfg.get("require_local_policy", False)):
+        try:
+            mcp_client.validate_local_tool_policy(server_cfg, required=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     servers = [item for item in (mcp_cfg.get("servers") or []) if item.get("name") != server_cfg["name"]]
     servers.append(server_cfg)

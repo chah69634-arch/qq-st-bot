@@ -418,7 +418,7 @@ async function importMcpServer() {
   const allow = [...document.querySelectorAll('[data-mcp-import-tool]:checked')].map(el => el.dataset.mcpImportTool);
   try {
     const result = await api('POST', '/settings/mcp/import', { ..._mcpImport.draft, allow_tools: allow });
-    toast(result.reload_status === 'restart_required' ? 'MCP server 已导入，需要重启服务' : 'MCP server 已导入；请选择确认每个工具的策略', result.reload_status === 'restart_required' ? 'err' : 'ok'); _mcpImport = null; document.getElementById('mcp-import-save').disabled = true; document.getElementById('mcp-import-result').innerHTML = ''; loadMcpPage();
+    toast(result.reload_status === 'restart_required' ? 'MCP server 已导入，需要重启服务' : 'MCP server 已导入，已补齐默认本地策略', result.reload_status === 'restart_required' ? 'err' : 'ok'); _mcpImport = null; document.getElementById('mcp-import-save').disabled = true; document.getElementById('mcp-import-result').innerHTML = ''; loadMcpPage();
   } catch (e) { toast(e.message, 'err'); }
 }
 

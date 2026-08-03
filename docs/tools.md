@@ -223,9 +223,11 @@ mcp_servers:
   inputSchema 校验 JSON 参数。它以 `admin_console` origin 复用 dispatcher；管理调用不受角色熟练度门控，
   但绝不绕过本地 effect、dangerous confirmation、模式与工具启用门。需要确认时只返回 120 秒一次性的
   ticket，`/confirm` 只能重放 ticket 内的 server/tool/arguments；policy 或连接变化会在确认时重新拒绝。
-- **本地 effect 策略**：`require_local_policy: true` 时，管理面更新 `allow_tools` 必须同时提交完整的
-  `tool_policy`。每个白名单工具都要显式标为 `read`、`write`、`actuate`、`emergency` 或 `unrestricted`；
-  校验失败不会写入配置或热重载。`unrestricted` 是管理员在本地明确选定的“无权限”模式：强制不确认、
+- **本地 effect 策略**：`require_local_policy: true` 时，管理面 URL 导入会在 `initialize + list_tools`
+  成功后为每个选中的工具写入本地默认 `tool_policy`，并保留重导入时已有的显式策略。建议可判定为
+  `read` / `write` 的工具按建议落盘；无法判定的工具保守地写为 `write + require_confirm: true`。手动更新
+  `allow_tools` 时，未配对的工具保持待确认，不会注册或调用。每个已确认的白名单工具都要显式标为 `read`、`write`、`actuate`、
+  `emergency` 或 `unrestricted`；校验失败不会写入配置或热重载。`unrestricted` 是管理员在本地明确选定的“无权限”模式：强制不确认、
   必须显式 `idempotent: true`，同一 `request_id` 最多重连重试三次。像删除远端帖子这样的操作应标为
   `write`，不根据远端工具描述自动推断。
 - **代理**：MCP HTTP client 一律 `trust_env=False`，不会继承 `HTTP_PROXY` / `HTTPS_PROXY`。
