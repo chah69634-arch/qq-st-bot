@@ -119,6 +119,104 @@ def test_write_tool_budget_prevents_second_write(sandbox, monkeypatch):
     assert run.tool_names == ["write_a"]
 
 
+def test_self_capability_enables_mcp_for_a_later_call_in_the_same_run(sandbox, monkeypatch):
+    from core.autonomy import runner, store
+    from core.autonomy.models import Job, Run
+    from core.self_management import policy as self_policy, store as self_store
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__test__status"
+    capability_id = "mcp.use:test/status"
+    called = []
+
+    async def mcp_status(**_kwargs):
+        called.append(True)
+        return "connected"
+
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": mcp_status, "description": "test mcp status", "parameters": {"type": "object", "properties": {}},
+        "category": "mcp", "mcp_server": "test", "mcp_tool": "status", "effect": "read", "dangerous": False,
+    })
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    capability_state = self_store.load("owner", "char")
+    capability_state["agent_state"][capability_id] = False
+    assert self_store.save("owner", "char", capability_state)
+    state = store.load("owner", "char")
+    state["config"].update({"enabled": True, "max_steps": 3, "max_tools": 2})
+
+    def current_tools(uid, char_id, _state):
+        if not self_policy.tool_allowed(uid, char_id, tool_name):
+            return []
+        return [{"type": "function", "function": {"name": tool_name, "parameters": {"type": "object", "properties": {}}}}]
+
+    monkeypatch.setattr(runner.policy, "allowed_tools", current_tools)
+    monkeypatch.setattr(runner.policy, "admission", lambda *args: None)
+    monkeypatch.setattr(runner.talk_gate, "check", lambda *args, **kwargs: ("hard", "suppressed_unanswered_cap"))
+    monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *_args, **_kwargs: True)
+    calls = iter([
+        SimpleNamespace(tool_calls=[{"id": "enable", "name": "manage_self_capability", "arguments": {"action": "enable", "capability_id": capability_id, "reason": "needed", "expected_revision": 1, "action_id": "enable-mcp"}}], continuation_items=[], assistant_message={}),
+        SimpleNamespace(tool_calls=[{"id": "mcp", "name": tool_name, "arguments": {}}], continuation_items=[], assistant_message={}),
+        SimpleNamespace(tool_calls=[], continuation_items=[], assistant_message={}),
+    ])
+    exposed = []
+
+    async def chat_turn(_messages, schemas, **_kwargs):
+        exposed.append({(schema.get("function") or schema).get("name") for schema in schemas})
+        return next(calls)
+
+    monkeypatch.setattr("core.llm_client.chat_turn", chat_turn)
+    run = asyncio.run(runner._run_locked(Job(uid="owner", char_id="char", source="manual", id="job-e2e"), state, Run(uid="owner", char_id="char", source="manual", job_id="job-e2e", id="run-e2e")))
+    assert tool_name not in exposed[0] and tool_name in exposed[1]
+    assert called == [True]
+    assert run.disposition == "completed_tools_only"
+    assert any(event["status"] == "self_capability_changed" for event in run.events)
+    mcp_event = next(event for event in run.events if event.get("tool_name") == tool_name)
+    assert mcp_event["mcp_audit_id"] == "autonomy:run-e2e:job-e2e"
+    audit = self_store.read_audit("owner", "char", limit=10)
+    assert any(row.get("action_id") == "enable-mcp" and row.get("run_id") == "run-e2e" and row.get("job_id") == "job-e2e" for row in audit)
+
+
+def test_self_capability_disable_denies_following_call_before_dispatch(sandbox, monkeypatch):
+    from core.autonomy import runner, store
+    from core.autonomy.models import Job, Run
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__test__status"
+    capability_id = "mcp.use:test/status"
+    called = []
+
+    async def mcp_status(**_kwargs):
+        called.append(True)
+        return "unexpected"
+
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": mcp_status, "description": "test mcp status", "parameters": {"type": "object", "properties": {}},
+        "category": "mcp", "mcp_server": "test", "mcp_tool": "status", "effect": "read", "dangerous": False,
+    })
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    state = store.load("owner", "char")
+    state["config"].update({"enabled": True, "max_steps": 2, "max_tools": 2})
+    schema = {"type": "function", "function": {"name": tool_name, "parameters": {"type": "object", "properties": {}}}}
+    monkeypatch.setattr(runner.policy, "allowed_tools", lambda uid, char_id, _state: [schema] if __import__("core.self_management.policy", fromlist=["tool_allowed"]).tool_allowed(uid, char_id, tool_name) else [])
+    monkeypatch.setattr(runner.policy, "admission", lambda *args: None)
+    monkeypatch.setattr(runner.talk_gate, "check", lambda *args, **kwargs: ("hard", "suppressed_unanswered_cap"))
+    calls = iter([
+        SimpleNamespace(tool_calls=[{"id": "disable", "name": "manage_self_capability", "arguments": {"action": "disable", "capability_id": capability_id, "reason": "stop", "expected_revision": 1, "action_id": "disable-mcp"}}], continuation_items=[], assistant_message={}),
+        SimpleNamespace(tool_calls=[{"id": "mcp", "name": tool_name, "arguments": {}}], continuation_items=[], assistant_message={}),
+    ])
+    monkeypatch.setattr("core.llm_client.chat_turn", lambda *_args, **_kwargs: _async_next(calls))
+    run = asyncio.run(runner._run_locked(Job(uid="owner", char_id="char", source="manual"), state, Run(uid="owner", char_id="char", source="manual", job_id="job")))
+    assert called == []
+    assert run.disposition == "tool_call_denied"
+    assert run.events[-1] == {"status": "tool_call_denied", "tool_name": tool_name, "reason": "not_in_current_effective_allowlist"}
+
+
+async def _async_next(values):
+    return next(values)
+
+
 def test_schedule_window_supports_local_cross_midnight():
     from core.autonomy.runner import _inside_schedule_window
     assert _inside_schedule_window(23, 30, ["22:00", "02:00"])
@@ -163,6 +261,16 @@ def test_admin_config_rejects_bad_timezone(sandbox, monkeypatch):
     with pytest.raises(Exception) as exc:
         asyncio.run(api.patch_config({"schedule": {"timezone": "Not/AZone"}}, auth=None))
     assert "timezone" in str(exc.value)
+
+
+def test_admin_tool_surface_reports_the_effective_decision_matrix(sandbox, monkeypatch):
+    import admin.routers.autonomy as api
+
+    monkeypatch.setattr(api, "_scope", lambda: ("owner", "char"))
+    data = asyncio.run(api.tools(auth=None))
+    assert data["tools"]
+    required = {"global_enabled", "registered", "mcp_policy", "self_capability_granted", "agent_selected_state", "autonomy_allowlist", "effect", "dangerous", "require_confirm", "execution_allowed", "denial_reason"}
+    assert required <= set(data["tools"][0])
 
 
 def test_expired_lease_can_be_reclaimed_but_stale_finisher_cannot_overwrite(sandbox, monkeypatch):

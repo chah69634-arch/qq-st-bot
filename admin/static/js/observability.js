@@ -213,7 +213,7 @@ async function loadSelfManagement() {
     }).join('')}</tbody></table>`;
     bindPageActions(capabilities);
     const events = data.audit || [];
-    audit.innerHTML = `<table><thead><tr><th>Time</th><th>Actor</th><th>Capability</th><th>Result</th><th>Reason</th></tr></thead><tbody>${events.map(event => `<tr><td>${escapeHtml(_autonomyTime(event.timestamp))}</td><td>${escapeHtml(event.actor || '')}</td><td>${escapeHtml(event.capability_id || '')}</td><td>${escapeHtml(event.result || '')}</td><td>${escapeHtml(event.reason || '')}</td></tr>`).join('')}</tbody></table>`;
+    audit.innerHTML = `<table><thead><tr><th>Time</th><th>Source</th><th>Capability</th><th>Revision</th><th>Agent value</th><th>Effective value</th><th>Action</th><th>Result</th><th>Reason</th><th>Run / job</th></tr></thead><tbody>${events.map(event => `<tr><td>${escapeHtml(_autonomyTime(event.timestamp))}</td><td>${escapeHtml(event.source || event.actor || '')}</td><td>${escapeHtml(event.capability_id || '')}</td><td>${escapeHtml(`${event.revision_before ?? '-'} -> ${event.revision_after ?? '-'}`)}</td><td>${escapeHtml(`${event.old_value ?? '-'} -> ${event.new_value ?? '-'}`)}</td><td>${escapeHtml(`${event.old_effective_value ?? '-'} -> ${event.new_effective_value ?? '-'}`)}</td><td>${escapeHtml(event.action_id || '')}</td><td>${escapeHtml(event.result || '')}</td><td>${escapeHtml(event.reason || '')}</td><td>${escapeHtml([event.run_id, event.job_id].filter(Boolean).join(' / '))}</td></tr>`).join('')}</tbody></table>`;
   } catch (error) {
     capabilities.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
@@ -287,7 +287,7 @@ function _autonomyRunLabel(run) {
   return labels[disposition] || (disposition ? disposition.replaceAll('_', ' ') : '尚无记录');
 }
 
-function _renderAutonomyTools(host, tools) {
+function _renderAutonomyToolsLegacy(host, tools) {
   // This is intentionally driven by the effective autonomy allowlist. It does
   // not name or hide MCP tools by hand: inactive/unavailable entries simply
   // are not part of the current autonomy surface.
@@ -297,6 +297,11 @@ function _renderAutonomyTools(host, tools) {
     return;
   }
   host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>动作类型</th><th>风险</th><th>可重试</th></tr></thead><tbody>${active.map(item => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.effect === 'read' ? '读取' : '受限写入')}</td><td>${escapeHtml(item.risk === 'high' ? '高（当前不会自动执行）' : '低')}</td><td>${item.idempotent ? '可安全重试' : '失败后停止并记录'}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function _renderAutonomyTools(host, tools) {
+  const cell = value => escapeHtml(value === null || value === undefined || value === '' ? '-' : String(value));
+  host.innerHTML = `<table><thead><tr><th>Tool</th><th>Source</th><th>Global</th><th>Registered</th><th>Connected</th><th>MCP policy</th><th>MCP explicit</th><th>Self grant</th><th>Self Capability</th><th>Agent selected</th><th>Autonomy allowlist</th><th>Effect</th><th>Danger/confirm</th><th>Final</th><th>Denial</th></tr></thead><tbody>${tools.map(item => `<tr><td>${cell(item.name)}</td><td>${cell(item.source)}</td><td>${cell(item.global_enabled)}</td><td>${cell(item.registered)}</td><td>${cell(item.mcp_server_connected)}</td><td>${cell(item.mcp_policy)}</td><td>${cell(item.mcp_explicit)}</td><td>${cell(item.self_capability_granted)}</td><td>${cell(item.self_capability_effective)}</td><td>${cell(item.agent_selected_state)}</td><td>${cell(item.autonomy_allowlist)}</td><td>${cell(item.effect)}</td><td>${cell(item.dangerous || item.require_confirm)}</td><td>${cell(item.execution_allowed)}</td><td>${cell(item.denial_reason)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function _renderAutonomyRuns(host, runs) {

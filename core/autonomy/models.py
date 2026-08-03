@@ -32,7 +32,11 @@ class Disposition(StrEnum):
     EXPIRED = "expired"
     DUPLICATE = "duplicate"
     TOOL_FAILED = "tool_failed"
+    TOOL_CALL_DENIED = "tool_call_denied"
     TOOL_OUTCOME_UNKNOWN = "tool_outcome_unknown"
+    SELF_CAPABILITY_CHANGED = "self_capability_changed"
+    SELF_CAPABILITY_REJECTED = "self_capability_rejected"
+    STOPPED_SELF_DISABLED = "stopped_self_disabled"
     LLM_FAILED = "llm_failed"
     TIMEOUT = "timeout"
     LEASE_LOST = "lease_lost"
@@ -73,6 +77,8 @@ class Run:
     finished_at: float = 0.0
     disposition: str = ""
     tool_names: list[str] = field(default_factory=list)
+    events: list[dict] = field(default_factory=list)
+    self_capability_changes: list[dict] = field(default_factory=list)
     talk_sent: bool = False
     talk_soft_blocked: bool = False
 

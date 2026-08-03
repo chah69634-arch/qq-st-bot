@@ -106,17 +106,98 @@ def admission(uid: str, char_id: str, state: dict) -> str | None:
 
 
 def allowed_tools(uid: str, char_id: str, state: dict) -> list[dict]:
-    from core.tool_dispatcher import _TOOL_REGISTRY, get_tool_effect, get_tools_schema, is_side_effect_tool
-    enabled = state["config"].get("tools", {})
+    from core.tool_dispatcher import get_tools_schema
     schemas = {((s.get("function") or s).get("name")): s for s in get_tools_schema(char_id=char_id, uid=uid)}
-    out = []
-    for name, policy in enabled.items():
-        if not isinstance(policy, dict) or not policy.get("enabled") or name not in _TOOL_REGISTRY or name not in schemas:
+    return [schemas[row["name"]] for row in tool_decisions(uid, char_id, state) if row["execution_allowed"] and row["name"] in schemas]
+
+
+def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
+    """Return a safe, execution-time decision matrix for the autonomy surface."""
+    from core.config_loader import get_config
+    from core.self_management import registry as capability_registry, store as capability_store
+    from core.self_management.policy import effective as capability_effective
+    from core.tool_dispatcher import _TOOL_REGISTRY, _is_tool_enabled, get_tool_effect, get_tools_schema, is_side_effect_tool
+
+    schemas = {((item.get("function") or item).get("name")) for item in get_tools_schema(char_id=char_id, uid=uid)}
+    configured = state.get("config", {}).get("tools", {})
+    capability_state = capability_store.load(uid, char_id)
+    mcp_config = get_config().get("mcp_servers", {}) or {}
+    server_config = {
+        str(item.get("name") or ""): item
+        for item in (mcp_config.get("servers") or [])
+        if isinstance(item, dict)
+    }
+    rows = []
+    for name, info in _TOOL_REGISTRY.items():
+        if info.get("self_management"):
             continue
-        info = _TOOL_REGISTRY[name]
+        configured_policy = configured.get(name) if isinstance(configured.get(name), dict) else {}
         effect = get_tool_effect(name) or ("write" if is_side_effect_tool(name) else "read")
-        eligible, _ = tool_eligibility(name, policy, registry=_TOOL_REGISTRY, effect=effect)
-        if not eligible:
-            continue
-        out.append(schemas[name])
-    return out
+        eligible, eligibility_reason = tool_eligibility(name, configured_policy, registry=_TOOL_REGISTRY, effect=effect)
+        is_mcp = info.get("category") == "mcp"
+        connected = True
+        registered = True
+        mcp_policy_ok = True
+        mcp_policy_reason = "not_mcp"
+        if is_mcp:
+            from core.mcp_client import server_runtime
+            server = str(info.get("mcp_server") or "")
+            runtime = server_runtime(server)
+            connected = bool(runtime.get("connected"))
+            registered = name in set(runtime.get("registered_tools") or [])
+            server_cfg = server_config.get(server) or {}
+            if bool(mcp_config.get("require_local_policy")):
+                mcp_tool = str(info.get("mcp_tool") or "")
+                local = (server_cfg.get("tool_policy") or {}).get(mcp_tool)
+                mcp_policy_ok = mcp_tool in set(server_cfg.get("allow_tools") or []) and isinstance(local, dict)
+                mcp_policy_reason = "local_policy_ok" if mcp_policy_ok else "mcp_local_policy_denied"
+            else:
+                mcp_policy_reason = "local_policy_not_required"
+        capability_id = capability_registry.capability_for_tool(name)
+        self_capability, agent_selected_state = capability_effective(capability_id, uid, char_id) if capability_id else (False, None)
+        grant = (capability_state.get("grants") or {}).get(capability_id) if capability_id else None
+        explicitly_enabled = bool(configured_policy.get("enabled"))
+        final_schema = bool(
+            explicitly_enabled and eligible and name in schemas and connected and registered and mcp_policy_ok
+        )
+        denial = ""
+        if not _is_tool_enabled(name):
+            denial = "globally_disabled"
+        elif not self_capability:
+            denial = "self_capability_disabled"
+        elif not explicitly_enabled:
+            denial = "autonomy_allowlist_disabled"
+        elif not eligible:
+            denial = eligibility_reason
+        elif not connected:
+            denial = "mcp_server_disconnected"
+        elif not registered:
+            denial = "mcp_tool_not_registered"
+        elif not mcp_policy_ok:
+            denial = mcp_policy_reason
+        elif name not in schemas:
+            denial = "schema_unavailable"
+        rows.append({
+            "name": name,
+            "source": "mcp" if is_mcp else "builtin",
+            "global_enabled": bool(_is_tool_enabled(name)),
+            "registered": registered,
+            "mcp_server_connected": connected if is_mcp else None,
+            "mcp_policy": mcp_policy_reason,
+            "mcp_policy_allowed": mcp_policy_ok,
+            "self_capability_effective": self_capability,
+            "self_capability_granted": bool((grant or {}).get("allowed")) if grant is not None else None,
+            "agent_selected_state": agent_selected_state,
+            "autonomy_allowlist": explicitly_enabled,
+            "mcp_explicit": bool(configured_policy.get("mcp_explicit")),
+            "effect": effect,
+            "dangerous": bool(info.get("dangerous")),
+            "require_confirm": bool(info.get("require_confirm")),
+            "eligible": eligible,
+            "eligibility_reason": eligibility_reason,
+            "final_schema": final_schema,
+            "execution_allowed": final_schema,
+            "enabled": final_schema,
+            "denial_reason": denial,
+        })
+    return rows

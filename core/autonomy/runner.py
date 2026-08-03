@@ -58,20 +58,24 @@ async def run_job(job: Job) -> Run:
 
 
 async def _run_locked(job: Job, state: dict, run: Run) -> Run:
-    tools = policy.allowed_tools(job.uid, job.char_id, state)
+    tools, self_context = _runtime_tools(job.uid, job.char_id, state)
     mode, _ = talk_gate.check(job.uid)
     # A soft limit still exposes talk once so the model can make one explicit
     # re-decision. Hard limits remove it at schema construction time.
     talk_available = bool(state["config"].get("talk_enabled", True) and mode != "hard")
     if talk_available:
         tools.append(talk_gate.schema())
-    messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy"}, {"role": "user", "content": f"Autonomy opportunity source: {job.source}. Decide what to do, if anything."}]
+    messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy"}]
+    if self_context is not None:
+        messages.append(_self_context_message(self_context))
+    messages.append({"role": "user", "content": f"Autonomy opportunity source: {job.source}. Decide what to do, if anything."})
     cfg = state["config"]
     max_steps = max(1, min(int(cfg.get("max_steps") or 4), 8))
     max_tools = max(0, min(int(cfg.get("max_tools") or 4), 8))
     max_write_tools = max(0, min(int(cfg.get("max_write_tools") or 0), max_tools))
     session = _AutonomySession()
     saw_tool = False
+    saw_self_change = False
     pending_talk_text = ""
     confirm_available = False
     write_tool_count = 0
@@ -81,6 +85,9 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
         for _ in range(max_steps):
             if _user_became_active(job.uid):
                 run.disposition = Disposition.CANCELED_BY_USER_ACTIVITY.value; break
+            tools, self_context = _runtime_tools(job.uid, job.char_id, state)
+            if talk_available:
+                tools.append(talk_gate.schema())
             active_tools = list(tools)
             if confirm_available:
                 # A soft timing block is one explicit re-decision, not another
@@ -94,13 +101,18 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 timeout=remaining,
             )
             if not turn.tool_calls:
-                run.disposition = Disposition.COMPLETED_TOOLS_ONLY.value if saw_tool else Disposition.COMPLETED_NO_OP.value
+                run.disposition = _completed_disposition(saw_tool, saw_self_change)
                 break
             messages.extend(turn.continuation_items or [turn.assistant_message])
             for call in turn.tool_calls:
                 name, args = call["name"], call["arguments"]
                 if _user_became_active(job.uid):
                     run.disposition = Disposition.CANCELED_BY_USER_ACTIVITY.value; break
+                allowed_names = {((item.get("function") or item).get("name")) for item in active_tools}
+                if name not in allowed_names:
+                    _record_event(run, "tool_call_denied", tool_name=name, reason="not_in_current_effective_allowlist")
+                    run.disposition = Disposition.TOOL_CALL_DENIED.value
+                    return _finish(run)
                 if name == "talk_owner":
                     gate_mode, gate_reason = talk_gate.check(job.uid, allow_soft=True)
                     if gate_mode == "soft" and not confirm_available:
@@ -125,23 +137,44 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     run.talk_sent = ok
                     run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_SENT.value if ok else (reason if reason in Disposition._value2member_map_ else Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value)
                     return _finish(run)
-                if len(run.tool_names) >= max_tools:
-                    run.disposition = Disposition.COMPLETED_TOOLS_ONLY.value if saw_tool else Disposition.COMPLETED_NO_OP.value; return _finish(run)
-                if _is_write_tool(name) and write_tool_count >= max_write_tools:
+                if len([tool for tool in run.tool_names if tool != "manage_self_capability"]) >= max_tools:
+                    run.disposition = _completed_disposition(saw_tool, saw_self_change); return _finish(run)
+                if name != "manage_self_capability" and _is_write_tool(name) and write_tool_count >= max_write_tools:
                     messages.append({"role": "tool", "tool_call_id": call["id"], "content": "write tool budget exhausted for this autonomy run"})
                     continue
-                result, outcome = await _execute_tool(name, args, job, session, cfg)
-                saw_tool = True; run.tool_names.append(name)
+                result, outcome = await _execute_tool(name, args, job, session, cfg, run)
+                run.tool_names.append(name)
                 if outcome == "outcome_unknown": run.disposition = Disposition.TOOL_OUTCOME_UNKNOWN.value; return _finish(run)
+                if outcome == "denied":
+                    run.disposition = Disposition.TOOL_CALL_DENIED.value
+                    return _finish(run)
                 if outcome == "failed":
                     run.disposition = Disposition.TOOL_FAILED.value
                     return _finish(run)
-                if _is_write_tool(name):
+                if name == "manage_self_capability":
+                    record = _self_change_audit(job.uid, job.char_id, str(args.get("action_id") or ""))
+                    if record is None or record.get("result") not in {"applied", "idempotent"}:
+                        _record_event(run, "self_capability_rejected", tool_name=name, action_id=str(args.get("action_id") or ""), reason=str((record or {}).get("result") or "audit_missing"))
+                        run.disposition = Disposition.SELF_CAPABILITY_REJECTED.value
+                        return _finish(run)
+                    change = {"action_id": record.get("action_id"), "capability_id": record.get("capability_id"), "revision_before": record.get("revision_before"), "revision_after": record.get("revision_after"), "old_agent_value": record.get("old_value"), "new_agent_value": record.get("new_value"), "old_effective_value": record.get("old_effective_value"), "new_effective_value": record.get("new_effective_value")}
+                    run.self_capability_changes.append(change)
+                    _record_event(run, "self_capability_changed", **change)
+                    saw_self_change = True
+                    tools, self_context = _runtime_tools(job.uid, job.char_id, state)
+                    if self_context is not None:
+                        messages.append(_self_context_message(self_context))
+                    if not _autonomy_still_enabled(job.uid, job.char_id, state):
+                        run.disposition = Disposition.STOPPED_SELF_DISABLED.value
+                        return _finish(run)
+                else:
+                    saw_tool = True
+                if name != "manage_self_capability" and _is_write_tool(name):
                     write_tool_count += 1
                 messages.append({"role": "tool", "tool_call_id": call["id"], "content": (result or "tool failed")[:1200]})
             if run.disposition == Disposition.CANCELED_BY_USER_ACTIVITY.value: break
         else:
-            run.disposition = Disposition.COMPLETED_TOOLS_ONLY.value if saw_tool else Disposition.COMPLETED_NO_OP.value
+            run.disposition = _completed_disposition(saw_tool, saw_self_change)
     except asyncio.TimeoutError:
         run.disposition = Disposition.TIMEOUT.value
     except Exception:
@@ -152,6 +185,50 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
 def _finish(run: Run) -> Run:
     run.finished_at = time.time()
     return run
+
+
+def _record_event(run: Run, status: str, **details) -> None:
+    run.events.append({"status": status, **{key: value for key, value in details.items() if value not in (None, "")}})
+
+
+def _completed_disposition(saw_tool: bool, saw_self_change: bool) -> str:
+    if saw_tool:
+        return Disposition.COMPLETED_TOOLS_ONLY.value
+    if saw_self_change:
+        return Disposition.SELF_CAPABILITY_CHANGED.value
+    return Disposition.COMPLETED_NO_OP.value
+
+
+def _self_context_message(context: dict) -> dict:
+    return {
+        "role": "system",
+        "content": f"Self Capability control state: {json.dumps(context, ensure_ascii=False)}. You may use manage_self_capability only for these IDs, with this revision and a new action_id.",
+        "_layer": "autonomy_self_management",
+    }
+
+
+def _runtime_tools(uid: str, char_id: str, state: dict) -> tuple[list[dict], dict | None]:
+    """Build a fresh autonomy tool surface; never reuse a stale capability grant."""
+    tools = policy.allowed_tools(uid, char_id, state)
+    from core.self_management.service import agent_gateway_context
+    from core.tool_dispatcher import _TOOL_REGISTRY, _is_tool_enabled
+    context = agent_gateway_context(uid, char_id)
+    gateway = _TOOL_REGISTRY.get("manage_self_capability")
+    if context is not None and isinstance(gateway, dict) and _is_tool_enabled("manage_self_capability"):
+        tools.append({"type": "function", "function": {"name": "manage_self_capability", "description": gateway["description"], "parameters": gateway["parameters"]}})
+    else:
+        context = None
+    return tools, context
+
+
+def _self_change_audit(uid: str, char_id: str, action_id: str) -> dict | None:
+    from core.self_management import store as self_store
+    return next((row for row in reversed(self_store.read_audit(uid, char_id, limit=200)) if row.get("action_id") == action_id and row.get("source") == "autonomy_self_management"), None)
+
+
+def _autonomy_still_enabled(uid: str, char_id: str, state: dict) -> bool:
+    from core.self_management.policy import autonomy_enabled
+    return autonomy_enabled(uid, char_id, bool(state["config"].get("enabled")))
 
 
 def _user_became_active(uid: str) -> bool:
@@ -178,16 +255,30 @@ def _character_for(char_id: str):
         return None
 
 
-async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict) -> tuple[str | None, str]:
+async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict, run: Run) -> tuple[str | None, str]:
+    from core.mcp_client import audit_context
+    from core.self_management.service import autonomy_audit_context
     from core.tool_dispatcher import execute
+    statuses: list[str] = []
+
+    async def observe(kind: str, **_kwargs) -> None:
+        statuses.append(kind)
+
+    origin = "autonomy_self_management" if name == "manage_self_capability" else "autonomy_loop"
     try:
-        result, ask = await asyncio.wait_for(execute(name, args, job.uid, job.uid, False, session, origin="autonomy_loop", char_id=job.char_id), timeout=float(cfg.get("tool_timeout_seconds") or 30))
+        with audit_context(f"autonomy:{run.id}:{job.id}"), autonomy_audit_context(run_id=run.id, job_id=job.id):
+            result, ask = await asyncio.wait_for(execute(name, args, job.uid, job.uid, False, session, origin=origin, char_id=job.char_id, tool_status_observer=observe), timeout=float(cfg.get("tool_timeout_seconds") or 30))
     except asyncio.TimeoutError:
         return "tool timeout", "failed"
     if ask:
-        return "tool requires user confirmation and was not executed", "failed"
-    if result and "结果不明" in result:
+        return "tool requires user confirmation and was not executed", "denied"
+    if "outcome_unknown" in statuses:
         return result, "outcome_unknown"
+    if "failed" in statuses:
+        return result, "failed"
+    if "finished" not in statuses:
+        return result, "denied"
+    _record_event(run, "tool_executed", tool_name=name, origin=origin, mcp_audit_id=(f"autonomy:{run.id}:{job.id}" if name.startswith("mcp__") else ""))
     return result, "ok"
 
 

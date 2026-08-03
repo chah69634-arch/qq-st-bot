@@ -22,6 +22,8 @@ def test_agent_change_requires_grant_lock_revision_and_idempotency(sandbox):
     assert agent_change("u1", "char_a", request, source="assistant_self_management").code == "not_granted"
     assert user_grant("u1", "char_a", capability_id="autonomy.enabled", allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
     assert agent_change("u1", "char_a", request, source="assistant_self_management").code == "revision_conflict"
+    from core.self_management import store
+    assert store.read_audit("u1", "char_a", limit=10)[-1]["result"] == "revision_conflict"
     applied = agent_change("u1", "char_a", CapabilityChange("disable", "autonomy.enabled", None, "quiet", 1, "a1"), source="assistant_self_management")
     assert applied.ok and applied.revision == 2
     assert agent_change("u1", "char_a", CapabilityChange("disable", "autonomy.enabled", None, "quiet", 2, "a1"), source="assistant_self_management").code == "idempotent"
@@ -74,6 +76,16 @@ def test_management_tool_is_hidden_from_regular_schema_and_rejects_regular_origi
     result, confirm = asyncio.run(execute("manage_self_capability", {"action": "disable", "capability_id": "autonomy.enabled", "reason": "quiet", "expected_revision": 0, "action_id": "a1"}, "u1", "u1", False, object(), origin="assistant_loop", char_id="char_a"))
     assert confirm is None
     assert "unavailable" in result.lower()
+
+
+def test_self_management_origin_cannot_execute_a_business_tool(sandbox):
+    import asyncio
+
+    from core.tool_dispatcher import execute
+
+    result, confirm = asyncio.run(execute("get_time", {}, "u1", "u1", False, object(), origin="autonomy_self_management", char_id="char_a"))
+    assert confirm is None
+    assert "only change self capability" in result.lower()
 
 
 def test_admin_routes_use_active_owner_character_scope(sandbox, monkeypatch):

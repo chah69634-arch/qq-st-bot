@@ -1599,6 +1599,9 @@ async def execute(
             _trace("failed", "self-management origin rejected")
             return "This management action is unavailable in this context.", None
     else:
+        if origin in {"assistant_self_management", "autonomy_self_management"}:
+            _trace("failed", "self-management origin may not execute a business tool")
+            return "This management origin may only change self capability.", None
         from core.self_management.policy import tool_allowed
         if not tool_allowed(user_id, char_id, tool_name):
             _trace("failed", "self capability disabled")

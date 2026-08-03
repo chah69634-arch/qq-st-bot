@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from threading import RLock
 from typing import Any
 
@@ -10,6 +12,17 @@ from core.self_management import policy, registry, store
 from core.self_management.models import CapabilityChange, ChangeResult
 
 _MUTATION_LOCK = RLock()
+_AUDIT_CONTEXT: ContextVar[dict[str, str]] = ContextVar("self_management_audit_context", default={})
+
+
+@contextmanager
+def autonomy_audit_context(*, run_id: str, job_id: str):
+    """Attach bounded autonomy identifiers to capability audit records."""
+    token = _AUDIT_CONTEXT.set({"run_id": str(run_id)[:128], "job_id": str(job_id)[:128]})
+    try:
+        yield
+    finally:
+        _AUDIT_CONTEXT.reset(token)
 
 
 def _reason(value: object) -> str | None:
@@ -19,8 +32,8 @@ def _reason(value: object) -> str | None:
     return value[:240] if value else None
 
 
-def _audit(uid: str, char_id: str, *, action_id: str, actor: str, source: str, capability_id: str, old_value, new_value, reason: str, before: int, after: int, result: str) -> None:
-    store.append_audit(uid, char_id, {
+def _audit(uid: str, char_id: str, *, action_id: str, actor: str, source: str, capability_id: str, old_value, new_value, reason: str, before: int, after: int, result: str, old_effective_value=None, new_effective_value=None) -> None:
+    record = {
         "event_id": uuid.uuid4().hex,
         "action_id": action_id[:128],
         "actor": actor,
@@ -32,7 +45,11 @@ def _audit(uid: str, char_id: str, *, action_id: str, actor: str, source: str, c
         "revision_before": before,
         "revision_after": after,
         "result": result,
-    })
+        "old_effective_value": old_effective_value,
+        "new_effective_value": new_effective_value,
+    }
+    record.update(_AUDIT_CONTEXT.get())
+    store.append_audit(uid, char_id, record)
 
 
 def _constraints_valid(capability_id: str, grant: dict, value: object) -> bool:
@@ -56,14 +73,18 @@ def agent_change(uid: str, char_id: str, change: CapabilityChange, *, source: st
     if source not in {"assistant_self_management", "autonomy_self_management"}:
         return ChangeResult(False, "invalid_source", store.load(uid, char_id)["revision"])
     if not change.action_id or len(change.action_id) > 128 or not _reason(change.reason):
-        return ChangeResult(False, "invalid_request", store.load(uid, char_id)["revision"])
+        state = store.load(uid, char_id); revision = int(state.get("revision") or 0)
+        _audit(uid, char_id, action_id=str(change.action_id or uuid.uuid4().hex), actor="agent", source=source, capability_id=str(change.capability_id)[:128], old_value=None, new_value=None, reason=_reason(change.reason) or "invalid request", before=revision, after=revision, result="invalid_request")
+        return ChangeResult(False, "invalid_request", revision)
     with _MUTATION_LOCK:
         state = store.load(uid, char_id)
         revision = int(state.get("revision") or 0)
         previous = (state.get("applied_actions") or {}).get(change.action_id)
         if isinstance(previous, dict):
+            _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=change.capability_id, old_value=previous.get("value"), new_value=previous.get("value"), reason=change.reason, before=revision, after=revision, result="idempotent")
             return ChangeResult(bool(previous.get("ok")), "idempotent", revision, previous.get("value"))
         if change.expected_revision != revision:
+            _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=change.capability_id, old_value=None, new_value=None, reason=change.reason, before=revision, after=revision, result="revision_conflict")
             return ChangeResult(False, "revision_conflict", revision)
         allowed, code = policy.can_agent_manage(uid, char_id, change.capability_id)
         if not allowed:
@@ -72,22 +93,27 @@ def agent_change(uid: str, char_id: str, change: CapabilityChange, *, source: st
         grant = state["grants"][change.capability_id]
         spec = registry.resolve(change.capability_id)
         if spec is None:
+            _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=change.capability_id, old_value=None, new_value=None, reason=change.reason, before=revision, after=revision, result="unknown_capability")
             return ChangeResult(False, "unknown_capability", revision)
         if change.action == "set_value":
             if spec.kind != "autonomy_min_interval" or not _constraints_valid(change.capability_id, grant, change.value):
+                _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=change.capability_id, old_value=state.setdefault("agent_state", {}).get(change.capability_id), new_value=None, reason=change.reason, before=revision, after=revision, result="value_out_of_constraints")
                 return ChangeResult(False, "value_out_of_constraints", revision)
             new_value = int(change.value)
         elif change.action in {"enable", "disable"} and spec.kind != "autonomy_min_interval":
             new_value = change.action == "enable"
         else:
+            _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=change.capability_id, old_value=state.setdefault("agent_state", {}).get(change.capability_id), new_value=None, reason=change.reason, before=revision, after=revision, result="invalid_action")
             return ChangeResult(False, "invalid_action", revision)
         old_value = state.setdefault("agent_state", {}).get(change.capability_id)
+        old_effective_value = policy.effective(change.capability_id, uid, char_id)[1]
         state["agent_state"][change.capability_id] = new_value
         state["revision"] = revision + 1
         state.setdefault("applied_actions", {})[change.action_id] = {"ok": True, "value": new_value, "timestamp": time.time()}
         if not store.save(uid, char_id, state):
             return ChangeResult(False, "persistence_failed", revision)
-        _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=change.capability_id, old_value=old_value, new_value=new_value, reason=change.reason, before=revision, after=revision + 1, result="applied")
+        new_effective_value = policy.effective(change.capability_id, uid, char_id)[1]
+        _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=change.capability_id, old_value=old_value, new_value=new_value, reason=change.reason, before=revision, after=revision + 1, result="applied", old_effective_value=old_effective_value, new_effective_value=new_effective_value)
         return ChangeResult(True, "applied", revision + 1, new_value)
 
 
@@ -172,3 +198,28 @@ def view(uid: str, char_id: str) -> dict[str, Any]:
         grant = (state.get("grants") or {}).get(capability_id)
         rows.append({"capability_id": capability_id, "kind": spec.kind, "system_available": policy.global_available(capability_id), "grant": grant, "agent_selected_state": (state.get("agent_state") or {}).get(capability_id), "locked": bool((state.get("locks") or {}).get(capability_id, False)), "effective": available, "effective_value": selected})
     return {"uid": str(uid), "char_id": str(char_id), "revision": int(state.get("revision") or 0), "capabilities": rows, "audit": list(reversed(store.read_audit(uid, char_id, limit=20)))}
+
+
+def agent_gateway_context(uid: str, char_id: str) -> dict[str, Any] | None:
+    """Return the safe, currently mutable capability summary for an agent loop."""
+    snapshot = view(uid, char_id)
+    mutable = []
+    locked = []
+    for row in snapshot["capabilities"]:
+        grant = row.get("grant") or {}
+        if row.get("locked"):
+            locked.append(row["capability_id"])
+        allowed, _ = policy.can_agent_manage(uid, char_id, row["capability_id"])
+        if not allowed:
+            continue
+        mutable.append({
+            "id": row["capability_id"],
+            "agent_selected_state": row.get("agent_selected_state"),
+            "effective": bool(row.get("effective")),
+            "effective_value": row.get("effective_value"),
+            "constraints": grant.get("constraints") or {},
+            "locked": bool(row.get("locked")),
+        })
+    if not mutable:
+        return None
+    return {"revision": snapshot["revision"], "mutable_capabilities": mutable, "locked_capabilities": locked}

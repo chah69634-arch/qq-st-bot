@@ -110,16 +110,9 @@ async def runs(limit: int = 30, auth=Depends(require_scopes("state.read"))):
 @router.get("/admin/autonomy/tools", summary="读取自主工具 allowlist")
 async def tools(auth=Depends(require_scopes("state.read"))):
     from core.autonomy import store
-    from core.autonomy.policy import tool_eligibility
-    from core.tool_dispatcher import _TOOL_REGISTRY, get_tool_effect, is_side_effect_tool
-    uid, char_id = _scope(); configured = store.load(uid, char_id)["config"].get("tools", {})
-    rows = []
-    for name, info in _TOOL_REGISTRY.items():
-        policy = configured.get(name) or {}
-        effect = get_tool_effect(name) or ("write" if is_side_effect_tool(name) else "read")
-        eligible, reason = tool_eligibility(name, policy, registry=_TOOL_REGISTRY, effect=effect)
-        rows.append({"name": name, "source": "MCP" if info.get("category") == "mcp" else "builtin", "effect": effect, "risk": "high" if info.get("dangerous") else "low", "eligible": eligible, "eligibility_reason": reason, "enabled": bool(policy.get("enabled")) and eligible, "idempotent": bool(info.get("mcp_idempotent", False)), "outcome_unknown": policy.get("outcome_unknown", "fail_closed")})
-    return {"tools": rows}
+    from core.autonomy.policy import tool_decisions
+    uid, char_id = _scope(); state = store.load(uid, char_id)
+    return {"tools": tool_decisions(uid, char_id, state)}
 
 
 @router.patch("/admin/autonomy/tools", summary="更新自主工具 allowlist")
