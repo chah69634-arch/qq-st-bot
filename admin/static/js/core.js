@@ -15,7 +15,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-autonomy-dashboard-2';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-i18n-3';
 
 function _actionArgs(element) {
   const raw = element.dataset.actionArgs;
