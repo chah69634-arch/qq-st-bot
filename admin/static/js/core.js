@@ -5,6 +5,7 @@ let TOKEN = localStorage.getItem('qq_admin_key') || '';
 let BASE  = window.location.origin;
 let _currentUser = null;
 let _allUsers = [];
+const ACTIVE_PAGE_SESSION_KEY = 'admin_active_page';
 window._charName = '叶瑄';  // fallback; overwritten after login by _initCharName()
 
 window.addEventListener('admin-language-changed', () => {
@@ -16,6 +17,27 @@ window.addEventListener('admin-language-changed', () => {
 
 const _pageFragmentLoads = new Map();
 const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-i18n-3';
+
+function getRememberedPage() {
+  try {
+    const page = sessionStorage.getItem(ACTIVE_PAGE_SESSION_KEY);
+    if (page && document.getElementById('page-' + page)) return page;
+    sessionStorage.removeItem(ACTIVE_PAGE_SESSION_KEY);
+  } catch (_error) { /* Storage can be unavailable in restricted browser contexts. */ }
+  return null;
+}
+
+function rememberPage(page) {
+  try {
+    sessionStorage.setItem(ACTIVE_PAGE_SESSION_KEY, page);
+  } catch (_error) { /* Page navigation must still work without storage access. */ }
+}
+
+function clearRememberedPage() {
+  try {
+    sessionStorage.removeItem(ACTIVE_PAGE_SESSION_KEY);
+  } catch (_error) { /* Best effort only. */ }
+}
 
 function _actionArgs(element) {
   const raw = element.dataset.actionArgs;
@@ -142,6 +164,7 @@ async function goto(page) {
   } catch (_error) {
     return;
   }
+  rememberPage(page);
 
   const loaders = {
     setup:           loadSetupPage,

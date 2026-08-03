@@ -387,7 +387,10 @@ async function tryLogin(key, silent) {
     document.getElementById('nav-host').textContent = window.location.host;
     document.getElementById('nav-key-hint').textContent = t('dynamic.auth.key_prefix', '密钥: {value}', {value: key.slice(0,4) + '…'});
     const setupStatus = await checkSetupStatus();
-    goto(setupStatus && setupStatus.needs_setup ? 'setup' : 'status');
+    const initialPage = setupStatus && setupStatus.needs_setup
+      ? 'setup'
+      : getRememberedPage() || 'status';
+    goto(initialPage);
     restoreNavGroups();
     _initCharName().catch(() => {});
     initSecretsBookFab().catch(() => {});
@@ -407,6 +410,7 @@ async function doLogin() {
 
 function logout() {
   localStorage.removeItem('qq_admin_key');
+  clearRememberedPage();
   TOKEN = '';
   document.getElementById('key-input').value = '';
   document.getElementById('auth-err').textContent = '';

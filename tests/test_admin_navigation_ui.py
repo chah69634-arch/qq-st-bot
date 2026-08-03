@@ -18,6 +18,16 @@ def test_navigation_restore_discovers_all_rendered_groups():
     assert 'data-action-args=\'["presence"]\'' in source
 
 
+def test_navigation_restores_the_current_page_within_a_browser_tab_session():
+    source = read_admin_client_source()
+
+    assert "const ACTIVE_PAGE_SESSION_KEY = 'admin_active_page';" in source
+    assert 'sessionStorage.setItem(ACTIVE_PAGE_SESSION_KEY, page);' in source
+    assert "getRememberedPage() || 'status'" in source
+    assert 'clearRememberedPage();' in source
+    assert "setupStatus && setupStatus.needs_setup\n      ? 'setup'" in source
+
+
 def test_mobile_navigation_uses_a_shell_managed_drawer():
     source = read_admin_client_source()
     style = STYLE.read_text(encoding="utf-8")
