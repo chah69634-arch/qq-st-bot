@@ -22,6 +22,7 @@ FLAGS = {
     "spend": ("spend", "enabled", "支出意向"),
     "practice": ("practice", "enabled", "自主练习"),
     "action_trace": ("action_trace", "enabled", "行为痕迹"),
+    "self_management": ("self_management", "enabled", "Self Capability"),
     "mcp_servers": ("mcp_servers", "enabled", "MCP 外部工具"),
     "fs_access": ("fs_access", "enabled", "文件只读访问"),
     "anti_collapse": ("anti_collapse", "enabled", "输出防坍缩"),
@@ -32,6 +33,7 @@ FLAGS = {
     "private_exchange": ("private_exchange", "enabled", "角色私下往来"),
 }
 RESTART_REQUIRED_FLAGS = frozenset({"qq"})
+_DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
 
 
 class FeatureFlagsUpdate(BaseModel):
@@ -43,7 +45,7 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
     cfg = get_config()
     return {"flags": {
         name: {
-            "enabled": bool(cfg.get(section, {}).get(key, False)),
+            "enabled": bool(cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS)),
             "label": label,
             "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
             "restart_required": name in RESTART_REQUIRED_FLAGS,
@@ -61,7 +63,7 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
     changed = set()
     for name, enabled in body.flags.items():
         section, key, _ = FLAGS[name]
-        if bool(full_cfg.get(section, {}).get(key, False)) != enabled:
+        if bool(full_cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS)) != enabled:
             changed.add(name)
         full_cfg.setdefault(section, {})[key] = enabled
     write_config_file(CONFIG_FILE, full_cfg)

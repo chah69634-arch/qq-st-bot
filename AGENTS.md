@@ -201,6 +201,10 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 如果跑全量，这里有个好东西叫pytest -n auto
 别再python -m pytest串行跑全量啦！！！
 
+## Admin Static Asset Cache
+
+When editing a JS or CSS file loaded directly by `admin/static/index.html`, update that asset's `?v=` query version in `index.html`. When editing a page fragment under `admin/static/pages/`, also update `ADMIN_UI_FRAGMENT_VERSION` in `admin/static/js/core.js` and the `core.js` query version in `index.html`. Do not rely on a browser refresh or the default StaticFiles cache behavior to verify a page change.
+
 ## Commands
 
 ```bash

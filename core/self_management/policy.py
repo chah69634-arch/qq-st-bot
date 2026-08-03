@@ -6,6 +6,12 @@ from typing import Any
 from core.self_management import registry, store
 
 
+def feature_enabled() -> bool:
+    """Global master switch; absent config preserves the existing capability behavior."""
+    from core.config_loader import get_config
+    return bool((get_config().get("self_management") or {}).get("enabled", True))
+
+
 def _grant(state: dict[str, Any], capability_id: str) -> dict[str, Any] | None:
     value = (state.get("grants") or {}).get(capability_id)
     return value if isinstance(value, dict) else None
@@ -28,6 +34,10 @@ def global_available(capability_id: str) -> bool:
 
 def effective(capability_id: str, uid: str, char_id: str) -> tuple[bool, bool | int | None]:
     """Return global availability intersected with user grant and agent choice."""
+    if not feature_enabled():
+        # Disabling the feature makes durable overrides dormant and preserves
+        # the legacy tool/autonomy defaults without deleting user state.
+        return True, None
     if not global_available(capability_id):
         return False, None
     if not store.exists(uid, char_id):
@@ -64,6 +74,8 @@ def autonomy_min_interval(uid: str, char_id: str, base_seconds: int) -> int:
 
 
 def can_agent_manage(uid: str, char_id: str, capability_id: str) -> tuple[bool, str]:
+    if not feature_enabled():
+        return False, "self_management_disabled"
     state = store.load(uid, char_id)
     grant = _grant(state, capability_id)
     if registry.resolve(capability_id) is None:

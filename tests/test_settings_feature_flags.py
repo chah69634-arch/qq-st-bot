@@ -18,6 +18,23 @@ def test_feature_flags_update_is_allowlisted(tmp_path, monkeypatch):
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["practice"]["enabled"] is True
 
 
+def test_self_management_feature_flag_is_exposed_and_consumed(tmp_path, monkeypatch):
+    path = tmp_path / "config.yaml"
+    path.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "CONFIG_FILE", path)
+    read_config = lambda: yaml.safe_load(path.read_text(encoding="utf-8"))
+    monkeypatch.setattr(mod, "get_config", read_config)
+    from core import config_loader
+    from core.self_management import policy
+    monkeypatch.setattr(config_loader, "get_config", read_config)
+    monkeypatch.setattr(config_loader, "reload_config", lambda: None)
+
+    assert asyncio.run(mod.get_feature_flags(auth=None))["flags"]["self_management"]["enabled"] is True
+    result = asyncio.run(mod.update_feature_flags(mod.FeatureFlagsUpdate(flags={"self_management": False}), auth=None))
+    assert result["flags"]["self_management"]["enabled"] is False
+    assert policy.feature_enabled() is False
+
+
 def test_feature_flags_reject_unknown(monkeypatch):
     import pytest
     from fastapi import HTTPException

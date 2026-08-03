@@ -54,6 +54,18 @@ def test_management_gateway_cannot_manage_itself_or_accept_wrong_origin(sandbox)
     assert result.code == "invalid_source"
 
 
+def test_global_feature_switch_makes_agent_overrides_dormant(sandbox, monkeypatch):
+    from core.self_management import policy
+    from core.self_management.service import agent_change, agent_gateway_context, user_grant
+
+    assert user_grant("u1", "char_a", capability_id="autonomy.enabled", allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"self_management": {"enabled": False}})
+    assert policy.autonomy_enabled("u1", "char_a", True) is True
+    assert agent_gateway_context("u1", "char_a") is None
+    result = agent_change("u1", "char_a", CapabilityChange("disable", "autonomy.enabled", None, "quiet", 1, "a1"), source="assistant_self_management")
+    assert result.code == "self_management_disabled"
+
+
 def test_tool_overlay_applies_to_chat_schema_and_autonomy_allowlist(sandbox):
     from core.autonomy import policy as autonomy_policy, store as autonomy_store
     from core.self_management.service import user_grant
