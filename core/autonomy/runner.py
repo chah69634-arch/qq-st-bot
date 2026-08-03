@@ -58,7 +58,7 @@ async def run_job(job: Job) -> Run:
 
 
 async def _run_locked(job: Job, state: dict, run: Run) -> Run:
-    tools = policy.allowed_tools(job.char_id, state)
+    tools = policy.allowed_tools(job.uid, job.char_id, state)
     mode, _ = talk_gate.check(job.uid)
     # A soft limit still exposes talk once so the model can make one explicit
     # re-decision. Hard limits remove it at schema construction time.
@@ -205,6 +205,10 @@ async def tick(uid: str, char_id: str) -> None:
     cfg = state["config"]
     if not cfg.get("enabled"):
         return
+    from core.self_management.policy import autonomy_enabled, autonomy_min_interval
+    if not autonomy_enabled(uid, char_id, bool(cfg.get("enabled"))):
+        return
+    effective_minimum = autonomy_min_interval(uid, char_id, int(cfg.get("min_interval_seconds") or 0))
     now = time.time()
     interval = cfg.get("interval", {})
     if interval.get("enabled") and now - store.source_last_evaluated(state, "interval") >= int(interval.get("seconds") or 0):
@@ -217,7 +221,7 @@ async def tick(uid: str, char_id: str) -> None:
         from core.scheduler.overflow_bucket import compute_signals
         signals = compute_signals(uid, char_id=char_id)
         if signals.bucket_score() >= float(overflow.get("threshold") or 1.6):
-            key = f"overflow:{int(now // max(60, int(cfg.get('min_interval_seconds') or 900)))}"
+            key = f"overflow:{int(now // max(60, effective_minimum or 900))}"
             store.enqueue(uid, char_id, "overflow", dedupe_key=key)
     job = store.claim_due(uid, char_id)
     if job is None: return

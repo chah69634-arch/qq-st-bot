@@ -51,6 +51,8 @@ REGISTRY: dict[str, PathMeta] = {
     "service_state":          PathMeta("runtime",   "shared",          "global",        "ignore"),
     "proactive_ledger":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "autonomy_state":         PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
+    "self_management_state":  PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
+    "self_management_audit":  PathMeta("forensic",  "shared",          "per_char_user", "ignore"),
     "wake_delivery_ledger":   PathMeta("canonical", "shared",          "per_user",      "ignore"),
     "wake_bridge_root":       PathMeta("canonical", "shared",          "global",        "ignore"),
     "wake_bridge_state":      PathMeta("canonical", "shared",          "per_char_user", "ignore"),

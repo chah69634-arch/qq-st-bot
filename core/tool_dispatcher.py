@@ -452,6 +452,40 @@ async def _fs_read_wrapper(path: str) -> str:
     return fs_read(path=path)
 
 
+async def _manage_self_capability_wrapper(
+    action: str,
+    capability_id: str,
+    value=None,
+    reason: str = "",
+    expected_revision: int = -1,
+    action_id: str = "",
+    *,
+    user_id: str,
+    char_id: str,
+    origin: str,
+) -> str:
+    """Narrow internal gateway; it never accepts a config path or secret."""
+    from core.self_management.models import CapabilityChange
+    from core.self_management.service import agent_change
+
+    result = agent_change(
+        user_id,
+        char_id,
+        CapabilityChange(
+            action=action,
+            capability_id=capability_id,
+            value=value,
+            reason=reason,
+            expected_revision=expected_revision,
+            action_id=action_id,
+        ),
+        source=origin,
+    )
+    if result.ok:
+        return f"Self capability updated: {capability_id}; revision={result.revision}."
+    return f"Self capability change was not applied: {result.code}; revision={result.revision}."
+
+
 _TOOL_REGISTRY["get_time"] = {
     "func": _get_current_time,
     "description": "获取当前本地日期、时间和星期。用户询问现在几点、今天日期或星期时调用；不要猜测时间。",
@@ -1065,6 +1099,33 @@ _TOOL_REGISTRY["fs_read"] = {
     "trace_args": ["path"],
 }
 
+_TOOL_REGISTRY["manage_self_capability"] = {
+    "func": _manage_self_capability_wrapper,
+    "description": (
+        "Manage only an explicitly user-granted capability for this character. "
+        "Use only with a current revision and an idempotency action_id. "
+        "Never use it for URLs, headers, tokens, arbitrary settings, files, or global configuration."
+    ),
+    "dangerous": False,
+    "category": "self_management",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["enable", "disable", "set_value"]},
+            "capability_id": {"type": "string", "maxLength": 160},
+            "value": {"type": ["boolean", "integer", "null"]},
+            "reason": {"type": "string", "minLength": 1, "maxLength": 240},
+            "expected_revision": {"type": "integer", "minimum": 0},
+            "action_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        },
+        "required": ["action", "capability_id", "reason", "expected_revision", "action_id"],
+    },
+    "examples": ["temporarily disable an authorized capability", "set an authorized cooldown within its limit"],
+    "keywords": ["authorized capability", "self capability", "cooldown"],
+    "effect": "write",
+    "self_management": True,
+}
+
 
 # ─── N7: 快速路径风险标记 helper ──────────────────────────────────────────────
 #
@@ -1152,17 +1213,29 @@ def _is_tool_enabled(tool_name: str) -> bool:
     return cfg.get(group, {}).get("enabled", True)
 
 
-def get_tools_schema(categories: list[str] | None = None, *, char_id: str | None = None) -> list[dict]:
+def get_tools_schema(
+    categories: list[str] | None = None,
+    *,
+    char_id: str | None = None,
+    uid: str | None = None,
+) -> list[dict]:
     """返回已启用工具的 OpenAI function_calling 格式 schema。
     categories: 若提供，仅返回该分类内的工具；None 返回全部。
     """
     char_name = get_active_char_name()
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
+        if info.get("self_management"):
+            # The gateway is added only by trusted agent loops.
+            continue
         if not _is_tool_enabled(name):
             continue
         if categories is not None and info.get("category") not in categories:
             continue
+        if uid is not None and char_id is not None:
+            from core.self_management.policy import tool_allowed
+            if not tool_allowed(uid, char_id, name):
+                continue
         schemas.append({
             "type": "function",
             "function": {
@@ -1348,6 +1421,7 @@ def parse_tail_brace(text: str) -> tuple[str, str | None]:
 
 _EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({
     "user_live", "assistant_loop", "assistant_loop_relay", "autonomy_loop", "admin_console",
+    "assistant_self_management", "autonomy_self_management",
 })
 _OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
     "toy_vibrate",
@@ -1519,6 +1593,17 @@ async def execute(
         _trace("failed", _fail)
         return _fail, None
 
+    tool_info = _TOOL_REGISTRY[tool_name]
+    if tool_info.get("self_management"):
+        if origin not in {"assistant_self_management", "autonomy_self_management"}:
+            _trace("failed", "self-management origin rejected")
+            return "This management action is unavailable in this context.", None
+    else:
+        from core.self_management.policy import tool_allowed
+        if not tool_allowed(user_id, char_id, tool_name):
+            _trace("failed", "self capability disabled")
+            return "This capability is currently unavailable for this character.", None
+
     # Brief 61 defensive gate. A blocked hallucinated MCP call is not an action,
     # so it deliberately leaves no action_trace record and reveals no level data.
     if tool_name.startswith("mcp__") and origin != "admin_console":
@@ -1536,8 +1621,6 @@ async def execute(
         _fail = get_tool_fail_response()
         _trace("failed", _fail)
         return _fail, None
-
-    tool_info = _TOOL_REGISTRY[tool_name]
 
     # Keep the prelude truthful: an observer is not told the tool is queued
     # until its basic local argument shape has been checked as well.
@@ -1607,7 +1690,9 @@ async def execute(
         # All local policy/permission/confirmation gates have passed. This is
         # "handling it", not a claim that a remote service or device started.
         await _notify_status("queued")
-        if tool_name in (
+        if tool_info.get("self_management"):
+            result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
+        elif tool_name in (
             "add_reminder", "read_diary", "read_watch", "search_diary",
             "get_profile", "get_episodic",
         ):
@@ -1714,8 +1799,8 @@ class ToolDispatcher:
     def register_send_callback(self, callback):
         register_send_callback(callback)
 
-    def get_tools_schema(self, categories: list[str] | None = None) -> list:
-        return get_tools_schema(categories=categories)
+    def get_tools_schema(self, categories: list[str] | None = None, *, char_id: str | None = None, uid: str | None = None) -> list:
+        return get_tools_schema(categories=categories, char_id=char_id, uid=uid)
 
     async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str, bypass_read_log: bool = False, tool_status_observer=None):
         return await execute(

@@ -51,7 +51,7 @@ from admin.routers import (
     hidden_state_debug, hardware, observe,
     group, group_dream, relationship_facts,
     transcribe, provenance,
-    auth_tokens, coplay, perception, spend, growth, observability, wake_bridge, integrations, autonomy,
+    auth_tokens, coplay, perception, spend, growth, observability, wake_bridge, integrations, autonomy, self_management,
     phone_control,
 )
 
@@ -115,6 +115,7 @@ app.include_router(growth.router,               prefix="", tags=["成长观测"]
 app.include_router(observability.router,        prefix="", tags=["观测"])
 app.include_router(wake_bridge.router,          prefix="", tags=["外部集成"])
 app.include_router(autonomy.router,             prefix="", tags=["观测"])
+app.include_router(self_management.router,      prefix="", tags=["角色自主管理"])
 app.include_router(integrations.router,         prefix="", tags=["外部集成"])
 
 # ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────

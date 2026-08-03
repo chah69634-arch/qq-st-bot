@@ -43,6 +43,9 @@ def admission(uid: str, char_id: str, state: dict) -> str | None:
     cfg = state["config"]
     if not cfg.get("enabled", False):
         return Disposition.SUPPRESSED_PROACTIVE_OFF.value
+    from core.self_management.policy import autonomy_enabled, autonomy_min_interval
+    if not autonomy_enabled(uid, char_id, bool(cfg.get("enabled"))):
+        return Disposition.SUPPRESSED_PROACTIVE_OFF.value
     from core.autonomy.store import circuit_open
     if circuit_open(state):
         return Disposition.CIRCUIT_OPEN.value
@@ -96,15 +99,16 @@ def admission(uid: str, char_id: str, state: dict) -> str | None:
         default=0.0,
     )
     import time
-    if latest and time.time() - latest < int(cfg.get("min_interval_seconds") or 0):
+    effective_minimum = autonomy_min_interval(uid, char_id, int(cfg.get("min_interval_seconds") or 0))
+    if latest and time.time() - latest < effective_minimum:
         return Disposition.DUPLICATE.value
     return None
 
 
-def allowed_tools(char_id: str, state: dict) -> list[dict]:
+def allowed_tools(uid: str, char_id: str, state: dict) -> list[dict]:
     from core.tool_dispatcher import _TOOL_REGISTRY, get_tool_effect, get_tools_schema, is_side_effect_tool
     enabled = state["config"].get("tools", {})
-    schemas = {((s.get("function") or s).get("name")): s for s in get_tools_schema(char_id=char_id)}
+    schemas = {((s.get("function") or s).get("name")): s for s in get_tools_schema(char_id=char_id, uid=uid)}
     out = []
     for name, policy in enabled.items():
         if not isinstance(policy, dict) or not policy.get("enabled") or name not in _TOOL_REGISTRY or name not in schemas:

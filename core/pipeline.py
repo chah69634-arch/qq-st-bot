@@ -945,9 +945,27 @@ class Pipeline:
         # compatibility; proficiency is an exposure-layer filter applied here.
         from core.growth.mcp_proficiency import filter_schemas as _filter_growth_tools
         tools = [
-            t for t in _filter_growth_tools(get_tools_schema(categories=categories), char_id=char_id)
+            t for t in _filter_growth_tools(get_tools_schema(categories=categories, char_id=char_id, uid=uid), char_id=char_id)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
+        # This internal gateway is not part of the ordinary registry exposure.
+        # It is appended only when this character has at least one mutable,
+        # currently available user grant.
+        self_management_context = None
+        try:
+            from core.self_management.service import view as _self_management_view
+            _self_management_state = _self_management_view(uid, char_id)
+            _rows = _self_management_state.get("capabilities", [])
+            _mutable_rows = [row for row in _rows if row.get("system_available") and (row.get("grant") or {}).get("allowed") and (row.get("grant") or {}).get("mutable_by_agent") and not row.get("locked")]
+            if _mutable_rows:
+                _info = _TOOL_REGISTRY["manage_self_capability"]
+                tools.append({"type": "function", "function": {"name": "manage_self_capability", "description": _info["description"], "parameters": _info["parameters"]}})
+                self_management_context = {
+                    "revision": _self_management_state.get("revision", 0),
+                    "capabilities": [{"id": row["capability_id"], "current": row.get("agent_selected_state"), "constraints": (row.get("grant") or {}).get("constraints", {})} for row in _mutable_rows],
+                }
+        except Exception:
+            logger.warning("[pipeline.run_agentic_loop] self-management schema unavailable", exc_info=True)
         # A named tool preset is a final, model-specific *exposure* filter.  It
         # cannot bypass category, per-character, MCP proficiency, or global
         # execution gates above; it only makes this model receive fewer schemas.
@@ -965,6 +983,7 @@ class Pipeline:
                 # The built-in tool page must not turn currently connected
                 # dynamic entries into an incomplete, persistent MCP catalogue.
                 if _TOOL_REGISTRY.get((tool.get("function") or tool).get("name", ""), {}).get("category") == "mcp"
+                or (tool.get("function") or tool).get("name") == "manage_self_capability"
                 or (tool.get("function") or tool).get("name") in allowed_tool_names
             ]
             logger.info(
@@ -995,6 +1014,8 @@ class Pipeline:
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
+        if self_management_context is not None:
+            loop_msgs.insert(0, {"role": "system", "content": f"Self Capability control state: {json.dumps(self_management_context, ensure_ascii=False)}. You may use manage_self_capability only for these IDs, with this revision and a new action_id.", "_layer": "11.4_self_management"})
         # 工具意愿软提示（Brief 29 · 5，Brief 28 补丁；Brief 120 补充尾部花括号约定，
         # Brief 122 补充"调用过程本身不入台词"）：利用 recency 位置，插在用户消息
         # 之前；只在 loop 首步注入一次，不进 short_term history（loop_msgs 本就是
@@ -1206,6 +1227,10 @@ class Pipeline:
                                 ],
                             })
                             for _index, rc in enumerate(relay_calls, start=1):
+                                if rc["name"] == "manage_self_capability":
+                                    # Relay parsing cannot safely supply an action id or a
+                                    # revision, so this narrow operation is native-call only.
+                                    continue
                                 try:
                                     result, ask_confirm = await _execute_with_ephemeral_status(
                                         rc["id"], rc["name"], rc["arguments"],
@@ -1245,7 +1270,7 @@ class Pipeline:
                             tc["id"], tc["name"], tc["arguments"],
                             index=_index,
                             total=len(turn.tool_calls),
-                            origin="assistant_loop",
+                            origin=("assistant_self_management" if tc["name"] == "manage_self_capability" else "assistant_loop"),
                         )
                     except Exception as e:
                         log_error("pipeline.run_agentic_loop.execute", e)

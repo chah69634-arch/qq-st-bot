@@ -194,7 +194,47 @@ async function loadObserveAutonomy() {
     document.getElementById('autonomy-miss-policy').value = schedule.restart_miss_policy || 'skip';
     const host = document.getElementById('autonomy-tools');
     _renderAutonomyTools(host, tools.tools || []);
+    await loadSelfManagement();
   } catch (e) { overviewEl.innerHTML = `<div class="empty">读取唤醒状态失败：${escapeHtml(e.message)}</div>`; }
+}
+
+async function loadSelfManagement() {
+  const capabilities = document.getElementById('self-management-capabilities');
+  const audit = document.getElementById('self-management-audit');
+  if (!capabilities || !audit) return;
+  try {
+    const data = await api('GET', '/admin/self-management');
+    const rows = data.capabilities || [];
+    capabilities.innerHTML = `<table><thead><tr><th>Capability</th><th>Available</th><th>User grant</th><th>Agent state</th><th>Lock</th><th>Actions</th></tr></thead><tbody>${rows.map(row => {
+      const id = escapeHtml(row.capability_id);
+      const grant = row.grant || {};
+      const locked = !!row.locked;
+      return `<tr><td>${id}</td><td>${row.system_available ? 'yes' : 'no'}</td><td>${grant.allowed ? (grant.mutable_by_agent ? 'mutable' : 'user only') : 'not granted'}<br><small>${escapeHtml(JSON.stringify(grant.constraints || {}))}</small></td><td>${escapeHtml(String(row.agent_selected_state ?? 'base'))}</td><td>${locked ? 'locked' : 'open'}</td><td class="actions"><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["grant","${id}"]'>Grant</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["revoke","${id}"]'>Revoke</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["${locked ? 'unlock' : 'lock'}","${id}"]'>${locked ? 'Unlock' : 'Lock'}</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["restore","${id}"]'>Restore</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["undo","${id}"]'>Undo</button></td></tr>`;
+    }).join('')}</tbody></table>`;
+    bindPageActions(capabilities);
+    const events = data.audit || [];
+    audit.innerHTML = `<table><thead><tr><th>Time</th><th>Actor</th><th>Capability</th><th>Result</th><th>Reason</th></tr></thead><tbody>${events.map(event => `<tr><td>${escapeHtml(_autonomyTime(event.timestamp))}</td><td>${escapeHtml(event.actor || '')}</td><td>${escapeHtml(event.capability_id || '')}</td><td>${escapeHtml(event.result || '')}</td><td>${escapeHtml(event.reason || '')}</td></tr>`).join('')}</tbody></table>`;
+  } catch (error) {
+    capabilities.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function selfManagementChange(action, capabilityId) {
+  const reason = window.prompt('Reason for this user override:', 'user override');
+  if (!reason) return;
+  let path, body;
+  if (action === 'grant' || action === 'revoke') {
+    const constraints = capabilityId === 'autonomy.min_interval_seconds' ? {minimum: 60, maximum: 86400} : {};
+    path = '/admin/self-management/grants'; body = {capability_id: capabilityId, allowed: action === 'grant', mutable_by_agent: action === 'grant', constraints, reason};
+  } else if (action === 'lock' || action === 'unlock') {
+    path = '/admin/self-management/locks'; body = {capability_id: capabilityId, locked: action === 'lock', reason};
+  } else if (action === 'restore') {
+    path = '/admin/self-management/restore'; body = {capability_id: capabilityId, reason};
+  } else {
+    path = '/admin/self-management/undo'; body = {capability_id: capabilityId, reason};
+  }
+  try { await api('POST', path, body); await loadSelfManagement(); toast('Self Capability updated', 'ok'); }
+  catch (error) { toast(`Self Capability update failed: ${error.message}`, 'err'); }
 }
 
 function _autonomyTime(value) {
@@ -300,6 +340,8 @@ async function enqueueAutonomyTest() {
 }
 
 window.loadObserveAutonomy = loadObserveAutonomy;
+window.loadSelfManagement = loadSelfManagement;
+window.selfManagementChange = selfManagementChange;
 window.saveAutonomyConfig = saveAutonomyConfig;
 window.enqueueAutonomyTest = enqueueAutonomyTest;
 
