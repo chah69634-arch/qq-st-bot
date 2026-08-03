@@ -239,7 +239,8 @@ textarea { resize: vertical; min-height: 72px; }
 .autonomy-overview .stat .detail { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: 5px; }
 .autonomy-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .autonomy-source-grid .card { margin-bottom: 0; }
-.autonomy-hint { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: -10px; margin-bottom: 14px; }
+.autonomy-hint { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 0 0 14px; }
+.autonomy-page .card-header .autonomy-hint { margin: 4px 0 0; }
 .autonomy-controls { align-items: end; }
 .autonomy-controls .checkbox-row { padding: 9px 0; }
 .autonomy-page em { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border: 1px solid var(--muted); border-radius: 50%; color: var(--muted); cursor: help; font-size: 10px; font-style: normal; }
