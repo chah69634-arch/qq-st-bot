@@ -21,7 +21,7 @@
         <div class="admin-inline-041"><button class="btn btn-ghost" data-action="testMcpImport" data-i18n="mcp.test_import">测试连接并发现工具</button><button class="btn btn-primary" id="mcp-import-save" data-action="importMcpServer" disabled data-i18n="mcp.confirm_import">确认导入</button></div>
         <div id="mcp-import-result" class="admin-inline-133"></div>
       </div>
-      <div class="card"><div class="card-header"><h3 data-i18n="mcp.servers_title">已配置 Servers</h3></div><p class="admin-inline-144" data-i18n="mcp.policy.help">模式说明：read 只读，可重连重试一次；write 修改外部状态，仅显式幂等时重试；actuate 触发现实动作，按策略确认且不自动重放，超时可能结果未知；emergency 用于紧急安全动作，仅幂等 hardware_stop 可重试；unrestricted 无权限，显式幂等且同一命令最多重试三次。</p><div id="mcp-servers"><div class="loading" data-i18n="common.loading">加载中…</div></div></div>
+      <div class="card"><div class="card-header"><h3 data-i18n="mcp.servers_title">已配置 Servers</h3></div><p class="admin-inline-144" data-i18n="mcp.policy.help">模式说明：read 只读，可重连重试一次；write 修改外部状态，仅显式幂等时重试；actuate 触发现实动作，按策略确认且不自动重放，超时可能结果未知；emergency 用于紧急安全动作，仅幂等 hardware_stop 可重试；unrestricted 是管理员明确选择的无限制执行模式。</p><div id="mcp-servers"><div class="loading" data-i18n="common.loading">加载中…</div></div></div>
       <div class="card" id="mcp-console-card">
         <div class="card-header"><h3 data-i18n="mcp.console.title">工具调用控制台</h3><button class="btn btn-ghost btn-sm" data-action="refreshMcpConsole" data-i18n="common.refresh">刷新</button></div>
         <p class="admin-inline-144" data-i18n="mcp.console.notice">仅允许调用已连接、allowlisted 且已确认本地 policy 的工具。参数会按工具 schema 校验；高危调用需要二次确认。</p>

@@ -134,9 +134,9 @@ def validate_local_tool_policy(
 
     name = str(server_cfg.get("name") or "<unnamed>")
     allow_tools = server_cfg.get("allow_tools")
-    if not isinstance(allow_tools, list) or not allow_tools:
+    if not isinstance(allow_tools, list):
         raise ValueError(
-            f"MCP server '{name}' require_local_policy=true 时必须配置非空 allow_tools"
+            f"MCP server '{name}' require_local_policy=true 时 allow_tools 必须是列表"
         )
     if not all(isinstance(tool_name, str) and tool_name for tool_name in allow_tools):
         raise ValueError(f"MCP server '{name}' 的 allow_tools 必须全部是非空工具名")
@@ -648,7 +648,10 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
     )
 
     for tool in listed.tools:
-        if allow and tool.name not in allow:
+        if local_policy is not None:
+            if tool.name not in allow:
+                continue
+        elif allow and tool.name not in allow:
             continue
         if local_policy is not None and tool.name not in local_policy:
             # Strict local policy intentionally treats an allowlisted tool

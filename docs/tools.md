@@ -2,6 +2,22 @@
 
 ---
 
+## MCP 批量授权与严格白名单（Brief 135）
+
+管理面 `PATCH /settings/mcp/{name}` 支持一次性的 `bulk_authorize` 动作，值只能是
+`default` 或 `unrestricted`。后端只使用当前已连接 server 的 `list_tools()` 快照构造
+`allow_tools`，不会信任前端提交的工具名；一次请求只写一次配置并触发一次 server 热重载，
+响应包含 `processed_count`、最终 `allow_tools`、`tool_policy` 和 `reload_status`。
+
+`default` 只补齐缺失的本地 policy，保留已有显式策略；可靠只读工具使用 `read`，其他工具
+使用 `write`，未知语义或高风险工具要求确认。导入、普通保存和批量默认授权共用同一套生成规则。
+`unrestricted` 是管理员明确选择的无限制执行模式，会为当前发现的全部工具写入
+`effect: unrestricted`、`idempotent: true`、`require_confirm: false`，并只需一次管理面确认。
+
+开启 `mcp_servers.require_local_policy` 后，`allow_tools: []` 表示零授权，不再表示全部允许。
+普通保存会先补齐当前运行时快照中的缺失 policy；若仍有 allowlisted 工具没有有效本地 policy，
+请求会在写盘前失败。非严格 legacy 模式保留空白 allowlist 的兼容行为。
+
 ## 工具触发路径
 
 ### 媒介 MCP 熟练度门控（Brief 61）
@@ -208,7 +224,7 @@ mcp_servers:
       tool_timeout_s: 30
       tool_timeouts_s:              # 可选：只覆盖指定工具，不影响同 server 的其他工具
         hardware_sequence: 60
-      allow_tools: []              # 空 = 全部；非空 = 白名单
+      allow_tools: []              # legacy 非严格模式空 = 全部；严格模式空 = 零授权
 ```
 
 - **Transport**：当前代码的 canonical transports 是 `stdio`、`sse`、`streamable-http`；配置中的
@@ -235,8 +251,8 @@ mcp_servers:
 - **本地 effect 策略**：`require_local_policy: true` 时，管理面 URL 导入会在 `initialize + list_tools`
   成功后为每个选中的工具写入本地默认 `tool_policy`，并保留重导入时已有的显式策略。建议可判定为
   `read` / `write` 的工具按建议落盘；无法判定的工具保守地写为 `write + require_confirm: true`。手动更新
-  `allow_tools` 时，未配对的工具保持待确认，不会注册或调用。每个已确认的白名单工具都要显式标为 `read`、`write`、`actuate`、
-  `emergency` 或 `unrestricted`；校验失败不会写入配置或热重载。`unrestricted` 是管理员在本地明确选定的“无权限”模式：强制不确认、
+  `allow_tools` 时，管理面会从当前运行时快照补齐缺失策略；无法补齐时严格写入会拒绝。每个已确认的白名单工具都要显式标为 `read`、`write`、`actuate`、
+  `emergency` 或 `unrestricted`；校验失败不会写入配置或热重载。`unrestricted` 是管理员在本地明确选定的“无限制执行”模式：强制不确认、
   必须显式 `idempotent: true`，同一 `request_id` 最多重连重试三次。像删除远端帖子这样的操作应标为
   `write`，不根据远端工具描述自动推断。
 - **代理**：MCP HTTP client 一律 `trust_env=False`，不会继承 `HTTP_PROXY` / `HTTPS_PROXY`。

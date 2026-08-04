@@ -53,6 +53,7 @@ class McpServerUpdate(BaseModel):
     enabled: Optional[bool] = None
     allow_tools: Optional[list[str]] = None
     tool_policy: Optional[dict[str, McpToolPolicy]] = None
+    bulk_authorize: Optional[Literal["default", "unrestricted"]] = None
     headers: Optional[dict[str, str]] = None
     tool_timeout_s: Optional[float] = None
     tool_timeouts_s: Optional[dict[str, float]] = None
@@ -217,6 +218,49 @@ def _prune_tool_policy(server: dict) -> None:
         server.pop("tool_policy", None)
 
 
+def _default_tool_policy_entries(tools: list[dict]) -> dict[str, dict[str, object]]:
+    """Build conservative local policies from one trusted discovery snapshot."""
+    from core.mcp_client import suggest_tool_policy
+
+    entries: dict[str, dict[str, object]] = {}
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        tool_name = str(tool.get("name") or "").strip()
+        if not tool_name or tool_name in entries:
+            continue
+        suggestion = tool.get("suggestion")
+        if not isinstance(suggestion, dict):
+            suggestion = suggest_tool_policy(
+                tool_name,
+                str(tool.get("description") or ""),
+            )
+        effect = "read" if suggestion.get("effect") == "read" else "write"
+        require_confirm = bool(
+            suggestion.get("require_confirm")
+            or suggestion.get("high_risk")
+            or suggestion.get("effect") is None
+        )
+        entry: dict[str, object] = {"effect": effect}
+        if require_confirm:
+            entry["require_confirm"] = True
+        entries[tool_name] = entry
+    return entries
+
+
+def _fill_missing_tool_policy_defaults(server: dict, tools: list[dict]) -> None:
+    """Fill only missing entries; explicit local policy always wins."""
+    allowed = set(server.get("allow_tools") or [])
+    policy = dict(server.get("tool_policy") or {})
+    for tool_name, entry in _default_tool_policy_entries(tools).items():
+        if tool_name in allowed and tool_name not in policy:
+            policy[tool_name] = entry
+    if policy:
+        server["tool_policy"] = policy
+    else:
+        server.pop("tool_policy", None)
+
+
 def _fill_import_tool_policy_defaults(server: dict, tools: list[dict]) -> None:
     """Persist conservative local policies for newly imported tools.
 
@@ -224,29 +268,42 @@ def _fill_import_tool_policy_defaults(server: dict, tools: list[dict]) -> None:
     conservative ``write`` effect and require an execution confirmation;
     explicit policies from a re-import are never overwritten.
     """
-    from core.mcp_client import suggest_tool_policy
+    _fill_missing_tool_policy_defaults(server, tools)
 
-    allowed = set(server.get("allow_tools") or [])
-    policy = dict(server.get("tool_policy") or {})
-    for tool in tools:
-        tool_name = str(tool.get("name") or "")
-        if not tool_name or tool_name not in allowed or tool_name in policy:
-            continue
-        suggestion = tool.get("suggestion")
-        if not isinstance(suggestion, dict):
-            suggestion = suggest_tool_policy(tool_name, str(tool.get("description") or ""))
-        effect = suggestion.get("effect")
-        if effect not in {"read", "write", "actuate", "emergency", "unrestricted"}:
-            effect = "write"
-            require_confirm = True
-        else:
-            require_confirm = bool(suggestion.get("require_confirm", False))
-        entry: dict[str, object] = {"effect": effect}
-        if require_confirm:
-            entry["require_confirm"] = True
-        policy[tool_name] = entry
-    if policy:
-        server["tool_policy"] = policy
+
+def _runtime_tool_snapshot(name: str, mcp_client) -> list[dict]:
+    """Return the current connected ``list_tools`` snapshot for one server."""
+    runtime = mcp_client.server_runtime(name)
+    if not bool(runtime.get("connected", False)):
+        raise HTTPException(status_code=409, detail="MCP server 当前未连接，无法授权")
+    tools = runtime.get("tools")
+    if not isinstance(tools, list):
+        raise HTTPException(status_code=409, detail="MCP server 当前没有有效工具目录")
+    snapshot = [
+        tool for tool in tools
+        if isinstance(tool, dict) and str(tool.get("name") or "").strip()
+    ]
+    if not snapshot:
+        raise HTTPException(status_code=409, detail="MCP server 当前没有发现工具")
+    return snapshot
+
+
+def _validate_local_policy_before_write(server: dict, mcp_cfg: dict, mcp_client) -> None:
+    """Reject strict writes that would leave an allowlisted tool unregistered."""
+    if not bool(mcp_cfg.get("require_local_policy", False)) or not bool(server.get("enabled", True)):
+        return
+    try:
+        mcp_client.validate_local_tool_policy(server, required=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    allow_tools = list(server.get("allow_tools") or [])
+    policy = server.get("tool_policy") or {}
+    missing = [tool_name for tool_name in allow_tools if not isinstance(policy.get(tool_name), dict)]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"严格模式下 allow_tools 缺少本地 policy: {missing}",
+        )
 
 
 def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dict:
@@ -265,7 +322,7 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
         suggestion = tool.get("suggestion") or suggest_tool_policy(
             tool_name, str(tool.get("description") or ""),
         )
-        allowlisted = not allowed or tool_name in allowed
+        allowlisted = tool_name in allowed if require_local_policy else not allowed or tool_name in allowed
         confirmed = isinstance(policy.get(tool_name), dict)
         if not allowlisted:
             policy_status = "not_allowlisted"
@@ -302,6 +359,7 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
         "tool_timeouts_s": dict(server_cfg.get("tool_timeouts_s") or {}),
         "allow_tools": list(server_cfg.get("allow_tools") or []),
         "tool_policy": policy,
+        "require_local_policy": bool(require_local_policy),
         "tool_states": tool_states,
         "tool_presets": _normalize_tool_presets(server_cfg.get("tool_presets")),
         "active_tool_preset": str(server_cfg.get("active_tool_preset") or ""),
@@ -315,6 +373,7 @@ async def get_mcp_settings(_auth=Depends(require_scopes("admin"))):
     servers = [item for item in (cfg.get("servers") or []) if isinstance(item, dict)]
     return {
         "enabled": bool(cfg.get("enabled", False)),
+        "require_local_policy": bool(cfg.get("require_local_policy", False)),
         "servers": [
             _server_view(item, require_local_policy=bool(cfg.get("require_local_policy", False)))
             for item in servers
@@ -353,7 +412,10 @@ def _resolve_console_tool(server_name: str, tool_name: str) -> tuple[str, dict]:
         raise HTTPException(status_code=409, detail="MCP server 当前未连接")
 
     allow_tools = server_cfg.get("allow_tools") or []
-    if allow_tools and tool_name not in allow_tools:
+    strict_policy = bool(mcp_cfg.get("require_local_policy", False))
+    if (strict_policy and tool_name not in allow_tools) or (
+        not strict_policy and allow_tools and tool_name not in allow_tools
+    ):
         raise HTTPException(status_code=403, detail="工具不在当前 allowlist 中")
     if bool(mcp_cfg.get("require_local_policy", False)) and not isinstance(
         (server_cfg.get("tool_policy") or {}).get(tool_name), dict,
@@ -544,11 +606,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 
     _fill_import_tool_policy_defaults(server_cfg, tools)
     _prune_tool_policy(server_cfg)
-    if bool(mcp_cfg.get("require_local_policy", False)):
-        try:
-            mcp_client.validate_local_tool_policy(server_cfg, required=True)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    _validate_local_policy_before_write(server_cfg, mcp_cfg, mcp_client)
 
     servers = [item for item in (mcp_cfg.get("servers") or []) if item.get("name") != server_cfg["name"]]
     servers.append(server_cfg)
@@ -574,13 +632,56 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin"))):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
-    if all(value is None for value in (body.enabled, body.allow_tools, body.tool_policy, body.headers, body.tool_timeout_s, body.tool_timeouts_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
+    if all(value is None for value in (body.enabled, body.allow_tools, body.tool_policy, body.bulk_authorize, body.headers, body.tool_timeout_s, body.tool_timeouts_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
         raise HTTPException(status_code=422, detail="没有可更新字段")
     full_cfg = _read_config()
-    servers = full_cfg.setdefault("mcp_servers", {}).setdefault("servers", [])
+    mcp_cfg = full_cfg.setdefault("mcp_servers", {})
+    servers = mcp_cfg.setdefault("servers", [])
     server = next((item for item in servers if item.get("name") == name), None)
     if server is None:
         raise HTTPException(status_code=404, detail="MCP server 不存在")
+    from core import config_loader, mcp_client
+
+    if body.bulk_authorize is not None:
+        other_fields = (
+            body.enabled, body.allow_tools, body.tool_policy, body.headers,
+            body.tool_timeout_s, body.tool_timeouts_s, body.use_proxy,
+            body.tool_presets, body.active_tool_preset,
+        )
+        if any(value is not None for value in other_fields):
+            raise HTTPException(status_code=422, detail="批量授权不能与其他设置同时提交")
+        snapshot = _runtime_tool_snapshot(name, mcp_client)
+        tool_names = list(dict.fromkeys(str(tool["name"]).strip() for tool in snapshot))
+        server["allow_tools"] = tool_names
+        if body.bulk_authorize == "default":
+            _fill_missing_tool_policy_defaults(server, snapshot)
+        else:
+            server["tool_policy"] = {
+                tool_name: {
+                    "effect": "unrestricted",
+                    "idempotent": True,
+                    "require_confirm": False,
+                }
+                for tool_name in tool_names
+            }
+        _prune_tool_policy(server)
+        _validate_local_policy_before_write(server, mcp_cfg, mcp_client)
+        _write_config(full_cfg)
+        config_loader.reload_config()
+        reload_ok = await mcp_client.reload_server_from_config(name)
+        reloaded = reload_ok is not False
+        return {
+            "message": "MCP 批量授权已完成" if reloaded else "配置已保存，但 MCP 热重载失败，需要重启服务",
+            "action": body.bulk_authorize,
+            "processed_count": len(tool_names),
+            "allow_tools": list(server.get("allow_tools") or []),
+            "tool_policy": dict(server.get("tool_policy") or {}),
+            "reload_status": "reloaded" if reloaded else "restart_required",
+            "server": _server_view(
+                server,
+                require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+            ),
+        }
     if body.enabled is not None:
         server["enabled"] = body.enabled
     if body.allow_tools is not None:
@@ -620,15 +721,13 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
     if body.use_proxy is not None:
         server["use_proxy"] = bool(body.use_proxy)
     _prune_tool_policy(server)
-    from core import config_loader, mcp_client
-    if (
-        bool(full_cfg.get("mcp_servers", {}).get("require_local_policy", False))
-        and bool(server.get("enabled", True))
-    ):
-        try:
-            mcp_client.validate_local_tool_policy(server, required=True)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if bool(mcp_cfg.get("require_local_policy", False)) and bool(server.get("enabled", True)):
+        runtime = mcp_client.server_runtime(name)
+        runtime_tools = runtime.get("tools") if bool(runtime.get("connected", False)) else []
+        if isinstance(runtime_tools, list):
+            _fill_missing_tool_policy_defaults(server, runtime_tools)
+            _prune_tool_policy(server)
+    _validate_local_policy_before_write(server, mcp_cfg, mcp_client)
     _write_config(full_cfg)
     config_loader.reload_config()
     # Brief 115 根治：同上，走信号队列热重载，由 server 专属常驻 task 自己关闭/重连。
@@ -639,7 +738,7 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         "reload_status": "reloaded" if reloaded else "restart_required",
         "server": _server_view(
             server,
-            require_local_policy=bool(full_cfg.get("mcp_servers", {}).get("require_local_policy", False)),
+            require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
         ),
     }
 

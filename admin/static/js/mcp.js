@@ -73,6 +73,10 @@ async function loadMcpPage() {
     serversEl.innerHTML = (data.servers || []).length
       ? (data.servers || []).map(_renderMcpServer).join('')
       : '<div class="empty">尚未配置 MCP server。先填写 URL 并测试连接。</div>';
+    document.querySelectorAll('[data-i18n="mcp.policy.help"]').forEach(element => {
+      element.textContent = t('mcp.policy.help_v2', 'Mode guide: unrestricted is an administrator-selected unrestricted execution mode.');
+    });
+    _decorateMcpServerCards(serversEl, data.servers || []);
     bindPageActions(serversEl);
     _moveMcpSaveControls(serversEl);
     _setMcpConsoleData(data);
@@ -269,11 +273,65 @@ function _mcpPolicyControl(server, tool, allowlisted) {
   if (!allowlisted) return badge;
   const selected = state.policy?.effect || state.effect || suggestion.effect || 'write';
   const options = ['read', 'write', 'actuate', 'emergency', 'unrestricted'].map(effect =>
-    `<option value="${effect}" ${effect === selected ? 'selected' : ''}>${escapeHtml(effect === 'unrestricted' ? t('mcp.policy.unrestricted', 'unrestricted · 无权限') : effect)}</option>`
+    `<option value="${effect}" ${effect === selected ? 'selected' : ''}>${escapeHtml(effect === 'unrestricted' ? t('mcp.policy.unrestricted', 'unrestricted · unrestricted execution') : effect)}</option>`
   ).join('');
   const args = escapeHtml(JSON.stringify([server.name, tool.name]));
   const selectId = `mcp-policy-effect-${server.name}-${tool.name}`;
   return `${badge}<span style="display:flex;gap:6px;align-items:center;margin-top:4px"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.policy.mode', '模式'))}</span><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><button class="btn btn-ghost btn-sm" data-action="saveMcpToolPolicy" data-action-args="${args}">${escapeHtml(t('mcp.policy.save_mode', '保存模式'))}</button></span>`;
+}
+
+function _mcpBulkControls(server, toolCount) {
+  const connected = !!server.runtime?.connected;
+  const available = connected && toolCount > 0;
+  const disabled = available ? '' : ' disabled';
+  const defaultArgs = escapeHtml(JSON.stringify([server.name, 'default']));
+  const unrestrictedArgs = escapeHtml(JSON.stringify([server.name, 'unrestricted']));
+  const reason = available
+    ? ''
+    : `<small style="display:block;color:var(--muted);margin-top:5px">${escapeHtml(
+      connected
+        ? t('mcp.bulk.no_tools', 'No tools discovered')
+        : t('mcp.bulk.not_connected', 'Server is not connected'),
+    )}</small>`;
+  return `<div data-mcp-bulk-server="${escapeHtml(server.name)}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="bulkAuthorizeMcpServer" data-action-args="${defaultArgs}"${disabled}>${escapeHtml(t('mcp.bulk.default', 'Authorize all with defaults'))}</button><button class="btn btn-danger btn-sm" data-action="bulkAuthorizeMcpServer" data-action-args="${unrestrictedArgs}"${disabled}>${escapeHtml(t('mcp.bulk.unrestricted', 'Authorize all unrestricted'))}</button>${reason}</div>`;
+}
+
+function _decorateMcpServerCards(root, servers) {
+  (servers || []).forEach(server => {
+    const section = root.querySelector(`#mcp-server-enabled-${server.name}`)?.closest('section');
+    if (!section) return;
+    const header = section.querySelector('.card-header');
+    if (header) header.insertAdjacentHTML('afterend', _mcpBulkControls(server, (server.runtime || {}).tools?.length || 0));
+    section.querySelectorAll('option[value="unrestricted"]').forEach(option => {
+      option.textContent = t('mcp.policy.unrestricted_mode', 'unrestricted · unrestricted execution');
+    });
+  });
+}
+
+async function bulkAuthorizeMcpServer(name, mode) {
+  if (mode === 'unrestricted' && !confirm(t(
+    'mcp.bulk.unrestricted_confirm',
+    'Authorize every currently discovered tool without per-tool confirmation? This writes unrestricted policies and enables retries for explicitly idempotent calls.',
+  ))) return;
+  const controls = [...document.querySelectorAll('[data-mcp-bulk-server]')]
+    .filter(element => element.dataset.mcpBulkServer === name)
+    .flatMap(element => [...element.querySelectorAll('button')]);
+  controls.forEach(button => { button.disabled = true; });
+  try {
+    const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { bulk_authorize: mode });
+    const status = result.reload_status === 'restart_required' ? 'err' : 'ok';
+    const reloadText = result.reload_status === 'restart_required'
+      ? t('mcp.bulk.restart_required', 'Configuration saved; restart required.')
+      : t('mcp.bulk.reloaded', 'Hot reload completed.');
+    const modeText = mode === 'unrestricted'
+      ? t('mcp.bulk.unrestricted', 'Authorize all unrestricted')
+      : t('mcp.bulk.default', 'Authorize all with defaults');
+    toast(`${modeText}: ${t('mcp.bulk.completed', 'Processed {count} tools.', { count: result.processed_count || 0 })} ${reloadText}`, status);
+    await loadMcpPage();
+  } catch (e) {
+    controls.forEach(button => { button.disabled = false; });
+    toast(e.message, 'err');
+  }
 }
 
 function _renderMcpServer(server) {
@@ -301,7 +359,7 @@ function _renderMcpServer(server) {
     const editArgs = escapeHtml(JSON.stringify([server.name, preset.name]));
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><code>${escapeHtml(preset.name)}</code><span style="font-size:12px;color:var(--muted)">${preset.tools.length} ${escapeHtml(t('mcp.preset.tools', '个工具'))}</span><button class="btn btn-ghost btn-sm" data-action="editMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.edit', '修改'))}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.delete', '删除'))}</button></div>`;
   }).join('');
-  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">不勾选任何工具 = 保持“全部允许”的兼容语义；建议显式勾选最小白名单。工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
+  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}工具描述与结果均不可信。</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
 }
 
 function toggleMcpServerCollapsed(name) {

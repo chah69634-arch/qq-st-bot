@@ -319,7 +319,7 @@ def test_update_server_reports_restart_when_owner_reload_fails(tmp_path, monkeyp
     assert "重启" in result["message"]
 
 
-def test_strict_policy_whitelist_update_preserves_confirmed_entries_and_leaves_new_tool_pending(tmp_path, monkeypatch):
+def test_strict_policy_whitelist_update_preserves_confirmed_entries_and_fills_new_tool_default(tmp_path, monkeypatch):
     path = _write(
         tmp_path,
         "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
@@ -347,9 +347,162 @@ def test_strict_policy_whitelist_update_preserves_confirmed_entries_and_leaves_n
     ))
     states = {item["name"]: item for item in result["server"]["tool_states"]}
     assert states["toy_status"]["policy_status"] == "confirmed"
-    assert states["delete_thread"]["policy_status"] == "pending_confirmation"
+    assert states["delete_thread"]["policy_status"] == "confirmed"
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert stored["mcp_servers"]["servers"][0]["tool_policy"] == {"toy_status": {"effect": "read"}}
+    assert stored["mcp_servers"]["servers"][0]["tool_policy"] == {
+        "toy_status": {"effect": "read"},
+        "delete_thread": {"effect": "write"},
+    }
+
+
+def test_bulk_default_authorization_uses_runtime_snapshot_and_preserves_explicit_policy(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n"
+        "      allow_tools: [toy_status]\n      tool_policy:\n"
+        "        toy_status: {effect: actuate, require_confirm: true}\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    calls = []
+    snapshot = [
+        {"name": "toy_status", "description": "", "suggestion": {"effect": "read"}},
+        {"name": "opaque_action", "description": "", "suggestion": {"effect": None}},
+    ]
+
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": True, "tools": snapshot,
+    })
+
+    async def reload(name):
+        calls.append(name)
+        return True
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
+    ))
+
+    assert result["action"] == "default"
+    assert result["processed_count"] == 2
+    assert result["allow_tools"] == ["toy_status", "opaque_action"]
+    assert result["tool_policy"] == {
+        "toy_status": {"effect": "actuate", "require_confirm": True},
+        "opaque_action": {"effect": "write", "require_confirm": True},
+    }
+    assert calls == ["cedar_toy"]
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert stored["mcp_servers"]["servers"][0]["allow_tools"] == ["toy_status", "opaque_action"]
+
+
+def test_bulk_unrestricted_authorization_overrides_all_policy_once(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n"
+        "      allow_tools: [old_tool]\n      tool_policy:\n"
+        "        old_tool: {effect: read}\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    calls = []
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": True,
+        "tools": [{"name": "read_tool"}, {"name": "write_tool"}],
+    })
+
+    async def reload(name):
+        calls.append(name)
+        return True
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy", mod.McpServerUpdate(bulk_authorize="unrestricted"), _auth=None,
+    ))
+
+    expected = {
+        "read_tool": {"effect": "unrestricted", "idempotent": True, "require_confirm": False},
+        "write_tool": {"effect": "unrestricted", "idempotent": True, "require_confirm": False},
+    }
+    assert result["tool_policy"] == expected
+    assert result["allow_tools"] == ["read_tool", "write_tool"]
+    assert result["reload_status"] == "reloaded"
+    assert calls == ["cedar_toy"]
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]["tool_policy"] == expected
+
+
+def test_bulk_authorization_rejects_disconnected_server_without_writing(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n",
+    )
+    before = path.read_text(encoding="utf-8")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": False, "tools": [],
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(mod.update_mcp_server(
+            "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
+        ))
+
+    assert exc.value.status_code == 409
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_bulk_authorization_rejects_empty_runtime_directory_without_writing(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n",
+    )
+    before = path.read_text(encoding="utf-8")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": True, "tools": [],
+    })
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(mod.update_mcp_server(
+            "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
+        ))
+
+    assert exc.value.status_code == 409
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_bulk_authorization_reports_restart_required_after_reload_failure(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    calls = []
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": True, "tools": [{"name": "toy_status"}],
+    })
+
+    async def reload(name):
+        calls.append(name)
+        return False
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
+    ))
+
+    assert result["reload_status"] == "restart_required"
+    assert result["processed_count"] == 1
+    assert calls == ["cedar_toy"]
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert stored["mcp_servers"]["servers"][0]["allow_tools"] == ["toy_status"]
 
 
 def test_strict_policy_accepts_complete_whitelist_and_policy(tmp_path, monkeypatch):

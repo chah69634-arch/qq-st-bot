@@ -155,7 +155,7 @@ async def test_destructive_annotation_remains_high_risk_after_local_confirmation
 @pytest.mark.parametrize(
     ("allow_tools", "tool_policy", "error"),
     [
-        ([], {}, "非空 allow_tools"),
+        ("not-a-list", {}, "allow_tools"),
         (["status"], {"status": {"effect": "unknown"}}, "effect 无效"),
     ],
 )
@@ -174,6 +174,20 @@ async def test_strict_local_policy_fails_closed_before_transport(monkeypatch, al
         ))
     assert opened is False
     assert mc.server_runtime("srv1")["last_init_ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_strict_empty_allowlist_is_zero_authorization(monkeypatch):
+    tools = [SimpleNamespace(name="read_status", description="", inputSchema={})]
+    monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+    _patch_client_session(monkeypatch, _FakeSession(tools))
+
+    await mc._connect_server("srv1", _strict_server(allow_tools=[], tool_policy={}))
+
+    runtime = mc.server_runtime("srv1")
+    assert runtime["registered_tools"] == []
+    assert runtime["pending_confirmation_tools"] == []
+    assert "mcp__srv1__read_status" not in td._TOOL_REGISTRY
 
 
 @pytest.mark.asyncio

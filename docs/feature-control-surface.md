@@ -51,12 +51,12 @@ MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /s
 服务商使用路径认证时可将敏感路径段写为 `${MCP_TOKEN}`，缺失变量会 fail-closed；管理面不回显字面 URL
 路径或 header 值。MCP 不继承环境代理：loopback/localhost 地址始终直连，远程地址可在管理面单独设置
 `use_proxy`，启用后使用全局 `proxy.http` / `proxy.https`。删除会立即断开该 server 并摘除它的动态工具；总开关同步所有 session，单 server 的启停/白名单只重载该 server；工具调用以
-`caller=mcp__{server}__{tool}` 记录到 API 调用总账。`tool_timeout_s` 是 server 默认值，`tool_timeouts_s.<tool>` 可为个别工具覆盖 1-660 秒的调用上限；设置读取接口会返回两者，更新会热重载对应 server。动作工具超时会记录相同 `request_id` 并返回 `outcome_unknown`，不会自动重放。工具策略新增 `unrestricted`（面板显示“无权限”）：管理员选择时强制显式幂等、跳过确认，并以同一 `request_id` 最多重连重试三次。`tool_policy.<tool>.ui_label` 是可选的本地瞬态展示标签（1-48 字符），仅供已配对桌面端的 NOW 状态使用；它不影响权限、确认、重试或调用参数，缺失时统一显示“外部工具”，不会回显远端工具名、说明、参数或结果。
+`caller=mcp__{server}__{tool}` 记录到 API 调用总账。`tool_timeout_s` 是 server 默认值，`tool_timeouts_s.<tool>` 可为个别工具覆盖 1-660 秒的调用上限；设置读取接口会返回两者，更新会热重载对应 server。动作工具超时会记录相同 `request_id` 并返回 `outcome_unknown`，不会自动重放。工具策略新增 `unrestricted`（面板显示“无限制执行”）：管理员选择时强制显式幂等、跳过确认，并以同一 `request_id` 最多重连重试三次。`tool_policy.<tool>.ui_label` 是可选的本地瞬态展示标签（1-48 字符），仅供已配对桌面端的 NOW 状态使用；它不影响权限、确认、重试或调用参数，缺失时统一显示“外部工具”，不会回显远端工具名、说明、参数或结果。
 
 后端管理面 MCP 页的 Tool-call Console 仅通过 admin-only 的 `POST /settings/mcp/console/invoke` 与
 `POST /settings/mcp/console/confirm` 调用。路由只接受当前已连接、有效 allowlist、已注册且本地 policy 已确认的动态工具，并在服务端以工具的 JSON Schema 校验参数；绝不接受任意 MCP method 或 server command。它复用 `tool_dispatcher.execute(origin="admin_console")`、effect/确认门、每工具超时和 MCP API 调用总账，不直接触碰 session；高危调用返回一次性确认票据（120 秒、仅原工具原参数可确认）。控制台响应和总账以 `audit_id` 关联，且总账不记录 arguments 或返回正文。桌面客户端不代理 MCP 管理调用、配置或密钥。
 
-每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；管理面 URL 导入会在工具探测成功后为新白名单工具写入本地默认 `tool_policy`，保留已有显式策略。MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述只能影响默认建议，不能授予远端权限：未知语义会落为 `write + require_confirm: true`。手动修改白名单时，缺少策略的工具保持 `pending_confirmation`，不会注册或调用。保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
+每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；管理面 URL 导入和普通白名单保存会在工具探测成功后为新白名单工具写入本地默认 `tool_policy`，保留已有显式策略。MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述只能影响默认建议，不能授予远端权限：未知语义会落为 `write + require_confirm: true`。无法从当前运行时快照补齐策略时，严格写入会被拒绝，不会注册或调用。保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
 
 管理面「运维 → 工具」经 admin-only `GET/PUT /settings/tools` 统一观察内置已注册工具、保存命名的 `tool_loop.tool_presets`，并把预设绑定到 `model_presets.presets.<name>.tool_preset`。该预设只收窄该聊天模型收到的内置 function schema，且不替代 `tools.<name>.enabled` 全局执行闸门。未绑定模型明确显示为「全局默认」：勾选并保存会把内置工具选择编译为全局 `tool_loop.categories` / `exclude_tools` 并热更新；面板未表示的类别与排除项会原样保留。MCP 在此页只显示全局启用状态，动态工具目录、连接与配置仍不由此页维护。删除工具预设会同步清除引用它的模型绑定。
 
@@ -72,3 +72,13 @@ LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admi
 内置唤醒由 `GET/PATCH /admin/autonomy/config` 与 `GET/PATCH /admin/autonomy/tools` 控制，配置和有限运行记录按 owner/角色写入独立 autonomy state，不写入 `config.yaml`。默认关闭；启用后的 job 仍只由现有 scheduler tick 消费。全局已连接的只读 MCP 工具会直接进入自主工具面，但仍必须通过全局启用、MCP local policy、Self Capability 的有效授权与动态注册检查；写入工具继续要求 autonomy allowlist 和代码审查的 sandboxed write（当前为花园浇水）。`manage_self_capability` 只在存在可由角色修改的、用户已授权且未锁定的能力时暴露。每次 run 会保存只读记忆、最近五轮和基础角色描述组成的 prompt 快照；普通运行列表不返回快照，只有 `GET /admin/autonomy/runs/{run_id}/prompt`（`admin` scope）可读取。关闭开关会停止新的 autonomy run，不会改变普通聊天 tool loop、Wake Bridge 或现有 scheduler trigger 的行为。
 
 Self Capability P0 uses `GET /admin/self-management` and fixed `POST` actions for grants, locks, restore, and undo. Its durable state and audit are scoped by `uid + char_id` under the runtime sandbox, separately from autonomy state and `config.yaml`. The global `self_management.enabled` master switch is exposed in System Status -> Feature switches and is hot-reloaded. When off, stored agent overrides are dormant, the management gateway is hidden, and agent requests are rejected; user grants and audits remain intact for a later re-enable. The panel returns capability IDs, status, constraints, revisions, and audit metadata only; it never returns MCP URLs, headers, tokens, or raw tool results. Agent mutations use the internal `manage_self_capability` gateway and require a user grant, `mutable_by_agent`, an unlocked capability, a current revision, and an idempotent action ID. During an autonomy run, the gateway is exposed only while a mutable capability exists; every model step rebuilds the effective schema, and every requested call is checked against that current allowlist before dispatch. Self-management calls use `autonomy_self_management`; business calls use `autonomy_loop`, and the two origins are not interchangeable. Audit records correlate the run/job/action IDs while the autonomy tools endpoint reports the safe final decision matrix. The effective runtime decision still intersects global availability and every existing dispatcher/autonomy gate.
+# MCP 批量授权补充（Brief 135）
+
+MCP 管理页的 server 卡片提供“默认授权全部”和“无限制授权全部”两个 server 级动作。
+它们分别发送一次 `PATCH /settings/mcp/{name}`，请求体只允许
+`{"bulk_authorize":"default"}` 或 `{"bulk_authorize":"unrestricted"}`；服务端从当前连接态
+`list_tools()` 快照生成白名单，写入一次并热重载一次。响应的 `processed_count`、最终白名单、
+policy 和 `reload_status` 是管理面的唯一状态来源；未连接或没有工具目录时按钮禁用并显示原因。
+
+严格本地策略通过 `GET /settings/mcp` 返回的 `require_local_policy` 显示。严格模式空白
+`allow_tools` 是零授权；legacy 非严格模式才保留空白即全开的兼容语义。
