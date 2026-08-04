@@ -461,12 +461,8 @@ async def test_detect_emotion_invalid_falls_back(monkeypatch):
 # ===========================================================================
 
 @pytest.mark.asyncio
-async def test_sensor_judge_uses_intent_preset_model(monkeypatch):
-    """When chat preset routes to model-A and intent preset routes to model-B,
-    sensor_judge must issue the LLM call with model-B (the intent preset's model).
-    Regression guard: before the fix sensor_judge read cfg["model"] from the
-    legacy llm: block regardless of which client _get_client() returned.
-    """
+async def test_sensor_judge_uses_sensor_judge_preset_model(monkeypatch):
+    """Sensor judge uses its dedicated routing category, not generic intent."""
     import core.scheduler.sensor_judge as sj
     from core.model_registry import ModelClient
 
@@ -508,8 +504,8 @@ async def test_sensor_judge_uses_intent_preset_model(monkeypatch):
     }
     result = await sj.judge(event)
 
-    assert seen_categories == ["intent"], (
-        f"sensor_judge must call get_model_client('intent'), got {seen_categories}"
+    assert seen_categories == ["sensor_judge"], (
+        f"sensor_judge must call get_model_client('sensor_judge'), got {seen_categories}"
     )
     assert captured["model"] == "model-B", (
         f"LLM call must use intent preset model 'model-B', got {captured['model']!r}"

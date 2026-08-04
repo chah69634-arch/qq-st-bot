@@ -5,8 +5,11 @@ sensor_judge.py — sensor 候选事件裁决器。
 
 调用方式：result = await judge(event)
 """
+import asyncio
 import json
 import logging
+import time
+from dataclasses import dataclass
 from typing import Optional
 
 from core.model_registry import get_model_client
@@ -27,6 +30,55 @@ def _score_to_tier(score: int) -> str:
 
 
 _FAILURE: dict = {"score": 0, "reason": "裁决失败", "intent_tier": "drop"}
+_BREAKER_THRESHOLD = 3
+_BREAKER_COOLDOWN_S = 60.0
+
+
+@dataclass
+class _Breaker:
+    failures: int = 0
+    open_until: float = 0.0
+    half_open_in_flight: bool = False
+
+
+_BREAKERS: dict[tuple[str, str], _Breaker] = {}
+
+
+def _failure_category(exc: Exception) -> str:
+    status = getattr(exc, "status_code", None)
+    text = str(exc).lower()
+    if isinstance(exc, TimeoutError) or "timeout" in text:
+        return "timeout"
+    if status in (401, 403) or "forbidden" in text or "unauthorized" in text:
+        return "auth_or_forbidden"
+    if status == 429 or "rate limit" in text:
+        return "rate_limited"
+    if isinstance(status, int) and status >= 500:
+        return "upstream_5xx"
+    return "transport"
+
+
+def _breaker_permits(key: tuple[str, str], now: float) -> bool:
+    breaker = _BREAKERS.setdefault(key, _Breaker())
+    if breaker.open_until <= now:
+        if breaker.open_until and breaker.half_open_in_flight:
+            return False
+        if breaker.open_until:
+            breaker.half_open_in_flight = True
+        return True
+    return False
+
+
+def _breaker_record(key: tuple[str, str], category: str, *, ok: bool, now: float) -> None:
+    breaker = _BREAKERS.setdefault(key, _Breaker())
+    breaker.half_open_in_flight = False
+    if ok:
+        breaker.failures = 0
+        breaker.open_until = 0.0
+    elif category in {"auth_or_forbidden", "upstream_5xx"}:
+        breaker.failures += 1
+        if breaker.failures >= _BREAKER_THRESHOLD:
+            breaker.open_until = now + _BREAKER_COOLDOWN_S
 
 
 # ── 字段叙事化辅助 ────────────────────────────────────────────────────────────
@@ -133,18 +185,29 @@ async def judge(event: dict) -> dict:
     audit_prompt = f"[SYSTEM]\n{_SYSTEM}\n\n[USER]\n{user_text}"
 
     try:
-        mc = get_model_client("intent")
+        mc = get_model_client("sensor_judge")
+        breaker_key = (mc.name, "sensor_judge")
+        started = time.monotonic()
+        if not _breaker_permits(breaker_key, started):
+            logger.info("[sensor_judge] circuit open preset=%s", mc.name)
+            return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": None}
         from core.llm_protocol import create as create_protocol_response
-        response = await create_protocol_response(
-            mc,
-            messages,
-            tools=None,
-            tool_choice=None,
-            gen_kwargs={"max_tokens": 80, "temperature": 0.1},
-        )
+        response = await asyncio.wait_for(create_protocol_response(
+            mc, messages, tools=None, tool_choice=None,
+            gen_kwargs={"max_tokens": 80, "temperature": 0.1, "timeout": mc.request_timeout_s},
+        ), timeout=mc.request_timeout_s)
         raw = response.assistant_text.strip()
+        _breaker_record(breaker_key, "", ok=True, now=time.monotonic())
     except Exception as e:
-        logger.warning(f"[sensor_judge] LLM 调用失败 event={event_type}: {e}")
+        category = _failure_category(e)
+        if "breaker_key" in locals():
+            _breaker_record(breaker_key, category, ok=False, now=time.monotonic())
+        try:
+            from core.api_call_log import append
+            append(caller="sensor_judge", purpose="sensor_judge", provider=getattr(locals().get("mc", None), "provider_kind", "unknown"), model=getattr(locals().get("mc", None), "model", "unknown"), duration_ms=int((time.monotonic() - locals().get("started", time.monotonic())) * 1000), ok=False, protocol=getattr(locals().get("mc", None), "api_protocol", ""), error_category=category)
+        except Exception:
+            pass
+        logger.warning("[sensor_judge] LLM 调用失败 event=%s category=%s", event_type, category)
         return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": None}
 
     # 解析 JSON（容错 markdown 代码块包裹）
@@ -154,6 +217,11 @@ async def judge(event: dict) -> dict:
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         logger.warning(f"[sensor_judge] 非 JSON 响应 event={event_type}: {raw!r}")
+        try:
+            from core.api_call_log import append
+            append(caller="sensor_judge", purpose="sensor_judge", provider=mc.provider_kind, model=mc.model, duration_ms=int((time.monotonic() - started) * 1000), ok=False, protocol=mc.api_protocol, error_category="response_format")
+        except Exception:
+            pass
         return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": raw}
 
     score = data.get("score")

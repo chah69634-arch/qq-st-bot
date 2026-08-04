@@ -45,6 +45,7 @@ PROVIDER_PROFILES: dict[str, dict] = {
 _FALLBACK_PROFILE = PROVIDER_PROFILES["openai"]
 
 _DEFAULT_CALL_TIMEOUT: float = 90.0
+_SENSOR_JUDGE_POLICY: dict[str, float | int] = {"timeout_s": 10.0, "max_retries": 0}
 
 
 @dataclass
@@ -63,10 +64,11 @@ class ModelClient:
     anthropic_auth_mode: str = "x_api_key"
     reasoning_native: bool = False                       # Brief 32：preset 声明原生 reasoning 支持
     reasoning_extra_body: dict[str, Any] = field(default_factory=dict)  # 原样透传 extra_body，绕过参数白名单（逃生舱）
+    request_timeout_s: float = _DEFAULT_CALL_TIMEOUT
 
 
 # preset_name → built ModelClient; cleared on reload_registry()
-_model_clients: dict[str, ModelClient] = {}
+_model_clients: dict[tuple[str, str], ModelClient] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +83,8 @@ def _get_proxy_url() -> str | None:
     return None
 
 
-def _make_http_client(proxy_url: str | None) -> httpx.AsyncClient:
-    base_timeout = httpx.Timeout(timeout=_DEFAULT_CALL_TIMEOUT, connect=10.0)
+def _make_http_client(proxy_url: str | None, *, timeout_s: float = _DEFAULT_CALL_TIMEOUT) -> httpx.AsyncClient:
+    base_timeout = httpx.Timeout(timeout=timeout_s, connect=min(10.0, timeout_s))
     if proxy_url:
         return httpx.AsyncClient(proxy=proxy_url, timeout=base_timeout)
     return httpx.AsyncClient(trust_env=False, timeout=base_timeout)
@@ -117,7 +119,7 @@ def _synth_legacy_presets(cfg: dict) -> dict:
         "api_protocol": "chat_completions",
         "params": {k: llm[k] for k in _known_params if k in llm},
     }
-    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform")
+    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge")
     return {
         "active_routing": "default",
         "defaults": {},
@@ -215,7 +217,13 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
             )
 
     profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
-    name = profile.get(call_category) or profile.get("chat")
+    # Old routing profiles predate sensor_judge.  Preserve their lightweight
+    # intent route before falling back to chat; all other categories retain
+    # the established category -> chat fallback.
+    if call_category == "sensor_judge":
+        name = profile.get("sensor_judge") or profile.get("intent") or profile.get("chat")
+    else:
+        name = profile.get(call_category) or profile.get("chat")
     if not name:
         presets = mp.get("presets", {})
         name = next(iter(presets), "legacy")
@@ -246,7 +254,7 @@ def resolve_routing_info(char_id: str) -> dict:
 # Client construction + registry
 # ---------------------------------------------------------------------------
 
-def _build_model_client(preset_name: str) -> ModelClient:
+def _build_model_client(preset_name: str, *, request_policy: dict[str, float | int] | None = None) -> ModelClient:
     mp = _get_preset_config()
     presets = mp.get("presets", {})
     preset = presets.get(preset_name)
@@ -279,8 +287,11 @@ def _build_model_client(preset_name: str) -> ModelClient:
         kind,
     )
 
+    request_policy = request_policy or {}
+    timeout_s = float(request_policy.get("timeout_s", _DEFAULT_CALL_TIMEOUT))
+    max_retries = int(request_policy.get("max_retries", 2))
     proxy_url = _get_proxy_url()
-    http_client = _make_http_client(proxy_url)
+    http_client = _make_http_client(proxy_url, timeout_s=timeout_s)
     base_url = preset.get("base_url", "")
     api_key = preset.get("api_key", "")
     # Native Anthropic Messages calls use httpx directly; Chat Completions and
@@ -293,6 +304,7 @@ def _build_model_client(preset_name: str) -> ModelClient:
             api_key=api_key,
             base_url=base_url or None,
             http_client=http_client,
+            max_retries=max_retries,
         )
     logger.info(
         "[model_registry] built ModelClient '%s' kind=%s model=%s api_protocol=%s proxy=%s",
@@ -312,6 +324,7 @@ def _build_model_client(preset_name: str) -> ModelClient:
         anthropic_auth_mode=anthropic_auth_mode,
         reasoning_native=bool(preset.get("reasoning_native", False)),
         reasoning_extra_body=dict(preset.get("reasoning_extra_body") or {}),
+        request_timeout_s=timeout_s,
     )
 
 
@@ -343,9 +356,12 @@ def get_model_client(
             raise ValueError("[model_registry] explicit preset name must not be empty")
     else:
         resolved_name = _resolve_preset_name(call_category, char_id=char_id)
-    if resolved_name not in _model_clients:
-        _model_clients[resolved_name] = _build_model_client(resolved_name)
-    return _model_clients[resolved_name]
+    policy_name = "sensor_judge" if call_category == "sensor_judge" else "default"
+    cache_key = (resolved_name, policy_name)
+    if cache_key not in _model_clients:
+        policy = _SENSOR_JUDGE_POLICY if policy_name == "sensor_judge" else None
+        _model_clients[cache_key] = _build_model_client(resolved_name, request_policy=policy)
+    return _model_clients[cache_key]
 
 
 def reload_registry() -> list[ModelClient]:

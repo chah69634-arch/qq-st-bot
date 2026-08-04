@@ -109,6 +109,7 @@ model_presets:
     default:                     # 全 DeepSeek，等价旧行为
       chat:           deepseek-default
       intent:         deepseek-default
+      sensor_judge:   deepseek-default  # 后台事件裁决；固定短 timeout、零 SDK retry
       probe:          deepseek-default
       summary:        deepseek-default
       detect_emotion: deepseek-default
@@ -118,6 +119,7 @@ model_presets:
     claude-main:                 # 主对话走 Claude，杂活留 DS 省钱
       chat:           claude-sonnet
       intent:         deepseek-default
+      sensor_judge:   deepseek-default
       probe:          deepseek-default
       summary:        deepseek-default
       detect_emotion: deepseek-default
@@ -188,6 +190,11 @@ function schema 转为 `input_schema`，并把模型的 `tool_use` 与本地执�
    preset（参照下方 `claude-main` 样例）。
 1. 取 `routing_profiles[active_routing]`（第 0 步可能已替换）。
 2. 用 `call_category` 查 preset 名；查不到 → 回退到该 profile 的 `chat`；再查不到 → 第一个 preset。
+   `sensor_judge` 是例外的兼容链：`sensor_judge → intent → chat → first preset`。所有新建
+   profile 应显式声明它，并指向稳定、低成本的 `chat_completions` preset；旧 profile 缺失时仍可
+   安全运行。该类别使用 10 秒超时与零 SDK 重试，且按 `preset + category` 独立缓存，不影响同一
+   preset 的主聊天策略。失败 fail-closed 为不主动发言的裁决；失败台账经
+   `GET /observability/api-calls` 以 `caller=sensor_judge` 查询，记录安全错误分类而不记录 prompt。
    **`probe`/`summary` 等轻量角色未在某个 profile 里单独声明时走的就是这条回退**：
    缺失不报错、不阻塞聊天，直接落到该 profile 的主聊天 preset（Brief 93 §5 核实项，见
    `tests/test_model_presets.py::TestRoutingFallback`）。管理面板「配置」页 §1 的

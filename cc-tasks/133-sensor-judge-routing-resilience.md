@@ -149,3 +149,7 @@ GET /observability/api-calls
 - 涉及 desktop 文档/控制面时，desktop 测试与 build 通过
 - 两仓分别 `git diff --check` 通过
 - 后端独立 commit；如改 desktop，desktop 独立 commit，并互相回填 hash
+
+## 施工记录
+
+- Desktop 文档提交：`aabad7d`

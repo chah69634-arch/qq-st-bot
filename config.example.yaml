@@ -72,6 +72,7 @@ model_presets:
     default:                       # 全 DeepSeek，等价旧行为
       chat:           deepseek-default
       intent:         deepseek-default
+      sensor_judge:   deepseek-default  # 后台 sensor 裁决：短超时、零 SDK 重试的独立调用策略
       probe:          deepseek-default
       summary:        deepseek-default
       detect_emotion: deepseek-default
@@ -83,6 +84,7 @@ model_presets:
     claude-main:                   # 主对话走 Claude，杂活留 DS
       chat:           claude-sonnet
       intent:         deepseek-default
+      sensor_judge:   deepseek-default
       probe:          deepseek-default
       summary:        deepseek-default
       detect_emotion: deepseek-default
