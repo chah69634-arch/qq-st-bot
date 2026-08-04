@@ -10,6 +10,8 @@
 
 ## 定位
 
+群梦 HTTP 入场冲突使用结构化 409 `detail`（`code`、`message`、`retryable`），这不是新的桌面 WebSocket 帧，也不改变 v0.1 消息全集。桌面 bridge 只向 WebView 透传预期 4xx 的受限 detail；5xx 不透传响应正文。
+
 通道层只负责**把已经生成好的回复送到用户能看到的地方**。QQ、桌宠、调度器广播共用同一个 `Pipeline`，区别只在入口和发送方式。
 
 桌宠功能已并入新客户端，"desktop" channel 名义保留，实际承载新客户端。QQ 桌宠本体已废弃。

@@ -121,6 +121,9 @@ speaker_id / content / timestamp / _turn_id / triggered_by
 | `GET` | `/group/{id}/settings` | 读群设置 |
 | `PATCH` | `/group/{id}/settings` | 部分更新群设置（min/max_responders 等） |
 | `PATCH` | `/group/{id}/roster` | 改群成员（`{roster:[char_id,…]}`）；max_responders 自动夹紧到新 roster 长度 |
+| `GET` | `/group/{id}/dream/transition-audit?limit=` | 读取群梦 enter/exit 的安全审计（`state.read`，最大 100） |
+
+群梦入场冲突使用 `{detail:{code,message,retryable}}` 的 HTTP 409 契约。`GROUP_DREAM_ALREADY_ACTIVE`、`SOLO_DREAM_ACTIVE`、`OWNER_CONVERSATION_BUSY`、`GROUP_DREAM_ENTERING`、`GROUP_NOT_REALITY` 与 `GROUP_DREAM_STATE_UNCERTAIN` 是稳定 code；客户端按 code 分支，不能解析展示文案。入场 reservation 是进程内状态，重启自然丢失并由持久化 `DREAM_ACTIVE` 状态恢复真值；它不写半完成状态到磁盘。
 
 `POST /group/{id}/send` 触发 `run_reality_stage_turn()` 作为异步 task，不阻塞 HTTP 返回。
 

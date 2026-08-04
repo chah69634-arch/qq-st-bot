@@ -55,6 +55,28 @@ _VALID_BOUNDARY_LEVEL = frozenset({"vague", "body_perceptible", "numbers_visible
 _SAFE_PRESET_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _PATCH_ALLOWED = frozenset({"world_layer", "enable_dream_lorebook", "boundary_level", "jailbreak_presets", "per_char"})
 
+_CONFLICTS = {
+    "GROUP_NOT_REALITY": ("当前群无法进入群聊梦境", False),
+    "GROUP_DREAM_ALREADY_ACTIVE": ("当前群已在群聊梦境中", True),
+    "SOLO_DREAM_ACTIVE": ("请先退出单人梦境", False),
+    "OWNER_CONVERSATION_BUSY": ("当前对话正在处理，请稍后重试", True),
+    "GROUP_DREAM_ENTERING": ("群聊梦境正在进入，请稍后重试", True),
+    "GROUP_DREAM_STATE_UNCERTAIN": ("群聊梦境状态无法确认，请检查后重试", False),
+}
+
+
+def _conflict(code: str) -> HTTPException:
+    message, retryable = _CONFLICTS[code]
+    return HTTPException(status_code=409, detail={"code": code, "message": message, "retryable": retryable})
+
+
+def _audit(group_id: str, **kwargs) -> None:
+    try:
+        from core.stage.dream_transition_audit import append
+        append(group_id, **kwargs)
+    except Exception:
+        logger.warning("[group_dream] transition audit write failed group=%s", group_id)
+
 
 def _require_reality_stage(group_id: str) -> Stage:
     stage = load_stage(group_id)
@@ -66,7 +88,7 @@ def _require_reality_stage(group_id: str) -> Stage:
         # session layered on top of an existing reality group, not its own
         # group type. Seeing anything else here means the underlying group
         # meta was corrupted or hand-edited.
-        raise HTTPException(status_code=409, detail=f"群 {group_id!r} 不是标准 reality 群，无法开始群聊梦境")
+        raise _conflict("GROUP_NOT_REALITY")
     return stage
 
 
@@ -136,23 +158,35 @@ async def group_dream_enter(group_id: str, body: dict | None = None, _auth=Depen
     stage = _require_reality_stage(group_id)
     entry_reason = str(body.get("entry_reason") or "").strip()
 
-    if is_group_dream_active(group_id):
-        raise HTTPException(status_code=409, detail=f"群 {group_id!r} 已有正在进行的群聊梦境")
-
-    from core.dream.dream_state import read_state as read_solo_state
-    solo_state = read_solo_state(stage.owner_uid)
-    if solo_state.get("status") in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
-        raise HTTPException(status_code=409, detail="owner 正在进行单人梦境，无法同时开始群聊梦境")
-
-    from core.conversation_gate import conversation_lock
-    if conversation_lock(stage.owner_uid).locked():
-        raise HTTPException(status_code=409, detail="该 owner 当前有对话正在处理，请稍后重试")
+    from core.stage.dream_transition import lock_for, release_enter, reserve_enter, owns_enter
+    async with lock_for(group_id):
+        if is_group_dream_active(group_id):
+            _audit(group_id, action="enter", result="rejected", code="GROUP_DREAM_ALREADY_ACTIVE")
+            raise _conflict("GROUP_DREAM_ALREADY_ACTIVE")
+        from core.dream.dream_state import read_state as read_solo_state
+        solo_state = read_solo_state(stage.owner_uid)
+        if solo_state.get("status") in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
+            _audit(group_id, action="enter", result="rejected", code="SOLO_DREAM_ACTIVE", solo_status=str(solo_state.get("status")))
+            raise _conflict("SOLO_DREAM_ACTIVE")
+        from core.conversation_gate import conversation_lock
+        if conversation_lock(stage.owner_uid).locked():
+            _audit(group_id, action="enter", result="rejected", code="OWNER_CONVERSATION_BUSY", conversation_busy=True)
+            raise _conflict("OWNER_CONVERSATION_BUSY")
+        token = reserve_enter(group_id)
+        if token is None:
+            _audit(group_id, action="enter", result="rejected", code="GROUP_DREAM_ENTERING", transition_busy=True)
+            raise _conflict("GROUP_DREAM_ENTERING")
 
     settings = load_dream_group_settings(group_id)
     world_id = settings.get("world_layer", "reality_derived")
 
-    per_char_snapshots = await _build_per_char_snapshots(stage, entry_reason)
-    frozen_relations = _build_frozen_relations(stage.roster)
+    try:
+        per_char_snapshots = await _build_per_char_snapshots(stage, entry_reason)
+        frozen_relations = _build_frozen_relations(stage.roster)
+    except Exception:
+        release_enter(group_id, token)
+        _audit(group_id, action="enter", result="failed", code="GROUP_DREAM_STATE_UNCERTAIN")
+        raise
 
     dream_id = f"dream_group_{group_id}_{int(time.time())}"
     state = default_dream_group_state(group_id, owner_uid=stage.owner_uid)
@@ -167,8 +201,13 @@ async def group_dream_enter(group_id: str, body: dict | None = None, _auth=Depen
     state["scene_state"] = None
     state["symbolic_anchors"] = []
     state["flow_entries"] = []
-    write_dream_group_state(group_id, state)
-    clear_dream_transcript(group_id)
+    async with lock_for(group_id):
+        if not owns_enter(group_id, token):
+            raise _conflict("GROUP_DREAM_ENTERING")
+        write_dream_group_state(group_id, state)
+        clear_dream_transcript(group_id)
+        release_enter(group_id, token)
+    _audit(group_id, action="enter", result="accepted", dream_id=dream_id, group_status=DreamStatus.DREAM_ACTIVE.value)
 
     logger.info("[group_dream] entered group=%s dream_id=%s roster=%s", group_id, dream_id, stage.roster)
     return {"ok": True, "dream_id": dream_id, "roster": list(stage.roster)}
@@ -213,16 +252,20 @@ async def group_dream_send(group_id: str, body: dict, _auth=Depends(require_scop
 @router.post("/{group_id}/dream/exit", summary="群聊梦境硬退出（Invariant D，无条件成功）")
 async def group_dream_exit(group_id: str, _auth=Depends(require_scopes("chat"))):
     _require_reality_stage(group_id)
+    from core.stage.dream_transition import lock_for, release_enter
 
-    state = read_dream_group_state(group_id)
-    dream_id = str(state.get("dream_id") or "")
-    if dream_id:
-        archive_dream_transcript(group_id, dream_id)
-    clear_dream_transcript(group_id)
+    async with lock_for(group_id):
+        release_enter(group_id)
+        state = read_dream_group_state(group_id)
+        dream_id = str(state.get("dream_id") or "")
+        if dream_id:
+            archive_dream_transcript(group_id, dream_id)
+        clear_dream_transcript(group_id)
+        state = clear_dream_group_local_state(state)
+        state["status"] = DreamStatus.REALITY_CHAT.value
+        write_dream_group_state(group_id, state)
 
-    state = clear_dream_group_local_state(state)
-    state["status"] = DreamStatus.REALITY_CHAT.value
-    write_dream_group_state(group_id, state)
+    _audit(group_id, action="exit", result="accepted", dream_id=dream_id, group_status=DreamStatus.REALITY_CHAT.value)
 
     logger.info("[group_dream] exited group=%s dream_id=%s", group_id, dream_id)
     return {"ok": True, "exited": True}
@@ -254,8 +297,17 @@ async def group_dream_state_get(group_id: str, _auth=Depends(require_scopes("cha
         "last_round_error": state.get("last_round_error"),
     }
     base.update(derive_dream_state_projection(state))
+    from core.stage.dream_transition import is_entering
+    base["transition"] = "ENTERING" if is_entering(group_id) else None
     base["blocks_chat"] = get_reality_guard_status(stage.owner_uid) != DreamGuardStatus.ALLOW
     return base
+
+
+@router.get("/{group_id}/dream/transition-audit", summary="读取群聊梦境 transition 审计")
+async def group_dream_transition_audit_get(group_id: str, limit: int = 50, _auth=Depends(require_scopes("state.read"))):
+    _require_reality_stage(group_id)
+    from core.stage.dream_transition_audit import query
+    return {"entries": query(group_id, max(1, min(limit, 100)))}
 
 
 # ── transcript（Brief 100 之后新增：手机端无 WS，靠轮询拿逐条发言）───────────────

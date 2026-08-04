@@ -306,6 +306,10 @@ class DataPaths:
     def agent_actions(self) -> Path:
         return self._p("runtime", "agent_actions.json")
 
+    def dream_group_transition_audit(self, group_id: str) -> Path:
+        """Append-only, non-semantic transition audit for one Dream Stage group."""
+        return self.dream_group_dir(group_id=group_id) / "transition_audit.jsonl"
+
     def phone_control_tasks(self) -> Path:
         """data/runtime/phone_control_tasks.json — 手机自动化任务 session 状态
 

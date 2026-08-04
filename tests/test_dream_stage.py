@@ -75,6 +75,32 @@ async def test_enter_conflict_group_already_active(sandbox):
     with pytest.raises(HTTPException) as exc:
         await group_dream_enter(GROUP_ID, {})
     assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "GROUP_DREAM_ALREADY_ACTIVE"
+    assert exc.value.detail["retryable"] is True
+
+
+@pytest.mark.asyncio
+async def test_concurrent_enter_uses_single_transition_reservation(sandbox, monkeypatch):
+    from fastapi import HTTPException
+    from admin.routers.group_dream import group_dream_enter
+
+    _create_reality_group()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_snapshots(*args, **kwargs):
+        started.set()
+        await release.wait()
+        return {}
+
+    monkeypatch.setattr("admin.routers.group_dream._build_per_char_snapshots", slow_snapshots)
+    first = asyncio.create_task(group_dream_enter(GROUP_ID, {}))
+    await started.wait()
+    with pytest.raises(HTTPException) as exc:
+        await group_dream_enter(GROUP_ID, {})
+    assert exc.value.detail["code"] == "GROUP_DREAM_ENTERING"
+    release.set()
+    assert (await first)["ok"] is True
 
 
 @pytest.mark.asyncio
