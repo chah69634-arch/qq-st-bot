@@ -123,4 +123,3 @@ device
 - 固件构建通过或明确记录环境限制
 - `git diff --check` 通过
 - 后端与固件同仓一次独立 commit，回填 commit hash
-
