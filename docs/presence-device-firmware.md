@@ -49,3 +49,9 @@ action 的降级策略）。
 
 `ConnState`：`WIFI_CONNECTING` → `WS_CONNECTING` → `ONLINE`。WiFi 和 WS 断线各自独立
 指数退避重连（1s 翻倍到 30s 封顶），互不干扰；display 层据此渲染离线/重连中状态。
+# Action acknowledgements (Brief 132)
+
+The device accepts `show_heart` as its current device-owned action. Any unknown `action.type`
+must immediately return an `ack` with `ok: false` and `error: "unsupported action type"`; the
+reply must not include credentials, network configuration, or the original payload. Device actions
+have no backend file-queue fallback, and v0.1 does not negotiate device capabilities.

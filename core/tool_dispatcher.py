@@ -203,6 +203,26 @@ from pathlib import Path as _Path
 _MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "phone_control"})
 _DANGER_MODE_TTL_SECONDS: int = 7200  # 2 小时后自动回 safe
 
+# Action ownership is static for desktop protocol v0.1.  This is deliberately
+# not a capabilities negotiation mechanism: an unregistered action must never
+# be broadcast to whichever clients happen to be connected.
+_ACTION_TARGETS: dict[str, str] = {
+    "avatar_directive": "desktop",
+    "dream_invite": "desktop",
+    "media_play_pause": "desktop",
+    "minimize_window": "desktop",
+    "open_url": "desktop",
+    "play_netease": "desktop",
+    "show_notify": "desktop",
+    "toy_invite": "desktop",
+    "show_heart": "device",
+}
+
+
+def resolve_action_target(action_type: str) -> str | None:
+    """Return the sole transport owner for a registered action, else None."""
+    return _ACTION_TARGETS.get(action_type)
+
 
 def _current_mode() -> str:
     """读 data/runtime/meta_mode.json，返回 'safe' 或 'danger'。
@@ -250,18 +270,35 @@ def _is_desktop_active() -> bool:
 
 
 async def _push_desktop_action(action: dict) -> str:
-    """推送桌面/设备动作：优先 WS + ack（桌宠、设备任一成功即算成功），失败降级到文件队列。"""
+    """Deliver an action to its registered owner; retained name is compatibility only.
+
+    Desktop actions retain their existing file fallback. Device actions are
+    WS-only: offline, NACK, and timeout are explicit failures and never enter
+    the desktop-consumed action queue.
+    """
+    action_type = action.get("type") if isinstance(action, dict) else None
+    target = resolve_action_target(action_type) if isinstance(action_type, str) else None
+    if target is None:
+        logger.warning("[_push_desktop_action] 未注册 action: type=%r", action_type)
+        return "未注册动作，未执行"
+
     from channels import desktop_ws, device_ws
-    targets = [w for w in (desktop_ws, device_ws) if w.is_connected()]
-    if not targets and not _is_desktop_active():
-        return "端离线，动作未执行"
-    # 路径 1：WS push + 等 ack，任一目标 ack 成功即返回
-    for w in targets:
-        ok, err = await w.push_action_and_wait(action, timeout=5.0)
+    transport = desktop_ws if target == "desktop" else device_ws
+    if transport.is_connected():
+        ok, err = await transport.push_action_and_wait(action, timeout=5.0)
         if ok:
+            logger.info("[_push_desktop_action] action=%s target=%s ack=ok", action_type, target)
             return "ok"
-        logger.warning(f"[_push_desktop_action] WS ack 失败: {err}，尝试下一目标/降级到文件")
-    # 路径 2：文件队列 fallback
+        logger.warning("[_push_desktop_action] action=%s target=%s ack_failed=%s", action_type, target, err)
+        if target == "device":
+            return f"设备动作未执行: {err or 'NACK'}"
+    elif target == "device":
+        logger.info("[_push_desktop_action] action=%s target=device offline", action_type)
+        return "设备端离线，动作未执行"
+
+    # Only desktop-owned actions may use the legacy desktop file queue.
+    if not _is_desktop_active():
+        return "桌宠端离线，动作未执行"
     try:
         from core.sandbox import get_paths
         _actions_file = get_paths().agent_actions()

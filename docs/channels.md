@@ -484,3 +484,11 @@ perform 字段属于 v0.1 `message_segments` 契约；权威入口见 [desktop-c
 2. 不要在业务模块里直接写 `runtime/channel_queue.json`、`runtime/mobile_queue.json` 或 `runtime/agent_actions.json`，统一走 `DesktopChannel` / `MobileChannel` / `tool_dispatcher`。
 3. 桌面动作优先走 WebSocket ack；只有失败或离线时才降级到文件队列。
 4. 如果改跨通道感知，检查 `Pipeline._last_channel` 和 `perception_block`，避免把工具结果再次注入层 1。
+# Device action routing (Brief 132)
+
+Backend actions use static ownership rather than transport fanout. `show_heart` is device-only
+and is sent only through `device_ws`; it never waits for a desktop acknowledgement or enters the
+desktop file queue. Desktop-owned actions are sent only through `desktop_ws` and retain their
+existing file fallback. Unknown actions fail closed. Device clients return an `ack` with
+`ok: false` and `error: "unsupported action type"` for unknown action types. This does not change
+the desktop WebSocket v0.1 hello or introduce capability negotiation.

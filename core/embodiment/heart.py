@@ -24,12 +24,15 @@ async def maybe_draw_heart(reply: str, char_id: str) -> None:
     try:
         if not await llm_client.detect_affection(reply):
             return
-        _LAST_SENT[char_id] = now
         from core.tool_dispatcher import _push_desktop_action
-        await _push_desktop_action({
+        result = await _push_desktop_action({
             "type": "show_heart",
             "duration_ms": int(cfg.get("duration_ms", 4000)),
         })
-        logger.info("[heart] 爱意命中，已请求板子画爱心 char=%s", char_id)
+        if result == "ok":
+            _LAST_SENT[char_id] = now
+            logger.info("[heart] 爱意命中，设备已确认画爱心 char=%s", char_id)
+        else:
+            logger.debug("[heart] 爱意命中但设备动作未确认: %s", result)
     except Exception as e:
         logger.debug("[heart] skipped: %s", e)

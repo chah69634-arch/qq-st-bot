@@ -13,6 +13,15 @@ tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level
 
 当前真正接入主流程的触发路径有两类：
 
+### 静态 action ownership（Brief 132）
+
+后端发出的 action 由 `core.tool_dispatcher.resolve_action_target()` 按静态表路由：
+桌宠 v0.1 allowlist 中的既有动作只发给 `desktop_ws`，`show_heart` 只发给
+`device_ws`。未登记 action fail-closed，不会广播给任意连接。设备动作只接受设备
+ack，离线、NACK 或超时均为明确失败，且没有桌宠文件队列 fallback；桌宠动作保留既有
+WS 后 `agent_actions.json` fallback。此处不是 capability negotiation，v0.1 不新增
+hello 字段或协商流程。
+
 ```
 路径A：pre-pipeline 探针
   QQ 用户消息 → trusted_user_text（media merge 前捕获，下同）

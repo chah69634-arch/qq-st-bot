@@ -67,8 +67,9 @@ void handleTextMessage(const uint8_t *payload, size_t length) {
             int durationMs = doc["action"]["duration_ms"] | 4000;
             wsSendAck(msgId, true);
             displayShowHeart(durationMs);
+        } else {
+            wsSendAck(msgId, false, "unsupported action type");
         }
-        // 未知 action 类型：安全忽略，不回 ack（呼应桌宠端对未知 action 的降级策略）。
     }
     // group_round_start/end、其余类型本单忽略。
 }
@@ -159,11 +160,14 @@ void wsSendPong() {
     webSocket.sendTXT(out);
 }
 
-void wsSendAck(const String &msgId, bool ok) {
+void wsSendAck(const String &msgId, bool ok, const char *error) {
     JsonDocument doc;
     doc["type"] = "ack";
     doc["msg_id"] = msgId;
     doc["ok"] = ok;
+    if (!ok && error != nullptr) {
+        doc["error"] = error;
+    }
     String out;
     serializeJson(doc, out);
     webSocket.sendTXT(out);

@@ -18,4 +18,4 @@ ConnState wsClientState();
 
 // 上行：回 pong / ack。
 void wsSendPong();
-void wsSendAck(const String &msgId, bool ok);
+void wsSendAck(const String &msgId, bool ok, const char *error = nullptr);
