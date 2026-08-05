@@ -231,6 +231,9 @@ mcp_servers:
 
 第三方工具可选分类是客户端扩展，不是 MCP 官方分类标准。server 不提供 `_meta`、提供 Emerald
 不认识的 namespace，或 metadata 损坏时，工具仍按普通 `category="mcp"` 发现、授权和调用。
+新建独立 MCP Server 时，先复制并填写
+[`docs/mcp-server-authoring-template.md`](mcp-server-authoring-template.md)，固定工具 schema、错误、
+幂等、annotations、可选 metadata 和兼容测试，再开始实现。
 每个 server 可独立声明通用映射、精确工具名覆盖和本轮 schema 筛选：
 
 ```yaml
