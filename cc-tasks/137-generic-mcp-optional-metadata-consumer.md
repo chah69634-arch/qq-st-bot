@@ -87,6 +87,80 @@ mcp_servers:
 可以提供少量“已知数据形状”的纯结构解析 helper，但不能把供应商名称写成业务分支。若为方便
 导入提供自动建议，它必须要求管理员确认采用哪个 namespace，且不获得任何授权效果。
 
+### 3.1 已落地的独立 Server 参考契约
+
+独立开源 MCP Server Mendel Garden 已在提交 `cff5409` 中实现以下实际 `tools/list` 扩展。
+下例省略了与本议题无关的完整 description 和 input schema，`annotations` 与 `_meta` 结构取自
+真实契约：
+
+```json
+{
+  "name": "mendel_seed_bank",
+  "description": "...",
+  "inputSchema": {"type": "object", "properties": {}},
+  "annotations": {
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "_meta": {
+    "io.mendel-garden/tool": {
+      "schema_version": 1,
+      "domains": ["garden_action", "seed_bank"],
+      "interaction": "mixed"
+    }
+  }
+}
+```
+
+其中分类 payload 的权威 shape 是：
+
+```json
+{
+  "schema_version": 1,
+  "domains": ["非空、去重、稳定排序的字符串"],
+  "interaction": "read | write | mixed"
+}
+```
+
+当前实际 domain 词表为：
+
+```text
+account
+archive
+breeding
+care
+game_lifecycle
+garden_action
+observe
+research
+seed_bank
+```
+
+`mendel_seed_bank` 和 `mendel_research` 是实际的 `mixed` 示例；标准 MCP annotations 与 `_meta`
+分类彼此独立。Emerald 不得用 `interaction` 覆盖 annotations，也不得用二者覆盖本地 policy。
+
+这份契约用于：
+
+- 给实现者一个真实的 MCP Tool JSON 样例；
+- 作为 mapping 配置和解析测试 fixture；
+- 完成一次可选的跨仓人工兼容验证。
+
+它不得变成运行时供应商特判。Emerald 的通用实现必须通过如下配置解释该输出：
+
+```yaml
+mcp_servers:
+  servers:
+    - name: local_garden
+      metadata_mapping:
+        namespace: "io.mendel-garden/tool"
+        schema_versions: [1]
+        domains_field: "domains"
+        interaction_field: "interaction"
+```
+
+换成其他 namespace、相同字段形状的第三方 MCP Server 后，同一解析器必须照常工作。未填写这段
+mapping 时，Mendel Garden 也必须继续作为普通 `category="mcp"` Server 被发现和调用。
+
 ## 四、解析边界
 
 在 `list_tools()` 成功之后、动态注册表条目生成之前解析 `_meta`。
@@ -221,6 +295,10 @@ headers、URL secret、Bearer、原始 description 或完整参数 schema。
 
 另增加一个可选的跨仓契约测试或人工验证说明，使用任意实现了同一 JSON shape 的 MCP Server
 验证；不能让 Emerald 测试套件依赖相邻仓库存在。
+
+测试仓内可以保存一个由上述实际输出精简得到的静态 fixture，但 fixture 不得包含相邻仓库绝对
+路径、凭证、运行时 game id 或完整远端业务结果。该 fixture 只证明通用 mapping 能解释真实
+shape，不能替代无 metadata、其他 namespace 和坏 metadata 测试。
 
 ## 九、文档与控制面
 
