@@ -1251,6 +1251,42 @@ def _is_tool_enabled(tool_name: str) -> bool:
     return cfg.get(group, {}).get("enabled", True)
 
 
+def mcp_domain_selector_allows(info: dict) -> bool:
+    """Apply an optional per-server MCP domain selector as a narrowing-only gate."""
+    if info.get("category") != "mcp":
+        return True
+    server_name = str(info.get("mcp_server") or "")
+    cfg = get_config() or {}
+    mcp_cfg = cfg.get("mcp_servers", {}) or {}
+    server_cfg = next(
+        (
+            item for item in (mcp_cfg.get("servers") or [])
+            if isinstance(item, dict) and str(item.get("name") or "") == server_name
+        ),
+        None,
+    )
+    if server_cfg is None or server_cfg.get("domain_selector") is None:
+        return True
+    try:
+        from core.mcp_client import normalize_domain_selector
+
+        selector = normalize_domain_selector(server_cfg.get("domain_selector"))
+    except (ImportError, ValueError) as exc:
+        logger.warning(
+            "[tool_dispatcher] MCP domain_selector 无效，保持兼容暴露: server=%s error=%s",
+            server_name, exc,
+        )
+        return True
+    if selector is None:
+        return True
+    domains = {
+        domain for domain in (info.get("mcp_domains") or []) if isinstance(domain, str)
+    }
+    if not domains:
+        return bool(selector["include_unclassified"])
+    return bool(domains.intersection(selector["domains"]))
+
+
 def get_tools_schema(
     categories: list[str] | None = None,
     *,
@@ -1285,6 +1321,13 @@ def get_tools_schema(
     if char_id is not None:
         from core.growth.mcp_proficiency import filter_schemas
         schemas = filter_schemas(schemas, char_id=char_id)
+    schemas = [
+        schema
+        for schema in schemas
+        if mcp_domain_selector_allows(
+            _TOOL_REGISTRY.get(schema.get("function", {}).get("name", ""), {})
+        )
+    ]
     return schemas
 
 

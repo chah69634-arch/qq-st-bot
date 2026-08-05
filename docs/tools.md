@@ -229,6 +229,30 @@ mcp_servers:
       allow_tools: []              # legacy 非严格模式空 = 全部；严格模式空 = 零授权
 ```
 
+第三方工具可选分类是客户端扩展，不是 MCP 官方分类标准。server 不提供 `_meta`、提供 Emerald
+不认识的 namespace，或 metadata 损坏时，工具仍按普通 `category="mcp"` 发现、授权和调用。
+每个 server 可独立声明通用映射、精确工具名覆盖和本轮 schema 筛选：
+
+```yaml
+metadata_mapping:
+  namespace: "io.example/tool"
+  schema_versions: [1]
+  schema_version_field: "schema_version"
+  domains_field: "domains"
+  interaction_field: "interaction"
+metadata_overrides:
+  remote_tool_name:
+    mode: override                 # remote | override | ignore
+    domains: [local_domain]
+domain_selector:
+  domains: [local_domain]
+  include_unclassified: true
+```
+
+override 按 `server + remote tool name` 精确定位，工具离线或消失时配置仍保留；工具改名不会继承旧
+override。删除 mapping、override 或 selector 后立即回到普通 MCP 行为。配置只保存本地字段，
+不复制远端 `_meta` 或 secret。
+
 - **Transport**：当前代码的 canonical transports 是 `stdio`、`sse`、`streamable-http`；配置中的
   `http` 只是兼容别名，归一化为 `streamable-http`。`stdio` 使用 `command`，另外两种使用
   HTTP(S) URL。
@@ -266,6 +290,18 @@ mcp_servers:
   `category="mcp"`，description/inputSchema 直接映射为 OpenAI function schema。与静态注册表
   同名冲突时 MCP 侧让位（记 warning，不覆盖）；连接关闭、断线重连失败后的摘除、单 server
   重载和总开关同步都会移除该 server 的动态条目。
+- **可选 metadata 解析**：`list_tools()` 成功后、动态 registry 生成前，
+  `summarize_tool_metadata()` 按该 server 的 `metadata_mapping` 解析 `_meta`。registry 只保留
+  `mcp_remote_domains`、`mcp_remote_interaction`、`mcp_metadata_source`、
+  `mcp_metadata_status`、`mcp_metadata_schema_version` 和最终 `mcp_domains`。domain 最多 8 项、
+  单项 48 字符、总长 256 字符；控制字符、超长值和未知 interaction 被丢弃或降为 `unknown`。
+  状态为 `absent | recognized | unrecognized | invalid | overridden`。单个工具解析异常只影响该
+  工具摘要，不中止同 server 的其他工具注册。完整 `_meta` 不落盘、不进日志、管理面或 prompt。
+- **domain selector**：`get_tools_schema()` 只在既有 category、allowlist/local policy、连接、
+  registry、自管理与 proficiency 门控之后应用 `domain_selector`，因此只能收窄，不能授权或扩大。
+  selector 缺失时保持旧行为；`include_unclassified: true`（推荐默认）保留无 metadata server。
+  Path C 的原生 function schema 从这里取得，tail-brace relay 继续复用同一轮已经筛选后的 `tools`
+  与 allowed name 集合，不会重建或扩大 MCP 暴露面。Path A 默认类别仍不含 MCP。
 - **暴露面与危险工具排除**：server 级 `allow_tools` 先按 `list_tools` 结果做白名单过滤；Path C
   还要同时满足全局 `tool_loop.categories` 或角色卡 `presence_ext.tool_categories` 包含
   `mcp`、全局 `exclude_tools` 未排除、以及 `mcp_proficiency` 的 schema/执行双重门控。默认
@@ -293,6 +329,11 @@ mcp_servers:
   `mcp__{server}__{tool}`，只记录成功/失败、时长与无敏感的结果提示，不记录 arguments 或
   外部返回正文；管理面按工具展示最近一条调用记录。控制台调用额外携带 `audit_id`，使 UI 返回值能关联
   到同一条总账记录；`request_id` 仍用于动作超时/结果不明的 MCP 侧关联。
+- **管理面安全摘要**：`GET /settings/mcp` 为每个工具分别返回已发现、已授权、当前会话可暴露
+  三个状态，以及远端/本地/最终 domains、interaction 提示和 metadata 状态/版本。远端分类不是
+  授权，interaction 不是本地 effect，确认仍只由本地 policy 控制。响应不返回完整 `_meta`、
+  原始 description 或完整参数 schema；控制台只得到有界的参数名/类型摘要，执行时仍在服务端用
+  registry 中的完整 JSON Schema 校验。
 - **探针不覆盖 mcp 类**：`get_probe_prompt()` 只拼 info/desktop 两类，MCP 工具只经 tool
   loop（Path C）暴露——角色卡 `presence_ext.tool_categories` 不含 `"mcp"` 就永远看不到这
   些工具，这是"本我接 MCP、角色扮演不受影响"的实现方式。

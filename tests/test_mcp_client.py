@@ -271,7 +271,6 @@ class TestHttpHeadersAndProbe:
 
         assert tools == [{
             "name": "inspect",
-            "description": "inspect status",
             "suggestion": {
                 "effect": "read",
                 "source": "name_description",
@@ -279,6 +278,12 @@ class TestHttpHeadersAndProbe:
                 "high_risk": False,
                 "require_confirm": False,
             },
+            "remote_domains": [],
+            "remote_interaction": "unknown",
+            "metadata_source": "none",
+            "metadata_status": "absent",
+            "metadata_schema_version": None,
+            "final_domains": [],
         }]
         assert "mcp__remote__inspect" not in td._TOOL_REGISTRY
 
@@ -708,6 +713,7 @@ class TestCallTool:
         monkeypatch.setitem(td._TOOL_REGISTRY, "mcp__hardware__hardware_sequence", {
             "func": _unknown, "description": "", "dangerous": False,
             "category": "mcp", "parameters": {}, "effect": "actuate",
+            "mcp_server": "hardware", "mcp_tool": "hardware_sequence",
         })
         monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
         monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
@@ -860,6 +866,8 @@ class TestMcpServerErrorPassthrough:
             "dangerous": False,
             "category": "mcp",
             "parameters": {"type": "object", "properties": {}},
+            "mcp_server": "cedar_toy",
+            "mcp_tool": "play",
         })
 
     async def test_server_business_error_passed_through_verbatim(self, monkeypatch, sandbox):

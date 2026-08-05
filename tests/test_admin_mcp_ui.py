@@ -52,3 +52,21 @@ def test_mcp_servers_start_collapsed_and_persist_ui_state():
     assert "const collapsed = !_mcpExpandedServers.has(server.name);" in source
     assert "_mcpExpandedServers.has(name) ? _mcpExpandedServers.delete(name) : _mcpExpandedServers.add(name);" in source
     assert "_persistMcpExpandedServers();" in source
+
+
+def test_mcp_management_page_exposes_optional_metadata_controls_and_safe_summary():
+    source = read_admin_client_source()
+    for marker in (
+        "mcp.metadata_notice",
+        "mcp-import-metadata-namespace",
+        "metadata_mapping",
+        "metadata_overrides",
+        "domain_selector",
+        "saveMcpMetadataOverride",
+        "state.discovered",
+        "state.authorized",
+        "state.session_exposed",
+        "parameter_summary",
+    ):
+        assert marker in source
+    assert "tool?.input_schema" not in source

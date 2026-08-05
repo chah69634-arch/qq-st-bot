@@ -45,6 +45,11 @@ _RESULT_CHAR_CAP = 2000
 _ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _SUPPORTED_TRANSPORTS = ("stdio", "sse", "streamable-http")
 _TRANSPORT_ALIASES = {"http": "streamable-http"}
+_MCP_METADATA_MAX_DOMAINS = 8
+_MCP_METADATA_DOMAIN_MAX_CHARS = 48
+_MCP_METADATA_DOMAINS_TOTAL_MAX_CHARS = 256
+_MCP_METADATA_INTERACTIONS = frozenset({"read", "write", "mixed"})
+_MCP_METADATA_OVERRIDE_MODES = frozenset({"remote", "override", "ignore"})
 
 # server_name → handle；进程内单例，_connect_server 填充，_close_server 清空。
 _servers: dict[str, "_ServerHandle"] = {}
@@ -298,15 +303,277 @@ def suggest_tool_policy(
     }
 
 
-def _tool_details(listed) -> list[dict]:
+def _contains_control_chars(value: str) -> bool:
+    return any(ord(char) < 32 or 127 <= ord(char) < 160 for char in value)
+
+
+def normalize_mcp_domains(
+    raw: object, *, field: str = "domains", allow_empty: bool = True,
+) -> list[str]:
+    """Validate authored domain configuration and return a bounded stable list."""
+    if not isinstance(raw, list):
+        raise ValueError(f"{field} 必须是字符串数组")
+    if len(raw) > _MCP_METADATA_MAX_DOMAINS:
+        raise ValueError(f"{field} 最多 {_MCP_METADATA_MAX_DOMAINS} 项")
+    domains: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            raise ValueError(f"{field} 必须全部是字符串")
+        domain = item.strip()
+        if not domain:
+            raise ValueError(f"{field} 不能包含空字符串")
+        if len(domain) > _MCP_METADATA_DOMAIN_MAX_CHARS:
+            raise ValueError(
+                f"{field} 单项最多 {_MCP_METADATA_DOMAIN_MAX_CHARS} 字符"
+            )
+        if _contains_control_chars(domain):
+            raise ValueError(f"{field} 不能包含控制字符")
+        domains.append(domain)
+    domains = sorted(set(domains))
+    if not allow_empty and not domains:
+        raise ValueError(f"{field} 不能为空")
+    if sum(len(domain) for domain in domains) > _MCP_METADATA_DOMAINS_TOTAL_MAX_CHARS:
+        raise ValueError(
+            f"{field} 总长度最多 {_MCP_METADATA_DOMAINS_TOTAL_MAX_CHARS} 字符"
+        )
+    return domains
+
+
+def normalize_metadata_mapping(raw: object) -> dict | None:
+    """Validate one server's generic metadata mapping without vendor knowledge."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("metadata_mapping 必须是对象")
+    namespace = str(raw.get("namespace") or "").strip()
+    if not namespace or len(namespace) > 160 or _contains_control_chars(namespace):
+        raise ValueError("metadata_mapping.namespace 必须是 1-160 字符的安全字符串")
+    raw_versions = raw.get("schema_versions")
+    if not isinstance(raw_versions, list) or not raw_versions or len(raw_versions) > 16:
+        raise ValueError("metadata_mapping.schema_versions 必须是 1-16 项数组")
+    versions: list[int | str] = []
+    for value in raw_versions:
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise ValueError("metadata_mapping.schema_versions 只允许整数或字符串")
+        normalized = value.strip() if isinstance(value, str) else value
+        if normalized == "" or (isinstance(normalized, str) and len(normalized) > 32):
+            raise ValueError("metadata_mapping.schema_versions 含无效版本")
+        if normalized not in versions:
+            versions.append(normalized)
+
+    def _field_name(key: str, default: str) -> str:
+        value = str(raw.get(key) or default).strip()
+        if not value or len(value) > 64 or _contains_control_chars(value):
+            raise ValueError(f"metadata_mapping.{key} 必须是 1-64 字符的安全字符串")
+        return value
+
+    return {
+        "namespace": namespace,
+        "schema_versions": versions,
+        "schema_version_field": _field_name("schema_version_field", "schema_version"),
+        "domains_field": _field_name("domains_field", "domains"),
+        "interaction_field": _field_name("interaction_field", "interaction"),
+    }
+
+
+def normalize_metadata_overrides(raw: object) -> dict[str, dict]:
+    """Validate exact ``remote tool name -> local metadata mode`` overrides."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict) or len(raw) > 200:
+        raise ValueError("metadata_overrides 必须是不超过 200 项的对象")
+    normalized: dict[str, dict] = {}
+    for tool_name, entry in raw.items():
+        if (
+            not isinstance(tool_name, str)
+            or not tool_name
+            or len(tool_name) > 128
+            or _contains_control_chars(tool_name)
+        ):
+            raise ValueError("metadata_overrides 的工具名必须是安全的非空字符串")
+        if not isinstance(entry, dict):
+            raise ValueError(f"metadata_overrides.{tool_name} 必须是对象")
+        mode = str(entry.get("mode") or "remote")
+        if mode not in _MCP_METADATA_OVERRIDE_MODES:
+            raise ValueError(
+                f"metadata_overrides.{tool_name}.mode 仅允许 remote、override、ignore"
+            )
+        if mode == "override":
+            domains = normalize_mcp_domains(
+                entry.get("domains"),
+                field=f"metadata_overrides.{tool_name}.domains",
+                allow_empty=False,
+            )
+            normalized[tool_name] = {"mode": mode, "domains": domains}
+        else:
+            normalized[tool_name] = {"mode": mode}
+    return normalized
+
+
+def normalize_domain_selector(raw: object) -> dict | None:
+    """Validate a per-server selector that can only narrow MCP schema exposure."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("domain_selector 必须是对象")
+    include_unclassified = raw.get("include_unclassified", True)
+    if not isinstance(include_unclassified, bool):
+        raise ValueError("domain_selector.include_unclassified 必须是 bool")
+    return {
+        "domains": normalize_mcp_domains(
+            raw.get("domains"), field="domain_selector.domains", allow_empty=False,
+        ),
+        "include_unclassified": include_unclassified,
+    }
+
+
+def _remote_tool_meta(tool) -> tuple[bool, object]:
+    if isinstance(tool, dict):
+        return ("_meta" in tool or "meta" in tool), tool.get("_meta", tool.get("meta"))
+    sentinel = object()
+    value = getattr(tool, "meta", sentinel)
+    if value is sentinel:
+        value = getattr(tool, "_meta", sentinel)
+    return value is not sentinel and value is not None, None if value is sentinel else value
+
+
+def _safe_schema_version(value: object) -> int | str | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        value = value.strip()
+        if value and len(value) <= 32 and not _contains_control_chars(value):
+            return value
+    return None
+
+
+def _sanitize_remote_domains(raw: object) -> tuple[list[str], bool]:
+    """Return bounded valid values plus whether the field had the expected array shape."""
+    if not isinstance(raw, list):
+        return [], False
+    domains: list[str] = []
+    total_chars = 0
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        domain = item.strip()
+        if (
+            not domain
+            or len(domain) > _MCP_METADATA_DOMAIN_MAX_CHARS
+            or _contains_control_chars(domain)
+            or domain in domains
+            or len(domains) >= _MCP_METADATA_MAX_DOMAINS
+            or total_chars + len(domain) > _MCP_METADATA_DOMAINS_TOTAL_MAX_CHARS
+        ):
+            continue
+        domains.append(domain)
+        total_chars += len(domain)
+    return sorted(domains), True
+
+
+def summarize_tool_metadata(tool, server_cfg: dict) -> dict:
+    """Parse optional remote classification into a bounded, fail-soft summary."""
+    summary = {
+        "remote_domains": [],
+        "remote_interaction": "unknown",
+        "metadata_source": "none",
+        "metadata_status": "absent",
+        "metadata_schema_version": None,
+        "final_domains": [],
+    }
+    present, raw_meta = _remote_tool_meta(tool)
+    if present:
+        if not isinstance(raw_meta, dict):
+            summary["metadata_status"] = "invalid"
+        else:
+            try:
+                mapping = normalize_metadata_mapping(server_cfg.get("metadata_mapping"))
+            except ValueError as exc:
+                logger.warning(
+                    "[mcp_client] metadata_mapping 无效，按未识别处理: server=%s error=%s",
+                    server_cfg.get("name"), exc,
+                )
+                mapping = None
+            if mapping is None:
+                summary["metadata_status"] = "unrecognized"
+            elif mapping["namespace"] not in raw_meta:
+                summary["metadata_status"] = "unrecognized"
+            else:
+                payload = raw_meta.get(mapping["namespace"])
+                if not isinstance(payload, dict):
+                    summary["metadata_status"] = "invalid"
+                else:
+                    version = _safe_schema_version(payload.get(mapping["schema_version_field"]))
+                    summary["metadata_schema_version"] = version
+                    if version not in mapping["schema_versions"]:
+                        summary["metadata_status"] = "unrecognized"
+                    else:
+                        domains, valid_shape = _sanitize_remote_domains(
+                            payload.get(mapping["domains_field"])
+                        )
+                        if not valid_shape:
+                            summary["metadata_status"] = "invalid"
+                        else:
+                            interaction = payload.get(mapping["interaction_field"])
+                            summary["remote_domains"] = domains
+                            summary["remote_interaction"] = (
+                                interaction
+                                if interaction in _MCP_METADATA_INTERACTIONS
+                                else "unknown"
+                            )
+                            summary["metadata_source"] = "remote"
+                            summary["metadata_status"] = "recognized"
+                            summary["final_domains"] = list(domains)
+
+    tool_name = str(
+        (tool.get("name") if isinstance(tool, dict) else getattr(tool, "name", "")) or ""
+    )
+    raw_overrides = server_cfg.get("metadata_overrides")
+    if isinstance(raw_overrides, dict) and tool_name in raw_overrides:
+        try:
+            override = normalize_metadata_overrides({tool_name: raw_overrides[tool_name]})[
+                tool_name
+            ]
+        except ValueError as exc:
+            logger.warning(
+                "[mcp_client] metadata override 无效，已忽略: server=%s tool=%s error=%s",
+                server_cfg.get("name"), tool_name, exc,
+            )
+        else:
+            if override["mode"] == "override":
+                summary["final_domains"] = list(override["domains"])
+                summary["metadata_source"] = "local_override"
+                summary["metadata_status"] = "overridden"
+            elif override["mode"] == "ignore":
+                summary["final_domains"] = []
+                summary["metadata_source"] = "local_override"
+                summary["metadata_status"] = "overridden"
+    return summary
+
+
+def _tool_details(listed, server_cfg: dict) -> list[dict]:
     details: list[dict] = []
     for tool in (getattr(listed, "tools", None) or []):
-        if not getattr(tool, "name", None):
-            continue
-        name = str(tool.name)
-        description = str(tool.description or "")
-        suggestion = suggest_tool_policy(name, description, getattr(tool, "annotations", None))
-        details.append({"name": name, "description": description, "suggestion": suggestion})
+        try:
+            if not getattr(tool, "name", None):
+                continue
+            name = str(tool.name)
+            description = str(tool.description or "")
+            suggestion = suggest_tool_policy(
+                name, description, getattr(tool, "annotations", None)
+            )
+            details.append({
+                "name": name,
+                "suggestion": suggestion,
+                **summarize_tool_metadata(tool, server_cfg),
+            })
+        except Exception as exc:
+            logger.warning(
+                "[mcp_client] 单个工具摘要失败，继续处理其他工具: server=%s error=%s",
+                server_cfg.get("name"), exc,
+            )
     return details
 
 
@@ -642,7 +909,10 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
     if not isinstance(configured_timeouts, dict):
         logger.warning("[mcp_client] tool_timeouts_s 必须是对象，已忽略: server=%s", name)
         configured_timeouts = {}
-    details = _tool_details(listed)
+    details = _tool_details(listed, server_cfg)
+    metadata_by_name = {
+        str(item.get("name") or ""): item for item in details if item.get("name")
+    }
     handle = _ServerHandle(
         name=name, cfg=server_cfg, stack=stack, session=session, tool_details=details,
     )
@@ -688,6 +958,14 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
                 name, tool.name, effect,
             )
         high_risk = bool(suggestion["high_risk"])
+        metadata = metadata_by_name.get(str(tool.name)) or {
+            "remote_domains": [],
+            "remote_interaction": "unknown",
+            "metadata_source": "none",
+            "metadata_status": "invalid",
+            "metadata_schema_version": None,
+            "final_domains": [],
+        }
         # Local allow_tools + a valid local policy are the authorization
         # boundary.  Remote annotations and effect labels remain observable but
         # cannot silently restore per-call confirmation over an explicit local
@@ -716,6 +994,12 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
             "mcp_idempotent": idempotent,
             "mcp_high_risk": high_risk,
             "ui_label": ui_label,
+            "mcp_remote_domains": list(metadata["remote_domains"]),
+            "mcp_remote_interaction": metadata["remote_interaction"],
+            "mcp_metadata_source": metadata["metadata_source"],
+            "mcp_metadata_status": metadata["metadata_status"],
+            "mcp_metadata_schema_version": metadata["metadata_schema_version"],
+            "mcp_domains": list(metadata["final_domains"]),
             # MCP annotations are optional.  Keep the read-only declaration so
             # the tool-loop can safely point models at server-provided docs /
             # inspection tools without guessing from a tool's name.
@@ -768,7 +1052,7 @@ async def test_server_config(server_cfg: dict) -> list[dict]:
         from mcp import ClientSession
         session = await stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
-        return _tool_details(await session.list_tools())
+        return _tool_details(await session.list_tools(), server_cfg)
     except BaseException as exc:
         # 同 _connect_server：初始化阶段被取消可能抛非 Exception 子类，统一收窄，
         # 让 admin 路由的 `except Exception` 能正常转成 400 而不是让请求本身崩掉。

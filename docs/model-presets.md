@@ -182,6 +182,13 @@ function schema 转为 `input_schema`，并把模型的 `tool_use` 与本地执�
 全局 `config.tool_loop.enabled`。`intent` / `probe` 等轻量 preset 的 `tool_call_mode` 与 tool loop 无关
 （探针在 tool loop 激活时会被跳过，见 `docs/tools.md` 路径C）。
 
+模型 `tool_preset` 仍只维护内置工具白名单，不保存某次连接发现的动态 MCP 目录。MCP 的可选
+domain 分类与筛选归各 server 的 `metadata_mapping` / `metadata_overrides` / `domain_selector`
+控制；它们是客户端扩展，不是 MCP 官方分类标准。selector 在 category、MCP allowlist/local
+policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续收窄。原生 function-calling
+与 tail-brace relay 使用同一份已筛选 schema；任何 preset 或 metadata 都不能自动把 Path A 或
+不含 `mcp` 的角色类别扩大到 MCP。
+
 ### 路由解析规则
 
 0. **per-char 覆盖**（Brief 29 · 3.2）：活跃角色卡 `presence_ext.model_routing` 声明的 profile

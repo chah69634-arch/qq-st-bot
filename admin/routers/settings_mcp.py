@@ -25,6 +25,24 @@ _CONSOLE_CONFIRM_LIMIT = 100
 _console_confirmations: dict[str, dict[str, Any]] = {}
 
 
+class McpMetadataMapping(BaseModel):
+    namespace: str = Field(min_length=1, max_length=160)
+    schema_versions: list[int | str] = Field(min_length=1, max_length=16)
+    schema_version_field: str = Field(default="schema_version", min_length=1, max_length=64)
+    domains_field: str = Field(default="domains", min_length=1, max_length=64)
+    interaction_field: str = Field(default="interaction", min_length=1, max_length=64)
+
+
+class McpMetadataOverride(BaseModel):
+    mode: Literal["remote", "override", "ignore"] = "remote"
+    domains: list[str] = Field(default_factory=list)
+
+
+class McpDomainSelector(BaseModel):
+    domains: list[str] = Field(min_length=1)
+    include_unclassified: bool = True
+
+
 class McpServerDraft(BaseModel):
     name: str
     url: str
@@ -36,6 +54,8 @@ class McpServerDraft(BaseModel):
     enabled: bool = True
     tool_timeout_s: float = 30
     tool_timeouts_s: dict[str, float] = Field(default_factory=dict)
+    metadata_mapping: Optional[McpMetadataMapping] = None
+    domain_selector: Optional[McpDomainSelector] = None
 
 
 class McpSettingsUpdate(BaseModel):
@@ -60,6 +80,9 @@ class McpServerUpdate(BaseModel):
     use_proxy: Optional[bool] = None
     tool_presets: Optional[list[dict]] = None
     active_tool_preset: Optional[str] = None
+    metadata_mapping: Optional[McpMetadataMapping] = None
+    metadata_overrides: Optional[dict[str, McpMetadataOverride]] = None
+    domain_selector: Optional[McpDomainSelector] = None
 
 
 class McpConsoleInvoke(BaseModel):
@@ -89,6 +112,8 @@ class _ConsoleSessionState:
 
 
 def _validate_draft(draft: McpServerDraft) -> dict:
+    from core.mcp_client import normalize_domain_selector, normalize_metadata_mapping
+
     name = draft.name.strip()
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="name 只能含字母、数字、_、-，且必须以字母开头")
@@ -104,6 +129,17 @@ def _validate_draft(draft: McpServerDraft) -> dict:
         raise HTTPException(status_code=422, detail="headers 的键和值都必须是非空字符串")
     if len(draft.allow_tools) > 200:
         raise HTTPException(status_code=422, detail="allow_tools 最多 200 项")
+    try:
+        metadata_mapping = (
+            normalize_metadata_mapping(draft.metadata_mapping.model_dump(exclude_none=True))
+            if draft.metadata_mapping is not None else None
+        )
+        domain_selector = (
+            normalize_domain_selector(draft.domain_selector.model_dump(exclude_none=True))
+            if draft.domain_selector is not None else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "name": name,
         "transport": draft.transport,
@@ -121,6 +157,8 @@ def _validate_draft(draft: McpServerDraft) -> dict:
         "enabled": bool(draft.enabled),
         "tool_timeout_s": max(1, min(660, float(draft.tool_timeout_s))),
         "tool_timeouts_s": _normalize_tool_timeouts(draft.tool_timeouts_s),
+        **({"metadata_mapping": metadata_mapping} if metadata_mapping is not None else {}),
+        **({"domain_selector": domain_selector} if domain_selector is not None else {}),
     }
 
 
@@ -298,7 +336,93 @@ def _validate_local_policy_before_write(server: dict, mcp_cfg: dict, mcp_client)
         )
 
 
-def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dict:
+def _safe_parameter_summary(schema: object) -> dict:
+    """Return bounded argument hints without exposing the remote JSON Schema."""
+    if not isinstance(schema, dict):
+        return {"properties": [], "required": []}
+    raw_properties = schema.get("properties")
+    properties: list[dict[str, str]] = []
+    if isinstance(raw_properties, dict):
+        for name, definition in list(raw_properties.items())[:32]:
+            safe_name = str(name)[:64]
+            raw_type = definition.get("type") if isinstance(definition, dict) else None
+            if isinstance(raw_type, list):
+                safe_type = "|".join(str(item)[:16] for item in raw_type[:4])
+            elif isinstance(raw_type, str):
+                safe_type = raw_type[:32]
+            else:
+                safe_type = "unknown"
+            properties.append({"name": safe_name, "type": safe_type})
+    required = [
+        str(name)[:64] for name in (schema.get("required") or [])[:32]
+        if isinstance(name, str)
+    ] if isinstance(schema.get("required"), list) else []
+    return {"properties": properties, "required": required}
+
+
+def _current_mcp_exposure_names() -> set[str]:
+    """Resolve the active Path C schema once for the admin three-state view."""
+    from core.config_loader import get_config
+    from core.data_paths import DEFAULT_CHAR_ID
+    from core.tool_dispatcher import get_tools_schema, tool_loop_active
+
+    cfg = get_config() or {}
+    owner_id = str(cfg.get("scheduler", {}).get("owner_id") or "")
+    if not owner_id or not tool_loop_active(owner_id):
+        return set()
+    try:
+        from core import pipeline_registry
+
+        pipeline = pipeline_registry.get()
+        character = getattr(pipeline, "character", None) if pipeline is not None else None
+        char_id = str(getattr(pipeline, "_active_character_id", None) or DEFAULT_CHAR_ID)
+        presence_ext = getattr(character, "presence_ext", None) or {}
+        loop_cfg = cfg.get("tool_loop", {}) or {}
+        categories = presence_ext.get("tool_categories")
+        if categories is None:
+            categories = loop_cfg.get("categories", ["info", "desktop", "memory"])
+        if "mcp" not in categories:
+            return set()
+        excluded = set(loop_cfg.get("exclude_tools") or [])
+        return {
+            str((schema.get("function") or schema).get("name") or "")
+            for schema in get_tools_schema(
+                categories=list(categories), char_id=char_id, uid=owner_id,
+            )
+            if str((schema.get("function") or schema).get("name") or "") not in excluded
+        }
+    except Exception:
+        return set()
+
+
+def _safe_metadata_config(server_cfg: dict) -> tuple[dict | None, dict[str, dict], dict | None]:
+    from core.mcp_client import (
+        normalize_domain_selector,
+        normalize_metadata_mapping,
+        normalize_metadata_overrides,
+    )
+
+    try:
+        mapping = normalize_metadata_mapping(server_cfg.get("metadata_mapping"))
+    except ValueError:
+        mapping = None
+    try:
+        overrides = normalize_metadata_overrides(server_cfg.get("metadata_overrides"))
+    except ValueError:
+        overrides = {}
+    try:
+        selector = normalize_domain_selector(server_cfg.get("domain_selector"))
+    except ValueError:
+        selector = None
+    return mapping, overrides, selector
+
+
+def _server_view(
+    server_cfg: dict,
+    *,
+    require_local_policy: bool = False,
+    session_exposed_names: set[str] | None = None,
+) -> dict:
     from core.mcp_client import is_local_mcp_url, server_runtime, suggest_tool_policy
     from core.tool_dispatcher import _TOOL_REGISTRY
 
@@ -306,6 +430,8 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
     runtime = server_runtime(name)
     allowed = set(server_cfg.get("allow_tools") or [])
     policy = dict(server_cfg.get("tool_policy") or {})
+    metadata_mapping, metadata_overrides, domain_selector = _safe_metadata_config(server_cfg)
+    session_exposed_names = session_exposed_names or set()
     tool_states: list[dict] = []
     for tool in runtime.get("tools", []):
         tool_name = str(tool.get("name") or "")
@@ -325,19 +451,30 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
         else:
             policy_status = "legacy_allowed"
         registry_info = _TOOL_REGISTRY.get(f"mcp__{name}__{tool_name}") or {}
+        registered_name = f"mcp__{name}__{tool_name}"
+        registered = registry_info.get("category") == "mcp" and registry_info.get("mcp_server") == name
+        authorized = bool(allowlisted and (confirmed or not require_local_policy))
         tool_states.append({
             "name": tool_name,
-            "description": str(tool.get("description") or ""),
+            "discovered": True,
+            "authorized": authorized,
+            "session_exposed": registered and registered_name in session_exposed_names,
             "allowlisted": allowlisted,
             "policy_status": policy_status,
             "suggestion": suggestion,
             "policy": policy.get(tool_name),
-            "registered": registry_info.get("category") == "mcp"
-            and registry_info.get("mcp_server") == name,
-            "input_schema": registry_info.get("parameters") or {},
+            "registered": registered,
+            "parameter_summary": _safe_parameter_summary(registry_info.get("parameters")),
             "effect": registry_info.get("effect") or "",
             "require_confirm": bool(registry_info.get("require_confirm", False)),
             "ui_label": str(registry_info.get("ui_label") or "外部工具"),
+            "remote_domains": list(tool.get("remote_domains") or []),
+            "remote_interaction": str(tool.get("remote_interaction") or "unknown"),
+            "metadata_source": str(tool.get("metadata_source") or "none"),
+            "metadata_status": str(tool.get("metadata_status") or "absent"),
+            "metadata_schema_version": tool.get("metadata_schema_version"),
+            "final_domains": list(tool.get("final_domains") or []),
+            "metadata_override": metadata_overrides.get(tool_name),
         })
     return {
         "name": name,
@@ -351,6 +488,9 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
         "tool_timeouts_s": dict(server_cfg.get("tool_timeouts_s") or {}),
         "allow_tools": list(server_cfg.get("allow_tools") or []),
         "tool_policy": policy,
+        "metadata_mapping": metadata_mapping,
+        "metadata_overrides": metadata_overrides,
+        "domain_selector": domain_selector,
         "require_local_policy": bool(require_local_policy),
         "tool_states": tool_states,
         "tool_presets": _normalize_tool_presets(server_cfg.get("tool_presets")),
@@ -363,11 +503,16 @@ def _server_view(server_cfg: dict, *, require_local_policy: bool = False) -> dic
 async def get_mcp_settings(_auth=Depends(require_scopes("admin"))):
     cfg = get_config().get("mcp_servers", {}) or {}
     servers = [item for item in (cfg.get("servers") or []) if isinstance(item, dict)]
+    session_exposed_names = _current_mcp_exposure_names()
     return {
         "enabled": bool(cfg.get("enabled", False)),
         "require_local_policy": bool(cfg.get("require_local_policy", False)),
         "servers": [
-            _server_view(item, require_local_policy=bool(cfg.get("require_local_policy", False)))
+            _server_view(
+                item,
+                require_local_policy=bool(cfg.get("require_local_policy", False)),
+                session_exposed_names=session_exposed_names,
+            )
             for item in servers
         ],
         "warning": "外部 MCP 的工具描述与结果均为不可信输入；不要把密钥写进角色卡、prompt 或文档。",
@@ -581,6 +726,9 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
             server_cfg["allow_tools"] = list(existing["allow_tools"])
         if isinstance(existing.get("tool_policy"), dict):
             server_cfg["tool_policy"] = dict(existing["tool_policy"])
+        for key in ("metadata_mapping", "metadata_overrides", "domain_selector"):
+            if key not in server_cfg and key in existing:
+                server_cfg[key] = existing[key]
     if bool(mcp_cfg.get("require_local_policy", False)):
         try:
             mcp_client.validate_local_tool_policy(server_cfg, required=True)
@@ -615,7 +763,9 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
         "reload_status": "reloaded" if reloaded else "restart_required",
         "tools": tools,
         "server": _server_view(
-            server_cfg, require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+            server_cfg,
+            require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+            session_exposed_names=_current_mcp_exposure_names(),
         ),
     }
 
@@ -624,7 +774,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(require_scopes("admin"))):
     if not _NAME_RE.fullmatch(name):
         raise HTTPException(status_code=422, detail="非法 server name")
-    if all(value is None for value in (body.enabled, body.allow_tools, body.tool_policy, body.bulk_authorize, body.headers, body.tool_timeout_s, body.tool_timeouts_s, body.use_proxy, body.tool_presets, body.active_tool_preset)):
+    if not body.model_fields_set:
         raise HTTPException(status_code=422, detail="没有可更新字段")
     full_cfg = _read_config()
     mcp_cfg = full_cfg.setdefault("mcp_servers", {})
@@ -638,7 +788,8 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         other_fields = (
             body.enabled, body.allow_tools, body.tool_policy, body.headers,
             body.tool_timeout_s, body.tool_timeouts_s, body.use_proxy,
-            body.tool_presets, body.active_tool_preset,
+            body.tool_presets, body.active_tool_preset, body.metadata_mapping,
+            body.metadata_overrides, body.domain_selector,
         )
         if any(value is not None for value in other_fields):
             raise HTTPException(status_code=422, detail="批量授权不能与其他设置同时提交")
@@ -672,6 +823,7 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
             "server": _server_view(
                 server,
                 require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+                session_exposed_names=_current_mcp_exposure_names(),
             ),
         }
     if body.enabled is not None:
@@ -712,6 +864,35 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         server["tool_timeout_s"] = max(1, min(660, float(body.tool_timeout_s)))
     if body.use_proxy is not None:
         server["use_proxy"] = bool(body.use_proxy)
+    try:
+        if "metadata_mapping" in body.model_fields_set:
+            if body.metadata_mapping is None:
+                server.pop("metadata_mapping", None)
+            else:
+                server["metadata_mapping"] = mcp_client.normalize_metadata_mapping(
+                    body.metadata_mapping.model_dump(exclude_none=True)
+                )
+        if "metadata_overrides" in body.model_fields_set:
+            if body.metadata_overrides is None:
+                server.pop("metadata_overrides", None)
+            else:
+                normalized_overrides = mcp_client.normalize_metadata_overrides({
+                    tool_name: entry.model_dump(exclude_none=True)
+                    for tool_name, entry in body.metadata_overrides.items()
+                })
+                if normalized_overrides:
+                    server["metadata_overrides"] = normalized_overrides
+                else:
+                    server.pop("metadata_overrides", None)
+        if "domain_selector" in body.model_fields_set:
+            if body.domain_selector is None:
+                server.pop("domain_selector", None)
+            else:
+                server["domain_selector"] = mcp_client.normalize_domain_selector(
+                    body.domain_selector.model_dump(exclude_none=True)
+                )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     _prune_tool_policy(server)
     if bool(mcp_cfg.get("require_local_policy", False)) and bool(server.get("enabled", True)):
         runtime = mcp_client.server_runtime(name)
@@ -731,6 +912,7 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         "server": _server_view(
             server,
             require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+            session_exposed_names=_current_mcp_exposure_names(),
         ),
     }
 

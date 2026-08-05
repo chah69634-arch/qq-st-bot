@@ -425,6 +425,22 @@ mcp_servers:
       use_proxy: false             # 仅远程 server 可设 true；loopback 始终直连
       enabled: false               # per-server 开关；总开关仍由 mcp_servers.enabled 控制
       tool_timeout_s: 30
+      # 可选客户端扩展，不是 MCP 官方分类标准。未配置时仍按普通 category="mcp" 使用。
+      metadata_mapping:
+        namespace: "io.example/tool"
+        schema_versions: [1]
+        schema_version_field: "schema_version"
+        domains_field: "domains"
+        interaction_field: "interaction"
+      # exact remote tool name 覆盖；删除该项后重新使用远端分类。
+      metadata_overrides:
+        create_reply:
+          mode: override            # remote | override | ignore
+          domains: [forum_write]
+      # 只收窄已经通过 allow_tools/local policy 的本轮 schema，不授予权限。
+      domain_selector:
+        domains: [forum_read, forum_write]
+        include_unclassified: true  # 默认兼容无 metadata 的普通 MCP server
       allow_tools:                 # strict policy 下不可为空；远端多余工具会被忽略
         - list_threads
         - create_reply

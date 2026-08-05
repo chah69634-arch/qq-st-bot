@@ -2,6 +2,7 @@
       <h1 class="page-title" data-i18n="mcp.title">MCP 工具</h1>
       <div class="card admin-inline-006">
         <p data-i18n="mcp.security_notice" class="admin-inline-144">外部 MCP 的工具描述与返回内容均为不可信输入。仅在你明确需要时启用，并使用工具白名单；连接 token 请使用 ${ENV_VAR}，不要写进角色卡、Prompt 或文档。</p>
+        <p data-i18n="mcp.metadata_notice" class="admin-inline-144">远端分类不是授权，interaction 也不是本地 effect。未分类工具仍可走普通 MCP 兼容路径；执行与确认始终由本地 policy 决定。</p>
       </div>
       <div class="card">
         <div class="card-header"><h3 data-i18n="mcp.enabled_title">总开关</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpPage" data-i18n="common.refresh">刷新</button></div>
@@ -17,6 +18,18 @@
         </div>
         <div class="form-row col-1"><label class="field"><span data-i18n="mcp.headers_label">headers（JSON，可选；建议 ${ENV_VAR}）</span><textarea id="mcp-import-headers" rows="3" placeholder='{"Authorization":"Bearer ${MCP_TOKEN}"}'></textarea></label></div>
         <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="660" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-use-proxy" type="checkbox"><span data-i18n="mcp.proxy_label">远程 MCP 使用全局代理</span></label></div>
+        <details class="admin-inline-041">
+          <summary data-i18n="mcp.metadata_mapping_title">可选分类映射</summary>
+          <div class="form-row">
+            <label class="field"><span>namespace</span><input id="mcp-import-metadata-namespace" type="text" placeholder="io.example/tool"></label>
+            <label class="field"><span>schema_versions</span><input id="mcp-import-metadata-versions" type="text" value="1" placeholder="1,2"></label>
+          </div>
+          <div class="form-row">
+            <label class="field"><span>schema_version_field</span><input id="mcp-import-metadata-version-field" type="text" value="schema_version"></label>
+            <label class="field"><span>domains_field</span><input id="mcp-import-metadata-domains-field" type="text" value="domains"></label>
+            <label class="field"><span>interaction_field</span><input id="mcp-import-metadata-interaction-field" type="text" value="interaction"></label>
+          </div>
+        </details>
         <p class="admin-inline-144" data-i18n="mcp.proxy_notice">localhost、.localhost 与 loopback 地址始终直连，不读取环境代理；远程 MCP 仅在勾选后使用全局 proxy 配置。</p>
         <div class="admin-inline-041"><button class="btn btn-ghost" data-action="testMcpImport" data-i18n="mcp.test_import">测试连接并发现工具</button><button class="btn btn-primary" id="mcp-import-save" data-action="importMcpServer" disabled data-i18n="mcp.confirm_import">确认导入</button></div>
         <div id="mcp-import-result" class="admin-inline-133"></div>
@@ -31,7 +44,7 @@
         </div>
         <div id="mcp-console-tool-info" class="admin-inline-133"></div>
         <div class="form-row col-1"><label class="field"><span data-i18n="mcp.console.arguments">JSON 参数</span><textarea id="mcp-console-arguments" rows="6" spellcheck="false">{}</textarea></label></div>
-        <details class="admin-inline-041"><summary data-i18n="mcp.console.schema">输入 schema</summary><pre id="mcp-console-schema" class="log-view admin-inline-133"></pre></details>
+        <details class="admin-inline-041"><summary data-i18n="mcp.console.schema">参数摘要</summary><pre id="mcp-console-schema" class="log-view admin-inline-133"></pre></details>
         <div class="admin-inline-041">
           <button class="btn btn-ghost" data-action="clearMcpConsole" data-i18n="mcp.console.clear">清除结果</button>
           <button class="btn btn-primary" id="mcp-console-invoke" data-action="invokeMcpConsole" data-i18n="mcp.console.invoke">调用工具</button>

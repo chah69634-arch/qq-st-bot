@@ -62,6 +62,16 @@ MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /s
 
 每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；管理面 URL 导入和普通白名单保存会在工具探测成功后为新白名单工具写入本地默认 `tool_policy`，保留已有显式策略。MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述只能影响默认 effect 建议，不能授予远端权限或自动开启确认：未知语义落为 `write + require_confirm: false`。管理页逐工具“每次执行前确认”复选框显式保存 true/false；导入、普通保存和批量默认授权都只补缺失字段，不覆盖已有选择。无法从当前运行时快照补齐策略时，严格写入会被拒绝，不会注册或调用。保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
 
+Brief 137 增加每 server 的可选 `metadata_mapping`、按远端工具精确名称保存的
+`metadata_overrides`，以及 `domain_selector`。这是 Emerald 客户端扩展，不是 MCP 官方分类标准；
+第三方 server 无需实现即可继续连接和调用。远端 `_meta` 只被压缩为有界 domains、interaction
+提示、status/source/version，不改变 `category="mcp"`、allowlist、effect、确认、幂等、origin、
+schema 校验、连接或 proficiency。selector 缺失时保持旧行为；启用时只收窄已经授权的本轮 schema，
+`include_unclassified: true` 保留普通无 metadata server。管理面逐工具分开展示“已发现 / 已授权 /
+当前会话可暴露”，并允许选择使用远端分类、本地覆盖或忽略远端分类。`GET /settings/mcp` 不返回
+完整 `_meta`、原始 description 或完整参数 schema；控制台显示有界参数摘要，调用时仍由服务端用
+完整 registry schema 校验。直接加载的 MCP JS、i18n 和 page fragment 使用同一静态资源版本。
+
 管理面「运维 → 工具」经 admin-only `GET/PUT /settings/tools` 统一观察内置已注册工具、保存命名的 `tool_loop.tool_presets`，并把预设绑定到 `model_presets.presets.<name>.tool_preset`。该预设只收窄该聊天模型收到的内置 function schema，且不替代 `tools.<name>.enabled` 全局执行闸门。未绑定模型明确显示为「全局默认」：勾选并保存会把内置工具选择编译为全局 `tool_loop.categories` / `exclude_tools` 并热更新；面板未表示的类别与排除项会原样保留。MCP 在此页只显示全局启用状态，动态工具目录、连接与配置仍不由此页维护。删除工具预设会同步清除引用它的模型绑定。
 
 LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admin-only 的

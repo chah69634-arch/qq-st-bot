@@ -68,6 +68,72 @@ def test_server_view_redacts_literal_url_path_but_keeps_variable_binding(monkeyp
     assert template["url"] == "https://gateway.test/mcp/${MCP_URL_TOKEN}"
 
 
+def test_metadata_mapping_override_and_selector_round_trip_and_can_be_removed(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    async def reload(_name):
+        return True
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": True,
+        "tools": [{
+            "name": "inspect",
+            "suggestion": {"effect": "read"},
+            "remote_domains": ["remote"],
+            "remote_interaction": "read",
+            "metadata_source": "remote",
+            "metadata_status": "recognized",
+            "metadata_schema_version": 1,
+            "final_domains": ["local"],
+        }],
+    })
+
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy",
+        mod.McpServerUpdate(
+            metadata_mapping=mod.McpMetadataMapping(
+                namespace="io.any/tool", schema_versions=[1],
+            ),
+            metadata_overrides={
+                "inspect": mod.McpMetadataOverride(mode="override", domains=["local"]),
+            },
+            domain_selector=mod.McpDomainSelector(
+                domains=["local"], include_unclassified=True,
+            ),
+        ),
+        _auth=None,
+    ))
+
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
+    assert stored["metadata_mapping"]["namespace"] == "io.any/tool"
+    assert stored["metadata_overrides"] == {
+        "inspect": {"mode": "override", "domains": ["local"]},
+    }
+    assert stored["domain_selector"] == {
+        "domains": ["local"], "include_unclassified": True,
+    }
+    assert result["server"]["metadata_overrides"]["inspect"]["domains"] == ["local"]
+
+    asyncio.run(mod.update_mcp_server(
+        "cedar_toy",
+        mod.McpServerUpdate(
+            metadata_mapping=None, metadata_overrides=None, domain_selector=None,
+        ),
+        _auth=None,
+    ))
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
+    assert "metadata_mapping" not in stored
+    assert "metadata_overrides" not in stored
+    assert "domain_selector" not in stored
+
+
 def test_import_tests_before_write_and_hot_reloads(tmp_path, monkeypatch):
     """Brief 115 根治：MCP 连接生命周期已改成专属常驻 task 持有、管理面只发信号，
     不再跨 task 直接碰 AsyncExitStack，导入接口的热重载可以安全恢复。"""
