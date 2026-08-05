@@ -16,7 +16,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-mcp-metadata-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-structured-fields-1';
 
 function getRememberedPage() {
   try {
@@ -64,7 +64,7 @@ function _runAction(event) {
     console.error('[admin] missing action handler', action);
     return;
   }
-  fn(...args);
+  fn(...args, element);
 }
 
 function bindPageActions(scope) {
@@ -227,6 +227,59 @@ async function api(method, path, body) {
     throw new Error(`HTTP ${r.status}: ${t}`);
   }
   return r.json();
+}
+
+// Small structured editor for settings whose supported keys vary by provider.
+function renderKeyValueEditor(id, values = {}, options = {}) {
+  const root = document.getElementById(id);
+  if (!root) return;
+  const entries = Object.entries(values || {}).filter(([key]) => !options.exclude?.includes(key));
+  const rows = entries.length ? entries : [['', '']];
+  root.innerHTML = rows.map(([key, value]) => `
+    <div class="form-row" data-kv-row>
+      <input data-kv-key placeholder="key" value="${escapeHtml(String(key))}">
+      <input data-kv-value placeholder="value" value="${escapeHtml(value == null ? '' : String(value))}">
+      <select data-kv-type><option value="string">text</option><option value="number">number</option><option value="boolean">true/false</option></select>
+      <button type="button" class="btn btn-ghost btn-sm" data-action="removeKeyValueRow">Remove</button>
+    </div>`).join('');
+  root.querySelectorAll('[data-kv-row]').forEach((row, index) => {
+    const value = entries[index]?.[1];
+    const type = typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'string';
+    row.querySelector('[data-kv-type]').value = type;
+  });
+}
+
+function addKeyValueRow(id) {
+  const root = document.getElementById(id);
+  if (!root) return;
+  root.insertAdjacentHTML('beforeend', '<div class="form-row" data-kv-row><input data-kv-key placeholder="key"><input data-kv-value placeholder="value"><select data-kv-type><option value="string">text</option><option value="number">number</option><option value="boolean">true/false</option></select><button type="button" class="btn btn-ghost btn-sm" data-action="removeKeyValueRow">Remove</button></div>');
+  bindPageActions(root);
+}
+
+function removeKeyValueRow(button) {
+  const row = button.closest('[data-kv-row]');
+  const root = row?.parentElement;
+  row?.remove();
+  if (root && !root.querySelector('[data-kv-row]')) addKeyValueRow(root.id);
+}
+
+function readKeyValueEditor(id) {
+  const result = {};
+  document.querySelectorAll(`#${CSS.escape(id)} [data-kv-row]`).forEach(row => {
+    const key = row.querySelector('[data-kv-key]').value.trim();
+    const raw = row.querySelector('[data-kv-value]').value;
+    const type = row.querySelector('[data-kv-type]').value;
+    if (!key) return;
+    if (type === 'number') {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) throw new Error(`${key} must be a number`);
+      result[key] = value;
+    } else if (type === 'boolean') {
+      if (!/^(true|false)$/i.test(raw.trim())) throw new Error(`${key} must be true or false`);
+      result[key] = raw.trim().toLowerCase() === 'true';
+    } else result[key] = raw;
+  });
+  return result;
 }
 
 // ══════════════════════════════════════════════════════════

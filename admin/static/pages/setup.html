@@ -168,15 +168,9 @@
 
       <div class="card">
         <div class="card-header"><h3><span data-i18n="setup.anniversaries.title">自定义纪念日</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
-        <p data-i18n="setup.anniversaries.description" class="admin-inline-087">letter_writer / festival 消费；命中当天会主动提起。JSON 数组编辑，字段：key/month/day 必填，year_start 留空=每年都当作第 0 年（只用 prompt_zero），prompt_zero/prompt_years 可选（prompt_years 支持 {char}/{years} 占位符）。</p>
-        <div class="form-row col-1">
-          <label class="field">
-            <span data-i18n="setup.anniversaries.label">anniversaries（JSON 数组）</span>
-            <textarea id="setup-anniversaries-json" rows="8" data-i18n-placeholder="setup.anniversaries.placeholder" placeholder='[
-  {"key": "first_date", "month": 6, "day": 14, "year_start": 2024, "prompt_years": "在一起{years}年了"}
-]' class="admin-inline-074"></textarea>
-          </label>
-        </div>
+        <p class="admin-inline-087">letter_writer / festival 消费；命中当天会主动提起。每条填写 key、月、日；其余提示字段可选。</p>
+        <div id="setup-anniversaries-list"></div>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="addSetupAnniversary">Add anniversary</button>
         <div class="modal-footer admin-inline-124">
           <button class="btn btn-primary" data-action="saveSetupAnniversaries" data-i18n="common.save">保存</button>
         </div>
@@ -201,15 +195,9 @@
 
       <div class="card">
         <div class="card-header"><h3><span data-i18n="setup.coplay.title">Coplay 后台游戏检测白名单</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
-        <p data-i18n="setup.coplay.description" class="admin-inline-087">陪玩模式（coplay）用于识别非 Steam 游戏：armed 状态下按 process_name 做 psutil 进程名匹配（大小写不敏感，.exe 可写可不写）。save_dir 可选，填了才会做存档变化检测。JSON 数组编辑，name/process_name 必填。</p>
-        <div class="form-row col-1">
-          <label class="field">
-            <span data-i18n="setup.coplay.label">game_whitelist（JSON 数组）</span>
-            <textarea id="setup-coplay-games-json" rows="8" data-i18n-placeholder="setup.coplay.placeholder" placeholder='[
-  {"name": "示例游戏", "process_name": "game.exe", "save_dir": "C:\\Users\\你\\Saved Games\\示例游戏"}
-]' class="admin-inline-074"></textarea>
-          </label>
-        </div>
+        <p class="admin-inline-087">陪玩模式按进程名识别非 Steam 游戏。名称和进程名必填，存档目录可选。</p>
+        <div id="setup-coplay-games-list"></div>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="addSetupCoplayGame">Add game</button>
         <div class="modal-footer admin-inline-124">
           <button class="btn btn-primary" data-action="saveSetupCoplayGames" data-i18n="common.save">保存</button>
         </div>

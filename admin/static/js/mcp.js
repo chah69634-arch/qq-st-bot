@@ -26,13 +26,7 @@ function _mcpCsvValues(value) {
 }
 
 function _mcpDraftFromForm() {
-  let headers = {};
-  const rawHeaders = document.getElementById('mcp-import-headers').value.trim();
-  if (rawHeaders) {
-    try { headers = JSON.parse(rawHeaders); }
-    catch (_) { throw new Error('headers 必须是 JSON 对象'); }
-    if (!headers || Array.isArray(headers) || typeof headers !== 'object') throw new Error('headers 必须是 JSON 对象');
-  }
+  const headers = readKeyValueEditor('mcp-import-headers');
   const draft = {
     name: document.getElementById('mcp-import-name').value.trim(),
     url: document.getElementById('mcp-import-url').value.trim(),
@@ -92,6 +86,7 @@ function _mcpGroupTools(tools) {
 async function loadMcpPage() {
   const serversEl = document.getElementById('mcp-servers');
   if (!serversEl) return;
+  renderKeyValueEditor('mcp-import-headers', {});
   serversEl.innerHTML = '<div class="loading">加载中…</div>';
   try {
     const data = await api('GET', '/settings/mcp');
@@ -159,6 +154,7 @@ function _renderMcpConsoleTool() {
       `domains: ${(tool.final_domains || []).join(', ') || 'unclassified'} · interaction: ${tool.remote_interaction || 'unknown'}`
     : t('mcp.console.no_tool', '该 server 没有可调用工具。');
   schema.textContent = JSON.stringify(tool?.parameter_summary || {}, null, 2);
+  renderKeyValueEditor('mcp-console-arguments', Object.fromEntries((tool?.parameter_summary?.properties || []).map(item => [item.name, ''])));
   invoke.disabled = !_mcpConsoleData?.enabled || !tool;
 }
 
@@ -197,8 +193,7 @@ async function invokeMcpConsole() {
   if (!server || !tool) return;
   let arguments_;
   try {
-    arguments_ = JSON.parse(document.getElementById('mcp-console-arguments').value || '{}');
-    if (!arguments_ || Array.isArray(arguments_) || typeof arguments_ !== 'object') throw new Error(t('mcp.console.arguments_object', '参数必须是 JSON 对象'));
+    arguments_ = readKeyValueEditor('mcp-console-arguments');
   } catch (e) {
     _showMcpConsoleResult(`${t('mcp.console.arguments_error', '参数 JSON 无效：')}${e.message}`);
     return;
@@ -216,6 +211,9 @@ async function invokeMcpConsole() {
     _showMcpConsoleResult(`audit_id: ${result.audit_id}\n\n${result.result || t('mcp.console.no_result', '调用完成，无文本结果。')}`);
   } catch (e) { _showMcpConsoleResult(`${t('mcp.console.invoke_error', '调用被拒绝或失败：')}${e.message}`); }
 }
+
+function addMcpHeader() { addKeyValueRow('mcp-import-headers'); }
+function addMcpConsoleArgument() { addKeyValueRow('mcp-console-arguments'); }
 
 async function confirmMcpConsole() {
   if (!_mcpConsolePending?.confirmation_id) return;

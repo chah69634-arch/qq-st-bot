@@ -3,7 +3,7 @@ let _ttsLoadedProvider = 'gsv';
 
 function _renderTtsProvider(provider) {
   const params = _ttsProviderParamsByProvider[provider] || {};
-  document.getElementById('tts-provider-params').value = JSON.stringify(params, null, 2);
+  renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'prompt_text', 'speed'] });
   document.getElementById('tts-api-url').value = params.api_url || '';
   document.getElementById('tts-ref-audio').value = params.ref_audio || '';
   document.getElementById('tts-gpt-model-path').value = params.gpt_model_path || '';
@@ -17,7 +17,7 @@ function _renderTtsProvider(provider) {
 function onTtsProviderChange() {
   const next = document.getElementById('tts-provider').value;
   if (next === _ttsLoadedProvider) return;
-  if (document.getElementById('tts-provider-params').value.trim() && !confirm(t('status.tts.switch_discard_confirm', '切换 Provider 会放弃当前未保存的参数编辑，继续吗？'))) {
+  if (!confirm(t('status.tts.switch_discard_confirm', '切换 Provider 会放弃当前未保存的参数编辑，继续吗？'))) {
     document.getElementById('tts-provider').value = _ttsLoadedProvider;
     return;
   }
@@ -45,8 +45,8 @@ async function loadTtsConfig() {
 }
 async function saveTtsConfig() {
   let providerParams;
-  try { providerParams = JSON.parse(document.getElementById('tts-provider-params').value || '{}'); }
-  catch (e) { toast(t('status.tts.invalid_params', 'Provider parameters must be valid JSON'), 'err'); return; }
+  try { providerParams = readKeyValueEditor('tts-provider-params'); }
+  catch (e) { toast(e.message, 'err'); return; }
   const provider = document.getElementById('tts-provider').value;
   if (provider === 'openai_compatible') { toast(t('status.tts.provider_unavailable', '该 TTS Provider 尚未实装，不能保存。'), 'err'); return; }
   providerParams.api_url = document.getElementById('tts-api-url').value.trim();
@@ -71,6 +71,8 @@ async function saveTtsConfig() {
     toast(t('status.tts.saved', 'TTS 配置已保存'), 'ok');
   } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
+function addTtsProviderParam() { addKeyValueRow('tts-provider-params'); }
+
 async function loadStickerConfig() {
   try {
     const d = await api('GET', '/sticker-config');
@@ -291,8 +293,7 @@ async function loadCharacterDetail(filename) {
       document.getElementById('char-birthday-month').value  = d.birthday?.month ?? '';
       document.getElementById('char-birthday-day').value    = d.birthday?.day   ?? '';
       document.getElementById('char-birthday-prompt').value = d.birthday?.prompt ?? '';
-      document.getElementById('char-anniversaries').value   = d.anniversaries != null
-        ? JSON.stringify(d.anniversaries, null, 2) : '';
+      _renderCharacterAnniversaries(d.anniversaries || []);
       document.getElementById('char-first-mes').value       = d.first_mes || '';
       document.getElementById('char-edit-form').style.display = '';
       document.getElementById('char-text-form').style.display = 'none';
@@ -322,11 +323,8 @@ async function saveCharacter() {
       const birthdayVal = (bdMonth || bdDay || bdPrompt)
         ? { month: bdMonth ? parseInt(bdMonth) : null, day: bdDay ? parseInt(bdDay) : null, prompt: bdPrompt }
         : null;
-      const annRaw = document.getElementById('char-anniversaries').value.trim();
-      let anniversariesVal = _charData?.anniversaries ?? null;
-      if (annRaw !== '') {
-        try { anniversariesVal = JSON.parse(annRaw); } catch(e) { toast('anniversaries JSON 格式错误：' + e.message, 'err'); return; }
-      }
+      const anniversariesVal = _readCharacterAnniversaries();
+      if (!anniversariesVal) return;
       const body = {
         ..._charData,
         name:          document.getElementById('char-name').value,
@@ -346,6 +344,12 @@ async function saveCharacter() {
     }
   } catch(e) { toast('保存失败：' + e.message, 'err'); }
 }
+
+function _characterAnniversaryRow(value = {}) { return `<div class="form-row" data-character-anniversary><input data-key placeholder="key" value="${escapeHtml(value.key || '')}"><input data-month type="number" min="1" max="12" placeholder="month" value="${escapeHtml(value.month ?? '')}"><input data-day type="number" min="1" max="31" placeholder="day" value="${escapeHtml(value.day ?? '')}"><input data-year-start type="number" placeholder="year start" value="${escapeHtml(value.year_start ?? '')}"><input data-prompt-zero placeholder="prompt (first year)" value="${escapeHtml(value.prompt_zero || '')}"><input data-prompt-years placeholder="prompt (later years)" value="${escapeHtml(value.prompt_years || '')}"><button type="button" class="btn btn-ghost btn-sm" data-action="removeCharacterAnniversary">Remove</button></div>`; }
+function _renderCharacterAnniversaries(values) { const root=document.getElementById('char-anniversaries'); root.innerHTML=(values.length?values:[{}]).map(_characterAnniversaryRow).join(''); bindPageActions(root); }
+function addCharacterAnniversary() { const root=document.getElementById('char-anniversaries'); root.insertAdjacentHTML('beforeend',_characterAnniversaryRow()); bindPageActions(root); }
+function removeCharacterAnniversary(button) { button.closest('[data-character-anniversary]')?.remove(); }
+function _readCharacterAnniversaries() { const result=[]; for(const row of document.querySelectorAll('[data-character-anniversary]')) { const key=row.querySelector('[data-key]').value.trim(),month=Number(row.querySelector('[data-month]').value),day=Number(row.querySelector('[data-day]').value),year_start=row.querySelector('[data-year-start]').value,prompt_zero=row.querySelector('[data-prompt-zero]').value.trim(),prompt_years=row.querySelector('[data-prompt-years]').value.trim(); if(!key&&!month&&!day&&!year_start&&!prompt_zero&&!prompt_years)continue; if(!key||!Number.isInteger(month)||!Number.isInteger(day)){toast('Each anniversary needs key, month, and day.','err');return null;} result.push({...{key,month,day},...(year_start?{year_start:Number(year_start)}:{}),...(prompt_zero?{prompt_zero}:{}),...(prompt_years?{prompt_years}:{})}); } return result; }
 
 async function setActiveCharacter() {
   const id = document.getElementById('char-select').value;

@@ -16,7 +16,7 @@
           <label class="field"><span>url</span><input id="mcp-import-url" type="text" placeholder="https://example.com/mcp"></label>
           <label class="field"><span>transport</span><select id="mcp-import-transport"><option value="streamable-http">streamable-http</option><option value="sse">sse</option></select></label>
         </div>
-        <div class="form-row col-1"><label class="field"><span data-i18n="mcp.headers_label">headers（JSON，可选；建议 ${ENV_VAR}）</span><textarea id="mcp-import-headers" rows="3" placeholder='{"Authorization":"Bearer ${MCP_TOKEN}"}'></textarea></label></div>
+        <div class="form-row col-1"><label class="field"><span>Headers（可选）</span><div id="mcp-import-headers"></div></label></div><button type="button" class="btn btn-ghost btn-sm" data-action="addMcpHeader">Add header</button>
         <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="660" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-use-proxy" type="checkbox"><span data-i18n="mcp.proxy_label">远程 MCP 使用全局代理</span></label></div>
         <details class="admin-inline-041">
           <summary data-i18n="mcp.metadata_mapping_title">可选分类映射</summary>
@@ -43,7 +43,7 @@
           <label class="field"><span data-i18n="mcp.console.tool">Allowlisted Tool</span><select id="mcp-console-tool" data-action="changeMcpConsoleTool"></select></label>
         </div>
         <div id="mcp-console-tool-info" class="admin-inline-133"></div>
-        <div class="form-row col-1"><label class="field"><span data-i18n="mcp.console.arguments">JSON 参数</span><textarea id="mcp-console-arguments" rows="6" spellcheck="false">{}</textarea></label></div>
+        <div class="form-row col-1"><label class="field"><span>Tool arguments</span><div id="mcp-console-arguments"></div></label></div><button type="button" class="btn btn-ghost btn-sm" data-action="addMcpConsoleArgument">Add argument</button>
         <details class="admin-inline-041"><summary data-i18n="mcp.console.schema">参数摘要</summary><pre id="mcp-console-schema" class="log-view admin-inline-133"></pre></details>
         <div class="admin-inline-041">
           <button class="btn btn-ghost" data-action="clearMcpConsole" data-i18n="mcp.console.clear">清除结果</button>

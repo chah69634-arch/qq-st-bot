@@ -169,23 +169,15 @@ async function saveSetupMail() {
 async function _loadSetupAnniversaries() {
   try {
     const { anniversaries } = await api('GET', '/settings/anniversaries');
-    document.getElementById('setup-anniversaries-json').value =
-      anniversaries && anniversaries.length ? JSON.stringify(anniversaries, null, 2) : '';
+    _renderSetupAnniversaries(anniversaries || []);
   } catch (e) {
     toast(t('setup.anniversaries.load_error', '加载自定义纪念日失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
 }
 
 async function saveSetupAnniversaries() {
-  const raw = document.getElementById('setup-anniversaries-json').value.trim();
-  let anniversaries;
-  try {
-    anniversaries = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(anniversaries)) throw new Error(t('setup.array_required', '必须是数组'));
-  } catch (e) {
-    toast(t('setup.json_array_error', 'JSON 格式错误: {error}', {error: e.message}), 'err');
-    return;
-  }
+  const anniversaries = _readSetupAnniversaries();
+  if (!anniversaries) return;
   try {
     await api('PUT', '/settings/anniversaries', { anniversaries });
     toast(t('setup.anniversaries.saved', '自定义纪念日已保存'), 'ok');
@@ -220,23 +212,15 @@ async function saveSetupDiary() {
 async function _loadSetupCoplayGames() {
   try {
     const { game_whitelist } = await api('GET', '/settings/coplay-games');
-    document.getElementById('setup-coplay-games-json').value =
-      game_whitelist && game_whitelist.length ? JSON.stringify(game_whitelist, null, 2) : '';
+    _renderSetupCoplayGames(game_whitelist || []);
   } catch (e) {
     toast(t('setup.coplay.load_error', '加载 coplay 游戏白名单失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
 }
 
 async function saveSetupCoplayGames() {
-  const raw = document.getElementById('setup-coplay-games-json').value.trim();
-  let game_whitelist;
-  try {
-    game_whitelist = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(game_whitelist)) throw new Error(t('setup.array_required', '必须是数组'));
-  } catch (e) {
-    toast(t('setup.json_array_error', 'JSON 格式错误: {error}', {error: e.message}), 'err');
-    return;
-  }
+  const game_whitelist = _readSetupCoplayGames();
+  if (!game_whitelist) return;
   try {
     await api('PUT', '/settings/coplay-games', { game_whitelist });
     toast(t('setup.coplay.saved', 'coplay 游戏白名单已保存'), 'ok');
@@ -245,6 +229,16 @@ async function saveSetupCoplayGames() {
     toast(t('common.save_failed', '保存失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
 }
+
+function _anniversaryRow(value = {}) { return `<div class="form-row" data-setup-anniversary><input data-key placeholder="key" value="${escapeHtml(value.key || '')}"><input data-month type="number" min="1" max="12" placeholder="month" value="${escapeHtml(value.month ?? '')}"><input data-day type="number" min="1" max="31" placeholder="day" value="${escapeHtml(value.day ?? '')}"><input data-year-start type="number" placeholder="year start" value="${escapeHtml(value.year_start ?? '')}"><input data-prompt-zero placeholder="prompt (first year)" value="${escapeHtml(value.prompt_zero || '')}"><input data-prompt-years placeholder="prompt (later years)" value="${escapeHtml(value.prompt_years || '')}"><button type="button" class="btn btn-ghost btn-sm" data-action="removeSetupRow">Remove</button></div>`; }
+function _renderSetupAnniversaries(values) { const root=document.getElementById('setup-anniversaries-list'); root.innerHTML=(values.length?values:[{}]).map(_anniversaryRow).join(''); bindPageActions(root); }
+function addSetupAnniversary() { const root=document.getElementById('setup-anniversaries-list'); root.insertAdjacentHTML('beforeend', _anniversaryRow()); bindPageActions(root); }
+function _readSetupAnniversaries() { const result=[]; for(const row of document.querySelectorAll('[data-setup-anniversary]')) { const key=row.querySelector('[data-key]').value.trim(), month=Number(row.querySelector('[data-month]').value), day=Number(row.querySelector('[data-day]').value); if(!key&&!month&&!day)continue; if(!key||!Number.isInteger(month)||!Number.isInteger(day)){toast('Each anniversary needs key, month, and day.','err');return null;} const item={key,month,day}; const year=row.querySelector('[data-year-start]').value;if(year)item.year_start=Number(year);for(const field of ['prompt_zero','prompt_years']){const value=row.querySelector(`[data-${field.replace('_','-')}]`).value.trim();if(value)item[field]=value;}result.push(item);}return result; }
+function _gameRow(value = {}) { return `<div class="form-row" data-setup-game><input data-name placeholder="game name" value="${escapeHtml(value.name || '')}"><input data-process placeholder="process_name" value="${escapeHtml(value.process_name || '')}"><input data-save-dir placeholder="save directory (optional)" value="${escapeHtml(value.save_dir || '')}"><button type="button" class="btn btn-ghost btn-sm" data-action="removeSetupRow">Remove</button></div>`; }
+function _renderSetupCoplayGames(values) { const root=document.getElementById('setup-coplay-games-list'); root.innerHTML=(values.length?values:[{}]).map(_gameRow).join(''); bindPageActions(root); }
+function addSetupCoplayGame() { const root=document.getElementById('setup-coplay-games-list'); root.insertAdjacentHTML('beforeend', _gameRow()); bindPageActions(root); }
+function _readSetupCoplayGames() { const result=[];for(const row of document.querySelectorAll('[data-setup-game]')){const name=row.querySelector('[data-name]').value.trim(),process_name=row.querySelector('[data-process]').value.trim(),save_dir=row.querySelector('[data-save-dir]').value.trim();if(!name&&!process_name&&!save_dir)continue;if(!name||!process_name){toast('Each game needs a name and process name.','err');return null;}result.push({...{name,process_name},...(save_dir?{save_dir}:{})});}return result; }
+function removeSetupRow(button) { button.closest('[data-setup-anniversary], [data-setup-game]')?.remove(); }
 
 async function _loadSetupOptional() {
   const el = document.getElementById('setup-optional-body');

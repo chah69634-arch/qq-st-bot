@@ -629,7 +629,7 @@ function openPresetModal(name) {
     document.getElementById('mr-preset-api-key').value = '';
     document.getElementById('mr-preset-api-key').placeholder = p.api_key ? `已设置（${p.api_key}），留空不修改` : 'sk-...';
     document.getElementById('mr-preset-model').value = p.model || '';
-    document.getElementById('mr-preset-params').value = p.params ? JSON.stringify(p.params) : '';
+    renderKeyValueEditor('mr-preset-params', p.params || {});
     document.getElementById('mr-preset-modal-title').textContent = `编辑 Preset: ${name}`;
   } else {
     nameInput.value = '';
@@ -642,7 +642,7 @@ function openPresetModal(name) {
     document.getElementById('mr-preset-api-key').value = '';
     document.getElementById('mr-preset-api-key').placeholder = 'sk-...';
     document.getElementById('mr-preset-model').value = '';
-    document.getElementById('mr-preset-params').value = '';
+    renderKeyValueEditor('mr-preset-params', {});
     document.getElementById('mr-preset-modal-title').textContent = '新建 Preset';
   }
   document.getElementById('mr-preset-modal').classList.add('open');
@@ -667,11 +667,10 @@ async function submitPresetModal() {
   };
   const apiKey = document.getElementById('mr-preset-api-key').value.trim();
   if (apiKey) body.api_key = apiKey;
-  const paramsText = document.getElementById('mr-preset-params').value.trim();
-  if (paramsText) {
-    try { body.params = JSON.parse(paramsText); }
-    catch (e) { errEl.textContent = 'params 不是合法 JSON'; return; }
-  }
+  try {
+    const params = readKeyValueEditor('mr-preset-params');
+    if (Object.keys(params).length) body.params = params;
+  } catch (e) { errEl.textContent = e.message; return; }
   if (isEdit) delete body.provider_kind; // 编辑时不强制改变 kind，除非用户明确改了下拉——保留原选值语义更安全，仍一起提交也无妨；这里直接提交当前下拉值即可
   body.provider_kind = document.getElementById('mr-preset-kind').value;
 
@@ -684,6 +683,8 @@ async function submitPresetModal() {
     errEl.textContent = e.message;
   }
 }
+
+function addPresetParam() { addKeyValueRow('mr-preset-params'); }
 
 function confirmDeletePreset(name) {
   _openAtConfirm(`删除 preset '${name}'`, '若仍被某个 routing profile 引用，或是唯一剩余的 preset，将会被拒绝。', async () => {
