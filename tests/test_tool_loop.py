@@ -53,7 +53,7 @@ def _patch_tools_schema(monkeypatch, names):
         {"type": "function", "function": {"name": n, "description": "", "parameters": {"type": "object", "properties": {}}}}
         for n in names
     ]
-    monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None: schema)
+    monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None, **kwargs: schema)
 
 
 def _script_chat_turn(monkeypatch, turns: list[ChatTurn]):
@@ -633,7 +633,7 @@ async def test_nudge_hint_derives_opaque_mcp_parameter_guidance_from_current_reg
             "params": {"type": "object", "additionalProperties": True},
         }},
     }}]
-    monkeypatch.setattr(td, "get_tools_schema", lambda categories=None: schema)
+    monkeypatch.setattr(td, "get_tools_schema", lambda categories=None, **kwargs: schema)
     monkeypatch.setattr(td, "_TOOL_REGISTRY", {
         "mcp__arcade__play": {"category": "mcp", "mcp_server": "arcade", "description": "play"},
         "mcp__arcade__inspect_action": {
@@ -689,7 +689,7 @@ async def test_tail_brace_relay_triggers_second_tool_call(monkeypatch):
     """模型第二步不带 tool_calls，只在自然语言末尾标注 {true: ...}：应触发一次
     额外的 _execute()，循环继续进入第三步，而不是把这段文字直接丢弃收尾。"""
     _patch_tool_loop_config(monkeypatch)
-    _patch_tools_schema(monkeypatch, ["web_search"])
+    _patch_tools_schema(monkeypatch, ["web_search", "fish_cast"])
     chat_turn_calls = _script_chat_turn(monkeypatch, [
         ChatTurn(
             content="",
@@ -825,7 +825,7 @@ async def test_relay_prompt_covers_current_loop_categories_including_mcp(monkeyp
     from core import tool_dispatcher as td
 
     _patch_tool_loop_config(monkeypatch, categories=["info", "desktop", "memory", "mcp"])
-    _patch_tools_schema(monkeypatch, ["web_search"])
+    _patch_tools_schema(monkeypatch, ["web_search", "mcp__turtle_soup__ask"])
     monkeypatch.setitem(td._TOOL_REGISTRY, "mcp__turtle_soup__ask", {
         "func": lambda: None,
         "description": "海龟汤提问",

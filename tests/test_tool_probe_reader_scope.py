@@ -47,7 +47,7 @@ def _make_pipeline(active_char_id: str, refresh_raises=None):
     return fake
 
 
-_MSG = {"user_id": "probe_test_uid", "content": "现在几点", "sender_name": "tester"}
+_MSG = {"user_id": "probe_test_uid", "content": "查一下天气", "sender_name": "tester"}
 
 
 def _patch_env(monkeypatch):
@@ -71,8 +71,12 @@ def _patch_env(monkeypatch):
     monkeypatch.setattr(_pr, "update_last_message", lambda uid: None)
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
     monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
-    monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
-    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
+    monkeypatch.setattr(_td, "get_probe_prompt", lambda loc, **kwargs: "")
+    monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [
+        {"type": "function", "function": {"name": "weather", "description": "", "parameters": {}}},
+    ])
+    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
+    monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr(_llm, "chat", AsyncMock(return_value=""))
     monkeypatch.setattr(_llm, "parse_tool_call_response", lambda r: [])
     monkeypatch.setattr(_rp, "process", lambda reply, name: [reply] if reply else [])
@@ -185,7 +189,7 @@ async def test_content_isolation_yexuan_sentinel_not_in_probe(sandbox, monkeypat
 
     probe_locations: list[str] = []
 
-    def _capture_probe_prompt(loc: str) -> str:
+    def _capture_probe_prompt(loc: str, **kwargs) -> str:
         probe_locations.append(loc)
         return ""
 

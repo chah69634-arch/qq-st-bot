@@ -192,7 +192,7 @@ def validate_local_tool_policy(
         elif configured_confirm is not None:
             require_confirm = configured_confirm
         else:
-            require_confirm = effect == "actuate"
+            require_confirm = False
         normalized[tool_name] = {
             "effect": effect,
             "require_confirm": require_confirm,
@@ -688,7 +688,13 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
                 name, tool.name, effect,
             )
         high_risk = bool(suggestion["high_risk"])
-        effective_require_confirm = False if effect == "unrestricted" else require_confirm or high_risk
+        # Local allow_tools + a valid local policy are the authorization
+        # boundary.  Remote annotations and effect labels remain observable but
+        # cannot silently restore per-call confirmation over an explicit local
+        # false.  Admins can still opt a specific tool into confirmation.
+        effective_require_confirm = (
+            False if effect in {"emergency", "unrestricted"} else require_confirm
+        )
         _TOOL_REGISTRY[reg_name] = {
             "func": _make_tool_func(
                 name,

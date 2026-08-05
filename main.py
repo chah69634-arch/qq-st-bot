@@ -49,11 +49,11 @@ def get_pipeline():
     return _registry.get("pipeline")
 
 
-# N7-B: 只有零参数、零副作用、低误触风险的工具才允许走快速路径。
-# 排除在此 allowlist 之外 ≠ 禁用工具；排除的工具继续由 LLM probe 识别。
-FAST_PATH_TOOL_ALLOWLIST: frozenset[str] = frozenset({
-    "get_time",  # 零参数，零副作用，关键词（"几点"/"时间"/"几号"/"星期"）低误触
-})
+# Compatibility imports; ownership lives in core.pretool_router.
+from core.pretool_router import (
+    FAST_PATH_TOOL_ALLOWLIST,
+    fast_path_match as _fast_path_match,
+)
 
 
 def _check_admin_auth_startup(secret: str, has_tokens: bool) -> None:
@@ -93,23 +93,6 @@ def _validate_data_root_contract(cfg: dict, *, sandbox_mode: str) -> None:
             "mode=production cannot use data/test_sandbox; "
             "set data_prefix to data or start through run_test.py."
         )
-
-
-def _fast_path_match(user_msg: str) -> tuple[str, str] | None:
-    """快速路径关键词匹配（N7 可观测版）。
-
-    返回 (tool_name, matched_keyword)，未命中返回 None。
-    N7-B: 只扫描 FAST_PATH_TOOL_ALLOWLIST 内的工具，避免副作用工具或高误触风险
-    工具绕过 LLM probe 直接进入工具流程。排除 ≠ 禁用。
-    """
-    from core import tool_dispatcher as _td
-    for name, spec in _td._TOOL_REGISTRY.items():
-        if name not in FAST_PATH_TOOL_ALLOWLIST:
-            continue
-        for kw in spec.get("keywords", []):
-            if kw in user_msg:
-                return name, kw
-    return None
 
 
 def _init_modules():
@@ -343,52 +326,8 @@ async def handle_message(message: dict):
         return
     _char_id = _frozen_scope.character_id
 
-    # ── 步骤2：会话状态机（等待确认 / 等待补充参数）──────────────────────────
+    # ── 步骤2：会话状态由共用 pre-tool router 消费 ───────────────────────────
     state = ss.get(session_key)
-
-    if state.status == ss.SessionState.WAITING_CONFIRM:
-        if content.strip() == "确认":
-            logger.info(f"[handle_message] 用户确认执行工具: {state.pending_tool}")
-            tool_result, _ = await tool_dispatcher.execute(
-                tool_name=state.pending_tool,
-                tool_args=state.pending_args or {},
-                user_id=user_id,
-                target_id=target_id,
-                is_group=is_group,
-                session_state=state,
-                origin="user_live",
-                char_id=_char_id,
-            )
-            state.clear()
-            if tool_result:
-                await _reply_with_tool_result(tool_result, user_id, target_id, is_group, frozen_scope=_frozen_scope)
-        else:
-            logger.info("[handle_message] 用户取消了工具执行")
-            state.clear()
-            await text_output.send(target_id, ["好的，已取消～"], is_group)
-        return
-
-    elif state.status == ss.SessionState.WAITING_INPUT:
-        logger.info(f"[handle_message] 收到补充参数: {content}")
-        if state.pending_args is not None and state.pending_arg_key:
-            state.pending_args[state.pending_arg_key] = content
-        tool_result, ask_text = await tool_dispatcher.execute(
-            tool_name=state.pending_tool,
-            tool_args=state.pending_args or {},
-            user_id=user_id,
-            target_id=target_id,
-            is_group=is_group,
-            session_state=state,
-            origin="user_live",
-            char_id=_char_id,
-        )
-        state.clear()
-        if ask_text:
-            await text_output.send(target_id, [ask_text], is_group)
-            return
-        if tool_result:
-            await _reply_with_tool_result(tool_result, user_id, target_id, is_group, frozen_scope=_frozen_scope)
-        return
 
     # ── 步骤2.6：处理图片和文件 ─────────────────────────────────────────────
     # trusted_user_text 必须在媒体拼接之前捕获：probe 只能消费原始用户输入，
@@ -431,199 +370,48 @@ async def handle_message(message: dict):
     from core.write_envelope import stamp_qq as _stamp_qq_early
     _qq_envelope = _stamp_qq_early()
     async with conversation_lock(user_id):
-        # ── 步骤3：工具调用探测 ──────────────────────────────────────────────
-        from core import llm_client
-        from core.config_loader import get_config
-        cfg = get_config()
-
-        # Brief 28 · Path C 总闸：开关开 + owner 私聊 + chat preset 为 function_calling。
-        # 为真时跳过 pre-pipeline 探针（工具决策权整体移交主模型），主生成走 run_agentic_loop。
+        # ── 步骤3：统一 pre-tool routing ─────────────────────────────────────
         _loop_active = tool_dispatcher.tool_loop_active(user_id)
 
-        tool_result_text: str | None = None
-
-        from core.memory import user_profile as _up
-        _profile = _up.load(user_id, char_id=_char_id)
-        # 2026-07-25 修复：dict.get(key, default) 只在 key 缺失时才回落 default，
-        # 但 user_profile 的默认 schema 里 "location" 这个 key 永远存在（未设置时值是
-        # None，不是缺失），所以旧写法在用户从未提供地点时会把 None 传进探针 prompt，
-        # 而不是预期的兜底城市"杭州"。用 or 才是真正的"值为空则回落"。
-        _location = _profile.get("location") or "杭州"
-        # 快速路径：关键词命中直接走，不调 LLM；只匹配 trusted_user_text，不含 media span
-        _fast_match = _fast_path_match(_trusted_user_text)
-        if _fast_match:
-            _fast_tool, _fast_kw = _fast_match
-            # N7: 结构化命中日志（观测用，不影响行为）
-            _fast_spec = tool_dispatcher._TOOL_REGISTRY.get(_fast_tool, {})
-            _fast_requires_args = bool(
-                _fast_spec.get("parameters", {}).get("required", [])
-            )
-            logger.info(
-                "[qq_fast_path_match] event=qq_fast_path_match "
-                "fast_path_matched=True "
-                "uid=%s is_group=%s matched_tool=%s matched_keyword=%r "
-                "tool_category=%s has_side_effect=%s fast_path_risk=%s "
-                "original_text_preview=%r will_skip_probe=True "
-                "tool_requires_args=%s has_empty_args=%s",
-                user_id, is_group,
-                _fast_tool, _fast_kw,
-                _fast_spec.get("category", ""),
-                tool_dispatcher.is_side_effect_tool(_fast_tool),
-                tool_dispatcher.tool_fast_path_risk(_fast_tool),
-                _trusted_user_text[:80],
-                _fast_requires_args,
-                _fast_requires_args,   # fast path 恒传 {}，若工具要参数则 has_empty_args=True
-            )
-            tool_calls = [{"name": _fast_tool, "arguments": {}}]
-            logger.info(f"[handle_message] 快速路径命中工具: {_fast_tool}")
-            _probe_snap: dict = {
-                "is_fast_path": True,
-                "matched_tool": _fast_tool,
-                "matched_keyword": _fast_kw,
-                "fast_path_risk": tool_dispatcher.tool_fast_path_risk(_fast_tool),
-                "user_message": _trusted_user_text,
-                "tool_calls": list(tool_calls),
-                "channel": "qq",
-            }
-        elif _loop_active:
-            # Brief 28 §3.4：loop 激活时跳过 pre-pipeline 探针，工具决策权整体移交主模型。
-            tool_calls = None
-            _probe_snap = {
-                "is_fast_path": False,
-                "skipped_reason": "tool_loop_active",
-                "user_message": _trusted_user_text,
-                "tool_calls": [],
-                "channel": "qq",
-            }
-        else:
-            # 上下文降格为只读参考块：不喂 role:assistant 回合，避免分类器被表演台词带跑
-            import re as _re_probe
-            from core.memory import short_term as _st_probe
-            from core.character_name_provider import get_active_char_name as _get_probe_char_name
-            _probe_char_name = _get_probe_char_name()
-            _probe_ctx_raw = _st_probe.load(user_id, char_id=_char_id)
-            _ref_lines: list[str] = []
-            for _m in _probe_ctx_raw[-4:]:
-                if _m.get("_source") == "trigger_stub":
-                    continue
-                _txt = (_m.get("content") or "").strip()
-                if _m.get("role") == "assistant":
-                    # strip action/stage-direction text to avoid biasing the classifier
-                    _txt = _re_probe.sub(r"（[^）]*）|\([^)]*\)", "", _txt).strip()
-                    if not _txt:
-                        continue
-                    _ref_lines.append(f"{_probe_char_name}：{_txt}")
-                else:
-                    _ref_lines.append(f"用户：{_txt}")
-            _ref_block = "\n".join(_ref_lines)
-
-            _probe_system = tool_dispatcher.get_probe_prompt(_location)
-            if _ref_block:
-                _probe_system += (
-                    "\n\n【最近对话（仅供解析指代词等，不要续写、不要表演、不要进入角色）】\n"
-                    + _ref_block
-                )
-            tool_detection_messages = [
-                {"role": "system", "content": _probe_system},
-                {"role": "user", "content": _trusted_user_text},
-            ]
-            tools_schema = tool_dispatcher.get_tools_schema(categories=["info", "desktop"])
+        async def _mark_pretool_thinking() -> None:
             try:
-                probe_response = await llm_client.chat(tool_detection_messages, tools=tools_schema, call_category="probe")
-            except Exception:
-                probe_response = ""
-
-            tool_calls = llm_client.parse_tool_call_response(probe_response)
-            logger.info(f"[handle_message] probe_response type={type(probe_response)} tool_calls={tool_calls}")
-            _probe_snap = {
-                "is_fast_path": False,
-                "probe_system": _probe_system,
-                "probe_context": _ref_block,
-                "user_message": _trusted_user_text,
-                "tools_available": [
-                    (t.get("function") or t).get("name", "")
-                    for t in tools_schema
-                ],
-                "probe_response_raw": probe_response if isinstance(probe_response, str) else "",
-                "tool_calls": tool_calls or [],
-                "channel": "qq",
-            }
-        _probe_tool_results: list[dict] = []
-        _fast_path_exclude_tools: set[str] = set()
-        if tool_calls:
-            try:
-                # N2-A/N2-B: thinking mood 写入通过显式 helper，传入 qq envelope
                 from core.mood_helpers import mark_tool_thinking_mood as _mark_thinking
                 await _mark_thinking(uid=user_id, char_id=_char_id, envelope=_qq_envelope)
             except Exception:
                 pass
-            # Brief 82 · 决策 7：本轮用户原始消息命中显式重读短语时，放行 persist 工具已读指纹。
-            from core.memory.tool_read_log import detect_bypass_intent as _detect_bypass_reread
-            _bypass_read_log = _detect_bypass_reread(_trusted_user_text)
-            for tc in tool_calls:
-                t_name = tc.get("name", "")
-                t_args = tc.get("arguments", {})
-                logger.info(f"[handle_message] 检测到工具调用: {t_name}({t_args})")
-                t_result, ask_text = await tool_dispatcher.execute(
-                    tool_name=t_name,
-                    tool_args=t_args,
-                    user_id=user_id,
-                    target_id=target_id,
-                    is_group=is_group,
-                    session_state=state,
-                    origin="user_live",
-                    char_id=_char_id,
-                    bypass_read_log=_bypass_read_log,
-                )
-                if ask_text:
-                    logger.info(f"[handle_message] 高危工具 {t_name}，等待用户确认")
-                    # capture what we have before early return
-                    _probe_snap["tool_results"] = _probe_tool_results
-                    try:
-                        from core.observe.probe_capture import capture_probe as _cap_probe
-                        _cap_probe(user_id, _probe_snap)
-                    except Exception:
-                        pass
-                    await text_output.send(target_id, [ask_text], is_group)
-                    return
-                _probe_tool_results.append({
-                    "name": t_name,
-                    "arguments": t_args,
-                    "result": t_result or "",
-                    "has_side_effect": tool_dispatcher.is_side_effect_tool(t_name),
-                })
-                _success_prefix = f"工具已执行：{t_name}，结果："
-                _fast_path_succeeded = (
-                    bool(_fast_match)
-                    and isinstance(t_result, str)
-                    and t_result.startswith(_success_prefix)
-                    and bool(t_result[len(_success_prefix):].strip())
-                )
-                if _fast_path_succeeded and _loop_active:
-                    _fast_path_exclude_tools.add(t_name)
-                    logger.info(
-                        "[qq_fast_path_tool_loop] "
-                        "fast_path_tool_excluded_from_loop=True uid=%s tool=%s",
-                        user_id,
-                        t_name,
-                    )
-                if t_result:
-                    tool_result_text = t_result
-                    if t_name == "read_diary":
-                        _pipeline.author_note_extra = (
-                            "【日记回应规则】你刚刚读完了她的日记，这是她真实写下的内心世界。"
-                            "回应必须细腻且有分量：①摘取日记中具体的细节或句子来回应，不要泛泛而谈；"
-                            "②说出你读完之后真实的感受，可以是心疼、好奇、被击中、想多了解；"
-                            "③可以追问日记里没写完的事；"
-                            "④回应长度不少于150字，不要因为克制就缩短回应。"
-                        )
-                    break
-        _probe_snap["tool_results"] = _probe_tool_results
-        try:
-            from core.observe.probe_capture import capture_probe as _cap_probe
-            _cap_probe(user_id, _probe_snap)
-        except Exception:
-            pass
+
+        from core.pretool_router import route_pretool
+        _pretool = await route_pretool(
+            trusted_user_text=_trusted_user_text,
+            uid=user_id,
+            char_id=_char_id,
+            channel="qq",
+            target_id=str(target_id),
+            is_group=is_group,
+            session_state=state,
+            tool_loop_enabled=_loop_active,
+            categories=["info"],
+            before_execute=_mark_pretool_thinking,
+        )
+        if _pretool.should_stop_for_user_input:
+            request = (
+                _pretool.confirmation_request
+                or _pretool.missing_parameter_request
+                or _pretool.direct_response
+            )
+            if request:
+                await text_output.send(target_id, [request], is_group)
+            return
+        tool_result_text = _pretool.prompt_tool_result
+        _fast_path_exclude_tools = _pretool.exclude_tools
+        if _pretool.selected_tool == "read_diary" and tool_result_text:
+            _pipeline.author_note_extra = (
+                "【日记回应规则】你刚刚读完了她的日记，这是她真实写下的内心世界。"
+                "回应必须细腻且有分量：①摘取日记中具体的细节或句子来回应，不要泛泛而谈；"
+                "②说出你读完之后真实的感受，可以是心疼、好奇、被击中、想多了解；"
+                "③可以追问日记里没写完的事；"
+                "④回应长度不少于150字，不要因为克制就缩短回应。"
+            )
 
         # ── 步骤4：拉取上下文（并发）────────────────────────────────────────
         logger.debug("[handle_message] 并发拉取上下文...")

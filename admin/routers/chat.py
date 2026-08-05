@@ -95,10 +95,8 @@ async def run_owner_chat_turn(
     # function_calling。为真时跳过探针，主生成走 run_agentic_loop。
     from core import tool_dispatcher as _td_loop
     _loop_active = _td_loop.tool_loop_active(user_id)
-    _loop_session_state = None
-    if _loop_active:
-        from core.session_state import get as _get_loop_state
-        _loop_session_state = _get_loop_state(f"user_{user_id}")
+    from core.session_state import get as _get_loop_state
+    _loop_session_state = _get_loop_state(f"user_{user_id}")
 
     _t_start = time.monotonic()
     async with conversation_lock(user_id):
@@ -111,16 +109,12 @@ async def run_owner_chat_turn(
         async def _timed_probe():
             nonlocal _t_probe
             _t0 = time.monotonic()
-            if _loop_active:
-                # Path C 已激活：工具决策权整体移交主模型，跳过 pre-pipeline 探针。
-                result = None
-            else:
-                result = await _probe_and_execute_tools(
-                    _probe_text,
-                    user_id,
-                    char_id=_frozen_scope.character_id,
-                    provenance_channel=provenance_channel,
-                )
+            result = await _probe_and_execute_tools(
+                _probe_text,
+                user_id,
+                char_id=_frozen_scope.character_id,
+                provenance_channel=provenance_channel,
+            )
             _t_probe = time.monotonic() - _t0
             return result
 
@@ -131,22 +125,27 @@ async def run_owner_chat_turn(
             _t_ctx = time.monotonic() - _t0
             return result
 
-        tool_result_text, context = await asyncio.gather(_timed_probe(), _timed_ctx())
+        pretool_result, context = await asyncio.gather(_timed_probe(), _timed_ctx())
+        from core.pretool_router import PreToolRouteResult
+        if isinstance(pretool_result, PreToolRouteResult):
+            tool_result_text = pretool_result.prompt_tool_result
+            _pretool_direct_reply = (
+                pretool_result.confirmation_request
+                or pretool_result.missing_parameter_request
+                or pretool_result.direct_response
+            )
+            _fast_path_exclude_tools = pretool_result.exclude_tools
+        else:
+            # Compatibility for tests and older local extensions that patch the
+            # former helper to return only a prompt tool-result string.
+            tool_result_text = pretool_result
+            _pretool_direct_reply = None
+            _fast_path_exclude_tools = set()
         try:
             from core.observe.prompt_capture import set_capture_origin as _set_capture_origin
             _set_capture_origin({"origin": provenance_channel})
         except Exception:
             pass
-        _t0 = time.monotonic()
-        messages, _ = pipeline.build_prompt(
-            user_id,
-            message,
-            context,
-            tool_result=tool_result_text,
-            channel=provenance_channel,
-            char_id=_frozen_scope.character_id,
-        )
-        _t_prompt = time.monotonic() - _t0
         # ── 流式 vs 非流式分支 ──────────────────────────────────────────────────
         # desktop channel 且任一 UI 客户端（桌宠/设备）已连接时走流式：逐 token 推送，
         # 最终用 scrub 后文本替换。其余 channel（mobile、QQ 触发路径）和全部离线时
@@ -158,12 +157,29 @@ async def run_owner_chat_turn(
         _t_first_delta = None
         _t_stream = None
         _t_llm = None
-        _use_stream = (
+        _use_stream = not _pretool_direct_reply and (
             provenance_channel == "desktop"
             and live_origin_channel == "desktop"
             and _ui_push.any_connected()
         )
         _stream_paragraph_enforcer = None
+        if _pretool_direct_reply:
+            messages = []
+            _t_prompt = 0.0
+            _stream_msg_id = None
+            _t_llm = 0.0
+            reply = _pretool_direct_reply
+        else:
+            _t0 = time.monotonic()
+            messages, _ = pipeline.build_prompt(
+                user_id,
+                message,
+                context,
+                tool_result=tool_result_text,
+                channel=provenance_channel,
+                char_id=_frozen_scope.character_id,
+            )
+            _t_prompt = time.monotonic() - _t0
         if _use_stream:
             from core.output.segment_enforcer import (
                 ParagraphStreamEnforcer,
@@ -186,6 +202,7 @@ async def run_owner_chat_turn(
                     messages, uid=user_id, char_id=_frozen_scope.character_id,
                     session_state=_loop_session_state, is_group=False, stream=True,
                     tool_event_observer=_tool_status_observer,
+                    exclude_tools=_fast_path_exclude_tools,
                 )
             else:
                 _stream_source = pipeline.run_llm_stream(
@@ -212,7 +229,7 @@ async def run_owner_chat_turn(
             if _t_first_delta_ts is not None:
                 _t_stream = time.monotonic() - _t_first_delta_ts
             reply = "".join(_chunks)
-        else:
+        elif not _pretool_direct_reply:
             _stream_msg_id = None
             _t0 = time.monotonic()
             if _loop_active:
@@ -220,6 +237,7 @@ async def run_owner_chat_turn(
                     messages, uid=user_id, char_id=_frozen_scope.character_id,
                     session_state=_loop_session_state, is_group=False,
                     tool_event_observer=_tool_status_observer,
+                    exclude_tools=_fast_path_exclude_tools,
                 )
             else:
                 reply = await pipeline.run_llm(messages)
@@ -347,103 +365,25 @@ async def _probe_and_execute_tools(
     *,
     char_id: str,
     provenance_channel: str,
-) -> str | None:
-    from core import tool_dispatcher, llm_client as _llm
-    from core.memory import user_profile as _up, short_term as _st_probe
+):
+    """Compatibility seam delegating to the channel-neutral pre-tool router."""
+    from core import tool_dispatcher
+    from core.pretool_router import route_pretool
     from core.session_state import get as _get_state
 
-    _profile = _up.load(user_id, char_id=char_id)
-    _location = _profile.get("location", "杭州")
     categories = ["info", "desktop"] if provenance_channel == "desktop" else ["info"]
-    tools_schema = tool_dispatcher.get_tools_schema(categories=categories)
-    state = _get_state(f"user_{user_id}")
-
-    # 注入最近 2 轮（最多 4 条）真实对话，帮助探针解析代词指代
-    # 过滤 trigger_stub 条目，避免系统占位符混入探针上下文
-    _probe_ctx = [
-        {"role": m["role"], "content": m.get("content", "")}
-        for m in _st_probe.load(user_id, char_id=char_id)
-        if m.get("_source") != "trigger_stub"
-    ][-4:]
-    probe_messages = [
-        {
-            "role": "system",
-            "content": tool_dispatcher.get_probe_prompt(_location, categories=categories),
-        },
-        *_probe_ctx,
-        {"role": "user", "content": message},
-    ]
-
-    _probe_snap: dict | None = None
-    _probe_tool_results: list[dict] = []
-
-    def _capture_snap() -> None:
-        if _probe_snap is None:
-            return
-        _probe_snap["tool_results"] = list(_probe_tool_results)
-        try:
-            from core.observe.probe_capture import capture_probe as _cap
-            _cap(user_id, _probe_snap)
-        except Exception:
-            pass
-
-    try:
-        logger.info(f"[owner_chat] 工具探针，channel={provenance_channel} 消息={message[:20]!r}")
-        probe_raw = await _llm.chat(probe_messages, tools=tools_schema, call_category="probe")
-        logger.info(f"[owner_chat] 探针回复={probe_raw[:60] if probe_raw else 'empty'!r}")
-        tool_calls = _llm.parse_tool_call_response(probe_raw)
-        _probe_snap = {
-            "is_fast_path": False,
-            "probe_system": tool_dispatcher.get_probe_prompt(_location, categories=categories),
-            "probe_context": _probe_ctx,
-            "user_message": message,
-            "tools_available": [
-                (t.get("function") or t).get("name", "")
-                for t in tools_schema
-            ],
-            "probe_response_raw": probe_raw if isinstance(probe_raw, str) else "",
-            "tool_calls": tool_calls or [],
-            "channel": provenance_channel,
-        }
-        if not tool_calls:
-            _capture_snap()
-            return None
-
-        # Brief 82 · 决策 7：本轮用户原始消息命中显式重读短语时，放行 persist 工具已读指纹。
-        from core.memory.tool_read_log import detect_bypass_intent as _detect_bypass_reread
-        _bypass_read_log = _detect_bypass_reread(message)
-        for tc in tool_calls:
-            t_name = tc.get("name", "")
-            t_args = tc.get("arguments", {})
-            logger.info(f"[owner_chat] 调用工具: {t_name}({t_args})")
-            t_result, _ = await tool_dispatcher.execute(
-                tool_name=t_name,
-                tool_args=t_args,
-                user_id=user_id,
-                target_id=user_id,
-                is_group=False,
-                session_state=state,
-                origin="user_live",
-                char_id=char_id,
-                bypass_read_log=_bypass_read_log,
-            )
-            _probe_tool_results.append({
-                "name": t_name,
-                "arguments": t_args,
-                "result": t_result or "",
-                "has_side_effect": tool_dispatcher.is_side_effect_tool(t_name),
-            })
-            if t_result:
-                from core.config_loader import _char_name
-                _capture_snap()
-                return (
-                    f"（{_char_name()}刚刚执行了操作：{t_result}，"
-                    f"他知道自己做了这件事，可以自然地提及）"
-                )
-    except Exception as e:
-        logger.warning(f"[owner_chat] 探针异常: {e}")
-    _capture_snap()
-    return None
+    return await route_pretool(
+        trusted_user_text=message,
+        uid=user_id,
+        char_id=char_id,
+        channel=provenance_channel,
+        provenance_channel=provenance_channel,
+        target_id=user_id,
+        is_group=False,
+        session_state=_get_state(f"user_{user_id}"),
+        tool_loop_enabled=tool_dispatcher.tool_loop_active(user_id),
+        categories=categories,
+    )
 
 
 @router.post("/chat", summary="与角色对话（管理面板专用）[v0.1 已禁用]")

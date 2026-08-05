@@ -325,6 +325,8 @@ def test_s4_text_output_send_allowlist():
         # SYSTEM_MSG — hardcoded, not LLM output
         '["好的，已取消～"]',
         "[ask_text]",
+        # Brief 136: router-owned confirmation/missing/cancel response.
+        "target_id, [request], is_group",
         # LLM segments — strip_render_tags applied to 'segments' earlier in the function
         # (R1-B baseline: called with `segments` variable)
         "target_id, segments, is_group",

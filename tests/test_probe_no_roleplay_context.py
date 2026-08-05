@@ -29,49 +29,34 @@ sys.path.insert(0, str(ROOT))
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestSourceLevel:
-    _SRC = (ROOT / "main.py").read_text(encoding="utf-8")
+    _SRC = (ROOT / "core" / "pretool_router.py").read_text(encoding="utf-8")
 
     def test_old_probe_ctx_spread_removed(self):
         assert "*_probe_ctx" not in self._SRC, \
-            "Old *_probe_ctx spread must be removed from main.py"
+            "Old *_probe_ctx spread must be removed from the shared router"
 
     def test_no_role_assistant_in_probe_message_list(self):
         """After the patch, tool_detection_messages must be [system, user] only."""
-        # Heuristic: no line adds role:assistant via _probe_ctx into tool_detection_messages
-        for line in self._SRC.splitlines():
-            if "tool_detection_messages" in line and '"role": "assistant"' in line:
-                pytest.fail(
-                    f"tool_detection_messages still contains explicit role:assistant: {line!r}"
-                )
+        assert '{"role": "system", "content": result.probe_system}' in self._SRC
+        assert '{"role": "user", "content": trusted_user_text}' in self._SRC
 
     def test_ref_block_appended_to_system(self):
         """The ref block must go into the system message, not as a separate role."""
-        assert "_ref_block" in self._SRC, "Expected _ref_block variable in main.py"
-        assert "_probe_system" in self._SRC, "Expected _probe_system variable in main.py"
-        # Verify ref block is merged INTO the system string
-        assert "_probe_system +=" in self._SRC or '_probe_system += ' in self._SRC
+        assert "result.probe_context" in self._SRC
+        assert "result.probe_system" in self._SRC
+        assert "result.probe_system +=" in self._SRC
 
     def test_trigger_stub_filtered(self):
         """trigger_stub messages must be filtered from probe context."""
-        src_lines = self._SRC.splitlines()
-        in_probe_block = False
-        has_trigger_filter = False
-        for line in src_lines:
-            if "_probe_ctx_raw" in line:
-                in_probe_block = True
-            if in_probe_block and "trigger_stub" in line:
-                has_trigger_filter = True
-                break
-        assert has_trigger_filter, "trigger_stub must be filtered in probe context block"
+        assert 'message.get("_source") == "trigger_stub"' in self._SRC
 
     def test_action_text_stripped_from_assistant_messages(self):
         """Inline regex strip must exist; scrub_reality_output_text must NOT be used."""
-        assert "re_probe" in self._SRC or "_re_probe.sub" in self._SRC, \
-            "Inline regex strip (_re_probe) must exist in probe block"
+        assert "re.sub" in self._SRC, "Inline action-text stripping must remain in the router"
         for line in self._SRC.splitlines():
             if not line.strip().startswith("#") and "scrub_reality_output_text" in line:
                 pytest.fail(
-                    f"main.py must not import scrub_reality_output_text (R6-B contract): {line!r}"
+                    f"pretool_router.py must not import scrub_reality_output_text: {line!r}"
                 )
 
 
@@ -81,7 +66,7 @@ class TestSourceLevel:
 
 def _build_ref_block(history: list[dict], char_name: str, scrub_fn) -> str:
     """
-    Mirror of the new probe-context building logic in main.py so we can
+    Mirror of the shared probe-context building logic so we can
     unit-test it without running the full async handle_message.
     """
     ref_lines: list[str] = []

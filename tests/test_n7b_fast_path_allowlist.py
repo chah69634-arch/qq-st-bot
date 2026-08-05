@@ -14,7 +14,7 @@ tests/test_n7b_fast_path_allowlist.py — N7-B 快速路径白名单收窄
 """
 
 import pytest
-from main import _fast_path_match, FAST_PATH_TOOL_ALLOWLIST
+from core.pretool_router import fast_path_match as _fast_path_match, FAST_PATH_TOOL_ALLOWLIST
 from core import tool_dispatcher
 
 

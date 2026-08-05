@@ -196,34 +196,33 @@ def test_f2b_system_sends_not_followed_by_post_process():
     This confirms system texts do NOT write to memory.
     """
     src = _src("main.py")
-    # Verify that the cancel-confirm path has `return` after send and no post_process
+    # Verify that the structured pre-tool request path has `return` after send.
     # by checking the full function bodies
     hm_body = _function_body_text(src, "handle_message")
 
     # The adapter body is excluded; we check handle_message's non-adapter sends
-    # Verify: after the cancel-confirm send there's a return
-    cancel_send_idx = None
+    request_send_idx = None
     hm_lines = hm_body.splitlines()
     for i, ln in enumerate(hm_lines):
-        if '["好的，已取消～"]' in ln:
-            cancel_send_idx = i
+        if "text_output.send(target_id, [request], is_group)" in ln:
+            request_send_idx = i
             break
 
-    assert cancel_send_idx is not None, "cancel-confirm send not found in handle_message"
+    assert request_send_idx is not None, "structured pre-tool request send not found in handle_message"
 
     # Next non-blank non-comment line should be `return`
     found_return = False
-    for ln in hm_lines[cancel_send_idx + 1:]:
+    for ln in hm_lines[request_send_idx + 1:]:
         s = ln.strip()
         if not s or s.startswith("#"):
             continue
         assert s == "return", (
-            f"After cancel-confirm send in handle_message, expected 'return' but got: {s!r}"
+            f"After pre-tool request send in handle_message, expected 'return' but got: {s!r}"
         )
         found_return = True
         break
 
-    assert found_return, "cancel-confirm send not followed by return in handle_message"
+    assert found_return, "pre-tool request send not followed by return in handle_message"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

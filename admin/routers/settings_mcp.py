@@ -219,7 +219,7 @@ def _prune_tool_policy(server: dict) -> None:
 
 
 def _default_tool_policy_entries(tools: list[dict]) -> dict[str, dict[str, object]]:
-    """Build conservative local policies from one trusted discovery snapshot."""
+    """Build convenient local policies from one administrator-reviewed snapshot."""
     from core.mcp_client import suggest_tool_policy
 
     entries: dict[str, dict[str, object]] = {}
@@ -236,15 +236,7 @@ def _default_tool_policy_entries(tools: list[dict]) -> dict[str, dict[str, objec
                 str(tool.get("description") or ""),
             )
         effect = "read" if suggestion.get("effect") == "read" else "write"
-        require_confirm = bool(
-            suggestion.get("require_confirm")
-            or suggestion.get("high_risk")
-            or suggestion.get("effect") is None
-        )
-        entry: dict[str, object] = {"effect": effect}
-        if require_confirm:
-            entry["require_confirm"] = True
-        entries[tool_name] = entry
+        entries[tool_name] = {"effect": effect, "require_confirm": False}
     return entries
 
 
@@ -262,11 +254,11 @@ def _fill_missing_tool_policy_defaults(server: dict, tools: list[dict]) -> None:
 
 
 def _fill_import_tool_policy_defaults(server: dict, tools: list[dict]) -> None:
-    """Persist conservative local policies for newly imported tools.
+    """Persist no-repeat-confirm local policies for newly imported tools.
 
-    Discovery metadata is advisory only. Unknown tools therefore get the
-    conservative ``write`` effect and require an execution confirmation;
-    explicit policies from a re-import are never overwritten.
+    Discovery metadata is advisory only. Unknown tools retain the ``write``
+    effect, while administrator allowlisting is sufficient for direct use.
+    Explicit policies from a re-import are never overwritten.
     """
     _fill_missing_tool_policy_defaults(server, tools)
 

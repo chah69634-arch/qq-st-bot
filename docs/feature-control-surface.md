@@ -36,6 +36,10 @@
 工具暴露分类或危险工具排除。`examples/assistant.example.json` 展示人机直连组合，普通角色卡未声明时
 继续遵从全局默认关闭。
 
+Path A 没有独立通道开关：QQ、desktop、mobile 都经 `core.pretool_router.route_pretool()`；类别由入口
+固定为 QQ/mobile `info`、desktop `info + desktop`。显式快速路径白名单当前仅 `get_time`，不由设置页
+或工具 keywords 扩大；Path C 激活时只跳过普通 probe，快速成功会从本轮 loop schema 排除同名工具。
+
 TTS 有三个层次的开关：`tts.enabled` 是服务端能力总开关；`tts.desktop_enabled` 是旧桌面语音条显示兼容项，并与 `tts.auto_play.desktop_pet` 双向同步；`tts.auto_play` 则按 `chat`、`dream`、`video_call`、`desktop_pet`、`mobile` 独立决定客户端是否自动请求/播放，全部默认关闭。`GET/POST /settings/tts-auto-play` 是该落盘状态的读回观测面。桌面设置页提供已接入语音条的聊天与桌宠气泡开关，并在收到回复后实际自动合成播放。`POST /tts/synthesize` 只在能力总开关开启且 persona 鉴权通过时按需合成，接受可选 `scene`（旧客户端可省略），并在合成前移除中英文括号中的旁白/动作描写；返回 base64 WAV。手机轮询消息只携带 `voice_available` 轻量标记，绝不携带音频本体；手机端在本机“自动播放语音”开启时，以该标记按需请求并播放音频。管理面“观测 → 资源完整性”分别报告 TTS 服务就绪和桌宠手动语音条可用性；前者为关闭时，后者即使单独开启也会明确报告为不可合成。
 
 TTS provider 由管理面（admin token）经 `GET/PUT /tts-config` 管理：`tts.provider` 当前支持 `gsv` 与明确标注为预留的 `openai_compatible`，每个 provider 可放在 `tts.providers.<provider>`。`GET` 会分别返回各 provider 的脱敏参数块，面板切换 provider 时显示对应参数且保存互不污染；预留 provider 在面板禁用，绝不猜测或发起云厂商请求。GSV 可选 `gpt_model_path` / `sovits_model_path`，留空时分别切回 v3 / v2ProPlus 默认底模；模型切换是 GSV 服务的全局状态，后端会把切换与同次合成串行化，路径错误时自动回退对应底模。GSV 默认启用后端分句：清洗控制/格式字符并识别实际、字面 `\\n` 与 `/n` 换行，按 `。！？；……` 优先切分，只有超过 `segment_max_chars`（默认 42）才在逗号或破折号处兜底；每段以 GSV `不切` 请求、按中文/英文脚本选择语言模式，再校验 PCM WAV 参数并插入 `segment_pause_seconds`（默认 0.25 秒）静音拼接。`external_segment_enabled: false` 可临时恢复 GSV 内部切分。旧有顶层 GSV 字段（`api_url`、`ref_audio`、情绪参数等）会自动映射，保持已有本地 GPT-SoVITS 部署行为不变。`POST /tts-config/test` 只试听已就绪 provider，`GET /observability/api-calls?caller=tts` 可查询最近合成结果与失败类别（`state.read`）。
@@ -56,7 +60,7 @@ MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /s
 后端管理面 MCP 页的 Tool-call Console 仅通过 admin-only 的 `POST /settings/mcp/console/invoke` 与
 `POST /settings/mcp/console/confirm` 调用。路由只接受当前已连接、有效 allowlist、已注册且本地 policy 已确认的动态工具，并在服务端以工具的 JSON Schema 校验参数；绝不接受任意 MCP method 或 server command。它复用 `tool_dispatcher.execute(origin="admin_console")`、effect/确认门、每工具超时和 MCP API 调用总账，不直接触碰 session；高危调用返回一次性确认票据（120 秒、仅原工具原参数可确认）。控制台响应和总账以 `audit_id` 关联，且总账不记录 arguments 或返回正文。桌面客户端不代理 MCP 管理调用、配置或密钥。
 
-每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；管理面 URL 导入和普通白名单保存会在工具探测成功后为新白名单工具写入本地默认 `tool_policy`，保留已有显式策略。MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述只能影响默认建议，不能授予远端权限：未知语义会落为 `write + require_confirm: true`。无法从当前运行时快照补齐策略时，严格写入会被拒绝，不会注册或调用。保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
+每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；管理面 URL 导入和普通白名单保存会在工具探测成功后为新白名单工具写入本地默认 `tool_policy`，保留已有显式策略。MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述只能影响默认 effect 建议，不能授予远端权限或自动开启确认：未知语义落为 `write + require_confirm: false`。管理页逐工具“每次执行前确认”复选框显式保存 true/false；导入、普通保存和批量默认授权都只补缺失字段，不覆盖已有选择。无法从当前运行时快照补齐策略时，严格写入会被拒绝，不会注册或调用。保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
 
 管理面「运维 → 工具」经 admin-only `GET/PUT /settings/tools` 统一观察内置已注册工具、保存命名的 `tool_loop.tool_presets`，并把预设绑定到 `model_presets.presets.<name>.tool_preset`。该预设只收窄该聊天模型收到的内置 function schema，且不替代 `tools.<name>.enabled` 全局执行闸门。未绑定模型明确显示为「全局默认」：勾选并保存会把内置工具选择编译为全局 `tool_loop.categories` / `exclude_tools` 并热更新；面板未表示的类别与排除项会原样保留。MCP 在此页只显示全局启用状态，动态工具目录、连接与配置仍不由此页维护。删除工具预设会同步清除引用它的模型绑定。
 

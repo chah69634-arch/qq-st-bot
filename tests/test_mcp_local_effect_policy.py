@@ -101,7 +101,7 @@ async def test_local_policy_confirmation_defaults_and_emergency_override(monkeyp
     ))
 
     assert td._TOOL_REGISTRY["mcp__srv1__write"]["require_confirm"] is False
-    assert td._TOOL_REGISTRY["mcp__srv1__pulse"]["require_confirm"] is True
+    assert td._TOOL_REGISTRY["mcp__srv1__pulse"]["require_confirm"] is False
     assert td._TOOL_REGISTRY["mcp__srv1__stop"]["require_confirm"] is False
 
 
@@ -148,7 +148,7 @@ async def test_destructive_annotation_remains_high_risk_after_local_confirmation
 
     entry = td._TOOL_REGISTRY["mcp__srv1__delete_item"]
     assert entry["mcp_high_risk"] is True
-    assert entry["dangerous"] is True
+    assert entry["dangerous"] is False
 
 
 @pytest.mark.asyncio
@@ -306,6 +306,7 @@ async def test_write_calls_without_confirmation_and_explicit_write_confirmation_
         _confirmed_write, effect="write", require_confirm=True,
     )
     monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
+    monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 
     result, ask = await td.execute(
@@ -325,7 +326,7 @@ async def test_write_calls_without_confirmation_and_explicit_write_confirmation_
 
 
 @pytest.mark.asyncio
-async def test_actuate_defaults_to_confirmation_and_emergency_never_confirms(monkeypatch):
+async def test_explicit_actuate_confirmation_and_emergency_override(monkeypatch):
     calls: list[str] = []
 
     async def _actuate():
@@ -345,6 +346,7 @@ async def test_actuate_defaults_to_confirmation_and_emergency_never_confirms(mon
         _stop, effect="emergency", require_confirm=True,
     )
     monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
+    monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 
     pulse_state = _ConfirmState()

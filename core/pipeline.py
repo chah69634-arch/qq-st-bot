@@ -1150,7 +1150,15 @@ class Pipeline:
             mcp），覆盖 run_agentic_loop 当前实际暴露的 categories，而不是探针默认
             的 info/desktop 两类。
             """
-            relay_system = get_tool_loop_relay_prompt(categories)
+            exposed_tool_names = {
+                str((tool.get("function") or tool).get("name") or "")
+                for tool in tools
+            }
+            exposed_tool_names.discard("")
+            relay_system = get_tool_loop_relay_prompt(
+                categories,
+                allowed_tool_names=exposed_tool_names,
+            )
             try:
                 relay_response = await llm_client.chat(
                     [
@@ -1163,7 +1171,11 @@ class Pipeline:
             except Exception as e:
                 log_error("pipeline.run_agentic_loop.relay_resolve", e)
                 return []
-            raw_calls = llm_client.parse_tool_call_response(relay_response) or []
+            parsed = llm_client.parse_probe_response(
+                relay_response,
+                allowed_tool_names=exposed_tool_names,
+            )
+            raw_calls = parsed.tool_calls if parsed.status == "tool_selected" else []
             resolved = []
             for rc in raw_calls:
                 name = rc.get("name")

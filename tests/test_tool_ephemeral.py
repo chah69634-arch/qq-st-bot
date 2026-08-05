@@ -20,7 +20,7 @@ def _configure_loop(monkeypatch):
     )
     monkeypatch.setattr(
         "core.tool_dispatcher.get_tools_schema",
-        lambda categories=None: [
+        lambda categories=None, **kwargs: [
             {"type": "function", "function": {"name": "mcp__demo__call", "parameters": {}}}
         ],
     )

@@ -254,7 +254,10 @@ ack 失败时降级到 `data/runtime/agent_actions.json` 文件队列。
 ```
 HTTP /desktop/chat 触发 turn
         ↓ conversation_lock 内
-  probe ⇉ fetch_context（CC-18：asyncio.gather 并行，互不依赖）→ build_prompt
+  route_pretool ⇉ fetch_context（并行，互不依赖）→ build_prompt
+    ├─ desktop: info + desktop；mobile: info
+    ├─ 先尝试统一白名单快速路径；Path C 激活时只跳过普通 probe
+    └─ confirmation / missing input 直接形成结构化回复，不进入主生成
         ↓
   run_llm_stream() ── 逐 token ──→ 可选段落状态机 → push_stream_delta()
                                       达阈值后的句末即时补空行，前端实时拆泡
@@ -294,7 +297,7 @@ HTTP /desktop/chat 触发 turn
 **约束：**
 - QQ / mobile 链路不走流式，只收完整 `channel_message`。
 - Dream pipeline 不经 `run_owner_chat_turn`，不受影响。
-- 工具探测（probe）本身不走流式，只有主生成那一步流式推送。
+- 前置工具路由（快速路径、probe、确认/补参）本身不走流式，只有主生成那一步流式推送。
 - WS 断流时，`run_llm_stream` 累积已产出的 token 作为 reply，`record_assistant_turn` 用完整文本。
 - `output.segment_enforce.enabled=true` 时，只改发往 UI 的 delta 与最终 canonical；原始 chunk 仍单独
   累积并写入 memory。状态机达到 `min_len` 后等到 `。！？…`，在下一句开始前补 `\n\n`；右引号与

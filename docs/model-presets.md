@@ -165,15 +165,17 @@ function schema 转为 `input_schema`，并把模型的 `tool_use` 与本地执�
 ### 三个彼此独立的选择
 
 - `api_protocol`：网关收什么 HTTP 路径与 JSON/SSE 形状（Chat Completions、Responses、Anthropic Messages）。
-- `tool_call_mode`：模型是否采用结构化函数调用；`function_calling` 在三种 wire protocol 都可用，`xml_fallback` 才会把工具描述和调用退化成文本标签。
+- `tool_call_mode`：模型是否采用结构化函数调用；`function_calling` 在三种 wire protocol 都可用。
+  `xml_fallback` 只供隔离的 Path A probe / relay adapter 把工具描述和调用退化成文本标签，主聊天
+  `run_llm()` 不携带 tools，也不会解析聊天正文里的 XML 为工具调用。
 - `prompt_style`：system prompt 用自然段还是 XML 包装；它不决定 HTTP 协议，也不把 function calling 变成 XML。
 
 ### `tool_call_mode` 取值与 tool loop 的组合行为
 
-| `tool_call_mode` | 单发 FC（`llm_client.chat(tools=)`） | Brief 28/109 tool loop（有效开关开启） |
+| `tool_call_mode` | 隔离 probe adapter（`llm_client.chat(tools=)`） | Brief 28/109 tool loop（有效开关开启） |
 |---|---|---|
-| `function_calling` | 支持，探针/路径A/B 正常调用 | 支持：`chat` preset 为此模式且有效开关开启时 `tool_loop_active()` 才可能为真，主生成走 `run_agentic_loop`（多步自主调用） |
-| `xml_fallback` | 支持（`<tool_call>` 标签解析） | 不支持：`tool_loop_active()` 恒为假，即使有效开关开启也维持原 `run_llm` 单发生成——小模型没有可靠的多步自主调用能力，这是设计边界，不是遗漏 |
+| `function_calling` | 支持，Path A 严格接受原生 tool call；Path B 主生成不传 tools | 支持：`chat` preset 为此模式且有效开关开启时 `tool_loop_active()` 才可能为真，主生成走 `run_agentic_loop`（多步自主调用） |
+| `xml_fallback` | 支持隔离 probe 返回单个 `<tool_call>`；严格解析失败即 fail-soft | 不支持：`tool_loop_active()` 恒为假，即使有效开关开启也维持原 `run_llm` 单发生成；聊天正文不会被当成工具调用 |
 
 只有有效 routing profile 的 `chat` 指向 `function_calling` preset 时，tool loop 才可能激活；
 有效开关优先取活跃角色卡 `presence_ext.tool_loop`（`"on"`/`"off"`），字段缺失或非法值才回落

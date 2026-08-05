@@ -277,7 +277,9 @@ function _mcpPolicyControl(server, tool, allowlisted) {
   ).join('');
   const args = escapeHtml(JSON.stringify([server.name, tool.name]));
   const selectId = `mcp-policy-effect-${server.name}-${tool.name}`;
-  return `${badge}<span style="display:flex;gap:6px;align-items:center;margin-top:4px"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.policy.mode', '模式'))}</span><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><button class="btn btn-ghost btn-sm" data-action="saveMcpToolPolicy" data-action-args="${args}">${escapeHtml(t('mcp.policy.save_mode', '保存模式'))}</button></span>`;
+  const confirmId = `mcp-policy-confirm-${server.name}-${tool.name}`;
+  const requireConfirm = state.policy?.require_confirm === true || state.require_confirm === true;
+  return `${badge}<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.policy.mode', '模式'))}</span><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><label class="checkbox-row"><input type="checkbox" id="${escapeHtml(confirmId)}" ${requireConfirm ? 'checked' : ''}><span>${escapeHtml(t('mcp.policy.require_confirm', '每次执行前确认'))}</span></label><button class="btn btn-ghost btn-sm" data-action="saveMcpToolPolicy" data-action-args="${args}">${escapeHtml(t('mcp.policy.save_mode', '保存模式'))}</button></span>`;
 }
 
 function _mcpBulkControls(server, toolCount) {
@@ -392,14 +394,15 @@ async function saveMcpToolPolicy(name, toolName) {
     if (!server) throw new Error('MCP server 不存在');
     const state = (server.tool_states || []).find(item => item.name === toolName) || {};
     const effectControl = document.getElementById(`mcp-policy-effect-${name}-${toolName}`);
+    const confirmControl = document.getElementById(`mcp-policy-confirm-${name}-${toolName}`);
     const effect = effectControl?.value || state.suggestion?.effect || 'write';
     const policy = { ...(server.tool_policy || {}) };
     policy[toolName] = { ...(state.policy || {}), effect };
-    if (effect === 'unrestricted') {
-      policy[toolName].idempotent = true;
+    if (effect === 'unrestricted' || effect === 'emergency') {
+      if (effect === 'unrestricted') policy[toolName].idempotent = true;
       policy[toolName].require_confirm = false;
-    } else if (state.suggestion?.high_risk && policy[toolName].require_confirm === undefined) {
-      policy[toolName].require_confirm = true;
+    } else {
+      policy[toolName].require_confirm = !!confirmControl?.checked;
     }
     const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { tool_policy: policy });
     toast(result.reload_status === 'restart_required'

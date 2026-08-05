@@ -105,14 +105,14 @@ def _function_body_text(src: str, func_name: str) -> str:
 
 def test_a1a_text_output_send_count():
     """
-    A1a (FIX-09 updated): Exactly 5 text_output.send( calls in main.py non-comment lines.
+    A1a (Brief 136 updated): Exactly 3 text_output.send( calls in main.py non-comment lines.
 
     FIX-09 added _handle_group_message (group isolated path) with its own direct send.
+    Brief 136 collapsed confirmation, missing-input, and cancellation responses into
+    one structured pre-tool request outlet.
 
     Expected:
-      cancel confirm          SYSTEM_SHORT_TEXT      (handle_message)
-      WAITING_INPUT ask_text  TOOL_CONFIRMATION_PROMPT (handle_message)
-      probe ask_text          TOOL_CONFIRMATION_PROMPT (handle_message)
+      pre-tool request        SYSTEM_SHORT_TEXT / TOOL_CONFIRMATION_PROMPT (handle_message)
       adapter reply           LLM_ASSISTANT_REPLY    (_qq_reality_reply_adapter)
       group reply             GROUP_ISOLATED_REPLY   (_handle_group_message)
     """
@@ -121,8 +121,8 @@ def test_a1a_text_output_send_count():
         for lineno, ln in _non_comment_lines("main.py")
         if "text_output.send(" in ln
     ]
-    assert len(hits) == 5, (
-        f"Expected 5 text_output.send( calls in main.py (R1-C: 3 direct + 1 adapter + 1 group), "
+    assert len(hits) == 3, (
+        f"Expected 3 text_output.send( calls in main.py (Brief 136: 1 pre-tool + 1 adapter + 1 group), "
         f"found {len(hits)}:\n"
         + "\n".join(f"  L{lineno}: {ln.strip()}" for lineno, ln in hits)
     )
@@ -358,18 +358,18 @@ def test_a6_tool_reply_has_frozen_scope_param():
     )
 
 
-def test_a6b_handle_message_passes_frozen_scope_to_tool_reply():
+def test_a6b_handle_message_passes_frozen_scope_to_pretool_router():
     """
-    A6b: handle_message must call _reply_with_tool_result with frozen_scope=_frozen_scope.
-    Without this, the tool-confirm path runs with no scope freeze.
+    A6b (Brief 136): the shared pre-tool router must receive the frozen character id.
+    Without this, probe exposure and execution could cross character scope.
     """
     src = _src("main.py")
     body = _function_body_text(src, "handle_message")
-    assert "_reply_with_tool_result" in body, (
-        "handle_message does not call _reply_with_tool_result — unexpected structural change"
+    assert "route_pretool(" in body, (
+        "handle_message does not call the shared pre-tool router"
     )
-    assert "frozen_scope=_frozen_scope" in body, (
-        "handle_message: _reply_with_tool_result not called with frozen_scope=_frozen_scope"
+    assert "char_id=_char_id" in body, (
+        "handle_message: route_pretool not called with the frozen character id"
     )
 
 

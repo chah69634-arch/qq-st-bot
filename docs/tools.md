@@ -10,7 +10,9 @@
 响应包含 `processed_count`、最终 `allow_tools`、`tool_policy` 和 `reload_status`。
 
 `default` 只补齐缺失的本地 policy，保留已有显式策略；可靠只读工具使用 `read`，其他工具
-使用 `write`，未知语义或高风险工具要求确认。导入、普通保存和批量默认授权共用同一套生成规则。
+使用 `write`，新生成的普通策略统一写入 `require_confirm: false`。是否每次确认是管理员的逐工具
+显式选择，不由远端 annotations、名称、描述或风险建议自动开启。导入、普通保存和批量默认授权
+共用同一套生成规则。
 `unrestricted` 是管理员明确选择的无限制执行模式，会为当前发现的全部工具写入
 `effect: unrestricted`、`idempotent: true`、`require_confirm: false`，并只需一次管理面确认。
 
@@ -39,20 +41,20 @@ WS 后 `agent_actions.json` fallback。此处不是 capability negotiation，v0.
 hello 字段或协商流程。
 
 ```
-路径A：pre-pipeline 探针
-  QQ 用户消息 → trusted_user_text（media merge 前捕获，下同）
-              → 关键词快速路径（仅 QQ 入口，只匹配 trusted_user_text）
-              → 未命中时走 get_probe_prompt + function schema
-              → 探针 user message 只含 trusted_user_text，不含 history / media span
-              → 只判断 info + desktop 类
-              → execute(origin="user_live") → 结果写入 tool_result → prompt 层10
+路径A：统一 pre-pipeline 路由
+  QQ 私聊 / /desktop/chat / mobile 前台
+    → trusted_user_text（media merge 前捕获）
+    → core.pretool_router.route_pretool(...)
+    → 先检查显式快速路径白名单（当前仅 get_time；与 keywords 无关）
+    → 未命中且 Path C 未激活时，走 get_probe_prompt + 当前通道允许的 function schema
+    → 探针 user message 只含 trusted_user_text 与短期引用块，不含 media span 或主生成 prompt
+    → QQ/mobile categories=["info"]；desktop categories=["info", "desktop"]
+    → 严格解析 native function call 或完整封闭的 <tool_call> 编码，再 execute_structured(origin="user_live")
+    → 结果只以 bounded tool_result 写入 prompt 层10；raw probe 文本绝不进入主 prompt
 
-  /desktop/chat（desktop 与 mobile 前台共用） → trusted_user_text（body 原始字段，media 端点在拼接前捕获）
-                               → get_probe_prompt + function schema
-                               → execute(origin="user_live")
-                               → 工具结果包装成"刚刚执行了操作..."提示 → prompt 层10
-
-  /chat 管理面板冻结入口 → 不走工具探针
+  WAITING_CONFIRM / WAITING_INPUT 也由同一入口消费，分别返回结构化 confirmation_request
+  或 missing_parameter_request；/chat 管理面板冻结入口仍不走工具探针。
+```
 
 **memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。**
 `read_diary/read_watch/search_diary/get_profile/get_episodic` 已注册且 `execute()` 能执行，
@@ -69,8 +71,8 @@ hello 字段或协商流程。
     - chat preset 的 tool_call_mode == "function_calling"（xml_fallback 小模型不激活）
 
   激活后：
-    - 跳过路径A 探针（main.py:441-451、chat.py 内 _probe_and_execute_tools 调用点），
-      工具决策权整体移交主模型；QQ 关键词快速路径不受影响，先于一切判断
+    - `route_pretool()` 仍先检查显式快速路径白名单；只有普通 LLM 探针会被跳过，工具决策权
+      随后移交主模型。QQ、desktop、mobile 的快速路径判定和执行契约相同
     - 主生成改走 Pipeline.run_agentic_loop()：
         chat_turn(messages, tools) → 有 tool_calls 就 execute(origin="assistant_loop") 回填
         role="tool" 消息（tool_call_id 对齐）→ 继续下一步，直到自然终止 / max_steps 耗尽 /
@@ -94,15 +96,15 @@ hello 字段或协商流程。
     - 模型专属预设：若 chat model preset 绑定了 `tool_preset`，再按
       `tool_loop.tool_presets` 的同名白名单收窄；未绑定时保持上述旧语义。
 
-  与路径A互斥表：
-    | 场景                                  | 路径A探针 | 路径C loop |
-    |---------------------------------------|-----------|------------|
-    | 有效 tool_loop 关 / preset 非 FC / 非owner  | 正常执行  | 不激活     |
-    | 有效 tool_loop 开 + owner + FC preset       | 跳过      | 激活       |
+  与路径A关系：
+    | 场景                                  | 白名单快速路径 | 路径A普通探针 | 路径C loop |
+    |---------------------------------------|----------------|---------------|------------|
+    | 有效 tool_loop 关 / preset 非 FC / 非owner  | 可执行         | 正常执行      | 不激活     |
+    | 有效 tool_loop 开 + owner + FC preset       | 可执行         | 跳过          | 激活       |
 
-  默认不排斥的角落：QQ 关键词快速路径命中后走 tool_result 注入，loop 里的模型能在层10
-  看到这次执行结果，不会重复调用；两者理论上仍可能对同一意图各执行一次，见
-  `docs/known-issues.md` 的已知边角登记。
+  快速路径成功后会把该工具加入本轮 `exclude_tools`，Path C 不再看到同名 schema；快速执行失败时
+  不注入伪成功结果，Path C 仍可按正常 schema 重试，并在统一观测中标记
+  `fast_failed_then_loop_retry=true`。
 
   工具意愿软提示（`tool_loop.nudge_hint`，默认 true，Brief 29 · 5）：loop 首步在
   messages 尾部、用户消息之前插入一条 system 提示"需要外部信息或操作时，直接调用可用
@@ -250,7 +252,8 @@ mcp_servers:
   ticket，`/confirm` 只能重放 ticket 内的 server/tool/arguments；policy 或连接变化会在确认时重新拒绝。
 - **本地 effect 策略**：`require_local_policy: true` 时，管理面 URL 导入会在 `initialize + list_tools`
   成功后为每个选中的工具写入本地默认 `tool_policy`，并保留重导入时已有的显式策略。建议可判定为
-  `read` / `write` 的工具按建议落盘；无法判定的工具保守地写为 `write + require_confirm: true`。手动更新
+  `read` / `write` 的工具按建议落盘；无法判定的工具写为 `write`，新生成的普通策略均默认
+  `require_confirm: false`。管理面逐工具复选框是确认行为的唯一显式控制面，已有 true/false 均保留。手动更新
   `allow_tools` 时，管理面会从当前运行时快照补齐缺失策略；无法补齐时严格写入会拒绝。每个已确认的白名单工具都要显式标为 `read`、`write`、`actuate`、
   `emergency` 或 `unrestricted`；校验失败不会写入配置或热重载。`unrestricted` 是管理员在本地明确选定的“无限制执行”模式：强制不确认、
   必须显式 `idempotent: true`，同一 `request_id` 最多重连重试三次。像删除远端帖子这样的操作应标为
@@ -267,7 +270,8 @@ mcp_servers:
   还要同时满足全局 `tool_loop.categories` 或角色卡 `presence_ext.tool_categories` 包含
   `mcp`、全局 `exclude_tools` 未排除、以及 `mcp_proficiency` 的 schema/执行双重门控。默认
   tool loop 类别不含 `mcp`，探针也不暴露 `mcp`。动态 MCP 条目当前统一标记
-  `dangerous=False`，不会因外部 description 或 annotation 自动获得本地高危确认语义；需要
+  `dangerous=False`，不会因外部 description 或 annotation 自动获得本地高危确认语义；显式
+  `tool_policy.<tool>.require_confirm: true` 仍会要求确认。需要
   排除的工具必须显式列入 `exclude_tools` 或 `allow_tools` 白名单。外部 server 不能通过工具
   描述改变这些系统权限。
 - **执行适配**：`execute()` 走既有的通用分发分支（`func(**tool_args)`），内部转发到
@@ -299,13 +303,15 @@ mcp_servers:
   "观察项（Brief 29 · MCP）"。任何描述、参数 schema 或返回文本都不能被当作系统指令，
   不能借工具描述提升角色暴露面、绕过 origin 闸门、危险工具排除、超时或审计规则。
 
-探针调用时明确过滤：
+统一路由按通道明确过滤探针类别：
 ```python
-get_tools_schema(categories=["info", "desktop"])
+route_pretool(..., categories=["info"])
+route_pretool(..., categories=["info", "desktop"])
 ```
 
-QQ 入口的关键词快速路径直接构造 `{"name": tool, "arguments": {}}`，适合 `get_time` /
-`water_garden` 这类无参工具；需要参数的工具仍主要依赖 LLM function_calling 填参。
+快速路径不是 keywords 的通用捷径，只接受 `FAST_PATH_TOOL_ALLOWLIST` 中显式列出的、当前 schema
+可见、无必填参数且无副作用的工具；当前仅 `get_time`。其他无参工具（包括 `water_garden`）仍由
+普通探针或 Path C 决策。
 
 ---
 
@@ -470,9 +476,8 @@ fs_access:
 在同轮用户原始文本里命中 `_BYPASS_PHRASES` 常量表（`再读一遍` / `重新读` / `再看一次` /
 `重新看看`，不上 LLM 判断）就给本轮 `execute()` 传 `bypass_read_log=True`。`is_recently_read()`
 的 `bypass` 参数只影响"拦不拦"：命中时放行本次调用，但指纹仍照常 `record_read()` 刷新，
-不是关掉去重本身。三个调用点（`main.py` QQ 探针/快速路径、`admin/routers/chat.py`
-`owner_chat`、`core/pipeline.py::run_agentic_loop` Path C）各自从本轮用户原始文本探测一次，
-Path C 多步调用复用同一次探测结果。
+不是关掉去重本身。Path A 的 QQ/desktop/mobile 调用统一由 `route_pretool()` 从本轮用户原始文本
+探测一次；`core/pipeline.py::run_agentic_loop` 的 Path C 也从同一原始文本计算并在多步调用中复用。
 
 ### 花园工具
 
@@ -544,10 +549,11 @@ Path C 多步调用复用同一次探测结果。
 每个 `info` / `desktop` 类工具注册时需提供 `examples` 和 `keywords` 字段：
 
 - `examples`：2-4 条触发例句，拼入探针 prompt 供 LLM 判断
-- `keywords`：关键词列表，命中时走快速路径直接调工具，跳过 LLM
+- `keywords`：关键词提示，拼入探针 prompt 帮助模型判断；不自动获得快速执行权限
 
-**快速路径**（`_fast_path_match`，在 `main.py` 探针入口）：
-关键词命中 → 直接构造 tool_calls，不调 LLM 探针。
+**快速路径**（`core.pretool_router.fast_path_match()`）：只匹配
+`FAST_PATH_TOOL_ALLOWLIST` 的显式规则，且工具必须在本轮 schema 可见、无必填参数、无副作用。
+当前仅 `get_time`；QQ、desktop、mobile 共用同一实现。
 
 **严禁推断**规则保留不变：消息里有"现在""今天""热""冷"等词，但没有明确问天气或时间，不调工具。
 
@@ -590,7 +596,8 @@ Path C 多步调用复用同一次探测结果。
 | `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
 
 白名单 = `_EXECUTE_ALLOWED_ORIGINS = {"user_live", "assistant_loop", "assistant_loop_relay"}`。
-Path A 的 4 个调用方（`main.py` WAITING_CONFIRM / WAITING_INPUT / 探针结果 + `chat.py` `_probe_and_execute_tools`）均已显式传入 `origin="user_live"`。
+Path A 的 pending confirmation、missing input、快速路径和普通探针均由
+`core.pretool_router.route_pretool()` 收口，并显式传入 `origin="user_live"`；旧入口只保留兼容薄封装。
 
 ---
 

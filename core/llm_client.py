@@ -701,34 +701,76 @@ async def chat_stream(
         yield tail
 
 
-def parse_tool_call_response(response: str) -> list[dict] | None:
-    """
-    解析 LLM 返回值中的工具调用信息
+@dataclass(frozen=True)
+class ProbeParseResult:
+    """Strict, protocol-neutral result of decoding an isolated probe response."""
 
-    function_calling 模式：检测 __TOOL_CALL__: 前缀
-    xml_fallback 模式：检测 <tool_call> 标签
+    status: str
+    tool_calls: list[dict]
+    encoding: str | None
 
-    返回工具调用列表，无工具调用则返回 None
+
+def parse_probe_response(
+    response: object,
+    *,
+    allowed_tool_names: set[str] | frozenset[str] | None = None,
+) -> ProbeParseResult:
+    """Decode a function-calling sentinel or XML probe encoding fail-closed.
+
+    Probe output is control data, never chat content.  A malformed payload,
+    unknown tool, or non-object arguments invalidates the entire response so a
+    partially decoded call can never execute.
     """
+    if not isinstance(response, str) or not response.strip():
+        return ProbeParseResult("no_tool_selected", [], None)
+
+    raw_calls: object
+    encoding: str
     if response.startswith("__TOOL_CALL__:"):
+        encoding = "function_calling"
         try:
-            return json.loads(response[len("__TOOL_CALL__:"):])
+            raw_calls = json.loads(response[len("__TOOL_CALL__:"):])
         except json.JSONDecodeError:
-            return None
-
-    pattern = r"<tool_call>(.*?)</tool_call>"
-    matches = re.findall(pattern, response, re.DOTALL)
-    if matches:
-        tool_calls = []
-        for m in matches:
+            return ProbeParseResult("probe_parse_failed", [], encoding)
+    elif "<tool_call" in response or "</tool_call>" in response:
+        encoding = "xml"
+        matches = re.findall(r"<tool_call>(.*?)</tool_call>", response, re.DOTALL)
+        if not matches:
+            return ProbeParseResult("probe_parse_failed", [], encoding)
+        decoded: list[object] = []
+        for payload in matches:
             try:
-                data = json.loads(m.strip())
-                tool_calls.append(data)
+                decoded.append(json.loads(payload.strip()))
             except json.JSONDecodeError:
-                pass
-        return tool_calls if tool_calls else None
+                return ProbeParseResult("probe_parse_failed", [], encoding)
+        raw_calls = decoded
+    else:
+        # A probe is required to emit either an empty response or a supported
+        # control encoding.  Prose must not fall through into the chat path.
+        return ProbeParseResult("probe_parse_failed", [], None)
 
-    return None
+    if not isinstance(raw_calls, list) or not raw_calls:
+        return ProbeParseResult("probe_parse_failed", [], encoding)
+
+    calls: list[dict] = []
+    for item in raw_calls:
+        if not isinstance(item, dict):
+            return ProbeParseResult("probe_parse_failed", [], encoding)
+        name = item.get("name")
+        arguments = item.get("arguments", {})
+        if not isinstance(name, str) or not name or not isinstance(arguments, dict):
+            return ProbeParseResult("arguments_invalid", [], encoding)
+        if allowed_tool_names is not None and name not in allowed_tool_names:
+            return ProbeParseResult("tool_unknown", [], encoding)
+        calls.append({"name": name, "arguments": arguments})
+
+    return ProbeParseResult("tool_selected", calls, encoding)
+
+
+def parse_tool_call_response(response: str) -> list[dict] | None:
+    """Compatibility wrapper for callers that do not supply an exposure set."""
+    parsed = parse_probe_response(response)
+    return parsed.tool_calls or None
 
 
 def _build_xml_tool_desc(tools: list[dict]) -> str:

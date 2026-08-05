@@ -50,11 +50,14 @@ def _patch_handle_message_dependencies(monkeypatch, pipeline, execute_result):
             "parameters": {"type": "object", "properties": {}},
             "category": "info",
             "dangerous": False,
+            "description": "",
         },
     })
     monkeypatch.setattr(tool_dispatcher, "tool_loop_active", lambda uid: True)
-    execute = AsyncMock(return_value=(execute_result, None))
-    monkeypatch.setattr(tool_dispatcher, "execute", execute)
+    monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
+    status = "tool_executed" if execute_result == _SUCCESS_RESULT else "tool_failed"
+    execute = AsyncMock(return_value=tool_dispatcher.ToolExecutionOutcome(status, execute_result))
+    monkeypatch.setattr(tool_dispatcher, "execute_structured", execute)
     monkeypatch.setattr(response_processor, "process", lambda reply, name: [reply])
     monkeypatch.setattr(response_processor, "process_memory_copy", lambda reply, name: [reply])
     monkeypatch.setattr(main, "_pipeline", pipeline)
@@ -66,7 +69,7 @@ def _patch_handle_message_dependencies(monkeypatch, pipeline, execute_result):
 async def test_successful_fast_path_excludes_get_time_from_native_loop(monkeypatch, caplog):
     import main
 
-    caplog.set_level(logging.INFO, logger=main.__name__)
+    caplog.set_level(logging.INFO)
     pipeline = _make_pipeline()
     execute = _patch_handle_message_dependencies(monkeypatch, pipeline, _SUCCESS_RESULT)
 

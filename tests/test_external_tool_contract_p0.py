@@ -13,7 +13,7 @@ def _patch_loop(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", lambda: {
         "tool_loop": {"max_steps": 3, "total_timeout_s": 30, "categories": ["info"]},
     })
-    monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None: [
+    monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None, **kwargs: [
         {"type": "function", "function": {"name": "p0_tool", "description": "", "parameters": {}}},
     ])
     monkeypatch.setattr("core.character_name_provider.get_char_name", lambda char_id=None: "小星")
@@ -89,21 +89,28 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
 
     monkeypatch.setattr(user_profile, "load", _profile_load)
     monkeypatch.setattr(short_term, "load", _history_load)
-    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: [])
+    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: [
+        {"type": "function", "function": {"name": "p0_tool", "description": "", "parameters": {}}},
+    ])
+    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
+    monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr(tool_dispatcher, "get_probe_prompt", _probe_prompt)
     monkeypatch.setattr(llm_client, "chat", _chat)
-    monkeypatch.setattr(llm_client, "parse_tool_call_response", lambda response: [])
-
-    assert await chat._probe_and_execute_tools(
+    result = await chat._probe_and_execute_tools(
         "你好",
         "u1",
         char_id="frozen_char",
         provenance_channel="desktop",
-    ) is None
+    )
+    assert result.execution_status == "no_tool_selected"
     assert profile_calls == [{"char_id": "frozen_char"}]
     assert history_calls == [{"char_id": "frozen_char"}]
     assert probe_prompt_calls
     assert all(
-        call == {"location": "杭州", "categories": ["info", "desktop"]}
+        call == {
+            "location": "杭州",
+            "categories": ["info", "desktop"],
+            "allowed_tool_names": {"p0_tool"},
+        }
         for call in probe_prompt_calls
     )

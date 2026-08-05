@@ -15,6 +15,7 @@ import logging
 import platform
 import re
 import subprocess
+from dataclasses import dataclass
 from typing import Callable
 
 from core.config_loader import get_config
@@ -1277,8 +1278,8 @@ def get_tools_schema(
             "type": "function",
             "function": {
                 "name": name,
-                "description": info["description"].replace("{char}", char_name),
-                "parameters": info["parameters"],
+                "description": str(info.get("description") or "").replace("{char}", char_name),
+                "parameters": info.get("parameters") or {"type": "object", "properties": {}},
             },
         })
     if char_id is not None:
@@ -1368,7 +1369,13 @@ def format_tool_capability_note(categories: list[str] | None = None) -> str:
     return "可用工具：" + "、".join(names)
 
 
-def _build_probe_prompt(categories, *, location: str | None = None, relay: bool = False) -> str:
+def _build_probe_prompt(
+    categories,
+    *,
+    location: str | None = None,
+    relay: bool = False,
+    allowed_tool_names: set[str] | frozenset[str] | None = None,
+) -> str:
     """探针类 prompt 的共享构建逻辑。
 
     被 get_probe_prompt()（Path A，默认 info/desktop）与
@@ -1396,6 +1403,8 @@ def _build_probe_prompt(categories, *, location: str | None = None, relay: bool 
     )
     char_name = get_active_char_name()
     for name, spec in _TOOL_REGISTRY.items():
+        if allowed_tool_names is not None and name not in allowed_tool_names:
+            continue
         if spec.get("category") not in categories:
             continue
         examples = spec.get("examples", [])
@@ -1410,12 +1419,21 @@ def get_probe_prompt(
     location: str,
     *,
     categories: tuple[str, ...] | list[str] = ("info", "desktop"),
+    allowed_tool_names: set[str] | frozenset[str] | None = None,
 ) -> str:
     """动态从注册表构建探针 prompt，默认保持 desktop 的 info/desktop 暴露面。"""
-    return _build_probe_prompt(categories, location=location)
+    return _build_probe_prompt(
+        categories,
+        location=location,
+        allowed_tool_names=allowed_tool_names,
+    )
 
 
-def get_tool_loop_relay_prompt(categories: list[str]) -> str:
+def get_tool_loop_relay_prompt(
+    categories: list[str],
+    *,
+    allowed_tool_names: set[str] | frozenset[str] | None = None,
+) -> str:
     """Brief 120·工具循环二次调用兜底专用 prompt。
 
     解析模型自己在自然语言回复末尾用 ``{true: 意图}`` 标注过的干净意图文本，判断对应
@@ -1423,7 +1441,11 @@ def get_tool_loop_relay_prompt(categories: list[str]) -> str:
     tool_loop.categories（含 mcp），而不是探针默认的 info/desktop 两类——否则钓鱼/
     海龟汤这类 mcp 工具还是够不着。
     """
-    return _build_probe_prompt(categories, relay=True)
+    return _build_probe_prompt(
+        categories,
+        relay=True,
+        allowed_tool_names=allowed_tool_names,
+    )
 
 
 _TAIL_BRACE_RE = re.compile(r"\{\s*(true|false)\s*[:：]?", re.IGNORECASE)
@@ -1549,7 +1571,82 @@ def _mcp_server_reported_error(e: Exception) -> str | None:
     return None
 
 
-async def execute(
+@dataclass(frozen=True)
+class ToolExecutionOutcome:
+    """Structured execution result used by the pre-tool routing contract."""
+
+    status: str
+    result: str | None = None
+    confirmation_request: str | None = None
+    missing_parameters: tuple[str, ...] = ()
+
+
+def _execution_outcome(
+    status: str,
+    result: str | None = None,
+    confirmation_request: str | None = None,
+    *,
+    missing_parameters: list[str] | tuple[str, ...] = (),
+) -> ToolExecutionOutcome:
+    return ToolExecutionOutcome(
+        status=status,
+        result=result,
+        confirmation_request=confirmation_request,
+        missing_parameters=tuple(missing_parameters),
+    )
+
+
+def _schema_value_matches(value, expected: object) -> bool:
+    if isinstance(expected, list):
+        return any(_schema_value_matches(value, item) for item in expected)
+    return {
+        "object": isinstance(value, dict),
+        "array": isinstance(value, list),
+        "string": isinstance(value, str),
+        "integer": isinstance(value, int) and not isinstance(value, bool),
+        "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+        "boolean": isinstance(value, bool),
+        "null": value is None,
+    }.get(expected, True)
+
+
+def _schema_errors(value, schema: object, path: str = "arguments") -> list[str]:
+    """Validate the JSON Schema subset used by built-in and MCP tools."""
+    if not isinstance(schema, dict):
+        return []
+    expected = schema.get("type")
+    if expected is not None and not _schema_value_matches(value, expected):
+        return [f"{path} 类型不符合 schema"]
+    if "enum" in schema and value not in schema.get("enum", []):
+        return [f"{path} 不在允许值中"]
+    alternatives = schema.get("anyOf") or schema.get("oneOf")
+    if isinstance(alternatives, list) and alternatives:
+        if not any(not _schema_errors(value, candidate, path) for candidate in alternatives):
+            return [f"{path} 不符合任一允许结构"]
+    if isinstance(value, dict):
+        required = schema.get("required") or []
+        missing = [key for key in required if isinstance(key, str) and key not in value]
+        if missing:
+            return [f"{path} 缺少 {missing[0]}"]
+        properties = schema.get("properties") or {}
+        if schema.get("additionalProperties") is False:
+            unknown = [key for key in value if key not in properties]
+            if unknown:
+                return [f"{path}.{unknown[0]} 未在 schema 中声明"]
+        for key, child_schema in properties.items():
+            if key in value:
+                errors = _schema_errors(value[key], child_schema, f"{path}.{key}")
+                if errors:
+                    return errors
+    if isinstance(value, list) and "items" in schema:
+        for index, item in enumerate(value):
+            errors = _schema_errors(item, schema["items"], f"{path}[{index}]")
+            if errors:
+                return errors
+    return []
+
+
+async def _execute_structured_impl(
     tool_name: str,
     tool_args: dict,
     user_id: str,
@@ -1561,7 +1658,7 @@ async def execute(
     char_id: str,
     bypass_read_log: bool = False,
     tool_status_observer=None,
-) -> tuple[str | None, str | None]:
+) -> ToolExecutionOutcome:
     """
     执行工具，返回 (tool_result, ask_confirm_text)
 
@@ -1586,7 +1683,7 @@ async def execute(
             origin, tool_name,
         )
         # 闸门拒绝不落痕迹——这不是角色做过的事（Brief 27 · 2.2）。
-        return None, None
+        return _execution_outcome("tool_failed")
 
     # Brief 27：工具动作痕迹层，execute() 每条 return 前落一条精简痕迹（origin 闸门拒绝除外）。
     def _trace(status: str, digest_source=None) -> None:
@@ -1628,21 +1725,21 @@ async def execute(
     if tool_name not in _TOOL_REGISTRY:
         _fail = get_tool_fail_response()
         _trace("failed", _fail)
-        return _fail, None
+        return _execution_outcome("tool_unknown", _fail)
 
     tool_info = _TOOL_REGISTRY[tool_name]
     if tool_info.get("self_management"):
         if origin not in {"assistant_self_management", "autonomy_self_management"}:
             _trace("failed", "self-management origin rejected")
-            return "This management action is unavailable in this context.", None
+            return _execution_outcome("tool_failed", "This management action is unavailable in this context.")
     else:
         if origin in {"assistant_self_management", "autonomy_self_management"}:
             _trace("failed", "self-management origin may not execute a business tool")
-            return "This management origin may only change self capability.", None
+            return _execution_outcome("tool_failed", "This management origin may only change self capability.")
         from core.self_management.policy import tool_allowed
         if not tool_allowed(user_id, char_id, tool_name):
             _trace("failed", "self capability disabled")
-            return "This capability is currently unavailable for this character.", None
+            return _execution_outcome("tool_failed", "This capability is currently unavailable for this character.")
 
     # Brief 61 defensive gate. A blocked hallucinated MCP call is not an action,
     # so it deliberately leaves no action_trace record and reveals no level data.
@@ -1650,24 +1747,24 @@ async def execute(
         from core.growth.mcp_proficiency import NEUTRAL_REFUSAL, is_tool_allowed
         if not is_tool_allowed(tool_name, char_id=char_id):
             logger.warning("[tool_dispatcher] MCP proficiency gate denied tool=%s char_id=%s", tool_name, char_id)
-            return NEUTRAL_REFUSAL, None
+            return _execution_outcome("tool_failed", NEUTRAL_REFUSAL)
 
     gate_msg = _mode_gate(tool_name)
     if gate_msg is not None:
         _trace("failed", gate_msg)
-        return gate_msg, None
+        return _execution_outcome("tool_failed", gate_msg)
 
     if not _is_tool_enabled(tool_name):
         _fail = get_tool_fail_response()
         _trace("failed", _fail)
-        return _fail, None
+        return _execution_outcome("tool_failed", _fail)
 
     # Keep the prelude truthful: an observer is not told the tool is queued
     # until its basic local argument shape has been checked as well.
     if not isinstance(tool_args, dict):
         _msg = "工具参数格式不正确"
         _trace("failed", _msg)
-        return _msg, None
+        return _execution_outcome("arguments_invalid", _msg)
     _schema = tool_info.get("parameters") or {}
     _required = _schema.get("required") if isinstance(_schema, dict) else None
     if isinstance(_required, list):
@@ -1675,7 +1772,13 @@ async def execute(
         if _missing:
             _msg = f"工具参数不完整：缺少{_missing[0]}"
             _trace("failed", _msg)
-            return _msg, None
+            return _execution_outcome("missing_parameters", _msg, missing_parameters=_missing)
+
+    _schema_validation_errors = _schema_errors(tool_args, _schema)
+    if _schema_validation_errors:
+        _msg = f"工具参数格式不正确：{_schema_validation_errors[0]}"
+        _trace("failed", _msg)
+        return _execution_outcome("arguments_invalid", _msg)
 
     # 权限校验
     if tool_name in _OWNER_ONLY_HARDWARE_TOOLS:
@@ -1687,13 +1790,13 @@ async def execute(
             )
             _msg = "硬件控制只允许 owner 私聊触发"
             _trace("failed", _msg)
-            return _msg, None
+            return _execution_outcome("tool_failed", _msg)
 
     if tool_name in ("device_shutdown", "device_sleep"):
         if not user_relation.has_permission(user_id, "agent_control"):
             _msg = "你没有执行此操作的权限哦"
             _trace("failed", _msg)
-            return _msg, None
+            return _execution_outcome("tool_failed", _msg)
 
     # 高危工具确认机制
     # emergency MCP actions deliberately bypass the existing confirmation
@@ -1704,7 +1807,7 @@ async def execute(
             _trace("pending_confirm", _ask)
             session_state.set_waiting_confirm(tool_name, tool_args)
             await _notify_status("pending_confirmation")
-            return None, _ask
+            return _execution_outcome("confirmation_required", confirmation_request=_ask)
 
     # ── persist 工具：指纹去重检查 ────────────────────────────────────────────
     _is_persist = bool(tool_info.get("persist", False))
@@ -1720,7 +1823,7 @@ async def execute(
                 )
                 _skip = "（刚读过这个，这次跳过）"
                 _trace("ok", _skip)
-                return _skip, None
+                return _execution_outcome("tool_executed", _skip)
         except Exception as _fp_err:
             logger.debug("[tool_dispatcher] fingerprint check error: %s", _fp_err)
 
@@ -1790,14 +1893,14 @@ async def execute(
 
         _trace("ok", safe_summary)
         await _notify_status("finished")
-        return f"工具已执行：{tool_name}，结果：{safe_summary}", None
+        return _execution_outcome("tool_executed", f"工具已执行：{tool_name}，结果：{safe_summary}")
     except TypeError as e:
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)
         fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
         _trace("failed", fallback)
         await _notify_status("failed")
-        return fallback, None
+        return _execution_outcome("tool_failed", fallback)
     except Exception as e:
         from core.mcp_client import McpOutcomeUnknown
         if isinstance(e, McpOutcomeUnknown):
@@ -1805,7 +1908,7 @@ async def execute(
             logger.warning("[tool_dispatcher.execute] MCP 动作结果不明: tool=%s", tool_name)
             _trace("outcome_unknown", result_text)
             await _notify_status("outcome_unknown")
-            return result_text, None
+            return _execution_outcome("tool_failed", result_text)
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)
         server_reason = _mcp_server_reported_error(e)
@@ -1816,11 +1919,57 @@ async def execute(
             result_text = f"工具调用未成功：{server_reason}"
             _trace("failed", result_text)
             await _notify_status("failed")
-            return result_text, None
+            return _execution_outcome("tool_failed", result_text)
         fallback = _TOOL_FALLBACKS.get(tool_name, "工具暂时不可用")
         _trace("failed", fallback)
         await _notify_status("failed")
-        return fallback, None
+        return _execution_outcome("tool_failed", fallback)
+
+
+async def execute_structured(
+    tool_name: str,
+    tool_args: dict,
+    user_id: str,
+    target_id: str,
+    is_group: bool,
+    session_state,
+    *,
+    origin: str,
+    char_id: str,
+    bypass_read_log: bool = False,
+    tool_status_observer=None,
+) -> ToolExecutionOutcome:
+    return await _execute_structured_impl(
+        tool_name, tool_args, user_id, target_id, is_group, session_state,
+        origin=origin,
+        char_id=char_id,
+        bypass_read_log=bypass_read_log,
+        tool_status_observer=tool_status_observer,
+    )
+
+
+async def execute(
+    tool_name: str,
+    tool_args: dict,
+    user_id: str,
+    target_id: str,
+    is_group: bool,
+    session_state,
+    *,
+    origin: str,
+    char_id: str,
+    bypass_read_log: bool = False,
+    tool_status_observer=None,
+) -> tuple[str | None, str | None]:
+    """Compatibility tuple API; new routing code should use execute_structured()."""
+    outcome = await execute_structured(
+        tool_name, tool_args, user_id, target_id, is_group, session_state,
+        origin=origin,
+        char_id=char_id,
+        bypass_read_log=bypass_read_log,
+        tool_status_observer=tool_status_observer,
+    )
+    return outcome.result, outcome.confirmation_request
 
 
 def _build_confirm_ask(tool_name: str, tool_args: dict) -> str:

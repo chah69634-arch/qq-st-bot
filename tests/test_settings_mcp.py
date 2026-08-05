@@ -153,7 +153,7 @@ def test_reimport_preserves_explicit_policy_and_fills_new_tool_default(tmp_path,
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
     assert stored["tool_policy"] == {
         "toy_status": {"effect": "read"},
-        "send_message": {"effect": "write"},
+        "send_message": {"effect": "write", "require_confirm": False},
     }
 
 
@@ -204,11 +204,11 @@ def test_strict_import_fills_default_policy_for_each_allowlisted_tool(tmp_path, 
     assert result["server"]["tool_states"][0]["policy_status"] == "confirmed"
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert stored["mcp_servers"]["servers"][0]["tool_policy"] == {
-        "toy_status": {"effect": "read"},
+        "toy_status": {"effect": "read", "require_confirm": False},
     }
 
 
-def test_strict_import_defaults_unknown_tool_to_confirmed_write_with_confirmation(tmp_path, monkeypatch):
+def test_strict_import_defaults_unknown_tool_to_direct_write(tmp_path, monkeypatch):
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -231,7 +231,7 @@ def test_strict_import_defaults_unknown_tool_to_confirmed_write_with_confirmatio
     assert result["server"]["tool_states"][0]["policy_status"] == "confirmed"
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert stored["mcp_servers"]["servers"][0]["tool_policy"] == {
-        "request_access": {"effect": "write", "require_confirm": True},
+        "request_access": {"effect": "write", "require_confirm": False},
     }
 
 
@@ -351,7 +351,7 @@ def test_strict_policy_whitelist_update_preserves_confirmed_entries_and_fills_ne
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert stored["mcp_servers"]["servers"][0]["tool_policy"] == {
         "toy_status": {"effect": "read"},
-        "delete_thread": {"effect": "write"},
+        "delete_thread": {"effect": "write", "require_confirm": False},
     }
 
 
@@ -389,7 +389,7 @@ def test_bulk_default_authorization_uses_runtime_snapshot_and_preserves_explicit
     assert result["allow_tools"] == ["toy_status", "opaque_action"]
     assert result["tool_policy"] == {
         "toy_status": {"effect": "actuate", "require_confirm": True},
-        "opaque_action": {"effect": "write", "require_confirm": True},
+        "opaque_action": {"effect": "write", "require_confirm": False},
     }
     assert calls == ["cedar_toy"]
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
