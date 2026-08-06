@@ -294,10 +294,25 @@ async function loadAuthTokens() {
     _atWhoamiLabel = whoami.label;
     _atProfiles = profilesResp.profiles || {};
     document.getElementById('at-whoami').textContent = `当前身份: ${whoami.label}`;
+    _renderAuthCapabilitySummary(whoami);
     _renderAuthTokensTable(tokensResp.tokens || []);
   } catch (e) {
     body.innerHTML = `<div class="empty">加载失败: ${_atErrMsg(e)}</div>`;
   }
+}
+
+function _renderAuthCapabilitySummary(whoami) {
+  const el = document.getElementById('at-capability-summary');
+  if (!el) return;
+  const scopes = [...new Set(whoami.scopes || [])].sort();
+  const profile = Object.entries(_atProfiles).find(([, values]) =>
+    values.length === scopes.length && values.every(scope => scopes.includes(scope))
+  )?.[0] || 'custom scopes';
+  el.innerHTML = `<div class="admin-field-grid admin-field-grid-single">
+    <div><div class="admin-source-hint">当前身份</div><strong>${escapeHtml(whoami.label || 'unknown')}</strong></div>
+    <div><div class="admin-source-hint">Profile</div><strong>${escapeHtml(profile)}</strong></div>
+    <div><div class="admin-source-hint">Scopes</div><div class="admin-scope-list">${scopes.length ? scopes.map(scope => `<span class="badge badge-accent">${escapeHtml(scope)}</span>`).join(' ') : '无 scope'}</div></div>
+  </div>`;
 }
 
 function _renderAuthTokensTable(tokens) {

@@ -135,6 +135,13 @@ h1.page-title { font-size: 20px; margin-bottom: 20px; }
 }
 .admin-toolbar > *,
 .admin-card-actions > * { min-width: 0; }
+.admin-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.admin-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-field-grid-single { grid-template-columns: minmax(0, 560px); }
+.admin-action-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.admin-result-panel { min-width: 0; color: var(--text); line-height: 1.6; }
+.admin-source-hint { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 4px 0 0; }
+.admin-scope-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 
 /* ── Stat row ── */
 .stat-row {
@@ -405,6 +412,9 @@ textarea { resize: vertical; min-height: 72px; }
   .card { padding: 16px; }
   .card-header { align-items: flex-start; }
   .card-header h3 { flex: 1 1 180px; min-width: 0; }
+  .admin-card-header > :first-child { flex: 1 1 180px; min-width: 0; }
+  .admin-field-grid,
+  .admin-field-grid-single { grid-template-columns: 1fr; }
   .admin-toolbar,
   .admin-card-actions,
   .search-row { width: 100%; }

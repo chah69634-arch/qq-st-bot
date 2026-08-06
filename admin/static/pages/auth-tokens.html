@@ -3,6 +3,17 @@
         <span id="at-whoami" class="admin-inline-072"></span>
       </h1>
 
+      <div class="card admin-capability-card" id="at-capability-card">
+        <div class="admin-card-header">
+          <div>
+            <h3>当前身份与权限</h3>
+            <p class="admin-source-hint">只读信息，来源于当前登录 token；不会显示 token 明文。</p>
+          </div>
+          <span class="badge badge-accent">只读</span>
+        </div>
+        <div id="at-capability-summary" class="admin-result-panel"><div class="loading">加载中…</div></div>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <h3>通道开关</h3>
@@ -18,7 +29,7 @@
       <div class="card">
         <div class="card-header">
           <h3>Token 列表</h3>
-          <div class="admin-inline-037">
+          <div class="admin-action-group admin-inline-037">
             <button class="btn btn-ghost btn-sm" data-action="loadAuthTokens">刷新</button>
             <button class="btn btn-primary btn-sm" data-action="openCreateTokenModal">Create</button>
           </div>
