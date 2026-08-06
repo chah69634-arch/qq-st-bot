@@ -47,9 +47,9 @@ function renderUsers(list) {
   if (!list.length) { el.innerHTML = '<div class="empty">没有找到用户记录</div>'; return; }
 
   const rows = list.map(uid => `
-    <tr style="cursor:pointer" onclick="toggleUserRelPanel('${uid}')">
+    <tr>
       <td><code style="font-family:var(--mono);font-size:13px">${uid}</code>
-        <span style="font-size:11px;color:var(--muted);margin-left:6px">点击展开关系配置</span>
+        <button class="btn btn-ghost btn-sm user-rel-toggle" onclick="toggleUserRelPanel('${uid}')">关系配置</button>
       </td>
       <td>
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openMemModal('${uid}')">查看记忆</button>
@@ -59,7 +59,7 @@ function renderUsers(list) {
       <td colspan="2" style="padding:0">
         <div style="padding:14px 20px 16px;background:rgba(0,0,0,.2);border-top:1px solid var(--border)">
           <div style="font-size:12px;color:var(--muted);margin-bottom:10px">关系配置：${uid}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:560px">
+          <div class="user-rel-fields">
             <label class="field">
               <span>角色 (role)</span>
               <select id="ri-role-${uid}">
@@ -76,7 +76,7 @@ function renderUsers(list) {
               <input type="text" id="ri-nickname-${uid}" placeholder="留空则无">
             </label>
           </div>
-          <div style="margin-top:10px;max-width:560px">
+          <div class="user-rel-extra">
             <label class="field">
               <span>额外提示词 (extra_prompt)</span>
               <textarea id="ri-extra-${uid}" style="min-height:56px"

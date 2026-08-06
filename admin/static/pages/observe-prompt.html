@@ -7,7 +7,7 @@
           <h3>层级开关（消融测试）</h3>
           <span class="admin-inline-082">只过滤注入，不短路检索；保存后下一轮对话起作用</span>
         </div>
-        <div class="admin-inline-051">
+        <div class="admin-card-actions admin-inline-051">
           <button class="btn btn-ghost btn-sm" data-action="loadPromptAblation">刷新</button>
           <button class="btn btn-primary btn-sm" data-action="savePromptAblation">保存</button>
         </div>
@@ -19,7 +19,7 @@
           <h3>生成后段落兜底（实验）</h3>
           <span class="admin-inline-082">只改发送副本，不写回短期记忆；默认关闭</span>
         </div>
-        <div class="admin-inline-018">
+        <div class="admin-card-actions admin-inline-018">
           <label class="admin-inline-027">
             <input type="checkbox" id="obs-segment-enforce-enabled">
             <span class="admin-inline-080">长篇单段回复按句末标点补一个空行</span>
@@ -32,7 +32,7 @@
         </div>
       </div>
 
-      <div class="admin-inline-048">
+      <div class="admin-toolbar admin-inline-048">
         <input type="text" id="obs-prompt-uid" placeholder="uid (QQ号)" class="admin-inline-200">
         <select id="obs-prompt-n" class="admin-inline-180">
           <option value="0">最新轮</option>
@@ -74,7 +74,7 @@
       <!-- 召回溯源 -->
       <div class="card admin-inline-139" id="obs-recall-card">
         <div class="card-header"><h3>召回溯源</h3><span class="admin-inline-082">recall_trace · episodic/event_log/lore/semantic(X2)/web_recall(X3)</span></div>
-        <div class="admin-inline-046">
+        <div class="admin-toolbar admin-inline-046">
           <input type="date" id="obs-recall-date" class="admin-inline-180">
           <input type="number" id="obs-recall-n" value="5" min="1" class="admin-inline-209">
           <button class="btn btn-ghost btn-sm" data-action="loadObserveRecallTrace">查看（复用上方 uid）</button>
