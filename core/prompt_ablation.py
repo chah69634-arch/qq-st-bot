@@ -12,7 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-ALWAYS_ON = {"1_system_prompt", "12_user_message"}  # 不可消融
+ALWAYS_ON = {"1_system_prompt", "11_tool_grounding", "12_user_message"}  # 不可消融
 
 # 进程内缓存 + 文件 mtime 失效检查
 _cache: dict | None = None

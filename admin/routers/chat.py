@@ -135,12 +135,20 @@ async def run_owner_chat_turn(
                 or pretool_result.direct_response
             )
             _fast_path_exclude_tools = pretool_result.exclude_tools
+            _tool_result_status = pretool_result.execution_status if pretool_result.tool_results else None
+            _tool_result_generated_at = pretool_result.tool_result_generated_at
+            _tool_call_required = pretool_result.must_call_tool
+            _required_tool_names = pretool_result.required_tool_names
         else:
             # Compatibility for tests and older local extensions that patch the
             # former helper to return only a prompt tool-result string.
             tool_result_text = pretool_result
             _pretool_direct_reply = None
             _fast_path_exclude_tools = set()
+            _tool_result_status = None
+            _tool_result_generated_at = None
+            _tool_call_required = False
+            _required_tool_names = set()
         try:
             from core.observe.prompt_capture import set_capture_origin as _set_capture_origin
             _set_capture_origin({"origin": provenance_channel})
@@ -176,6 +184,10 @@ async def run_owner_chat_turn(
                 message,
                 context,
                 tool_result=tool_result_text,
+                tool_result_status=_tool_result_status,
+                tool_result_generated_at=_tool_result_generated_at,
+                tool_call_required=_tool_call_required,
+                required_tool_names=_required_tool_names,
                 channel=provenance_channel,
                 char_id=_frozen_scope.character_id,
             )
@@ -203,6 +215,8 @@ async def run_owner_chat_turn(
                     session_state=_loop_session_state, is_group=False, stream=True,
                     tool_event_observer=_tool_status_observer,
                     exclude_tools=_fast_path_exclude_tools,
+                    tool_call_required=_tool_call_required,
+                    required_tool_names=_required_tool_names,
                 )
             else:
                 _stream_source = pipeline.run_llm_stream(
@@ -238,6 +252,8 @@ async def run_owner_chat_turn(
                     session_state=_loop_session_state, is_group=False,
                     tool_event_observer=_tool_status_observer,
                     exclude_tools=_fast_path_exclude_tools,
+                    tool_call_required=_tool_call_required,
+                    required_tool_names=_required_tool_names,
                 )
             else:
                 reply = await pipeline.run_llm(messages)

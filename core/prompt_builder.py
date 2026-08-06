@@ -428,6 +428,10 @@ def build(
     coplay_context_text: str = "",
     coplay_residue_text: str = "",
     coplay_recall_text: str = "",
+    tool_result_status: str | None = None,
+    tool_result_generated_at: float | None = None,
+    tool_call_required: bool = False,
+    required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
 ) -> tuple[list[dict], dict]:
     """
     组装完整的 prompt 消息列表
@@ -1341,6 +1345,11 @@ def build(
     if tool_result:
         from core.tools.tool_result import to_tool_result, frame_tool_result
         _tr = to_tool_result(tool_result)
+        _result_validity = (
+            "current_turn" if tool_result_status in (None, "tool_executed")
+            else "outcome_unknown" if tool_result_status == "outcome_unknown"
+            else "execution_failed"
+        )
         logger.debug(
             "[tool_result_raw] raw_len=%d safe_len=%d",
             len(_tr.raw_data),
@@ -1348,9 +1357,27 @@ def build(
         )
         messages.append({
             "role": "system",
-            "content": frame_tool_result(_tr.safe_summary, char_name=character.name),
+            "content": frame_tool_result(
+                _tr.safe_summary,
+                char_name=character.name,
+                generated_at=tool_result_generated_at,
+                validity=_result_validity,
+            ),
             "_layer": "10_tool_result",
         })
+
+    from core.tool_grounding import grounding_message as _grounding_message
+    _grounding = _grounding_message(
+        required=tool_call_required,
+        tool_names=required_tool_names,
+        result_validity=(
+            "current_turn" if tool_result_status in (None, "tool_executed") and tool_result
+            else "execution_failed" if tool_result_status and tool_result_status != "tool_executed"
+            else "none"
+        ),
+    )
+    if _grounding:
+        messages.append(_grounding)
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 10.5：工具动作痕迹（Brief 27 · action_trace）——跨轮"你最近做过的操作"
@@ -1489,7 +1516,7 @@ def build(
         "【词级强调】每条回复在情绪或语义焦点处用一次 <hl>词</hl>（重音）；"
         "需要时再用 <big>词</big>（放大）/ <sm>词</sm>（缩小）。每条 1–3 处，自然不堆砌。"
     )
-    if tool_result:
+    if tool_result and (tool_result_status in (None, "tool_executed")):
         author_note_lines.append(
             "【工具结果已提供】"
             "本轮层10已注入工具执行结果，直接依据该结果回答；"
@@ -1838,6 +1865,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("9.5_episodic_top", "最相关情景记忆置顶一条"),
     ("10_tool_result", "本轮工具执行结果"),
     ("10.5_action_trace", "工具动作痕迹：你最近做过的操作（跨轮回忆，不进裁剪链）"),
+    ("11_tool_grounding", "本轮明确工具意图的事实闸（不可消融）"),
     ("anti_collapse_hint", "反坍缩提示：长度/分段维度合并，各自持久化倒计时 hint_rounds 轮"),
     ("stream_collapse_hint", "流式路径反坍缩软降级提示（ACT-2）：上一轮命中一次性信号，读到即消费清除"),
     ("11_author_note", "Author's Note 人设核心提醒"),

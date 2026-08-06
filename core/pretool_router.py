@@ -5,6 +5,8 @@ from __future__ import annotations
 import inspect
 import logging
 import re
+import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable
 
@@ -23,6 +25,8 @@ class RoutedToolResult:
     status: str
     result: str | None = None
     arguments: dict = field(default_factory=dict)
+    generated_at: float = field(default_factory=time.time)
+    validity: str = "current_turn"
 
 
 @dataclass
@@ -47,6 +51,14 @@ class PreToolRouteResult:
     probe_response_raw: str = ""
     probe_system: str = ""
     probe_context: str = ""
+    turn_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    must_call_tool: bool = False
+    required_tool_names: set[str] = field(default_factory=set)
+    tool_result_generated_at: float | None = None
+
+    @property
+    def has_successful_tool_call(self) -> bool:
+        return any(item.status == "tool_executed" for item in self.tool_results)
 
     @property
     def should_stop_for_user_input(self) -> bool:
@@ -86,6 +98,8 @@ class PreToolRouteResult:
                 {
                     "name": item.name,
                     "status": item.status,
+                    "generated_at": item.generated_at,
+                    "validity": item.validity,
                     "result_preview": (item.result or "")[:_OBS_TEXT_LIMIT],
                 }
                 for item in self.tool_results
@@ -110,6 +124,20 @@ def fast_path_match(
             if keyword and keyword in user_text:
                 return name, keyword
     return None
+
+
+def _required_tool_matches(
+    user_text: str,
+) -> set[str]:
+    """Find explicit registry keyword intents without executing side effects."""
+    matches: set[str] = set()
+    for name, spec in tool_dispatcher._TOOL_REGISTRY.items():
+        keywords = spec.get("keywords") or []
+        if any(keyword and keyword in user_text for keyword in keywords):
+            # Keep the intent even when exposure filtered this tool out.  The
+            # output guard must still prevent a false completion claim.
+            matches.add(name)
+    return matches
 
 
 def _probe_reference_block(uid: str, char_id: str) -> str:
@@ -201,12 +229,19 @@ async def _execute_selected(
     )
     result.selected_tool = name
     result.execution_status = outcome.status
+    result.tool_result_generated_at = time.time()
     result.tool_results.append(
         RoutedToolResult(
             name=name,
             status=outcome.status,
             result=outcome.result,
             arguments=dict(arguments),
+            generated_at=result.tool_result_generated_at,
+            validity=(
+                "current_turn" if outcome.status == "tool_executed"
+                else "outcome_unknown" if outcome.status == "outcome_unknown"
+                else "execution_failed"
+            ),
         )
     )
     if outcome.status == "confirmation_required":
@@ -259,6 +294,8 @@ async def route_pretool(
     result = PreToolRouteResult(
         route="no_tool", channel=effective_channel, tools_available=available,
     )
+    result.required_tool_names = _required_tool_matches(trusted_user_text)
+    result.must_call_tool = bool(result.required_tool_names)
 
     # Pending input is part of the same channel-neutral contract.  Clear the
     # old state before re-execution so execute() can establish a new confirm or

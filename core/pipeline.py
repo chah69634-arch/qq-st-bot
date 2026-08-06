@@ -8,6 +8,7 @@ Pipeline 实例持有角色卡和世界书引擎的引用，在 main.py 中初�
 import asyncio
 import json
 import logging
+import time
 import uuid
 
 from core.llm_output_validator import record_failure, reset
@@ -639,6 +640,10 @@ class Pipeline:
         channel: str | None = None,
         char_id: "str | None" = None,
         consume_pending_perception: bool = True,
+        tool_result_status: str | None = None,
+        tool_result_generated_at: float | None = None,
+        tool_call_required: bool = False,
+        required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
     ) -> tuple[list[dict], dict]:
         """
         调用 prompt_builder 组装完整消息列表。
@@ -716,6 +721,10 @@ class Pipeline:
             web_recall_result=context.get("web_recall_result", ""),
             web_recall_hits=context.get("web_recall_hits", []),
             action_trace_entries=context.get("action_trace_entries", []),
+            tool_result_status=tool_result_status,
+            tool_result_generated_at=tool_result_generated_at,
+            tool_call_required=tool_call_required,
+            required_tool_names=required_tool_names,
         )
         if _char_id == self._active_character_id:
             self.author_note_extra = ""
@@ -750,7 +759,9 @@ class Pipeline:
             return await llm_client.chat(messages, char_id=char_id, is_proactive=is_proactive)
 
         reply = await _call()
-        return await self._anti_collapse_prefix_retry(messages, reply)
+        reply = await self._anti_collapse_prefix_retry(messages, reply)
+        from core.tool_grounding import guard_completion_claim
+        return guard_completion_claim(reply, messages)
 
     @staticmethod
     def _homogeneity_hist_for_check(messages: list[dict]) -> list[dict]:
@@ -889,6 +900,8 @@ class Pipeline:
         is_proactive: bool = False,
         exclude_tools: set[str] | None = None,
         tool_event_observer=None,
+        tool_call_required: bool = False,
+        required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
     ):
         """主生成多步调用工具再回答，只在 tool_dispatcher.tool_loop_active(uid) 为真时被调用。
 
@@ -911,6 +924,7 @@ class Pipeline:
             _TOOL_REGISTRY,
         )
         from core.tools.tool_result import frame_tool_message
+        from core.tool_grounding import grounding_message, required_from_messages
         from core.tool_ephemeral import DEFAULT_TTL_S, ToolEphemeralEvent, notify as _notify_tool_event
 
         # Brief 82 · 决策 7：本轮最后一条用户消息命中显式重读短语时，放行本轮全部
@@ -944,8 +958,15 @@ class Pipeline:
         # Keep the registry helper's long-standing call shape for test/plugin
         # compatibility; proficiency is an exposure-layer filter applied here.
         from core.growth.mcp_proficiency import filter_schemas as _filter_growth_tools
+        try:
+            _raw_tools = get_tools_schema(categories=categories, char_id=char_id, uid=uid)
+        except TypeError:
+            # Older local extensions/tests still expose the categories-only
+            # helper.  The character and uid gates remain enforced by the
+            # filters below when the richer signature is available.
+            _raw_tools = get_tools_schema(categories=categories)
         tools = [
-            t for t in _filter_growth_tools(get_tools_schema(categories=categories, char_id=char_id, uid=uid), char_id=char_id)
+            t for t in _filter_growth_tools(_raw_tools, char_id=char_id)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
         # This internal gateway is not part of the ordinary registry exposure.
@@ -1015,6 +1036,13 @@ class Pipeline:
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
+        if tool_call_required and not required_from_messages(loop_msgs):
+            _grounding = grounding_message(
+                required=True,
+                tool_names=required_tool_names,
+            )
+            if _grounding:
+                loop_msgs.insert(max(0, len(loop_msgs) - 1), _grounding)
         if self_management_context is not None:
             loop_msgs.insert(0, {"role": "system", "content": f"Self Capability control state: {json.dumps(self_management_context, ensure_ascii=False)}. You may use manage_self_capability only for these IDs, with this revision and a new action_id.", "_layer": "11.4_self_management"})
         # 工具意愿软提示（Brief 29 · 5，Brief 28 补丁；Brief 120 补充尾部花括号约定，
@@ -1055,6 +1083,7 @@ class Pipeline:
                 "_layer": "11.5_tool_nudge",
             })
         used_tool = False
+        successful_tool_call = False
         # ("natural"/"exhausted"/"confirm", text) — 收尾结果种类 + 文本
         outcome: tuple[str, str] | None = None
 
@@ -1136,12 +1165,18 @@ class Pipeline:
                 if waiting_task is not None:
                     waiting_task.cancel()
 
-        def _tool_message_content(result: str | None, ask_confirm: str | None) -> str:
+        def _tool_message_content(
+            result: str | None,
+            ask_confirm: str | None,
+            *,
+            generated_at: float | None = None,
+        ) -> str:
             """Keep confirmation state outside the untrusted tool-data frame."""
             if ask_confirm:
                 return ask_confirm
             if result:
-                return frame_tool_message(result)
+                validity = "current_turn" if str(result).startswith("工具已执行：") else "execution_failed"
+                return frame_tool_message(result, generated_at=generated_at, validity=validity)
             return "（工具无结果或执行失败）"
 
         async def _resolve_relay_intent(intent_text: str) -> list[dict]:
@@ -1189,7 +1224,7 @@ class Pipeline:
             return resolved
 
         async def _run_steps() -> None:
-            nonlocal used_tool, outcome
+            nonlocal used_tool, successful_tool_call, outcome
             for _step in range(max_steps):
                 turn = await llm_client.chat_turn(
                     loop_msgs, tools, char_id=char_id, is_proactive=is_proactive,
@@ -1254,10 +1289,12 @@ class Pipeline:
                                 except Exception as e:
                                     log_error("pipeline.run_agentic_loop.relay_execute", e)
                                     result, ask_confirm = None, None
+                                if result and str(result).startswith("工具已执行：") and not ask_confirm:
+                                    successful_tool_call = True
                                 loop_msgs.append({
                                     "role": "tool",
                                     "tool_call_id": rc["id"],
-                                    "content": _tool_message_content(result, ask_confirm),
+                                    "content": _tool_message_content(result, ask_confirm, generated_at=time.time()),
                                 })
                                 if ask_confirm:
                                     outcome = ("confirm", ask_confirm)
@@ -1288,10 +1325,12 @@ class Pipeline:
                     except Exception as e:
                         log_error("pipeline.run_agentic_loop.execute", e)
                         result, ask_confirm = None, None
+                    if result and str(result).startswith("工具已执行：") and not ask_confirm:
+                        successful_tool_call = True
                     loop_msgs.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
-                        "content": _tool_message_content(result, ask_confirm),
+                        "content": _tool_message_content(result, ask_confirm, generated_at=time.time()),
                     })
                     if ask_confirm:
                         outcome = ("confirm", ask_confirm)
@@ -1317,13 +1356,38 @@ class Pipeline:
         if kind == "natural" and not used_tool:
             # 从未调用过工具：等价于原有单发生成，反坍缩检查照旧过一遍。
             final_text = await self._anti_collapse_prefix_retry(loop_msgs, text)
+            from core.tool_grounding import guard_completion_claim
+            final_text = guard_completion_claim(
+                final_text, loop_msgs, successful_tool_call=successful_tool_call,
+            )
             return _single_chunk(final_text) if stream else final_text
 
         # natural（用过工具）或 exhausted：强制收尾，注入声音锚定，走不带 tools 的出口。
         loop_msgs.append({"role": "system", "content": _voice_reanchor(char_id)})
         if stream:
-            return self.run_llm_stream(loop_msgs, char_id=char_id, is_proactive=is_proactive, user_id=uid)
-        return await self.run_llm(loop_msgs, is_proactive=is_proactive)
+            if successful_tool_call or not required_from_messages(loop_msgs):
+                return self.run_llm_stream(
+                    loop_msgs, char_id=char_id, is_proactive=is_proactive, user_id=uid,
+                )
+            async def _grounded_stream():
+                _pieces: list[str] = []
+                async for _piece in self.run_llm_stream(
+                    loop_msgs, char_id=char_id, is_proactive=is_proactive, user_id=uid,
+                ):
+                    _pieces.append(_piece)
+                from core.tool_grounding import guard_completion_claim
+                _guarded = guard_completion_claim(
+                    "".join(_pieces), loop_msgs,
+                    successful_tool_call=successful_tool_call,
+                )
+                if _guarded:
+                    yield _guarded
+            return _grounded_stream()
+        final_text = await self.run_llm(loop_msgs, is_proactive=is_proactive)
+        from core.tool_grounding import guard_completion_claim
+        return guard_completion_claim(
+            final_text, loop_msgs, successful_tool_call=successful_tool_call,
+        )
 
     # ──────────────────────────────────────────────────────────────────────────
     # 步骤 4：异步后处理

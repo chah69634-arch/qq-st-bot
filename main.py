@@ -419,7 +419,18 @@ async def handle_message(message: dict):
 
         # ── 步骤5：组装 prompt ───────────────────────────────────────────────
         logger.debug("[handle_message] 组装 prompt...")
-        messages, _meta = _pipeline.build_prompt(user_id, content, context, tool_result=tool_result_text, channel="qq", char_id=_char_id)
+        messages, _meta = _pipeline.build_prompt(
+            user_id,
+            content,
+            context,
+            tool_result=tool_result_text,
+            tool_result_status=_pretool.execution_status if _pretool.tool_results else None,
+            tool_result_generated_at=_pretool.tool_result_generated_at,
+            tool_call_required=_pretool.must_call_tool,
+            required_tool_names=_pretool.required_tool_names,
+            channel="qq",
+            char_id=_char_id,
+        )
 
         # ── 步骤6：调用主 LLM ────────────────────────────────────────────────
         logger.info("[handle_message] 调用主 LLM...")
@@ -428,6 +439,8 @@ async def handle_message(message: dict):
             raw_reply = await _pipeline.run_agentic_loop(
                 messages, uid=user_id, char_id=_char_id, session_state=state, is_group=is_group,
                 exclude_tools=_fast_path_exclude_tools,
+                tool_call_required=_pretool.must_call_tool,
+                required_tool_names=_pretool.required_tool_names,
                 tool_event_observer=(
                     _desktop_ws.push_tool_status if _desktop_ws.is_connected() else None
                 ),

@@ -52,8 +52,9 @@
 | `9_history` | 短期对话历史，前后各有 `<对话记录>` / `</对话记录>` 定界标签，明示"以下是真实发生的对话"；近场保留 + 远场加权择优；投影时跳过 `_source=="trigger_stub"` 防触发器名泄露 | always | `short_term.load_for_prompt()` |
 | `9_anti_repeat` | 跨轮开头去同质：取最近 2–3 条 assistant 回复的起手（首 8 字），以软约束告知模型别用相同开头/句式；fail-open，无历史时不注入 | 有近期 assistant 回复时 | `_recent_openings()` 从 history 提取 |
 | `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
-| `10_tool_result` | 本轮工具执行结果 | 有工具调用时 | `tool_dispatcher.execute()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`） |
-| `10.5_action_trace` | 工具动作痕迹：你最近做过的操作（跨轮回忆，供角色记得"刚才做了什么"，不要求逐条复述） | `action_trace_entries` 非空（`recent()` 过滤后仍有条目） | `core/memory/action_trace.py` → `recent()` + `format_trace_block()`；`fetch_context()` 拉取，`build_prompt()` 透传 |
+| `10_tool_result` | 本轮工具执行结果（带生成时间与有效性） | 有工具调用结果时 | `tool_dispatcher.execute()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`）；失败/结果不明明确不是完成事实 |
+| `10.5_action_trace` | 历史工具动作参考：你最近做过的操作（不是本轮结果） | `action_trace_entries` 非空（`recent()` 过滤后仍有条目） | `core/memory/action_trace.py` → `recent()` + `format_trace_block()`；历史条目带时间并明确标为参考 |
+| `11_tool_grounding` | 本轮工具事实闸：明确要求调用时绑定“必须成功调用”，并在输出端拦截无成功调用的完成式断言 | pretool 关键词命中，或调用方显式传入 `tool_call_required=True` | `core/pretool_router.py` 识别意图 → `core/tool_grounding.py` 组装消息并在 `Pipeline.run_llm()` / tool loop 收尾校验 |
 | `anti_collapse_hint` | 反坍缩提示（长度坍缩 + 分段坍缩合并，按触发维度拼装文案），per-uid 持久化倒计时 `hint_rounds` 轮（默认3），不可裁 | `anti_collapse.enabled` 且长度/分段任一维度倒计时未归零 | `core/memory/short_term.py::get_anti_collapse_hint()`（长度维度沿用 `detect_reply_length_collapse()`；分段维度由 `note_segment_collapse_signal()` 在 `capture_turn()` 落盘时写入） |
 | `stream_collapse_hint` | ACT-2 · 流式路径反坍缩软降级：上一轮流式生成命中句首同质坍缩时的一次性纠偏提示，读到即消费清除（非持久化倒计时） | `core.memory.short_term.consume_stream_collapse_signal()` 返回非空前缀 | `core/pipeline.py::Pipeline._check_stream_collapse()`（流式完成后复用 `detect_reply_homogeneity_prefix()`）写入 `core.memory.short_term.note_stream_collapse_signal()` → `data/runtime/memory/{char_id}/{uid}/stream_collapse_signal.json` |
 | `11_author_note` | 人设核心提醒 + 输出格式规则 + 风格补充 | always | 硬编码 + `author_note_rotator` + consistency_check |
@@ -782,7 +783,7 @@ docstring 与新增模板漏网，已在 Brief 25 §3 P0 收敛掉）。
 
 ### `core/prompt_ablation.py`
 
-- `ALWAYS_ON = {"1_system_prompt", "12_user_message"}` — 不可消融，`set_state()` 校验命中即 raise
+- `ALWAYS_ON = {"1_system_prompt", "11_tool_grounding", "12_user_message"}` — 不可消融，`set_state()` 校验命中即 raise
   `ValueError`（路由层转 422）。
 - `get_state()` → `{"disabled_layers": set(), "perception_block_disabled": bool}`；进程内缓存 + 文件
   mtime 失效检查，mtime 未变直接返回缓存。
@@ -791,7 +792,7 @@ docstring 与新增模板漏网，已在 Brief 25 §3 P0 收敛掉）。
 
 ### ALWAYS_ON 与已知联动
 
-- `1_system_prompt` / `12_user_message` 硬编码不可消融——去掉即无角色身份或无用户输入，对话崩坏。
+- `1_system_prompt` / `11_tool_grounding` / `12_user_message` 硬编码不可消融——事实闸不能被对比测试关闭，否则输出校验失去本轮调用依据。
 - `6c_episodic_fallback` 的消息 `_layer` 写的是 `6c_episodic`（与 `6c_episodic` 共用层名，便于统一
   裁剪）→ 关闭 `6c_episodic` 会连 fallback 一起关闭，**预期行为**，不是 bug。
 - `9_history` 允许关闭（消融场景需要观察"完全没有对话历史"时的行为），但前端会红字警示"关闭短期
@@ -839,7 +840,7 @@ PUT /prompt-ablation    body: {"disabled_layers": [...], "perception_block_disab
 `prompt_ablation.get_state()` 返回的 `disabled_layers` 是**全局开关文件 ∪ 活跃角色卡
 `presence_ext.disabled_layers`**。角色卡部分不缓存——每次调用都读当前活跃角色（走
 `pipeline_registry`），随角色切换即时生效，无需额外失效逻辑；`ALWAYS_ON`
-（`1_system_prompt` / `12_user_message`）对角色卡来源同样生效，不可被 per-char 配置消融。
+（`1_system_prompt` / `11_tool_grounding` / `12_user_message`）对角色卡来源同样生效，不可被 per-char 配置消融。
 
 管理面板「层级开关」页展示/编辑的仍然是全局开关文件那一份，不包含角色卡贡献的部分——
 角色卡的 `disabled_layers` 只在角色 JSON 里手改，不经过这个 API。

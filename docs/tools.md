@@ -45,16 +45,21 @@ hello 字段或协商流程。
   QQ 私聊 / /desktop/chat / mobile 前台
     → trusted_user_text（media merge 前捕获）
     → core.pretool_router.route_pretool(...)
-    → 先检查显式快速路径白名单（当前仅 get_time；与 keywords 无关）
+    → 同时按注册表 keywords 识别明确的查询/操作意图，记录本轮 must-call 标记（只标记，不绕过 execute 闸门）
+    → 再检查显式快速路径白名单（当前仅 get_time；与 keywords 无关）
     → 未命中且 Path C 未激活时，走 get_probe_prompt + 当前通道允许的 function schema
     → 探针 user message 只含 trusted_user_text 与短期引用块，不含 media span 或主生成 prompt
     → QQ/mobile categories=["info"]；desktop categories=["info", "desktop"]
     → 严格解析 native function call 或完整封闭的 <tool_call> 编码，再 execute_structured(origin="user_live")
-    → 结果只以 bounded tool_result 写入 prompt 层10；raw probe 文本绝不进入主 prompt
+    → 结果只以 bounded tool_result 写入 prompt 层10，带生成时间与 validity（current_turn / execution_failed / outcome_unknown）；raw probe 文本绝不进入主 prompt
 
   WAITING_CONFIRM / WAITING_INPUT 也由同一入口消费，分别返回结构化 confirmation_request
   或 missing_parameter_request；/chat 管理面板冻结入口仍不走工具探针。
 ```
+
+明确意图会进入 `11_tool_grounding` 事实闸。若工具未暴露、探针未选中或执行失败，
+主模型只能如实说明未完成/结果不明；不能把口头承诺、历史 `action_trace` 或失败兜底文案
+说成已经查到、控制或完成。输出端还会对完成式断言做一次 fail-closed 校验。
 
 **memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。**
 `read_diary/read_watch/search_diary/get_profile/get_episodic` 已注册且 `execute()` 能执行，
@@ -112,6 +117,12 @@ hello 字段或协商流程。
   模型不主动调工具的问题。只在 loop 首次组装 messages 时注入一次，只存在于本轮
   `loop_msgs` 副本里，不进 short_term history，也不经过 prompt_builder 的层级消融机制
   （那套只覆盖 `build()` 组装出的 messages，与 loop 的一次性 messages 是两条链路）。
+
+  明确意图 grounding：`route_pretool()` 将关键词命中结果作为本轮上下文元数据传给
+  `run_agentic_loop(tool_call_required=True)`。即使工具没有出现在 schema、调用失败或
+  结果不明，最终收尾也会经过 `core.tool_grounding.guard_completion_claim()`，禁止完成式断言。
+  只有 dispatcher 成功 envelope（`工具已执行：...`）或层10明确标注 `current_turn` 才能
+  解除该闸；历史 `10.5_action_trace` 永远只作为参考。
 ```
 
 ---
@@ -649,7 +660,8 @@ Path A 的 pending confirmation、missing input、快速路径和普通探针均
 
 工具结果只在执行当轮注入 prompt（层 `10_tool_result`），下一轮就"失忆"——用户追问
 "你刚才查到什么/你干了什么"无从溯源。`core/memory/action_trace.py` 给每次工具执行落一条
-精简痕迹，供层 `10.5_action_trace` 注入"你最近做过的操作"（见 `docs/prompt-layers.md`）。
+精简痕迹，供层 `10.5_action_trace` 注入"你最近做过的操作"（见 `docs/prompt-layers.md`）。该层明确
+标注为历史参考，不得替代本轮结果。
 
 **埋点位置：**
 
