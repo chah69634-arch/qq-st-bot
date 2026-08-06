@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 import logging
 import re
 import time
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,9 @@ def _hidden_state_reason(uid: str, *, char_id: str) -> str | None:
 
 def _make_execute(uid: str, char_id: str, reason: str):
     async def execute(*, dry_run: bool):
-        return await _send_letter_if_worthy(uid, char_id, reason, dry_run=dry_run)
+        return await _send_letter_if_worthy(
+            uid, char_id, reason, dry_run=dry_run, execution_id=uuid.uuid4().hex,
+        )
 
     return execute
 
@@ -193,23 +196,50 @@ async def _send_letter_if_worthy(
     reason: str,
     *,
     dry_run: bool = False,
+    execution_id: str | None = None,
 ):
     """Generate, quality-check, deduplicate, and possibly send a letter."""
     global _last_letter_text
 
+    execution_id = execution_id or uuid.uuid4().hex
+    started = time.monotonic()
+    from core.mail.execution_ledger import append as append_execution
+
+    def record(stage: str, result: str, **metadata) -> None:
+        append_execution(
+            execution_id=execution_id, uid=uid, char_id=char_id, stage=stage, result=result,
+            duration_ms=int((time.monotonic() - started) * 1000), **metadata,
+        )
+
+    record("selected", "accepted")
+
     from core.mail.letter_writer import QUALITY_THRESHOLD, evaluate_letter, generate_letter
     from core.scheduler.execution import write_execute_blocked, write_execute_dryrun
 
-    letter = await generate_letter(uid, reason, char_id=char_id)
+    try:
+        letter = await generate_letter(uid, reason, char_id=char_id)
+    except Exception as exc:
+        record("generation_failed", "failed", failure_code="generation_error", exception_type=type(exc).__name__)
+        if not dry_run:
+            from core.scheduler.loop import _record_attempt_failure
+            _record_attempt_failure("letter_writer", char_id=char_id)
+        return _result(reason, dry_run=dry_run, sent=False)
     if not letter:
+        record("generation_failed", "failed", failure_code="empty_content")
         if not dry_run:
             from core.scheduler.loop import _record_attempt_failure
             _record_attempt_failure("letter_writer", char_id=char_id)
         return _result(reason, dry_run=dry_run, sent=False)
 
-    score = await evaluate_letter(letter)
+    record("generated", "ok")
+    try:
+        score = await evaluate_letter(letter)
+    except Exception as exc:
+        record("quality_rejected", "failed", failure_code="generation_error", exception_type=type(exc).__name__)
+        score = 0
     logger.info("[letter_writer] quality_score=%d threshold=%d", score, QUALITY_THRESHOLD)
     if score < QUALITY_THRESHOLD or _is_too_similar(letter, _last_letter_text):
+        record("quality_rejected", "rejected", failure_code="quality_rejected")
         # A4: 质量门/相似度拒发不再让下个 tick 立即重跑一遍完整生成+评分流程（RC4）。
         if not dry_run:
             from core.scheduler.loop import _record_attempt_failure
@@ -217,15 +247,19 @@ async def _send_letter_if_worthy(
         return _result(letter, dry_run=dry_run, sent=False)
 
     if dry_run:
+        record("quality_passed", "dry_run")
         result = _result(letter, dry_run=True, sent=False)
         write_execute_dryrun(result)
         return result
 
-    from core.mail.mail_sender import send_letter
+    from core.mail.mail_sender import send_letter_detailed
     from core.scheduler.loop import _mark, _record_attempt_failure, _clear_attempt_backoff
 
-    sent = await send_letter(_extract_subject(letter, reason), letter)
-    if sent:
+    record("quality_passed", "ok")
+    record("send_attempted", "started")
+    send_result = await send_letter_detailed(_extract_subject(letter, reason), letter)
+    if send_result.sent:
+        record("sent", "ok", smtp_status_code=send_result.smtp_status_code)
         _last_letter_text = letter
         _mark("letter_writer")
         _clear_attempt_backoff("letter_writer", char_id=char_id)
@@ -235,9 +269,11 @@ async def _send_letter_if_worthy(
         except Exception:
             pass
     else:
+        record("smtp_failed", "failed", failure_code=send_result.failure_code,
+               exception_type=send_result.exception_type, smtp_status_code=send_result.smtp_status_code)
         _record_attempt_failure("letter_writer", char_id=char_id)
-    result = _result(letter, dry_run=False, sent=sent)
-    if not sent:
+    result = _result(letter, dry_run=False, sent=send_result.sent)
+    if not send_result.sent:
         write_execute_blocked(result)
     return result
 

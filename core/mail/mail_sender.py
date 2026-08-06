@@ -7,8 +7,18 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 from html import escape
 import logging
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MailSendResult:
+    sent: bool
+    failure_code: str = ""
+    exception_type: str = ""
+    smtp_status_code: int | None = None
+    message_id: str = ""
 
 
 async def _open_proxy_socket(proxy_url: str, host: str, port: int):
@@ -29,18 +39,23 @@ async def _open_proxy_socket(proxy_url: str, host: str, port: int):
 
 async def send_letter(subject: str, body_text: str) -> bool:
     """Send one letter. Returns True only after SMTP accepts the message."""
+    return (await send_letter_detailed(subject, body_text)).sent
+
+
+async def send_letter_detailed(subject: str, body_text: str) -> MailSendResult:
+    """Send one letter and retain only safe failure metadata for its caller."""
     from core.config_loader import get_config
 
     cfg = get_config().get("mail", {})
     if not cfg.get("enabled", False):
         logger.info("[mail] disabled, skipping send")
-        return False
+        return MailSendResult(False, "smtp_unknown_error")
 
     required = ("smtp_host", "smtp_user", "smtp_password", "to_addr")
     missing = [key for key in required if not str(cfg.get(key) or "").strip()]
     if missing:
         logger.error("[mail] missing required config: %s", ", ".join(missing))
-        return False
+        return MailSendResult(False, "smtp_unknown_error")
 
     try:
         import aiosmtplib
@@ -48,7 +63,7 @@ async def send_letter(subject: str, body_text: str) -> bool:
         logger.error(
             "[mail] aiosmtplib not installed. Run: python -m pip install aiosmtplib"
         )
-        return False
+        return MailSendResult(False, "smtp_unknown_error", "ImportError")
 
     smtp_user = str(cfg["smtp_user"]).strip()
     smtp_host = str(cfg["smtp_host"]).strip()
@@ -95,7 +110,7 @@ async def send_letter(subject: str, body_text: str) -> bool:
             sock=proxy_sock,
         )
         logger.info("[mail] sent subject=%r to=%s", subject, to_addr)
-        return True
+        return MailSendResult(True, message_id=str(msg.get("Message-ID") or "")[:255])
     except Exception as exc:
         if proxy_url:
             logger.error(
@@ -106,4 +121,27 @@ async def send_letter(subject: str, body_text: str) -> bool:
             )
         else:
             logger.error("[mail] send failed: %s", exc)
-        return False
+        return MailSendResult(
+            False,
+            _classify_smtp_failure(exc),
+            type(exc).__name__,
+            _smtp_status_code(exc),
+        )
+
+
+def _smtp_status_code(exc: Exception) -> int | None:
+    code = getattr(exc, "code", None)
+    return int(code) if isinstance(code, int) else None
+
+
+def _classify_smtp_failure(exc: Exception) -> str:
+    name = type(exc).__name__.lower()
+    if isinstance(exc, TimeoutError) or "timeout" in name:
+        return "smtp_timeout"
+    if "auth" in name or "authentication" in name:
+        return "smtp_auth_error"
+    if "connect" in name or "socket" in name or "network" in name:
+        return "smtp_connection_error"
+    if _smtp_status_code(exc) is not None or "recipient" in name or "sender" in name:
+        return "smtp_rejected"
+    return "smtp_unknown_error"

@@ -410,6 +410,10 @@ class DataPaths:
         """Fail-open external API observability ledger, rotated by the writer."""
         return self._p("runtime", "observability", "api_calls.jsonl")
 
+    def mail_execution_log(self) -> Path:
+        """Sanitized forensic outcomes for scheduler-driven character letters."""
+        return self._p("runtime", "observability", "mail_executions.jsonl")
+
     def llm_debug_request_log(self) -> Path:
         """Explicit opt-in LLM request snapshots; contains sensitive prompt content."""
         return self._p("runtime", "observability", "llm_debug_requests.jsonl")

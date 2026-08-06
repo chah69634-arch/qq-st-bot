@@ -142,11 +142,11 @@ def test_successful_send_marks_cooldown(monkeypatch):
         return 5
 
     async def fake_send(subject, text):
-        return True
+        return mail_sender.MailSendResult(True, message_id="test-id")
 
     monkeypatch.setattr(generator, "generate_letter", fake_generate)
     monkeypatch.setattr(generator, "evaluate_letter", fake_evaluate)
-    monkeypatch.setattr(mail_sender, "send_letter", fake_send)
+    monkeypatch.setattr(mail_sender, "send_letter_detailed", fake_send)
     monkeypatch.setattr(loop, "_mark", marks.append)
     monkeypatch.setattr(letter_writer, "_last_letter_text", "")
 
@@ -174,11 +174,11 @@ def test_low_quality_letter_is_not_sent_or_marked(monkeypatch):
 
     async def fake_send(subject, text):
         calls.append("send")
-        return True
+        return mail_sender.MailSendResult(True)
 
     monkeypatch.setattr(generator, "generate_letter", fake_generate)
     monkeypatch.setattr(generator, "evaluate_letter", fake_evaluate)
-    monkeypatch.setattr(mail_sender, "send_letter", fake_send)
+    monkeypatch.setattr(mail_sender, "send_letter_detailed", fake_send)
     monkeypatch.setattr(loop, "_mark", lambda name: calls.append("mark"))
 
     result = asyncio.run(
@@ -411,14 +411,14 @@ def test_sent_letter_archived_after_successful_send(monkeypatch, tmp_path):
         return 5
 
     async def fake_send(subject, text):
-        return True
+        return mail_sender.MailSendResult(True, message_id="test-id")
 
     def fake_append(uid, char_id, text):
         archived.append(text)
 
     monkeypatch.setattr(generator, "generate_letter", fake_generate)
     monkeypatch.setattr(generator, "evaluate_letter", fake_evaluate)
-    monkeypatch.setattr(mail_sender, "send_letter", fake_send)
+    monkeypatch.setattr(mail_sender, "send_letter_detailed", fake_send)
     monkeypatch.setattr(loop, "_mark", lambda name: None)
     monkeypatch.setattr(letter_writer, "_last_letter_text", "")
     monkeypatch.setattr(letter_reference, "append_sent_letter", fake_append)

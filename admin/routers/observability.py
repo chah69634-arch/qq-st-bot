@@ -24,6 +24,16 @@ async def api_calls(caller: str = "", provider: str = "", limit: int = Query(100
     return {"entries": entries, "count": len(entries), "by_provider": grouped}
 
 
+@router.get("/observability/mail-executions", summary="读取脱敏邮件执行台账")
+async def mail_executions(
+    uid: str = "", char_id: str = "", execution_id: str = "",
+    limit: int = Query(100, ge=1, le=500), _auth=Depends(require_scopes("state.read")),
+):
+    from core.mail.execution_ledger import query
+    entries = query(uid=uid, char_id=char_id, execution_id=execution_id, limit=limit)
+    return {"entries": entries, "count": len(entries)}
+
+
 @router.get(
     "/observability/runtime-signals",
     summary="读取进程内聚合运行信号（不含正文、prompt、密钥、路径或用户标识）",
