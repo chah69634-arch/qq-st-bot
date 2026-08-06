@@ -336,6 +336,45 @@ def _validate_local_policy_before_write(server: dict, mcp_cfg: dict, mcp_client)
         )
 
 
+async def _ensure_local_policy_before_write(server: dict, mcp_cfg: dict, mcp_client) -> None:
+    """Backfill policy for legacy allowlists before a strict reconnect/save.
+
+    Older configurations may have an allowlist without the newer local policy
+    entries.  A disconnected server has no runtime snapshot, so discover its
+    tools through the isolated test connection before applying the existing
+    default-policy generator.  Explicit local entries always win.
+    """
+    if not bool(mcp_cfg.get("require_local_policy", False)) or not bool(server.get("enabled", True)):
+        return
+
+    allow_tools = list(server.get("allow_tools") or [])
+    policy = server.get("tool_policy") or {}
+    missing = [tool_name for tool_name in allow_tools if not isinstance(policy.get(tool_name), dict)]
+    if missing:
+        runtime = mcp_client.server_runtime(str(server.get("name") or ""))
+        tools = runtime.get("tools") if bool(runtime.get("connected", False)) else None
+        if not isinstance(tools, list) or not tools:
+            try:
+                tools = await mcp_client.test_server_config(dict(server))
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"MCP 连接测试失败，无法为旧 allowlist 补齐本地 policy: {exc}",
+                ) from exc
+        discovered_names = {
+            str(item.get("name") or "").strip()
+            for item in tools
+            if isinstance(item, dict) and str(item.get("name") or "").strip()
+        }
+        unknown = sorted(set(allow_tools) - discovered_names)
+        if unknown:
+            raise HTTPException(status_code=422, detail=f"allow_tools 含未发现工具: {unknown}")
+        _fill_missing_tool_policy_defaults(server, tools)
+        _prune_tool_policy(server)
+
+    _validate_local_policy_before_write(server, mcp_cfg, mcp_client)
+
+
 def _safe_parameter_summary(schema: object) -> dict:
     """Return bounded argument hints without exposing the remote JSON Schema."""
     if not isinstance(schema, dict):
@@ -746,7 +785,7 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
 
     _fill_import_tool_policy_defaults(server_cfg, tools)
     _prune_tool_policy(server_cfg)
-    _validate_local_policy_before_write(server_cfg, mcp_cfg, mcp_client)
+    await _ensure_local_policy_before_write(server_cfg, mcp_cfg, mcp_client)
 
     servers = [item for item in (mcp_cfg.get("servers") or []) if item.get("name") != server_cfg["name"]]
     servers.append(server_cfg)
@@ -900,7 +939,7 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         if isinstance(runtime_tools, list):
             _fill_missing_tool_policy_defaults(server, runtime_tools)
             _prune_tool_policy(server)
-    _validate_local_policy_before_write(server, mcp_cfg, mcp_client)
+    await _ensure_local_policy_before_write(server, mcp_cfg, mcp_client)
     _write_config(full_cfg)
     config_loader.reload_config()
     # Brief 115 根治：同上，走信号队列热重载，由 server 专属常驻 task 自己关闭/重连。

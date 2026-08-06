@@ -223,6 +223,45 @@ def test_reimport_preserves_explicit_policy_and_fills_new_tool_default(tmp_path,
     }
 
 
+def test_reenable_disconnected_legacy_allowlist_backfills_policy_before_strict_reload(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n"
+        "      enabled: false\n      allow_tools: [list_threads, create_thread]\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    calls = []
+
+    async def probe(cfg):
+        calls.append(("probe", cfg["name"]))
+        return [
+            {"name": "list_threads", "description": "list threads", "suggestion": {"effect": "read"}},
+            {"name": "create_thread", "description": "create a thread", "suggestion": {"effect": "write"}},
+        ]
+
+    async def reload(name):
+        calls.append(("reload", name))
+        return True
+
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
+    monkeypatch.setattr(mcp_client, "test_server_config", probe)
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy", mod.McpServerUpdate(enabled=True), _auth=None,
+    ))
+
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"]["servers"][0]
+    assert stored["tool_policy"] == {
+        "list_threads": {"effect": "read", "require_confirm": False},
+        "create_thread": {"effect": "write", "require_confirm": False},
+    }
+    assert calls == [("probe", "cedar_toy"), ("reload", "cedar_toy")]
+    assert result["reload_status"] == "reloaded"
+
+
 def test_existing_explicit_policy_is_read_as_confirmed_without_config_migration(tmp_path, monkeypatch):
     path = _write(
         tmp_path,
