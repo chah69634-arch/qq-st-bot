@@ -754,12 +754,36 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 | `overflow` | 3h | 低 | overflow | 对话间隔、旧记忆牵引、隐性需求、花园事件、强情绪累计超过阈值后主动联系 |
 | `presence_nag` | 2h | 低 | presence_nag | 高活跃配置 + 60min 无互动 + 负面情绪时，下发可强制全关的桌面存在感弹窗 |
 | `dream_exit` | 1h | 普通 | dream_exit | 出梦后由 dream_state.char_id 对应角色主动开口；QUIET-only、一梦一次；无 afterglow 时按有限时段降级为中性问候 |
-| `letter_writer` | 7天 | 低 | letter_writer | 梦境、久未对话、强记忆、纪念日前夕或 hidden state 溢出时，经质量与相似度门控后发送真实邮件 |
+| `letter_writer` | 周频契约 | 低 | letter_writer | 每个 uid + char_id 每 ISO 周最多成功发送一封；失败不封周，梦境、久未对话、强记忆、纪念日前夕或 hidden state 溢出可作为写信缘由 |
 | reminders（备忘录） | 无冷却 | 低 | loop.py内联 | 到点即发，发完标记完成 |
 
 ---
 
 ## 冷却状态持久化
+
+## 邮件周频契约与观测
+
+`letter_writer` 不再把“7 天冷却”解释为每周计划。它按 `uid + char_id + ISO year/week`
+持久化 `unattempted` / `failed` / `sent` 三种状态：只有 SMTP 接受邮件后才写入
+`sent`，本周其余调度轮次不会再生成或投递；失败仍可在周窗口内再次候选。SMTP 失败使用
+有限指数退避，质量拒绝延后到下一次合法调度机会并受本周最大生成次数限制。进程内租约
+避免并发 tick 对同一周重复投递。
+
+本周仍欠一封时，候选仅豁免全局 proactive gap 与旧 `letter_writer` 冷却，仍受 QUIET 状态、
+用户活跃窗口和 DND 限制；不改变其他 proposer 的通用行为。默认周窗口为周一至周日，可用
+`mail.weekly_window_start_day` / `mail.weekly_window_end_day`（0=周一，6=周日）收窄。
+
+每一次执行写入 `runtime/observability/mail_executions.jsonl`，并可通过
+`GET /observability/mail-executions`（`state.read`）读取。台账只含 execution_id、uid、char_id、
+触发来源、stage/result、有限 failure_code、异常类型、SMTP 状态码、重试数、耗时与时间戳；
+绝不写邮件正文、prompt、地址、密码或异常原文。阶段依次为 `selected`、`generated`、
+`quality_passed`、`send_attempted`、`sent`，或终止于 `generation_failed`、`quality_rejected`、
+`smtp_failed`。
+
+人工验证：先把 `mail.to_addr` 临时设为受控测试收件箱，在管理 token 下调用
+`POST /scheduler/trigger/letter_writer`；响应返回 execution_id，随后按该 id 查询该端点。
+`smtp_failed` 会给出脱敏 failure_code/exception_type/status_code，
+`sent` 会有 Message-ID 等价投递标识。不要把真实密码、收件地址或正文放入日志、截图或工单。
 
 旧 `data/scheduler_state.json` 已由 `_migrate_scheduler_state_once()` 在启动时一次性拆分：
 

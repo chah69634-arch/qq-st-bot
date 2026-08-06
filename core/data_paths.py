@@ -414,6 +414,9 @@ class DataPaths:
         """Sanitized forensic outcomes for scheduler-driven character letters."""
         return self._p("runtime", "observability", "mail_executions.jsonl")
 
+    def letter_weekly_state(self) -> Path:
+        return self._p("runtime", "mail", "letter_weekly_state.json")
+
     def llm_debug_request_log(self) -> Path:
         """Explicit opt-in LLM request snapshots; contains sensitive prompt content."""
         return self._p("runtime", "observability", "llm_debug_requests.jsonl")

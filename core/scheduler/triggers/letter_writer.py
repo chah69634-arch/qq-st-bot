@@ -27,18 +27,20 @@ def propose(ctx: dict | None = None):
 
     from core.scheduler.loop import _active_char_id_or_none, _is_ready, _owner_id
 
-    if not _is_ready("letter_writer"):
-        return None
-
     uid = str(ctx.get("uid") or _owner_id()).strip()
     char_id = str(ctx.get("char_id") or _active_char_id_or_none() or "").strip()
     if not uid or not char_id:
         return None
 
     now_ts = float(ctx.get("now_ts") or time.time())
-    reason = _check_trigger_conditions(uid, char_id=char_id, now_ts=now_ts)
-    if not reason:
+    from core.mail import weekly_contract
+    weekly_due = _in_weekly_window(now_ts) and weekly_contract.is_due(uid, char_id, now=now_ts)
+    if not weekly_due and not _is_ready("letter_writer"):
         return None
+    reason = _check_trigger_conditions(uid, char_id=char_id, now_ts=now_ts)
+    if not reason and not weekly_due:
+        return None
+    reason = reason or "本周的信还没有寄出，想认真写给你"
 
     from core.scheduler.gating import TriggerProposal
     from core.scheduler.state_machine import TriggerState
@@ -50,8 +52,18 @@ def propose(ctx: dict | None = None):
         topic_source="letter_trigger",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
-        execute=_make_execute(uid, char_id, reason),
+        execute=_make_execute(uid, char_id, reason, weekly_due=weekly_due),
+        weekly_delivery_due=weekly_due,
     )
+
+
+def _in_weekly_window(now_ts: float) -> bool:
+    from core.config_loader import get_config
+    mail = get_config().get("mail", {})
+    start = int(mail.get("weekly_window_start_day", 0))
+    end = int(mail.get("weekly_window_end_day", 6))
+    weekday = datetime.fromtimestamp(now_ts).weekday()
+    return 0 <= start <= end <= 6 and start <= weekday <= end
 
 
 def _check_trigger_conditions(uid: str, *, char_id: str, now_ts: float) -> str | None:
@@ -181,10 +193,18 @@ def _hidden_state_reason(uid: str, *, char_id: str) -> str | None:
     return None
 
 
-def _make_execute(uid: str, char_id: str, reason: str):
+def _make_execute(uid: str, char_id: str, reason: str, *, weekly_due: bool = False):
     async def execute(*, dry_run: bool):
+        retry_count = 0
+        if weekly_due and not dry_run:
+            from core.mail import weekly_contract
+            claimed = weekly_contract.claim(uid, char_id)
+            if claimed is None:
+                return _result(reason, dry_run=False, sent=False)
+            retry_count = int(claimed.get("retry_count") or 0)
         return await _send_letter_if_worthy(
             uid, char_id, reason, dry_run=dry_run, execution_id=uuid.uuid4().hex,
+            weekly_contract=weekly_due, retry_count=retry_count,
         )
 
     return execute
@@ -197,6 +217,8 @@ async def _send_letter_if_worthy(
     *,
     dry_run: bool = False,
     execution_id: str | None = None,
+    weekly_contract: bool = False,
+    retry_count: int = 0,
 ):
     """Generate, quality-check, deduplicate, and possibly send a letter."""
     global _last_letter_text
@@ -208,8 +230,19 @@ async def _send_letter_if_worthy(
     def record(stage: str, result: str, **metadata) -> None:
         append_execution(
             execution_id=execution_id, uid=uid, char_id=char_id, stage=stage, result=result,
-            duration_ms=int((time.monotonic() - started) * 1000), **metadata,
+            retry_count=retry_count, duration_ms=int((time.monotonic() - started) * 1000), **metadata,
         )
+
+    def finish_weekly(*, sent: bool, failure_code: str = "", message_id: str = "") -> None:
+        if not weekly_contract or dry_run:
+            return
+        from core.config_loader import get_config
+        from core.mail import weekly_contract as contract
+        cfg = get_config().get("mail", {})
+        contract.finish(uid, char_id, sent=sent, failure_code=failure_code, message_id=message_id,
+                        max_generation_attempts=int(cfg.get("weekly_max_generation_attempts", 3)),
+                        smtp_max_retries=int(cfg.get("weekly_smtp_max_retries", 3)),
+                        retry_base_seconds=int(cfg.get("weekly_smtp_retry_base_seconds", 900)))
 
     record("selected", "accepted")
 
@@ -220,13 +253,15 @@ async def _send_letter_if_worthy(
         letter = await generate_letter(uid, reason, char_id=char_id)
     except Exception as exc:
         record("generation_failed", "failed", failure_code="generation_error", exception_type=type(exc).__name__)
-        if not dry_run:
+        finish_weekly(sent=False, failure_code="generation_error")
+        if not dry_run and not weekly_contract:
             from core.scheduler.loop import _record_attempt_failure
             _record_attempt_failure("letter_writer", char_id=char_id)
         return _result(reason, dry_run=dry_run, sent=False)
     if not letter:
         record("generation_failed", "failed", failure_code="empty_content")
-        if not dry_run:
+        finish_weekly(sent=False, failure_code="empty_content")
+        if not dry_run and not weekly_contract:
             from core.scheduler.loop import _record_attempt_failure
             _record_attempt_failure("letter_writer", char_id=char_id)
         return _result(reason, dry_run=dry_run, sent=False)
@@ -240,8 +275,9 @@ async def _send_letter_if_worthy(
     logger.info("[letter_writer] quality_score=%d threshold=%d", score, QUALITY_THRESHOLD)
     if score < QUALITY_THRESHOLD or _is_too_similar(letter, _last_letter_text):
         record("quality_rejected", "rejected", failure_code="quality_rejected")
+        finish_weekly(sent=False, failure_code="quality_rejected")
         # A4: 质量门/相似度拒发不再让下个 tick 立即重跑一遍完整生成+评分流程（RC4）。
-        if not dry_run:
+        if not dry_run and not weekly_contract:
             from core.scheduler.loop import _record_attempt_failure
             _record_attempt_failure("letter_writer", char_id=char_id)
         return _result(letter, dry_run=dry_run, sent=False)
@@ -260,6 +296,7 @@ async def _send_letter_if_worthy(
     send_result = await send_letter_detailed(_extract_subject(letter, reason), letter)
     if send_result.sent:
         record("sent", "ok", smtp_status_code=send_result.smtp_status_code)
+        finish_weekly(sent=True, message_id=send_result.message_id)
         _last_letter_text = letter
         _mark("letter_writer")
         _clear_attempt_backoff("letter_writer", char_id=char_id)
@@ -271,7 +308,9 @@ async def _send_letter_if_worthy(
     else:
         record("smtp_failed", "failed", failure_code=send_result.failure_code,
                exception_type=send_result.exception_type, smtp_status_code=send_result.smtp_status_code)
-        _record_attempt_failure("letter_writer", char_id=char_id)
+        finish_weekly(sent=False, failure_code=send_result.failure_code)
+        if not weekly_contract:
+            _record_attempt_failure("letter_writer", char_id=char_id)
     result = _result(letter, dry_run=False, sent=send_result.sent)
     if not send_result.sent:
         write_execute_blocked(result)

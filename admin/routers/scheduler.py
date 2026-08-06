@@ -185,7 +185,7 @@ async def delete_signature(body: dict, auth=Depends(require_scopes("admin"))):
 async def manual_trigger(name: str, auth=Depends(require_scopes("admin"))):
     """
     可触发的名称：
-      morning_greeting / night_reminder / random_message
+      morning_greeting / night_reminder / random_message / letter_writer
     """
     from core.scheduler import manual_trigger as _trigger
     result = await _trigger(name)

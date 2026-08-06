@@ -58,6 +58,7 @@ REGISTRY: dict[str, PathMeta] = {
     "wake_bridge_state":      PathMeta("canonical", "shared",          "per_char_user", "ignore"),
     "api_call_log":           PathMeta("forensic",  "shared",          "global",        "ignore"),
     "mail_execution_log":     PathMeta("forensic",  "shared",          "global",        "ignore"),
+    "letter_weekly_state":    PathMeta("canonical", "shared",          "global",        "ignore"),
     # Explicit opt-in prompt/tool-schema snapshots; daily files are pruned by
     # core.llm_debug_requests and are never runtime truth.
     "llm_debug_request_log": PathMeta("forensic",  "shared",          "global",        "ignore"),

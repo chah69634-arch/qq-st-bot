@@ -225,6 +225,7 @@ def test_mail_sender_escapes_html(monkeypatch):
     assert captured["kwargs"]["sock"] is None
     assert captured["kwargs"]["start_tls"] is True
     assert captured["kwargs"]["use_tls"] is False
+    assert captured["msg"]["Message-ID"]
 
 
 def test_mail_sender_uses_proxy_socket(monkeypatch):

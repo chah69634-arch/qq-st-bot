@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formataddr
+from email.utils import formataddr, make_msgid
 from html import escape
 import logging
 from dataclasses import dataclass
@@ -80,6 +80,7 @@ async def send_letter_detailed(subject: str, body_text: str) -> MailSendResult:
     msg["Subject"] = f"{prefix}{subject}"
     msg["From"] = formataddr((from_name, from_addr))
     msg["To"] = to_addr
+    msg["Message-ID"] = make_msgid()
     msg.attach(MIMEText(body_text, "plain", "utf-8"))
 
     html_body = "".join(

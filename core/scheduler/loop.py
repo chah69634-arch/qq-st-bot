@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import uuid
 import logging
 import random
 import time
@@ -838,6 +839,17 @@ async def manual_trigger(name: str) -> str:
                 recall_policy="none",
             )
             _mark("daily_journal")
+        elif name == "letter_writer":
+            oid = _owner_id()
+            char_id = _active_char_id_or_none()
+            if not oid or not char_id:
+                return "owner_id or active character not configured"
+            from core.scheduler.triggers.letter_writer import _send_letter_if_worthy
+            execution_id = uuid.uuid4().hex
+            result = await _send_letter_if_worthy(
+                oid, char_id, "管理员发起的测试来信", execution_id=execution_id,
+            )
+            return f"letter_writer execution_id={execution_id} sent={result.sent}"
         elif name == "period_reminder":
             oid = _owner_id()
             if not oid:

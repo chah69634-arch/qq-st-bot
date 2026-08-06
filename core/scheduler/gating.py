@@ -64,6 +64,7 @@ class TriggerProposal:
     time_sensitive_external_turn: bool = False
     execute: Optional[ExecuteFn] = None
     char_id: str | None = None
+    weekly_delivery_due: bool = False
 
 
 def _shadow_cfg() -> dict:
@@ -78,6 +79,8 @@ def is_trigger_ready(trigger_name: str, *, char_id: str | None = None) -> bool:
 
 
 def _proposal_cooldown_ready(proposal: TriggerProposal) -> bool:
+    if proposal.weekly_delivery_due:
+        return True
     if proposal.char_id is None:
         return is_trigger_ready(proposal.trigger_name)
     if "char_id" in inspect.signature(is_trigger_ready).parameters:
@@ -257,7 +260,7 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     ledger_allowed = []
     ledger_reasons: set[str] = set()
     for p in cooldown_allowed:
-        priority = "emergency" if (p.time_sensitive_external_turn or _policy_ledger_exempt(p.trigger_name)) else "normal"
+        priority = "emergency" if (p.time_sensitive_external_turn or p.weekly_delivery_due or _policy_ledger_exempt(p.trigger_name)) else "normal"
         allowed, reason = _ledger_can_send(p.trigger_name, priority=priority, uid=uid)
         if allowed:
             ledger_allowed.append(p)
