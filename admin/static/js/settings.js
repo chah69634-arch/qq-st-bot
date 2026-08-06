@@ -676,7 +676,6 @@ async function submitPresetModal() {
     const params = readKeyValueEditor('mr-preset-params');
     if (Object.keys(params).length) body.params = params;
   } catch (e) { errEl.textContent = e.message; return; }
-  if (isEdit) delete body.provider_kind; // 编辑时不强制改变 kind，除非用户明确改了下拉——保留原选值语义更安全，仍一起提交也无妨；这里直接提交当前下拉值即可
   body.provider_kind = document.getElementById('mr-preset-kind').value;
 
   try {
