@@ -1,6 +1,6 @@
 
       <h1 class="page-title">Token 管理
-        <span id="at-whoami" class="admin-inline-072"></span>
+        <span id="at-whoami" class="admin-identity-badge"></span>
       </h1>
 
       <div class="card admin-capability-card" id="at-capability-card">
@@ -19,7 +19,7 @@
           <h3>通道开关</h3>
           <button class="btn btn-ghost btn-sm" data-action="loadChannelToggles">刷新</button>
         </div>
-        <p class="admin-inline-087">
+        <p class="admin-source-note">
           只列出有独立总开关的通道；desktop / mobile / device 通道没有单独的 enabled 开关，
           是否可用取决于对应 token 是否已配置且未停用（见下方 Token 列表）。
         </p>
@@ -29,12 +29,12 @@
       <div class="card">
         <div class="card-header">
           <h3>Token 列表</h3>
-          <div class="admin-action-group admin-inline-037">
+          <div class="admin-action-group">
             <button class="btn btn-ghost btn-sm" data-action="loadAuthTokens">刷新</button>
             <button class="btn btn-primary btn-sm" data-action="openCreateTokenModal">Create</button>
           </div>
         </div>
-        <p class="admin-inline-087">
+        <p class="admin-source-note">
           出于安全设计，已有 token 的明文无法再次查看（服务端只存哈希）；丢失请 Rotate。
         </p>
         <div id="at-table-body"><div class="loading">加载中…</div></div>

@@ -298,6 +298,8 @@ async function loadAuthTokens() {
     _renderAuthTokensTable(tokensResp.tokens || []);
   } catch (e) {
     body.innerHTML = `<div class="empty">加载失败: ${_atErrMsg(e)}</div>`;
+    const summary = document.getElementById('at-capability-summary');
+    if (summary) summary.innerHTML = `<div class="admin-error-panel">身份与 scope 读取失败：${escapeHtml(_atErrMsg(e))}</div>`;
   }
 }
 
@@ -337,17 +339,20 @@ function _renderAuthTokensTable(tokens) {
       : '<span class="badge badge-success">● active</span>';
     const scopesText = (t.scopes || []).join(', ');
     const scopesShort = scopesText.length > 30 ? scopesText.slice(0, 30) + '…' : scopesText;
+    const rawLabel = String(t.label || '');
+    const safeLabel = escapeHtml(rawLabel);
+    const safeScopes = escapeHtml(scopesText);
     rows.push(`
       <tr>
-        <td>${t.label}${isSelf ? ' <span class="badge badge-warn" title="这是你当前登录使用的 token">当前</span>' : ''}</td>
-        <td title="${scopesText}">${scopesShort}</td>
+        <td>${safeLabel}${isSelf ? ' <span class="badge badge-warn" title="这是你当前登录使用的 token">当前</span>' : ''}</td>
+        <td title="${safeScopes}">${escapeHtml(scopesShort)}</td>
         <td>${statusBadge}</td>
         <td>${t.created_at ? t.created_at.slice(0, 10) : '—'}</td>
         <td><span class="badge">${t.hash_prefix}</span></td>
         <td style="white-space:nowrap">
-          <button class="btn btn-ghost btn-sm" onclick="confirmRotateToken('${t.label}')">Rotate</button>
-          <button class="btn btn-ghost btn-sm" onclick="confirmToggleToken('${t.label}', ${!t.disabled})">${t.disabled ? 'Enable' : 'Disable'}</button>
-          <button class="btn btn-ghost btn-sm" onclick="copyAtLabel('${t.label}')">Copy Label</button>
+          <button class="btn btn-ghost btn-sm" onclick="confirmRotateToken('${safeLabel}')">Rotate</button>
+          <button class="btn btn-ghost btn-sm" onclick="confirmToggleToken('${safeLabel}', ${!t.disabled})">${t.disabled ? 'Enable' : 'Disable'}</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyAtLabel('${safeLabel}')">Copy Label</button>
         </td>
       </tr>
     `);

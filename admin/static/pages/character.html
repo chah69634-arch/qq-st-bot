@@ -5,7 +5,7 @@
       <div class="card">
         <div class="card-header">
           <h3>当前角色</h3>
-          <div class="admin-action-group admin-inline-042">
+          <div class="admin-action-group">
             <button class="btn btn-ghost btn-sm" data-action="loadCharacterList">刷新</button>
             <button class="btn btn-primary btn-sm" data-action="newCharacter">➕ 新建角色卡</button>
             <label class="admin-inline-186">
@@ -18,7 +18,7 @@
             </label>
           </div>
         </div>
-        <div class="admin-toolbar admin-inline-039">
+        <div class="admin-toolbar">
           <select id="char-select" onchange="onCharSelectChange()" class="admin-inline-064">
             <option value="">-- 加载中 --</option>
           </select>
@@ -28,14 +28,14 @@
 
           <span id="char-active-badge" class="badge badge-accent admin-inline-056"></span>
         </div>
-        <p class="admin-inline-090">支持 .json / .txt / .md</p>
+        <p class="admin-source-note">支持 .json / .txt / .md</p>
       </div>
 
       <!-- 与用户关系：只读提示 + 跳转（关系是角色×用户维度的运行时状态，不在角色卡编辑，见用户管理页） -->
       <div class="card" id="char-capabilities-card">
         <div class="admin-card-header">
           <div><h3>角色能力绑定</h3><p id="char-capabilities-hint" class="admin-source-hint">选择角色后读取当前生效来源；保存只修改角色卡的 presence_ext。</p></div>
-          <span id="char-capabilities-status" class="admin-inline-082" role="status" aria-live="polite"></span>
+          <span id="char-capabilities-status" class="admin-status-text" role="status" aria-live="polite"></span>
         </div>
         <div class="admin-field-grid">
           <label class="field"><span>TTS 预设</span><input id="char-tts-preset" type="text" placeholder="留空 = 使用全局配置"></label>
@@ -47,12 +47,12 @@
       </div>
 
       <div class="card" id="char-routing-card">
-        <div class="admin-card-header"><div><h3>模型路由绑定</h3><p class="admin-source-hint">角色绑定优先于全局路由；清除绑定后回落全局 active routing。</p></div><span id="char-routing-status" class="admin-inline-082" role="status" aria-live="polite"></span></div>
+        <div class="admin-card-header"><div><h3>模型路由绑定</h3><p class="admin-source-hint">角色绑定优先于全局路由；清除绑定后回落全局 active routing。</p></div><span id="char-routing-status" class="admin-status-text" role="status" aria-live="polite"></span></div>
         <div class="admin-field-grid admin-field-grid-single"><label class="field"><span>Routing profile</span><input id="char-model-routing" type="text" placeholder="留空 = 跟随全局"></label></div>
         <div class="admin-action-group"><button class="btn btn-primary btn-sm" data-action="saveCharacterRouting">保存模型路由</button><span id="char-routing-effective" class="admin-result-panel"></span></div>
       </div>
 
-      <div class="card admin-inline-176">
+      <div class="card admin-source-note">
         💡 与用户的关系（称呼、亲密度等）不在角色卡里编辑——那是运行时状态，请去
         <a href="javascript:void(0)" data-action="goto" data-action-args='["users"]' class="admin-inline-008">用户管理</a> 页查看/修改。
       </div>

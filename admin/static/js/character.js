@@ -314,9 +314,28 @@ function _setCharacterCapabilityDisabled(disabled) {
   document.querySelectorAll('[data-action="saveCharacterCapabilities"], [data-action="saveCharacterRouting"]').forEach(el => { el.disabled = disabled; });
 }
 
+function _resetCharacterCapabilities() {
+  ['char-tts-preset', 'char-sticker-pack', 'char-live2d-model', 'char-model-3d', 'char-model-routing'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = ''; el.disabled = true; }
+  });
+  ['char-asset-resolution', 'char-routing-effective'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
+  });
+}
+
 async function loadCharacterCapabilities(charId = _characterCapabilityId()) {
   const status = document.getElementById('char-capabilities-status');
-  if (!status || !charId) return;
+  if (!status) return;
+  if (!charId) { _resetCharacterCapabilities(); status.textContent = '请选择角色'; return; }
+  _resetCharacterCapabilities();
+  if (_charData?.type === 'text') {
+    status.textContent = '暂未开放';
+    document.getElementById('char-routing-status').textContent = '暂未开放';
+    document.getElementById('char-capabilities-hint').textContent = '纯文本角色卡暂不支持能力绑定，请使用 JSON 角色卡。';
+    return;
+  }
   status.textContent = '读取中…';
   try {
     const [assets, routing] = await Promise.all([

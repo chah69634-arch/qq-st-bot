@@ -153,6 +153,7 @@
 
       <div class="card">
         <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" data-action="loadRelaySettings" data-i18n="common.refresh">刷新</button></div>
+        <p class="admin-source-hint">配置来源：全局 relay 设置；只影响中继唤醒通道，不改变调度器本地触发。</p>
         <div class="form-row admin-inline-158"><label class="field"><span>Base URL</span><input id="relay-base-url"></label><label class="field"><span>Topic</span><input id="relay-topic"></label></div>
         <label class="field admin-inline-158"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
         <button class="btn btn-primary btn-sm" data-action="saveRelaySettings" data-i18n="common.save">保存</button>
@@ -163,6 +164,7 @@
           <h3 data-i18n="status.tts.title">TTS 配置</h3>
           <button class="btn btn-ghost btn-sm" data-action="loadTtsConfig" data-i18n="common.refresh">刷新</button>
         </div>
+        <p class="admin-source-hint">配置来源：全局 TTS 配置；角色卡的 TTS 预设可在角色页覆盖。桌面语音条仅影响客户端展示。</p>
         <div class="admin-inline-021">
           <label class="checkbox-row admin-inline-117">
             <input type="checkbox" id="tts-enabled" class="admin-inline-202">
