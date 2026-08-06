@@ -618,6 +618,9 @@ async function testPreset(button) {
 }
 
 function openPresetModal(name) {
+  // Older cached table markup passed the button itself.  Keep that stale UI
+  // from persisting "[object HTMLButtonElement]" as a preset identifier.
+  if (name && typeof name !== 'string') name = name.dataset?.presetName || '';
   document.getElementById('mr-preset-err').textContent = '';
   const nameInput = document.getElementById('mr-preset-name');
   _mrEditingPresetName = name || null;
@@ -658,7 +661,9 @@ function closePresetModal() {
 async function submitPresetModal() {
   const nameInput = document.getElementById('mr-preset-name');
   const name = nameInput.value.trim();
-  const previousName = _mrEditingPresetName;
+  const previousName = typeof _mrEditingPresetName === 'string'
+    ? _mrEditingPresetName
+    : _mrEditingPresetName?.dataset?.presetName || null;
   const errEl = document.getElementById('mr-preset-err');
   if (!name) { errEl.textContent = '名称不能为空'; return; }
 
