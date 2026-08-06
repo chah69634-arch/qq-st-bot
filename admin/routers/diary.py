@@ -59,6 +59,23 @@ def _strip_body(content: str) -> str:
     return '\n'.join(lines).lstrip('\n')
 
 
+def _split_layers(content: str) -> tuple[str, str]:
+    """Return (facts, feeling), keeping the event layer off the UI API."""
+    body = _strip_body(content)
+    marker = re.search(r"(?m)^##\s*今日感受\s*$", body)
+    if marker:
+        return body[:marker.start()].strip(), body[marker.end():].strip()
+    if re.search(r"(?m)^##\s*今日事件\s*$", body):
+        return body.strip(), ""
+    # Legacy entries had no section headings; they are still readable and
+    # are treated as a single feeling block for the presentation layer.
+    return "", body.strip()
+
+
+def _feeling_title(feeling: str) -> str:
+    return _derive_title(feeling)
+
+
 @router.get("/list", summary="获取日记列表")
 async def list_diary(
     char_id: Optional[str] = Query(default=None, description="角色 id；缺省 = active char"),
@@ -72,10 +89,12 @@ async def list_diary(
             if not _FILE_RE.match(f.name):
                 continue
             content = f.read_text(encoding='utf-8')
+            _, feeling = _split_layers(content)
             entries.append({
                 "date": f.stem,
-                "title": _derive_title(content),
+                "title": _feeling_title(feeling),
                 "emotion": None,
+                "feeling": feeling,
             })
     entries.sort(key=lambda e: e["date"], reverse=True)
     return {"entries": entries, "count": len(entries)}
@@ -94,9 +113,11 @@ async def get_diary(
     if not path.exists():
         raise HTTPException(status_code=404, detail="diary not found")
     content = path.read_text(encoding='utf-8')
+    _, feeling = _split_layers(content)
     return {
         "date": date,
-        "title": _derive_title(content),
+        "title": _feeling_title(feeling),
         "emotion": None,
-        "body": _strip_body(content),
+        "feeling": feeling,
+        "body": feeling,
     }
