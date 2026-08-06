@@ -206,22 +206,22 @@ async function loadSelfManagement() {
   try {
     const data = await api('GET', '/admin/self-management');
     const rows = data.capabilities || [];
-    capabilities.innerHTML = `<table><thead><tr><th>Capability</th><th>Available</th><th>User grant</th><th>Agent state</th><th>Lock</th><th>Actions</th></tr></thead><tbody>${rows.map(row => {
+    capabilities.innerHTML = `<table><thead><tr><th>能力</th><th>可用</th><th>用户授权</th><th>代理状态</th><th>锁定</th><th>操作</th></tr></thead><tbody>${rows.map(row => {
       const id = escapeHtml(row.capability_id);
       const grant = row.grant || {};
       const locked = !!row.locked;
-      return `<tr><td>${id}</td><td>${row.system_available ? 'yes' : 'no'}</td><td>${grant.allowed ? (grant.mutable_by_agent ? 'mutable' : 'user only') : 'not granted'}<br><small>${escapeHtml(JSON.stringify(grant.constraints || {}))}</small></td><td>${escapeHtml(String(row.agent_selected_state ?? 'base'))}</td><td>${locked ? 'locked' : 'open'}</td><td class="actions"><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["grant","${id}"]'>Grant</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["revoke","${id}"]'>Revoke</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["${locked ? 'unlock' : 'lock'}","${id}"]'>${locked ? 'Unlock' : 'Lock'}</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["restore","${id}"]'>Restore</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["undo","${id}"]'>Undo</button></td></tr>`;
+      return `<tr><td>${id}</td><td>${row.system_available ? '是' : '否'}</td><td>${grant.allowed ? (grant.mutable_by_agent ? '可修改' : '仅用户可改') : '未授权'}<br><small>${escapeHtml(JSON.stringify(grant.constraints || {}))}</small></td><td>${escapeHtml(String(row.agent_selected_state ?? '默认'))}</td><td>${locked ? '已锁定' : '开放'}</td><td class="actions"><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["grant","${id}"]'>授权</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["revoke","${id}"]'>撤销授权</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["${locked ? 'unlock' : 'lock'}","${id}"]'>${locked ? '解锁' : '锁定'}</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["restore","${id}"]'>恢复</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["undo","${id}"]'>撤销上一步</button></td></tr>`;
     }).join('')}</tbody></table>`;
     bindPageActions(capabilities);
     const events = data.audit || [];
-    audit.innerHTML = `<table><thead><tr><th>Time</th><th>Source</th><th>Capability</th><th>Revision</th><th>Agent value</th><th>Effective value</th><th>Action</th><th>Result</th><th>Reason</th><th>Run / job</th></tr></thead><tbody>${events.map(event => `<tr><td>${escapeHtml(_autonomyTime(event.timestamp))}</td><td>${escapeHtml(event.source || event.actor || '')}</td><td>${escapeHtml(event.capability_id || '')}</td><td>${escapeHtml(`${event.revision_before ?? '-'} -> ${event.revision_after ?? '-'}`)}</td><td>${escapeHtml(`${event.old_value ?? '-'} -> ${event.new_value ?? '-'}`)}</td><td>${escapeHtml(`${event.old_effective_value ?? '-'} -> ${event.new_effective_value ?? '-'}`)}</td><td>${escapeHtml(event.action_id || '')}</td><td>${escapeHtml(event.result || '')}</td><td>${escapeHtml(event.reason || '')}</td><td>${escapeHtml([event.run_id, event.job_id].filter(Boolean).join(' / '))}</td></tr>`).join('')}</tbody></table>`;
+    audit.innerHTML = `<table><thead><tr><th>时间</th><th>来源</th><th>能力</th><th>修订号</th><th>代理值</th><th>生效值</th><th>操作</th><th>结果</th><th>原因</th><th>运行 / 任务</th></tr></thead><tbody>${events.map(event => `<tr><td>${escapeHtml(_autonomyTime(event.timestamp))}</td><td>${escapeHtml(event.source || event.actor || '')}</td><td>${escapeHtml(event.capability_id || '')}</td><td>${escapeHtml(`${event.revision_before ?? '-'} -> ${event.revision_after ?? '-'}`)}</td><td>${escapeHtml(`${event.old_value ?? '-'} -> ${event.new_value ?? '-'}`)}</td><td>${escapeHtml(`${event.old_effective_value ?? '-'} -> ${event.new_effective_value ?? '-'}`)}</td><td>${escapeHtml(event.action_id || '')}</td><td>${escapeHtml(event.result || '')}</td><td>${escapeHtml(event.reason || '')}</td><td>${escapeHtml([event.run_id, event.job_id].filter(Boolean).join(' / '))}</td></tr>`).join('')}</tbody></table>`;
   } catch (error) {
     capabilities.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
 }
 
 async function selfManagementChange(action, capabilityId) {
-  const reason = window.prompt('Reason for this user override:', 'user override');
+  const reason = window.prompt('请输入此次用户覆盖的原因：', '用户覆盖');
   if (!reason) return;
   let path, body;
   if (action === 'grant' || action === 'revoke') {
@@ -234,8 +234,8 @@ async function selfManagementChange(action, capabilityId) {
   } else {
     path = '/admin/self-management/undo'; body = {capability_id: capabilityId, reason};
   }
-  try { await api('POST', path, body); await loadSelfManagement(); toast('Self Capability updated', 'ok'); }
-  catch (error) { toast(`Self Capability update failed: ${error.message}`, 'err'); }
+  try { await api('POST', path, body); await loadSelfManagement(); toast('自主管理能力已更新', 'ok'); }
+  catch (error) { toast(`自主管理能力更新失败：${error.message}`, 'err'); }
 }
 
 function _autonomyTime(value) {
@@ -302,7 +302,7 @@ function _renderAutonomyToolsLegacy(host, tools) {
 
 function _renderAutonomyTools(host, tools) {
   const cell = value => escapeHtml(value === null || value === undefined || value === '' ? '-' : String(value));
-  host.innerHTML = `<table><thead><tr><th>Tool</th><th>Source</th><th>Global</th><th>Registered</th><th>Connected</th><th>MCP policy</th><th>MCP explicit</th><th>Self grant</th><th>Self Capability</th><th>Agent selected</th><th>Autonomy allowlist</th><th>Effect</th><th>Danger/confirm</th><th>Final</th><th>Denial</th></tr></thead><tbody>${tools.map(item => `<tr><td>${cell(item.name)}</td><td>${cell(item.source)}</td><td>${cell(item.global_enabled)}</td><td>${cell(item.registered)}</td><td>${cell(item.mcp_server_connected)}</td><td>${cell(item.mcp_policy)}</td><td>${cell(item.mcp_explicit)}</td><td>${cell(item.self_capability_granted)}</td><td>${cell(item.self_capability_effective)}</td><td>${cell(item.agent_selected_state)}</td><td>${cell(item.autonomy_allowlist)}</td><td>${cell(item.effect)}</td><td>${cell(item.dangerous || item.require_confirm)}</td><td>${cell(item.execution_allowed)}</td><td>${cell(item.denial_reason)}</td></tr>`).join('')}</tbody></table>`;
+      host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>全局开关</th><th>已注册</th><th>已连接</th><th>MCP 策略</th><th>MCP 明确授权</th><th>自主管理授权</th><th>自主管理生效值</th><th>代理选择</th><th>自主白名单</th><th>动作类型</th><th>危险/确认</th><th>最终状态</th><th>拒绝原因</th></tr></thead><tbody>${tools.map(item => `<tr><td>${cell(item.name)}</td><td>${cell(item.source)}</td><td>${cell(item.global_enabled)}</td><td>${cell(item.registered)}</td><td>${cell(item.mcp_server_connected)}</td><td>${cell(item.mcp_policy)}</td><td>${cell(item.mcp_explicit)}</td><td>${cell(item.self_capability_granted)}</td><td>${cell(item.self_capability_effective)}</td><td>${cell(item.agent_selected_state)}</td><td>${cell(item.autonomy_allowlist)}</td><td>${cell(item.effect)}</td><td>${cell(item.dangerous || item.require_confirm)}</td><td>${cell(item.execution_allowed)}</td><td>${cell(item.denial_reason)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function _renderAutonomyRuns(host, runs) {
@@ -346,7 +346,7 @@ async function saveAutonomyConfig() {
     });
     await loadObserveAutonomy();
     const enabled = config.enabled ? '已启用内置唤醒' : '已关闭内置唤醒';
-    const overflow = config.overflow?.enabled ? `Overflow 已启用（阈值 ${config.overflow.threshold}）` : 'Overflow 已关闭';
+    const overflow = config.overflow?.enabled ? `溢出信号已启用（阈值 ${config.overflow.threshold}）` : '溢出信号已关闭';
     const schedule = config.schedule?.enabled ? `定时唤醒已启用（${config.schedule.time}）` : '定时唤醒已关闭';
     const interval = config.interval?.enabled ? `间隔唤醒已启用（${config.interval.seconds} 秒）` : '间隔唤醒已关闭';
     toast(`${enabled}；${overflow}；${schedule}；${interval}`, 'ok');
@@ -1445,6 +1445,26 @@ async function loadObserveDreamPrompt() {
 //  触发器目录（observe-trigger-catalog）
 // ══════════════════════════════════════════════════════════
 
+const SCHEDULER_CATALOG_LABELS = {
+  birthday: '生日问候', diary_reminder: '日记缺失提醒', diary_share_reminder: '日记分享提醒',
+  dream_exit: '出梦问候', festival: '节日问候', garden_bloom: '花园开花',
+  garden_handle_gift: '处理花园赠礼', garden_handle_self: '处理自留花朵',
+  garden_harvest_expired: '处理过期采收', garden_vase_wilted: '处理花瓶枯萎',
+  holiday_boost: '节假日加强问候', hr_critical: '心率危急关心', hr_high: '心率偏高关心',
+  letter_writer: '写信问候', morning_greeting: '早安问候', night_reminder: '晚安提醒',
+  overflow: '运行信号溢出处理', period_reminder: '生理期关心', presence_nag: '存在感提醒',
+  practice_help: '练习协助', random_message: '随机日间消息', reminders: '待办提醒',
+  sleep_end: '睡醒关心', spontaneous_recall: '自发记忆召回', timenode: '节气提醒',
+  topic_followup: '话题跟进', watch_hr_critical: '心率危急关心', watch_hr_high: '心率偏高关心',
+  watch_sleep_end: '睡醒关心', weather_alert: '天气提醒', weather_alert_heavy: '恶劣天气提醒',
+  weather_alert_light: '轻度天气提醒', daily_journal: '每日手账',
+};
+
+function schedulerCatalogLabel(name) {
+  const purpose = SCHEDULER_CATALOG_LABELS[name];
+  return purpose ? `${purpose}（${name}）` : `${name}（用途待补充）`;
+}
+
 async function loadTriggerCatalog() {
   const el = document.getElementById('trigger-catalog-content');
   if (!el) return;
@@ -1453,7 +1473,7 @@ async function loadTriggerCatalog() {
     const d = await api('GET', '/observe/trigger-catalog');
     const proposers = d.proposers || [];
     if (!proposers.length) {
-      el.innerHTML = '<div style="color:var(--muted)">无已注册 proposer。</div>';
+      el.innerHTML = '<div style="color:var(--muted)">没有已注册的提议器。</div>';
       return;
     }
     let html = '';
@@ -1463,7 +1483,7 @@ async function loadTriggerCatalog() {
       const hasSample = tnames.some(t => samples[t] != null);
       html += `<div class="card" style="margin-bottom:12px">
         <div class="card-header" style="padding:10px 14px">
-          <h3 style="font-size:14px;margin:0">${escapeHtml(p.name)}</h3>
+          <h3 style="font-size:14px;margin:0">${escapeHtml(schedulerCatalogLabel(p.name))}</h3>
           ${hasSample ? '<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:1px 6px;border-radius:8px;margin-left:8px">有样本</span>' : '<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:1px 6px;border-radius:8px;margin-left:8px">暂无样本</span>'}
         </div>`;
       for (const tname of tnames) {
@@ -1477,12 +1497,12 @@ async function loadTriggerCatalog() {
         html += `
           <div style="padding:8px 14px;border-top:1px solid var(--border)">
             <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="togglePromptLayer('${contentId}')">
-              <code style="font-size:12px;background:var(--bg-secondary);padding:2px 6px;border-radius:4px">${escapeHtml(tname)}</code>
+              <span style="font-size:12px;background:var(--bg-secondary);padding:2px 6px;border-radius:4px">${escapeHtml(schedulerCatalogLabel(tname))}</span>
               ${s ? `<span style="font-size:11px;color:var(--muted)">${tsStr} · ${tok.toLocaleString()} 字</span>` : '<span style="font-size:11px;color:var(--muted)">暂无样本</span>'}
               ${s ? '<span style="font-size:11px;color:var(--muted)">▶</span>' : ''}
             </div>
             ${s ? `<div id="${contentId}" style="display:none;margin-top:8px;padding-left:8px">
-              <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">召回锚点 (search_query)：</span><span style="color:#fde68a">${sq ? escapeHtml(sq.slice(0,200)) : '<em style="color:var(--muted)">（与 seed_prompt 相同）</em>'}</span></div>
+              <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">召回锚点（搜索条件）：</span><span style="color:#fde68a">${sq ? escapeHtml(sq.slice(0,200)) : '<em style="color:var(--muted)">（与种子 prompt 相同）</em>'}</span></div>
               <div style="font-size:12px;margin-bottom:6px"><span style="color:var(--muted)">种子 prompt：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:100px;overflow:auto">${escapeHtml(sp.slice(0,600))}${sp.length>600?'\n…':''}</pre></div>
               ${out != null ? `<div style="font-size:12px"><span style="color:var(--muted)">LLM 回复：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:100px;overflow:auto;color:var(--text)">${escapeHtml((out||'').slice(0,600))}${(out||'').length>600?'\n…':''}</pre></div>` : ''}
             </div>` : ''}

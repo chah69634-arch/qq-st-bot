@@ -13,6 +13,12 @@ const SC_TRIGGER_LABELS = {
   diary_share_reminder: '日记分享提醒',
 };
 
+const SC_FIELD_LABELS = {
+  enabled: '启用调度器', morning_greeting: '早安问候', night_reminder: '晚安提醒',
+  random_message: '随机日间消息', daily_journal: '每日手账', period_reminder: '生理期关心',
+  diary_reminder: '日记提醒', diary_inject: '注入日记内容', presence_nag: '存在感提醒',
+};
+
 const SC_BOOL_FIELDS = [
   'enabled', 'morning_greeting', 'night_reminder', 'random_message',
   'daily_journal', 'period_reminder', 'diary_reminder', 'diary_inject',
@@ -63,7 +69,7 @@ async function loadProactiveLedger() {
 }
 
 let _scConfig = {};
-async function loadSchedulerConfig() { try { _scConfig = await api('GET','/scheduler/config'); document.getElementById('sc-config-switches').innerHTML = SC_BOOL_FIELDS.map(k => `<label class="checkbox-row"><input type="checkbox" data-sc-bool="${k}" ${_scConfig[k] ? 'checked' : ''}><span>${k}</span></label>`).join(''); document.getElementById('sc-owner-id').value=_scConfig.owner_id||''; document.getElementById('sc-presence-minutes').value=_scConfig.presence_nag_minutes||60; document.getElementById('sc-gap-hours').value=_scConfig.global_proactive_min_gap_hours||1.5; document.getElementById('sc-signatures').value=(_scConfig.signatures||[]).join('\n'); } catch(e){toast('读取调度配置失败: '+e.message,'err');} }
+async function loadSchedulerConfig() { try { _scConfig = await api('GET','/scheduler/config'); document.getElementById('sc-config-switches').innerHTML = SC_BOOL_FIELDS.map(k => `<label class="checkbox-row"><input type="checkbox" data-sc-bool="${k}" ${_scConfig[k] ? 'checked' : ''}><span>${SC_FIELD_LABELS[k] || k}</span></label>`).join(''); document.getElementById('sc-owner-id').value=_scConfig.owner_id||''; document.getElementById('sc-presence-minutes').value=_scConfig.presence_nag_minutes||60; document.getElementById('sc-gap-hours').value=_scConfig.global_proactive_min_gap_hours||1.5; document.getElementById('sc-signatures').value=(_scConfig.signatures||[]).join('\n'); } catch(e){toast('读取调度配置失败: '+e.message,'err');} }
 async function saveSchedulerConfig() { const body={owner_id:document.getElementById('sc-owner-id').value.trim(),presence_nag_minutes:Number(document.getElementById('sc-presence-minutes').value),global_proactive_min_gap_hours:Number(document.getElementById('sc-gap-hours').value),signatures:document.getElementById('sc-signatures').value.split('\n').map(x=>x.trim()).filter(Boolean)}; document.querySelectorAll('[data-sc-bool]').forEach(el=>body[el.dataset.scBool]=el.checked); try{await api('PUT','/scheduler/config',body);toast('调度配置已保存','ok');loadSchedulerConfig();}catch(e){toast('保存失败: '+e.message,'err');} }
 async function loadRelaySettings(){try{const d=await api('GET','/settings/relay');document.getElementById('relay-base-url').value=d.relay_base_url||'';document.getElementById('relay-topic').value=d.relay_topic||'';document.getElementById('relay-token').value='';document.getElementById('relay-token').placeholder=d.relay_token?t('status.relay.configured','已配置（{value}），留空保留',{value:d.relay_token}):t('status.relay.unconfigured','未配置');}catch(e){toast(t('status.relay.load_error','读取中继失败: {error}',{error:e.message}),'err');}}
 async function saveRelaySettings(){const body={relay_base_url:document.getElementById('relay-base-url').value.trim(),relay_topic:document.getElementById('relay-topic').value.trim()};const token=document.getElementById('relay-token').value.trim();if(token)body.relay_token=token;try{await api('PUT','/settings/relay',body);toast(t('status.relay.saved','中继配置已保存'),'ok');loadRelaySettings();}catch(e){toast(t('common.save_failed','保存失败: {error}',{error:e.message}),'err');}}
@@ -84,7 +90,7 @@ async function loadScheduler() {
         ? '<span class="badge badge-danger" style="font-size:10px">已禁用</span>'
         : '';
       return `<tr>
-        <td>${escapeHtml(SC_TRIGGER_LABELS[key] || key)} ${enabledBadge}</td>
+        <td>${escapeHtml(SC_TRIGGER_LABELS[key] || key)}${key in SC_TRIGGER_LABELS ? `（${escapeHtml(key)}）` : ''} ${enabledBadge}</td>
         <td style="font-size:12px;color:var(--muted)">${escapeHtml(v.last_triggered || '从未')}</td>
         <td>${badge}</td>
         <td style="min-width:120px">
@@ -106,9 +112,9 @@ async function loadScheduler() {
 }
 
 function _fmtSec(s) {
-  if (s < 60)  return s + 's';
-  if (s < 3600) return Math.round(s / 60) + 'm';
-  return (s / 3600).toFixed(1) + 'h';
+  if (s < 60)  return s + ' 秒';
+  if (s < 3600) return Math.round(s / 60) + ' 分钟';
+  return (s / 3600).toFixed(1) + ' 小时';
 }
 
 async function scTrigger(name) {
@@ -151,19 +157,19 @@ async function loadWatchStatus() {
     }
 
     if (d.event_type === 'heart_rate') {
-      hr.textContent = d.value ? `${d.value} bpm` : '暂无数据';
+      hr.textContent = d.value ? `${d.value} 次/分` : '暂无数据';
       hr.style.color = d.value > 120 ? 'var(--danger)' : d.value > 100 ? 'var(--warn)' : 'var(--accent)';
     }
 
     if (d.event_type === 'sleep_end') {
       const start = d.sleep_start || '—';
       const end   = d.sleep_end_time || '—';
-      const dur   = d.duration_minutes ? `${Math.floor(d.duration_minutes/60)}h${Math.round(d.duration_minutes%60)}m` : '—';
+      const dur   = d.duration_minutes ? `${Math.floor(d.duration_minutes/60)} 小时 ${Math.round(d.duration_minutes%60)} 分钟` : '—';
       sleep.textContent = `已醒 · 入睡 ${start} → 起床 ${end} · 共 ${dur}`;
       sleep.style.color = 'var(--success)';
     }
 
-    last.textContent = `${d.event_type} · ${d.timestamp || ''}`;
+    last.textContent = `${SC_TRIGGER_LABELS[d.event_type] || d.event_type} · ${d.timestamp || ''}`;
   } catch(e) { /* 静默失败 */ }
 }
 

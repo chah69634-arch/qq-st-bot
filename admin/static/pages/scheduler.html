@@ -5,7 +5,7 @@
         <div class="card-header"><h3>调度配置</h3><button class="btn btn-primary btn-sm" data-action="saveSchedulerConfig">保存</button></div>
         <div id="sc-config-switches" class="admin-inline-033"></div>
         <div class="form-row admin-inline-158">
-          <label class="field"><span>Owner ID</span><input id="sc-owner-id"></label>
+          <label class="field"><span>所有者 ID</span><input id="sc-owner-id"></label>
           <label class="field"><span>存在感提醒（分钟）</span><input type="number" min="1" id="sc-presence-minutes"></label>
           <label class="field"><span>主动消息最小间隔（小时）</span><input type="number" min="0.1" max="24" step="0.1" id="sc-gap-hours"></label>
         </div>
@@ -43,23 +43,23 @@
         </div>
       </div>
 
-      <!-- Watch 测试 -->
+      <!-- 手表设备测试 -->
       <div class="card">
-        <div class="card-header"><h3>Watch 事件测试</h3></div>
+        <div class="card-header"><h3>手表设备事件测试</h3></div>
         <div class="admin-inline-042">
           <input type="number" id="sc-hr-value" placeholder="心率值" value="105" class="admin-inline-197">
           <button class="btn btn-ghost btn-sm" data-action="testWatchEvent" data-action-args='["heart_rate"]'>发送心率事件</button>
           <button class="btn btn-ghost btn-sm" data-action="testWatchEvent" data-action-args='["sleep_end"]'>发送睡醒事件</button>
         </div>
         <div class="admin-inline-090">
-          Watch 设备推送地址：<code class="admin-inline-073">POST /watch/event?secret=...</code>
+          手表设备推送地址：<code class="admin-inline-073">POST /watch/event?secret=...</code>
         </div>
       </div>
 
-      <!-- Watch 状态 -->
+      <!-- 手表设备状态 -->
       <div class="card">
         <div class="card-header">
-          <h3>Watch 状态</h3>
+          <h3>手表设备状态</h3>
           <button class="btn btn-ghost btn-sm" data-action="loadWatchStatus">刷新</button>
         </div>
         <div id="watch-status-body">

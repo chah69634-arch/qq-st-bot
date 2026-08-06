@@ -16,7 +16,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-structured-fields-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-ui-cn-review-1';
 
 function getRememberedPage() {
   try {

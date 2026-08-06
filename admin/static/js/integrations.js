@@ -5,7 +5,7 @@ function _giFmtTime(value) {
 }
 
 function _giBool(value) {
-  return value ? '<span class="badge badge-success">enabled</span>' : '<span class="badge badge-warn">disabled</span>';
+  return value ? '<span class="badge badge-success">已启用</span>' : '<span class="badge badge-warn">未启用</span>';
 }
 
 function refreshGardenTemplate() {
@@ -43,19 +43,19 @@ async function loadGardenIntegrations() {
     target.innerHTML = `<div class="tbl-wrap"><table>
       <tr><th>项目</th><th>状态</th></tr>
       <tr><td>Garden</td><td>${_giBool(state.enabled)}</td></tr>
-      <tr><td>bridge</td><td>${escapeHtml(state.bridge_status || 'unknown')}</td></tr>
-      <tr><td>machine token（仅本进程环境探测）</td><td>${escapeHtml(state.machine_token || 'missing')}</td></tr>
-      <tr><td>Presence integration token</td><td>${escapeHtml(state.integration_token || 'missing')}</td></tr>
+      <tr><td>中继</td><td>${escapeHtml(state.bridge_status || '未知')}</td></tr>
+      <tr><td>机器 token（仅本进程环境探测）</td><td>${escapeHtml(state.machine_token || '缺失')}</td></tr>
+      <tr><td>Presence 集成 token</td><td>${escapeHtml(state.integration_token || '缺失')}</td></tr>
       <tr><td>uid / char_id</td><td>${escapeHtml(state.uid || '—')} / ${escapeHtml(state.char_id || '—')}</td></tr>
-      <tr><td>last wake received</td><td>${_giFmtTime(state.last_wake_received)}</td></tr>
-      <tr><td>last successful drain</td><td>${_giFmtTime(state.last_successful_drain)}</td></tr>
-      <tr><td>last reason / lane</td><td>${escapeHtml(state.last_reason || '—')} / ${state.last_reason ? (state.time_sensitive_lane ? 'time_sensitive_turn' : 'ordinary') : '—'}</td></tr>
-      <tr><td>last disposition</td><td>${escapeHtml(state.last_disposition || '—')}</td></tr>
-      <tr><td>last attempt / next attempt</td><td>${_giFmtTime(state.last_attempt_at)} / ${_giFmtTime(state.last_next_attempt_at)}</td></tr>
-      <tr><td>pending / processing / expired</td><td>${Number(state.pending_count || 0)} / ${Number(state.processing_count || 0)} / ${Number(state.expired_count || 0)}</td></tr>
-      <tr><td>consecutive failures</td><td>${Number(state.consecutive_failures || 0)}</td></tr>
-      <tr><td>current backoff until</td><td>${_giFmtTime(state.current_backoff_until)}</td></tr>
-      <tr><td>scheduler</td><td>${state.scheduler_running ? 'running' : 'not running'}</td></tr>
+      <tr><td>最近收到唤醒</td><td>${_giFmtTime(state.last_wake_received)}</td></tr>
+      <tr><td>最近成功处理</td><td>${_giFmtTime(state.last_successful_drain)}</td></tr>
+      <tr><td>最近原因 / 通道</td><td>${escapeHtml(state.last_reason || '—')} / ${state.last_reason ? (state.time_sensitive_lane ? '时间敏感对话' : '普通对话') : '—'}</td></tr>
+      <tr><td>最近处理结果</td><td>${escapeHtml(state.last_disposition || '—')}</td></tr>
+      <tr><td>最近尝试 / 下次尝试</td><td>${_giFmtTime(state.last_attempt_at)} / ${_giFmtTime(state.last_next_attempt_at)}</td></tr>
+      <tr><td>等待 / 处理中 / 已过期</td><td>${Number(state.pending_count || 0)} / ${Number(state.processing_count || 0)} / ${Number(state.expired_count || 0)}</td></tr>
+      <tr><td>连续失败次数</td><td>${Number(state.consecutive_failures || 0)}</td></tr>
+      <tr><td>当前退避至</td><td>${_giFmtTime(state.current_backoff_until)}</td></tr>
+      <tr><td>调度器</td><td>${state.scheduler_running ? '运行中' : '未运行'}</td></tr>
     </table></div>`;
     refreshGardenTemplate();
   } catch (error) {
@@ -77,7 +77,7 @@ async function copyGardenTemplate() {
 }
 
 async function sendGardenTestWake() {
-  if (!window.confirm('提交一条遵守现有 gate 的 Garden 测试提示？它不会强制立即回复。')) return;
+  if (!window.confirm('提交一条遵守现有门控的 Garden 测试提示？它不会强制立即回复。')) return;
   const result = document.getElementById('gi-test-result');
   const button = document.getElementById('gi-test-button');
   if (button) button.disabled = true;
@@ -85,8 +85,9 @@ async function sendGardenTestWake() {
   try {
     const payload = await api('POST', '/integrations/garden/test-wake', {});
     const status = String(payload.status || 'rejected');
-    if (result) result.textContent = `结果：${status}`;
-    toast(`Garden 测试唤醒：${status}`, status === 'rejected' ? 'warn' : 'ok');
+    const statusLabel = {rejected: '已拒绝', queued: '已排队', accepted: '已接受'}[status] || status;
+    if (result) result.textContent = `结果：${statusLabel}`;
+    toast(`Garden 测试唤醒：${statusLabel}`, status === 'rejected' ? 'warn' : 'ok');
     await loadGardenIntegrations();
   } catch (error) {
     if (result) result.textContent = '提交失败';
