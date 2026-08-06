@@ -432,6 +432,7 @@ def build(
     tool_result_generated_at: float | None = None,
     tool_call_required: bool = False,
     required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
+    hardware_jobs_text: str = "",
 ) -> tuple[list[dict], dict]:
     """
     组装完整的 prompt 消息列表
@@ -453,6 +454,7 @@ def build(
         lore_entries:        lore_engine.match() 的返回值
         tool_result:         本轮工具执行结果（有则注入）
         action_trace_entries: action_trace.recent() 返回的最近工具动作痕迹（层 10.5，跨轮回忆）
+        hardware_jobs_text: 当前硬件后台任务的系统计算状态（只读）
         author_note_extra:   consistency_check 发现问题时的纠偏提示
     """
     if lore_entries is None:
@@ -1395,6 +1397,14 @@ def build(
                 "_layer": "10.5_action_trace",
             })
 
+    # 层 10.6：长时硬件动作状态。只接受 jobs 模块生成的系统文本，不接受用户或模型提供的时间。
+    if hardware_jobs_text:
+        messages.append({
+            "role": "system",
+            "content": hardware_jobs_text,
+            "_layer": "10.6_hardware_jobs",
+        })
+
     # ─────────────────────────────────────────────────────────────────────────
     # 层 11：Author's Note（固定人设提醒 + 动态纠偏追加）
     # 放在历史之后、用户消息之前，对模型影响最大
@@ -1865,6 +1875,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("9.5_episodic_top", "最相关情景记忆置顶一条"),
     ("10_tool_result", "本轮工具执行结果"),
     ("10.5_action_trace", "工具动作痕迹：你最近做过的操作（跨轮回忆，不进裁剪链）"),
+    ("10.6_hardware_jobs", "当前硬件后台动作状态与系统计算的剩余时间"),
     ("11_tool_grounding", "本轮明确工具意图的事实闸（不可消融）"),
     ("anti_collapse_hint", "反坍缩提示：长度/分段维度合并，各自持久化倒计时 hint_rounds 轮"),
     ("stream_collapse_hint", "流式路径反坍缩软降级提示（ACT-2）：上一轮命中一次性信号，读到即消费清除"),

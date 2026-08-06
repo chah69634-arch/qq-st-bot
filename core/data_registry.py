@@ -197,6 +197,7 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── runtime: prompt 层级消融开关（CC 任务 23 · B，fail-open 重建）─────────
     "prompt_layer_ablation":  PathMeta("runtime",   "shared",          "global",        "ignore"),
+    "hardware_jobs":          PathMeta("canonical", "shared",          "global",        "ignore"),
 
     # ── canonical: shared toy-project files, writable only through whitelist ─
     "very_formal_project_dir": PathMeta("canonical", "shared",         "global",        "ignore"),

@@ -883,6 +883,10 @@ class DataPaths:
         """Runtime config: data/runtime/prompt_layer_ablation.json — layer ablation switches (CC 任务 23)."""
         return self._p("runtime", "prompt_layer_ablation.json")
 
+    def hardware_jobs(self) -> Path:
+        """Persistent hardware actuator jobs and their terminal outcomes."""
+        return self._p("runtime", "hardware_jobs.json")
+
     def very_formal_project_dir(self) -> Path:
         """data/very_formal_project/ — whitelisted toy files only."""
         return self._p("very_formal_project")

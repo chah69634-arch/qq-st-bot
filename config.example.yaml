@@ -195,6 +195,8 @@ tools:
     enabled: true
   toy_pattern:
     enabled: true
+  toy_job_status:
+    enabled: true
 dream:
   impression:
     forced_rounds: 3        # 出梦后强制连续注入轮数（精确现实回合数，非时间窗）
@@ -282,6 +284,7 @@ tts:
 hardware:
   enabled: false
   buttplug_ws: ws://127.0.0.1:12345
+  max_job_duration_ms: 900000  # 单个后台硬件动作最长 15 分钟
 # 爱意探针命中时请求板子画爱心，独立于 hardware（振动等）之外的具身反馈通道
 embodiment:
   heart:

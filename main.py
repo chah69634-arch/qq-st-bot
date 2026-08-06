@@ -779,6 +779,12 @@ async def main():
 
     _init_modules()
 
+    # Long-running hardware actions own explicit startup/recovery and shutdown
+    # cleanup; tools only enqueue jobs after this lifecycle hook runs.
+    from core.hardware import jobs as _hardware_jobs
+    await _hardware_jobs.startup()
+    logger.info("硬件后台任务管理器已启动")
+
     # Private-state backups only proceed when this lifecycle marker confirms
     # that the service is offline.  It is removed on normal shutdown and is
     # explicitly excluded from snapshots as ephemeral process state.
@@ -876,6 +882,9 @@ async def main():
         log_error("main", e)
         logger.error(f"主循环异常退出: {e}")
     finally:
+        await _hardware_jobs.shutdown()
+        from core.hardware import buttplug_client as _buttplug_client
+        await _buttplug_client.disconnect()
         await _slow_queue.shutdown()
         await mcp_client.shutdown_mcp_servers()
         from core.runtime_service_state import clear_marker as _clear_service_marker

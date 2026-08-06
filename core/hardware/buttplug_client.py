@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import time
@@ -21,7 +22,7 @@ _DEFAULT_WS_URL = "ws://127.0.0.1:12345"
 _RECONNECT_COOLDOWN = 30.0
 _REQUEST_TIMEOUT = 5.0
 _SCAN_SECONDS = 1.0
-_MAX_DURATION_MS = 30_000
+_MAX_DURATION_MS = 900_000
 _MAX_PATTERN_STEPS = 32
 
 _session: aiohttp.ClientSession | None = None
@@ -32,6 +33,7 @@ _next_id = 1
 _last_connect_attempt = 0.0
 _connect_lock = asyncio.Lock()
 _command_lock = asyncio.Lock()
+_disconnect_listeners: set[Any] = set()
 
 
 def _hardware_config() -> dict:
@@ -81,6 +83,7 @@ async def disconnect() -> None:
     global _session, _websocket, _reader_task
 
     websocket, session, reader = _websocket, _session, _reader_task
+    had_connection = websocket is not None or session is not None or reader is not None
     _websocket = None
     _session = None
     _reader_task = None
@@ -95,6 +98,8 @@ async def disconnect() -> None:
         await websocket.close()
     if session is not None and not session.closed:
         await session.close()
+    if had_connection:
+        _notify_device_lost(None)
 
 
 async def vibrate(
@@ -102,27 +107,53 @@ async def vibrate(
     intensity: float = 0.5,
     duration_ms: int = 1000,
 ) -> bool:
-    intensity = _clamp_intensity(intensity)
-    duration_ms = _clamp_duration(duration_ms)
-    if not await ensure_connected():
+    """Accept a persistent vibration job and return without waiting for it."""
+    from core.hardware import jobs
+
+    try:
+        await jobs.submit_vibration(
+            device_index=device_index,
+            intensity=intensity,
+            duration_ms=duration_ms,
+        )
+        return True
+    except jobs.HardwareJobError as exc:
+        logger.warning("[buttplug] vibrate job rejected: %s", exc)
         return False
+
+
+async def _start_vibration_command(
+    device_index: int | None = None,
+    intensity: float = 0.5,
+) -> int | None:
+    """Send one immediate scalar command; timing is owned by hardware.jobs."""
+    intensity = _clamp_intensity(intensity)
+    if not await ensure_connected():
+        return None
     device = device_registry.get(device_index, require_vibrate=True)
     if device is None:
-        return False
+        return None
 
     async with _command_lock:
         try:
             await _send_scalar(device.index, device.vibration_indices[0], intensity)
-            await asyncio.sleep(duration_ms / 1000.0)
-            return True
+            return device.index
         except Exception as exc:
-            logger.warning("[buttplug] vibrate failed: %s", exc)
-            return False
-        finally:
-            await _best_effort_stop(device.index)
+            logger.warning("[buttplug] vibration command failed: %s", exc)
+            return None
 
 
 async def stop(device_index: int | None = None) -> bool:
+    """Cancel managed jobs first, or stop the device directly when none exist."""
+    from core.hardware import jobs
+
+    cancelled = await jobs.cancel_active(device_index=device_index)
+    if cancelled:
+        return all(job.get("status") == "cancelled" for job in cancelled)
+    return await _stop_device_command(device_index)
+
+
+async def _stop_device_command(device_index: int | None = None) -> bool:
     if not await ensure_connected():
         return False
     device = device_registry.get(device_index)
@@ -141,24 +172,19 @@ async def pattern(
     device_index: int | None = None,
     steps: list[tuple[float, int]] | None = None,
 ) -> bool:
-    normalized = _normalize_steps(steps)
-    if not await ensure_connected():
-        return False
-    device = device_registry.get(device_index, require_vibrate=True)
-    if device is None:
-        return False
+    """Accept a persistent pattern job and return without waiting for it."""
+    from core.hardware import jobs
 
-    async with _command_lock:
-        try:
-            for intensity, duration_ms in normalized:
-                await _send_scalar(device.index, device.vibration_indices[0], intensity)
-                await asyncio.sleep(duration_ms / 1000.0)
-            return True
-        except Exception as exc:
-            logger.warning("[buttplug] pattern failed: %s", exc)
-            return False
-        finally:
-            await _best_effort_stop(device.index)
+    try:
+        await jobs.submit_pattern(
+            pattern_name="custom",
+            steps=_normalize_steps(steps),
+            device_index=device_index,
+        )
+        return True
+    except jobs.HardwareJobError as exc:
+        logger.warning("[buttplug] pattern job rejected: %s", exc)
+        return False
 
 
 async def _connect() -> None:
@@ -227,7 +253,9 @@ def _handle_message(envelope: dict) -> None:
         device_registry.upsert_from_message(payload)
         return
     if message_type == "DeviceRemoved":
-        device_registry.remove(int(payload["DeviceIndex"]))
+        device_index = int(payload["DeviceIndex"])
+        device_registry.remove(device_index)
+        _notify_device_lost(device_index)
         return
 
     future = _pending.get(int(payload.get("Id") or 0))
@@ -258,6 +286,24 @@ async def _best_effort_stop(device_index: int) -> None:
         await _request("StopDeviceCmd", {"DeviceIndex": device_index})
     except Exception as exc:
         logger.warning("[buttplug] final stop failed: %s", exc)
+
+
+def add_disconnect_listener(listener) -> None:
+    _disconnect_listeners.add(listener)
+
+
+def remove_disconnect_listener(listener) -> None:
+    _disconnect_listeners.discard(listener)
+
+
+def _notify_device_lost(device_index: int | None) -> None:
+    for listener in tuple(_disconnect_listeners):
+        try:
+            result = listener(device_index)
+            if inspect.isawaitable(result):
+                asyncio.create_task(result)
+        except Exception:
+            logger.warning("[buttplug] disconnect listener failed", exc_info=True)
 
 
 def _reject_pending(exc: Exception) -> None:

@@ -221,6 +221,7 @@ execution
 | Pipeline | main.py | process lifetime |
 | Lore Engine | main.py | process lifetime |
 | Scheduler Task | scheduler.start() | process lifetime |
+| Hardware job manager | main.py → `core.hardware.jobs.startup()` | process lifetime; workers stop/cancel during shutdown |
 | FastAPI Admin Server | main.py | process lifetime |
 | Sensor workers | corresponding runner | process lifetime when enabled |
 
@@ -246,6 +247,11 @@ scheduler task
 sensor runner
 visual observation runner
 hardware workers
+
+The hardware job manager is started by `main.py` after Pipeline setup. It marks
+jobs left active by a previous process as `expired`, attempts an explicit stop,
+and unregisters its device-disconnect listener during shutdown. A worker never
+starts from module import.
 
 
 A module should not silently create a background task during import.

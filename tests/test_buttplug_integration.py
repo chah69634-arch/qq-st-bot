@@ -1,16 +1,20 @@
 import asyncio
+import json
 
 import pytest
 from fastapi.routing import APIRoute
 
 from core.hardware import device_registry
 from core.hardware import buttplug_client
+from core.hardware import jobs
 
 
 @pytest.fixture(autouse=True)
 async def reset_buttplug_state():
+    await jobs._reset_for_tests()
     await buttplug_client._reset_for_tests()
     yield
+    await jobs._reset_for_tests()
     await buttplug_client._reset_for_tests()
 
 
@@ -45,7 +49,7 @@ def test_device_events_update_registry():
     assert buttplug_client.get_devices() == []
 
 
-async def test_vibrate_clamps_values_and_always_stops(monkeypatch):
+async def test_vibration_command_clamps_values_and_returns_immediately(monkeypatch):
     _add_vibrating_device()
     calls = []
 
@@ -56,15 +60,10 @@ async def test_vibrate_clamps_values_and_always_stops(monkeypatch):
         calls.append((message_type, payload))
         return {}
 
-    async def fake_sleep(seconds):
-        calls.append(("sleep", seconds))
-
     monkeypatch.setattr(buttplug_client, "ensure_connected", fake_connected)
     monkeypatch.setattr(buttplug_client, "is_connected", lambda: True)
     monkeypatch.setattr(buttplug_client, "_request", fake_request)
-    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-
-    assert await buttplug_client.vibrate(7, intensity=9, duration_ms=100_000)
+    assert await buttplug_client._start_vibration_command(7, intensity=9) == 7
     assert calls == [
         (
             "ScalarCmd",
@@ -73,12 +72,10 @@ async def test_vibrate_clamps_values_and_always_stops(monkeypatch):
                 "Scalars": [{"Index": 1, "Scalar": 1.0, "ActuatorType": "Vibrate"}],
             },
         ),
-        ("sleep", 30.0),
-        ("StopDeviceCmd", {"DeviceIndex": 7}),
     ]
 
 
-async def test_pattern_stops_after_command_failure(monkeypatch):
+async def test_vibration_command_reports_command_failure(monkeypatch):
     _add_vibrating_device()
     calls = []
 
@@ -95,8 +92,8 @@ async def test_pattern_stops_after_command_failure(monkeypatch):
     monkeypatch.setattr(buttplug_client, "is_connected", lambda: True)
     monkeypatch.setattr(buttplug_client, "_request", fake_request)
 
-    assert not await buttplug_client.pattern(7, [(0.5, 10)])
-    assert calls == ["ScalarCmd", "StopDeviceCmd"]
+    assert await buttplug_client._start_vibration_command(7, intensity=0.5) is None
+    assert calls == ["ScalarCmd"]
 
 
 async def test_hardware_disabled_fails_closed(monkeypatch):
@@ -114,6 +111,12 @@ def test_toy_tools_registered_as_desktop_side_effects():
         assert spec["keywords"]
         assert tool_dispatcher.is_side_effect_tool(name)
 
+    status_spec = tool_dispatcher._TOOL_REGISTRY["toy_job_status"]
+    assert status_spec["category"] == "info"
+    assert status_spec["examples"]
+    assert status_spec["keywords"]
+    assert not tool_dispatcher.is_side_effect_tool("toy_job_status")
+
 
 def test_hardware_routes_are_bearer_protected():
     from admin.admin_server import app
@@ -123,7 +126,13 @@ def test_hardware_routes_are_bearer_protected():
         for route in app.routes
         if isinstance(route, APIRoute)
     }
-    for path in ("/hardware/devices", "/hardware/connect"):
+    for path in (
+        "/hardware/devices",
+        "/hardware/connect",
+        "/hardware/jobs",
+        "/hardware/jobs/{job_id}",
+        "/hardware/jobs/{job_id}/stop",
+    ):
         assert path in routes
         assert any(
             hasattr(dependency.call, "_required_scopes")
@@ -190,3 +199,196 @@ async def test_toy_tool_executes_for_owner_private_turn(monkeypatch):
     )
     assert result == "工具已执行：toy_stop，结果：已停止"
     assert confirm is None
+
+
+async def _wait_for_terminal(job_id: str) -> dict:
+    for _ in range(50):
+        record = jobs.get_job(job_id)
+        if record and record["status"] in jobs.TERMINAL_STATUSES:
+            return record
+        await asyncio.sleep(0)
+    raise AssertionError(f"job did not finish: {job_id}")
+
+
+async def test_long_vibration_returns_before_transport_finishes(monkeypatch):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_start(device_index, intensity):
+        started.set()
+        await release.wait()
+        return 7
+
+    async def fake_stop(device_index):
+        return True
+
+    monkeypatch.setattr(jobs, "_start_command", fake_start)
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+
+    from core.tools.hardware_tools import toy_vibrate
+
+    result = await asyncio.wait_for(toy_vibrate(duration_ms=900_000, device_index=7), timeout=0.2)
+    assert "已受理" in result
+    record = jobs.list_jobs(active_only=True)[0]
+    assert record["status"] == "accepted"
+    await started.wait()
+    release.set()
+    await jobs.cancel_job(record["job_id"])
+
+
+async def test_job_stops_at_deadline(monkeypatch):
+    calls = []
+
+    async def fake_start(device_index, intensity):
+        calls.append(("start", device_index, intensity))
+        return 7
+
+    async def fake_stop(device_index):
+        calls.append(("stop", device_index))
+        return True
+
+    monkeypatch.setattr(jobs, "_start_command", fake_start)
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+    record, duplicate = await jobs.submit_vibration(duration_ms=0, device_index=7)
+    assert not duplicate
+    final = await _wait_for_terminal(record["job_id"])
+    assert final["status"] == "completed"
+    assert calls[-1] == ("stop", 7)
+
+
+async def test_pattern_runs_in_worker_and_stops_once(monkeypatch):
+    calls = []
+
+    async def fake_start(device_index, intensity):
+        calls.append(("start", device_index, intensity))
+        return 7
+
+    async def fake_stop(device_index):
+        calls.append(("stop", device_index))
+        return True
+
+    monkeypatch.setattr(jobs, "_start_command", fake_start)
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+    record, _ = await jobs.submit_pattern(
+        pattern_name="test",
+        steps=[(0.2, 0), (0.8, 0)],
+        device_index=7,
+    )
+    final = await _wait_for_terminal(record["job_id"])
+    assert final["status"] == "completed"
+    assert calls == [
+        ("start", 7, 0.2),
+        ("start", 7, 0.8),
+        ("stop", 7),
+    ]
+
+
+async def test_disconnect_fails_job_and_freezes_remaining_time(monkeypatch):
+    async def fake_start(device_index, intensity):
+        return 7
+
+    async def fake_stop(device_index):
+        pytest.fail("disconnect path must not claim a confirmed stop")
+
+    monkeypatch.setattr(jobs, "_start_command", fake_start)
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+    record, _ = await jobs.submit_vibration(duration_ms=60_000, device_index=7)
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if jobs.get_job(record["job_id"])["status"] == "started":
+            break
+    await jobs.handle_device_lost(7)
+    failed = jobs.get_job(record["job_id"])
+    assert failed["status"] == "failed"
+    assert failed["outcome"] == "unknown"
+    assert failed["remaining_seconds"] == 0
+
+
+async def test_prompt_fragment_uses_system_remaining_time(monkeypatch):
+    async def fake_start(device_index, intensity):
+        return 7
+
+    async def fake_stop(device_index):
+        return True
+
+    monkeypatch.setattr(jobs, "_start_command", fake_start)
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+    record, _ = await jobs.submit_vibration(duration_ms=120_000, device_index=7)
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if jobs.get_job(record["job_id"])["status"] == "started":
+            break
+    fragment = jobs.format_prompt()
+    assert "当前硬件动作状态" in fragment
+    assert "还剩 约 2 分钟" in fragment
+    await jobs.cancel_job(record["job_id"])
+
+
+async def test_duplicate_start_is_idempotent(monkeypatch):
+    async def fake_start(device_index, intensity):
+        return 7
+
+    async def fake_stop(device_index):
+        return True
+
+    monkeypatch.setattr(jobs, "_start_command", fake_start)
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+    first, duplicate_first = await jobs.submit_vibration(duration_ms=10_000, device_index=7)
+    second, duplicate_second = await jobs.submit_vibration(duration_ms=10_000, device_index=7)
+    assert not duplicate_first
+    assert duplicate_second
+    assert second["job_id"] == first["job_id"]
+
+
+async def test_cancel_confirms_stop(monkeypatch):
+    stop_calls = []
+
+    async def fake_start(device_index, intensity):
+        return 7
+
+    async def fake_stop(device_index):
+        stop_calls.append(device_index)
+        return True
+
+    monkeypatch.setattr(jobs, "_start_command", fake_start)
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+    record, _ = await jobs.submit_vibration(duration_ms=60_000, device_index=7)
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if jobs.get_job(record["job_id"])["status"] == "started":
+            break
+    cancelled = await jobs.cancel_job(record["job_id"])
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["stop_confirmed"] is True
+    assert stop_calls == [7]
+
+
+async def test_restart_expires_old_job_and_attempts_stop(monkeypatch):
+    path = jobs._state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    old_job = {
+        "job_id": "old-job",
+        "kind": "vibration",
+        "status": "started",
+        "device_index": 7,
+        "requested_device_index": 7,
+        "intensity": 0.5,
+        "duration_ms": 60_000,
+        "accepted_at": 1.0,
+        "started_at": 1.0,
+        "deadline_at": 60_001.0,
+    }
+    path.write_text(json.dumps({"schema_version": 1, "jobs": [old_job]}), encoding="utf-8")
+    stop_calls = []
+
+    async def fake_stop(device_index):
+        stop_calls.append(device_index)
+        return True
+
+    monkeypatch.setattr(jobs, "_stop_command", fake_stop)
+    await jobs.startup()
+    recovered = jobs.get_job("old-job")
+    assert recovered["status"] == "expired"
+    assert recovered["outcome"] == "expired"
+    assert recovered["stop_confirmed"] is True
+    assert stop_calls == [7]

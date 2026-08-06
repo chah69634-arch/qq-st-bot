@@ -596,6 +596,15 @@ class Pipeline:
         except Exception as _ate:
             logger.debug("[pipeline.fetch_context] action_trace recent failed: %s", _ate)
 
+        # Hardware jobs are persistent system state; only active jobs are
+        # rendered and the remaining time is calculated by core.hardware.jobs.
+        _hardware_jobs_text = ""
+        try:
+            from core.hardware import jobs as _hardware_jobs
+            _hardware_jobs_text = _hardware_jobs.format_prompt()
+        except Exception as _hje:
+            logger.debug("[pipeline.fetch_context] hardware job state failed: %s", _hje)
+
         return {
             "history":             history,
             "profile":             profile,
@@ -624,6 +633,7 @@ class Pipeline:
             "web_recall_result": _web_recall_text,
             "web_recall_hits":   _web_recall_hits,
             "action_trace_entries": _action_trace_entries,
+            "hardware_jobs_text": _hardware_jobs_text,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -644,6 +654,7 @@ class Pipeline:
         tool_result_generated_at: float | None = None,
         tool_call_required: bool = False,
         required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
+        hardware_jobs_text: str | None = None,
     ) -> tuple[list[dict], dict]:
         """
         调用 prompt_builder 组装完整消息列表。
@@ -686,7 +697,7 @@ class Pipeline:
 
         scoped_character = context.get("_scoped_character", self.character)
         scoped_author_note = self.author_note_extra if _char_id == self._active_character_id else ""
-        messages, debug_info = prompt_builder.build(
+        _prompt_kwargs = dict(
             character=scoped_character,
             user_id=user_id,
             user_message=content,
@@ -726,6 +737,10 @@ class Pipeline:
             tool_call_required=tool_call_required,
             required_tool_names=required_tool_names,
         )
+        _hardware_jobs_for_prompt = context.get("hardware_jobs_text", "") if hardware_jobs_text is None else hardware_jobs_text
+        if _hardware_jobs_for_prompt:
+            _prompt_kwargs["hardware_jobs_text"] = _hardware_jobs_for_prompt
+        messages, debug_info = prompt_builder.build(**_prompt_kwargs)
         if _char_id == self._active_character_id:
             self.author_note_extra = ""
         debug_info["pending_paths"] = _pending_paths

@@ -448,9 +448,15 @@ async def _toy_vibrate_wrapper(
     )
 
 
-async def _toy_stop_wrapper(device_index: int | None = None) -> str:
+async def _toy_stop_wrapper(
+    device_index: int | None = None,
+    job_id: str | None = None,
+) -> str:
     from core.tools.hardware_tools import toy_stop
-    return await toy_stop(device_index=device_index)
+    kwargs = {"device_index": device_index}
+    if job_id is not None:
+        kwargs["job_id"] = job_id
+    return await toy_stop(**kwargs)
 
 
 async def _toy_pattern_wrapper(
@@ -459,6 +465,11 @@ async def _toy_pattern_wrapper(
 ) -> str:
     from core.tools.hardware_tools import toy_pattern
     return await toy_pattern(pattern_name=pattern_name, device_index=device_index)
+
+
+async def _toy_job_status_wrapper(job_id: str | None = None) -> str:
+    from core.tools.hardware_tools import toy_job_status
+    return await toy_job_status(job_id=job_id)
 
 
 async def _read_toy_file_wrapper(file_key: str) -> str:
@@ -975,14 +986,14 @@ _TOOL_REGISTRY["peek_screen_content"] = {
 
 _TOOL_REGISTRY["toy_vibrate"] = {
     "func": _toy_vibrate_wrapper,
-    "description": "控制已连接的 Intiface 振动设备。仅在用户明确同意振动并给出或接受强度、时长时调用。",
+    "description": "登记并异步启动 Intiface 振动任务。仅在用户明确同意振动并给出或接受强度、时长时调用；返回受理状态，不代表动作已完成。",
     "dangerous": False,
     "category": "desktop",
     "parameters": {
         "type": "object",
         "properties": {
             "intensity": {"type": "number", "description": "振动强度，范围为 0.0 到 1.0。"},
-            "duration_ms": {"type": "integer", "description": "振动持续毫秒数，最大为 30000。"},
+            "duration_ms": {"type": "integer", "description": "振动持续毫秒数，最大为 900000（15 分钟）。"},
             "device_index": {"type": "integer", "description": "可选的已连接设备索引。"},
         },
         "required": [],
@@ -1000,6 +1011,7 @@ _TOOL_REGISTRY["toy_stop"] = {
         "type": "object",
         "properties": {
             "device_index": {"type": "integer", "description": "可选的已连接设备索引；省略时停止默认设备。"},
+            "job_id": {"type": "string", "description": "可选的硬件任务 ID；提供时只停止该任务。"},
         },
         "required": [],
     },
@@ -1009,7 +1021,7 @@ _TOOL_REGISTRY["toy_stop"] = {
 
 _TOOL_REGISTRY["toy_pattern"] = {
     "func": _toy_pattern_wrapper,
-    "description": "让已连接的 Intiface 振动设备执行预设振动模式。仅在用户明确同意并指定或接受模式时调用。",
+    "description": "登记并异步启动 Intiface 预设振动模式。仅在用户明确同意并指定或接受模式时调用；返回受理状态，不代表模式已完成。",
     "dangerous": False,
     "category": "desktop",
     "parameters": {
@@ -1027,6 +1039,24 @@ _TOOL_REGISTRY["toy_pattern"] = {
     "examples": ["让玩具用波浪模式振动", "让设备执行轻柔模式"],
     "keywords": ["玩具模式", "波浪振动"],
     "trace_args": ["pattern_name"],
+}
+
+_TOOL_REGISTRY["toy_job_status"] = {
+    "func": _toy_job_status_wrapper,
+    "description": "查询当前硬件动作任务的系统状态和剩余时间。只读，不会启动、重放或停止设备动作。",
+    "dangerous": False,
+    "category": "info",
+    "effect": "read",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "job_id": {"type": "string", "description": "可选的硬件任务 ID；省略时查询所有进行中的任务。"},
+        },
+        "required": [],
+    },
+    "examples": ["刚才的硬件动作还剩多久", "查询玩具任务状态"],
+    "keywords": ["硬件任务状态", "还剩多久", "玩具状态"],
+    "trace_args": ["job_id"],
 }
 
 _TOOL_REGISTRY["read_toy_file"] = {
@@ -1529,6 +1559,7 @@ _OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
     "toy_vibrate",
     "toy_stop",
     "toy_pattern",
+    "toy_job_status",
 })
 
 

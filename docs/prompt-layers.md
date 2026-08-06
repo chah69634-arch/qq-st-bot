@@ -54,6 +54,7 @@
 | `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
 | `10_tool_result` | 本轮工具执行结果（带生成时间与有效性） | 有工具调用结果时 | `tool_dispatcher.execute()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`）；失败/结果不明明确不是完成事实 |
 | `10.5_action_trace` | 历史工具动作参考：你最近做过的操作（不是本轮结果） | `action_trace_entries` 非空（`recent()` 过滤后仍有条目） | `core/memory/action_trace.py` → `recent()` + `format_trace_block()`；历史条目带时间并明确标为参考 |
+| `10.6_hardware_jobs` | 当前硬件后台动作状态与系统计算的剩余时间 | 存在 `accepted`/`started` job | `core/hardware/jobs.py::format_prompt()`；只读系统状态，断线/失败/取消/过期任务不继续倒计时 |
 | `11_tool_grounding` | 本轮工具事实闸：明确要求调用时绑定“必须成功调用”，并在输出端拦截无成功调用的完成式断言 | pretool 关键词命中，或调用方显式传入 `tool_call_required=True` | `core/pretool_router.py` 识别意图 → `core/tool_grounding.py` 组装消息并在 `Pipeline.run_llm()` / tool loop 收尾校验 |
 | `anti_collapse_hint` | 反坍缩提示（长度坍缩 + 分段坍缩合并，按触发维度拼装文案），per-uid 持久化倒计时 `hint_rounds` 轮（默认3），不可裁 | `anti_collapse.enabled` 且长度/分段任一维度倒计时未归零 | `core/memory/short_term.py::get_anti_collapse_hint()`（长度维度沿用 `detect_reply_length_collapse()`；分段维度由 `note_segment_collapse_signal()` 在 `capture_turn()` 落盘时写入） |
 | `stream_collapse_hint` | ACT-2 · 流式路径反坍缩软降级：上一轮流式生成命中句首同质坍缩时的一次性纠偏提示，读到即消费清除（非持久化倒计时） | `core.memory.short_term.consume_stream_collapse_signal()` 返回非空前缀 | `core/pipeline.py::Pipeline._check_stream_collapse()`（流式完成后复用 `detect_reply_homogeneity_prefix()`）写入 `core.memory.short_term.note_stream_collapse_signal()` → `data/runtime/memory/{char_id}/{uid}/stream_collapse_signal.json` |
@@ -67,6 +68,8 @@
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >
 > 层 10.5（Brief 27）：`tool_dispatcher.execute()` 每次 return（origin 闸门拒绝除外）都调 `action_trace.record()` 落一条精简痕迹（`data/runtime/memory/{char_id}/{uid}/action_trace.json`，环形上限 30 条）。`result_digest` 只消费 `ToolResult.safe_summary`，`peek_screen_content` 特判只留 title_hint。**当轮去重**：本轮已有 `tool_result` 且其工具名与痕迹最新一条相同时跳过该条，避免层10/10.5 重复同一件事。不进 `_drop_priority` 裁剪链（够小且时效性强），全层预算截断 400 字。`action_trace.enabled: false` 时零行为变化。可选 `event_log_echo` 配置项：`status=ok` 时经 `fixation_pipeline.capture_turn(trigger_name="action_trace")` 回流一条到 event_log（**不得**直接调用底层写入函数，见 `tests/test_r6b_reality_scrub_contract.py` C2 契约）；回流文案刻意不整行包在中文括号里，否则会被 `scrub_reality_output_text` 当整行动作旁白丢弃。
+>
+> 层 10.6（硬件长时动作）：工具调用只登记 `hardware_jobs.json` 并立即返回；后台 worker 负责设备命令、到期 stop、断线/异常/显式取消和进程关闭清理。Prompt 只注入活动任务，`remaining_seconds` 由 `deadline_at - now` 计算；`failed`/`cancelled`/`expired` 任务不会被描述成仍在运行，也不把“已受理”说成“已完成”。
 >
 > `6f_dream_afterglow` 与 `dream_afterglow_soft_hint` 为互斥层：前者在退梦后 0–5h 注入逐渐模糊的摘要，后者在详细层为空后接管至 8h TTL。两层均只读、非现实事实、读取异常 fail-closed，不写 memory / mood / profile / hidden state。
 >
@@ -357,7 +360,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 80 | `5.5_lore` | 世界书设定，最后丢 |
 | 85 | `coplay_context` | 陪玩模式游戏进度/动态 + 剧透压制约束，内容很小，比 lore 更晚丢 |
 
-不在裁剪表里（无 `_drop_priority`）：`6a_user_identity`、`6a_user_identity_coldstart`（与 `6a_user_identity` 互斥、内容极小）、`5_profile`、`5_profile_pref`、`5.1_user_facts`、`9_history`、`11_author_note`、`11.5_post_history`、`10.5_action_trace`（够小且时效性强，不参与裁剪）、`anti_collapse_hint`（触发时才存在，内容是纠偏软提示，裁掉即失去纠偏效果，够小不参与裁剪）等核心层。
+不在裁剪表里（无 `_drop_priority`）：`6a_user_identity`、`6a_user_identity_coldstart`（与 `6a_user_identity` 互斥、内容极小）、`5_profile`、`5_profile_pref`、`5.1_user_facts`、`9_history`、`11_author_note`、`11.5_post_history`、`10.5_action_trace`（够小且时效性强，不参与裁剪）、`10.6_hardware_jobs`（当前设备状态事实，不参与裁剪）、`anti_collapse_hint`（触发时才存在，内容是纠偏软提示，裁掉即失去纠偏效果，够小不参与裁剪）等核心层。
 
 ### 裁剪算法
 

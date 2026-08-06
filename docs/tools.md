@@ -452,6 +452,7 @@ fs_access:
 | `toy_vibrate` | 用户明确要求已连接设备振动 | Intiface Central / Buttplug v3 |
 | `toy_stop` | 用户要求立即停止设备 | Intiface Central / Buttplug v3 |
 | `toy_pattern` | 用户明确要求预设振动模式 | Intiface Central / Buttplug v3 |
+| `toy_job_status` | 查询硬件后台任务状态 | 只读硬件 job 状态 |
 | `read_toy_file` | 读取玩具项目白名单文件 | `data/very_formal_project/`，仅接受枚举 `file_key` |
 | `write_toy_file` | 覆盖或追加玩具项目白名单文件 | UTF-8 文本，文件总长最多 4000 字，原子写入 |
 
@@ -467,11 +468,18 @@ fs_access:
 
 管理端：`GET/POST /settings/screen-peek`（见 `admin/routers/settings_screen_peek.py`），供前端设置页调用，改后即时生效无需重启。
 
-`toy_*` 是 reality-side hardware actuator，只能由 `scheduler.owner_id` 对应用户的真实私聊，
+`toy_vibrate` / `toy_stop` / `toy_pattern` 是 reality-side hardware actuator，`toy_job_status`
+是同一 owner 边界内的只读查询；都只能由 `scheduler.owner_id` 对应用户的真实私聊，
 经带 origin 闸门的工具调用触发；群聊、scheduler、trigger 和 Dream pipeline 均不能触发。
 客户端使用 `aiohttp` 直连本机 Intiface Central，
-`trust_env=False` 绕过系统代理；动作串行执行，并在正常结束、异常和取消时 best-effort 停止设备。
-强度限制为 `0.0~1.0`，单步时长上限 30 秒，pattern 最多 32 步。
+`trust_env=False` 绕过系统代理。长时动作先写入 `hardware_jobs.json`，由后台 worker 管理
+`accepted/started/completed/failed/cancelled/expired` 生命周期；工具调用立即返回受理结果，
+worker 在到期、异常、断线、显式取消和进程关闭时尝试停止设备。单个振动任务默认最长 15 分钟，
+可由 `hardware.max_job_duration_ms` 限制；pattern 最多 32 步。状态只读注入 prompt，剩余时间由系统计算，
+不得由模型或用户输入覆盖。
+
+管理端 `GET /hardware/jobs`、`GET /hardware/jobs/{job_id}` 提供只读观测，
+`POST /hardware/jobs/{job_id}/stop`（另有 `/cancel` 兼容别名）执行显式停止，均需 `hardware` scope。
 
 `read_toy_file` / `write_toy_file` 只操作 `get_paths().very_formal_project_dir()` 下的
 `diary`（思考笔记）、`wishlist`（愿望清单）、`doodle`（涂鸦板）。LLM 不接触路径；
