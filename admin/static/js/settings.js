@@ -617,13 +617,26 @@ async function testPreset(button) {
   }
 }
 
+function openCreatePresetModal() {
+  _mrEditingPresetName = null;
+  _openPresetModal(null);
+}
+
 function openPresetModal(name) {
-  // Older cached table markup passed the button itself.  Keep that stale UI
-  // from persisting "[object HTMLButtonElement]" as a preset identifier.
-  if (name && typeof name !== 'string') name = name.dataset?.presetName || '';
+  // data-action handlers receive their source element as a trailing argument.
+  // New and edit flows intentionally use separate entry points so this button
+  // can never become the source preset name for a rename request.
+  if (typeof name !== 'string') {
+    openCreatePresetModal();
+    return;
+  }
+  _mrEditingPresetName = name;
+  _openPresetModal(name);
+}
+
+function _openPresetModal(name) {
   document.getElementById('mr-preset-err').textContent = '';
   const nameInput = document.getElementById('mr-preset-name');
-  _mrEditingPresetName = name || null;
   if (name) {
     const p = _mrData.presets[name] || {};
     nameInput.value = name;
@@ -661,9 +674,7 @@ function closePresetModal() {
 async function submitPresetModal() {
   const nameInput = document.getElementById('mr-preset-name');
   const name = nameInput.value.trim();
-  const previousName = typeof _mrEditingPresetName === 'string'
-    ? _mrEditingPresetName
-    : _mrEditingPresetName?.dataset?.presetName || null;
+  const previousName = _mrEditingPresetName;
   const errEl = document.getElementById('mr-preset-err');
   if (!name) { errEl.textContent = '名称不能为空'; return; }
 
