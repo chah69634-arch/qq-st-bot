@@ -101,3 +101,6 @@ Scheduler       → core/scheduler/loop.py
 - **Stop**: before ending a response, checks if any edited code file has a matching doc that wasn't also updated; blocks with a reminder if so
 
 If you get blocked: either update the relevant doc, or explicitly state "no doc update needed: \<reason\>" and the next stop will pass.
+
+提交必须在 commit message 末尾加入
+Co-authored-by: Codex <codex@openai.com>
