@@ -18,11 +18,16 @@ os.chdir(_ROOT)
 sys.path.insert(0, str(_ROOT))
 
 
+def _worker_session(suffix: str) -> str:
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    return f"pytest_{worker}_{suffix}"
+
+
 @pytest.fixture
 def sandbox(tmp_path, monkeypatch):
     """将 DataPaths._base 替换为 tmp_path，使文件读写不污染生产数据。"""
     import core.sandbox as _sandbox
-    paths = _sandbox.DataPaths(mode="test", test_session_id="pytest_unit")
+    paths = _sandbox.DataPaths(mode="test", test_session_id=_worker_session("unit"))
     paths._base = tmp_path
     monkeypatch.setattr(_sandbox, "_instance", paths)
     return paths
@@ -38,7 +43,7 @@ def _default_sandbox_guard(tmp_path, monkeypatch):
     执行），其 monkeypatch.setattr 会覆盖这里设置的默认值，语义不变。
     """
     import core.sandbox as _sandbox
-    guard_paths = _sandbox.DataPaths(mode="test", test_session_id="pytest_default_guard")
+    guard_paths = _sandbox.DataPaths(mode="test", test_session_id=_worker_session("default_guard"))
     guard_paths._base = tmp_path / "_default_sandbox_guard"
     monkeypatch.setattr(_sandbox, "_instance", guard_paths)
 

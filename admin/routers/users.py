@@ -18,6 +18,7 @@ router = APIRouter()
 def _get_known_users() -> list[str]:
     """扫描 history/ / profiles/（legacy）和 memory/{char_id}/（v1）目录，收集所有已知用户 ID。"""
     from core.sandbox import get_paths
+    from core.test_data_guard import is_test_identifier
     user_ids: set[str] = set()
 
     # legacy 扫描（含过渡期仍存在旧文件的情况）
@@ -34,7 +35,7 @@ def _get_known_users() -> list[str]:
     if char_root.exists():
         user_ids.update(d.name for d in char_root.iterdir() if d.is_dir())
 
-    return sorted(user_ids)
+    return sorted(uid for uid in user_ids if not is_test_identifier(uid))
 
 
 def _resolve_char_id(char_id: str | None) -> str:

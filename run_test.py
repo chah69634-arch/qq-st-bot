@@ -7,6 +7,7 @@ run_test.py — 以 test 模式启动 Emerald-presence。
 import asyncio
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # ── 1. 切换到 Emerald-presence 目录，与 main.py 保持一致 ────────────────────────────
@@ -15,7 +16,10 @@ os.chdir(Path(__file__).parent)
 # ── 2. 初始化沙盒（必须在所有项目模块导入之前）────────────────────────────────
 from core.sandbox import init_paths
 
-_paths = init_paths(mode="test")
+_manual_session_id = os.environ.get("PRESENCE_TEST_SESSION_ID") or (
+    f"manual_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
+)
+_paths = init_paths(mode="test", test_session_id=_manual_session_id)
 
 print("=" * 60)
 print(f"[TEST] session_id  : {_paths.test_session_id}")

@@ -56,6 +56,10 @@ HTTP 管理面不接受 `?token=` / `?secret=` query 鉴权；`/watch/event` 也
 实际路径实现位于 `core/data_paths.py`，治理登记位于 `core/data_registry.py`。`mode=test` 时，
 路径前缀切到 `data/test_sandbox/{session}/`，并把 `data_prefix` 写入 `config.yaml` 供桌宠端读取。
 
+生产模式还会在 `DataPaths` 的用户态运行路径入口拒绝高置信测试 UID/session 标识。统一判定
+位于 `core/test_data_guard.py`；`scripts/audit_test_data_root.py` 默认只读，只有显式传入
+`--archive-known` 才会把已分类测试目录移入 `data/_archive/test_data/`。未知用户目录不会被删除。
+
 `core/safe_write.py` 提供：
 - `safe_write_text/json/bytes()`：写临时文件后 replace
 - `safe_append_jsonl()`：追加 jsonl，用于日志类观测文件

@@ -2,6 +2,18 @@ async function loadStatus() {
   loadFeatureFlags();
   try {
     const d = await api('GET', '/status');
+    const mode = document.getElementById('s-data-mode');
+    const session = document.getElementById('s-test-session');
+    const root = document.getElementById('s-data-root');
+    const testUsers = document.getElementById('s-test-users');
+    if (mode) {
+      mode.textContent = d.data_mode || 'unknown';
+      mode.dataset.mode = d.data_mode || '';
+      mode.className = `badge ${d.data_mode === 'test' ? 'badge-warn' : 'badge-success'}`;
+    }
+    if (session) session.textContent = d.test_session_id || '(none)';
+    if (root) root.textContent = d.data_root || '(unknown)';
+    if (testUsers) testUsers.textContent = (d.test_user_ids || []).join(', ') || '(none)';
     document.getElementById('s-users').textContent    = d.known_user_count ?? '—';
   } catch(e) {
     toast(t('status.error.load', '获取状态失败: {error}', {error: e.message}), 'err');

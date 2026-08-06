@@ -231,7 +231,15 @@ authored 静态内容另有 new-primary / old-fallback，但由 accessor 自己�
 ## 新增路径规范
 
 1. 在 `core/data_paths.py` 增加 accessor，所有运行态 `data/` 路径都从 `get_paths()` 获取。
+
 2. 在 `core/data_registry.py::REGISTRY` 登记治理元数据；`tests/test_data_registry.py` 会自检。
 3. 明确 test sandbox 偏移、旧路径兼容和清理策略。
 4. 属于 retention 的路径同步登记 `RETENTION_POLICY`，并接入 `scheduler._check_log_maintenance()`。
+
+### Test data isolation
+
+- `mode=test` writes under `data/test_sandbox/{session_id}/`; `run_test.py` uses a distinct `manual_*` session and pytest includes the xdist worker in its session marker.
+- Production `DataPaths` rejects high-confidence test UID/session markers before resolving user-scoped runtime paths.
+- `python scripts/audit_test_data_root.py --json` is read-only by default. `--archive-known` moves only classified test UID directories to `data/_archive/test_data/`; unknown directories are never removed.
+- Admin `/status` exposes `data_mode`, `test_session_id`, and quarantined test UIDs. Normal `/users/` enumeration filters those test UIDs.
 5. 更新本文和对应专题文档。

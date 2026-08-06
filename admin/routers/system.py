@@ -22,21 +22,29 @@ router = APIRouter()
 @router.get("/status", summary="获取机器人运行状态")
 async def get_status(auth=Depends(require_scopes("state.read"))):
     from core import message_queue
+    from core.test_data_guard import is_test_identifier
 
     cfg = get_config()
+    paths = get_paths()
     # v1: 从 memory_char_root 枚举用户子目录；legacy: 扫 history/ *.json
-    char_root = get_paths().memory_char_root()
+    char_root = paths.memory_char_root()
     if char_root.exists():
-        user_count = sum(1 for d in char_root.iterdir() if d.is_dir())
+        user_ids = {item.name for item in char_root.iterdir() if item.is_dir()}
     else:
-        history_dir = get_paths().history()
-        user_count = len(list(history_dir.glob("*.json"))) if history_dir.exists() else 0
+        history_dir = paths.history()
+        user_ids = {item.stem for item in history_dir.glob("*.json")} if history_dir.exists() else set()
+    test_user_ids = sorted(uid for uid in user_ids if is_test_identifier(uid))
+    user_count = sum(1 for uid in user_ids if not is_test_identifier(uid))
 
     return {
         "status": "running",
         "active_sessions":      message_queue.active_sessions(),
         "active_session_count": len(message_queue.active_sessions()),
         "known_user_count":     user_count,
+        "data_mode": paths.mode,
+        "test_session_id": paths.test_session_id,
+        "data_root": str(paths.root_dir()).replace("\\", "/"),
+        "test_user_ids": test_user_ids,
         "config_summary": {
             "llm_model":        cfg.get("llm", {}).get("model",    "unknown"),
             "llm_provider":     cfg.get("llm", {}).get("provider", "unknown"),

@@ -9,6 +9,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from core.test_data_guard import assert_production_identity_allowed
+
 logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
@@ -91,8 +93,8 @@ class DataPaths:
         if mode == "test":
             if test_session_id is None:
                 test_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.test_session_id = test_session_id
-            self._base = Path("data") / "test_sandbox" / test_session_id
+            self.test_session_id = safe_user_id(test_session_id)
+            self._base = Path("data") / "test_sandbox" / self.test_session_id
         else:
             self.test_session_id = None
             self._base = Path("data")
@@ -122,6 +124,10 @@ class DataPaths:
         不作为业务写入路径的起点——业务路径一律走本类其他具名方法。
         """
         return self._base
+
+    def test_data_archive_root(self) -> Path:
+        """Archive root for confirmed test-only runtime remnants."""
+        return self._p("_archive", "test_data")
 
     def layout_version(self) -> Path:
         """data/layout_version.json — v1 installation/data compatibility baseline."""
@@ -336,17 +342,21 @@ class DataPaths:
 
     def autonomy_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Durable internal-autonomy state, isolated per character and owner."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "autonomy", safe_user_id(char_id), safe_user_id(user_id), "state.json")
 
     def self_management_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Character-scoped Self Capability state; never shares autonomy state."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "self_management", safe_user_id(char_id), safe_user_id(user_id), "state.json")
 
     def self_management_audit(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Append-only, capability-only audit trail for one character and owner."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "self_management", safe_user_id(char_id), safe_user_id(user_id), "audit.jsonl")
 
     def wake_delivery_ledger(self, user_id: str | int) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("wake_delivery", f"{safe_user_id(user_id)}.json")
 
     def wake_bridge_root(self) -> Path:
@@ -355,6 +365,7 @@ class DataPaths:
 
     def wake_bridge_state(self, user_id: str | int, *, char_id: str, provider: str) -> Path:
         """Persistent external-stimulus dedupe/cursor state, scoped by char, owner and provider."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return (
             self.wake_bridge_root() / safe_user_id(char_id) / safe_user_id(user_id)
             / f"{safe_user_id(provider)}.json"
@@ -504,19 +515,24 @@ class DataPaths:
         return self._p("runtime", "dreams", char_id, "invariants")
 
     def dream_state_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "dreams", char_id, "state", safe_user_id(user_id), "dream_state.json")
 
     def dream_settings_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "dreams", char_id, "settings", safe_user_id(user_id) + ".json")
 
     def dream_hud_state_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "dreams", char_id, "state", safe_user_id(user_id), "dream_hud_state.json")
 
     def coplay_state_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "coplay", char_id, "state", safe_user_id(user_id), "coplay_state.json")
 
     def coplay_games_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """data/runtime/coplay/{char_id}/games/{uid}/ — parent of all per-game dirs (Brief 42 listing)."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "coplay", char_id, "games", safe_user_id(user_id))
 
     def coplay_game_dir(self, user_id: str | int, game_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
@@ -525,17 +541,21 @@ class DataPaths:
         game_id can contain ':' (e.g. "steam:123", from core.coplay.watcher) which
         is illegal in a Windows path segment — sanitize before it ever reaches _p().
         """
+        assert_production_identity_allowed(user_id, mode=self.mode)
         safe_game_id = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(game_id)).strip(". ") or "unknown"
         return self.coplay_games_root(user_id, char_id=char_id) / safe_game_id
 
     def coplay_game_state_path(self, user_id: str | int, game_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self.coplay_game_dir(user_id, game_id, char_id=char_id) / "state.json"
 
     def coplay_afterglow_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Brief 42 — session 结束后的软提示残留（纯文本 TTL，不挂 hidden_state）。"""
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "coplay", char_id, "afterglow", f"{safe_user_id(user_id)}.json")
 
     def coplay_game_log_path(self, user_id: str | int, game_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self.coplay_game_dir(user_id, game_id, char_id=char_id) / "log.md"
 
     def garden(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
@@ -818,6 +838,7 @@ class DataPaths:
     def user_memory_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """S6: per-user memory 根目录: data/runtime/memory/{char_id}/{uid}/
         写入前调用方负责 .mkdir(parents=True, exist_ok=True)。"""
+        assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "memory", char_id, safe_user_id(user_id))
 
     # ── 信件内容资产（authored static content）────────────────────────────────
@@ -983,10 +1004,12 @@ class DataPaths:
 
     def reading_sessions_root(self, *, char_id: str, uid: str) -> Path:
         """data/runtime/activity/reading/{char_id}/{uid}/"""
+        assert_production_identity_allowed(uid, mode=self.mode)
         return self._p("runtime", "activity", "reading", char_id, safe_user_id(uid))
 
     def reading_session_dir(self, *, char_id: str, uid: str, session_id: str) -> Path:
         """data/runtime/activity/reading/{char_id}/{uid}/{session_id}/"""
+        assert_production_identity_allowed(uid, session_id, mode=self.mode)
         return self._p(
             "runtime", "activity", "reading",
             char_id, safe_user_id(uid), safe_user_id(session_id),
@@ -1016,10 +1039,12 @@ class DataPaths:
 
     def activity_sessions_root(self, *, char_id: str, uid: str, activity_type: str) -> Path:
         """data/runtime/activity/{char_id}/{uid}/{activity_type}/"""
+        assert_production_identity_allowed(uid, mode=self.mode)
         return self._p("runtime", "activity", char_id, safe_user_id(uid), activity_type)
 
     def activity_session_dir(self, *, char_id: str, uid: str, activity_type: str, session_id: str) -> Path:
         """data/runtime/activity/{char_id}/{uid}/{activity_type}/{session_id}/"""
+        assert_production_identity_allowed(uid, session_id, mode=self.mode)
         return self._p(
             "runtime", "activity",
             char_id, safe_user_id(uid), activity_type, safe_user_id(session_id),

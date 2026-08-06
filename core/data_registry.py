@@ -202,6 +202,7 @@ REGISTRY: dict[str, PathMeta] = {
     # ── canonical: shared toy-project files, writable only through whitelist ─
     "very_formal_project_dir": PathMeta("canonical", "shared",         "global",        "ignore"),
     "root_dir":               PathMeta("runtime",   "shared",          "global",        "ignore"),
+    "test_data_archive_root": PathMeta("archive",   "shared",          "global",        "ignore"),
 
     # ── Stage: multi-character session truth ─────────────────────────────────
     # Stage may run in reality or dream; the persisted meta carries the domain.
