@@ -467,6 +467,7 @@ async function loadFeatureFlags() {
 }
 async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { const result = await api('PUT', '/settings/feature-flags', { flags }); toast(result.message || t('common.saved', '已保存'), result.reload_status === 'restart_required' ? 'err' : 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
+let _mrEditingPresetName = null;
 const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue'];
 const MR_CATEGORY_DESC = {
   chat:           '角色的正式回复，用户实际看到的每一句话（建议配主力模型）',
@@ -552,20 +553,21 @@ function _renderPresetsTable(presets) {
   if (!names.length) { el.innerHTML = '<div class="empty">暂无 preset</div>'; return; }
   const rows = names.map(name => {
     const p = presets[name];
+    const escapedName = escapeHtml(name);
     return `
       <tr>
-        <td><strong>${name}</strong></td>
-        <td><span class="badge badge-accent">${p.provider_kind || '?'}</span></td>
-        <td><span class="badge">${p.api_protocol || 'chat_completions'}</span></td>
-        <td><code style="font-family:var(--mono);font-size:12px">${p.model || ''}</code></td>
-        <td style="font-size:12px;color:var(--muted)">${p.base_url || ''}</td>
+        <td><strong>${escapedName}</strong></td>
+        <td><span class="badge badge-accent">${escapeHtml(p.provider_kind || '?')}</span></td>
+        <td><span class="badge">${escapeHtml(p.api_protocol || 'chat_completions')}</span></td>
+        <td><code style="font-family:var(--mono);font-size:12px">${escapeHtml(p.model || '')}</code></td>
+        <td style="font-size:12px;color:var(--muted)">${escapeHtml(p.base_url || '')}</td>
         <td style="white-space:nowrap">
-          <button class="btn btn-ghost btn-sm" onclick="testPreset('${name}')">测试</button>
-          <button class="btn btn-ghost btn-sm" onclick="openPresetModal('${name}')">编辑</button>
-          <button class="btn btn-ghost btn-sm" onclick="confirmDeletePreset('${name}')">删除</button>
+          <button class="btn btn-ghost btn-sm" data-preset-name="${escapedName}" onclick="testPreset(this)">测试</button>
+          <button class="btn btn-ghost btn-sm" data-preset-name="${escapedName}" onclick="openPresetModal(this.dataset.presetName)">编辑</button>
+          <button class="btn btn-ghost btn-sm" data-preset-name="${escapedName}" onclick="confirmDeletePreset(this.dataset.presetName)">删除</button>
         </td>
       </tr>
-      <tr id="mr-test-row-${name}" style="display:none"><td colspan="6" style="font-size:12px" id="mr-test-result-${name}"></td></tr>
+      <tr class="mr-test-row" style="display:none"><td colspan="6" style="font-size:12px" data-preset-test-result></td></tr>
     `;
   }).join('');
   el.innerHTML = `<div class="tbl-wrap"><table>
@@ -597,9 +599,10 @@ function _renderProfilesTable(profiles, presets) {
   </table></div>`;
 }
 
-async function testPreset(name) {
-  const row = document.getElementById(`mr-test-row-${name}`);
-  const cell = document.getElementById(`mr-test-result-${name}`);
+async function testPreset(button) {
+  const name = button.dataset.presetName;
+  const row = button.closest('tr').nextElementSibling;
+  const cell = row.querySelector('[data-preset-test-result]');
   row.style.display = '';
   cell.textContent = '测试中…';
   try {
@@ -617,10 +620,11 @@ async function testPreset(name) {
 function openPresetModal(name) {
   document.getElementById('mr-preset-err').textContent = '';
   const nameInput = document.getElementById('mr-preset-name');
+  _mrEditingPresetName = name || null;
   if (name) {
     const p = _mrData.presets[name] || {};
     nameInput.value = name;
-    nameInput.disabled = true;
+    nameInput.disabled = false;
     document.getElementById('mr-preset-kind').value = p.provider_kind || 'openai';
     document.getElementById('mr-preset-api-protocol').value = p.api_protocol || 'chat_completions';
     document.getElementById('mr-preset-anthropic-auth-mode').value = p.anthropic_auth_mode || 'x_api_key';
@@ -649,11 +653,12 @@ function openPresetModal(name) {
 }
 function closePresetModal() {
   document.getElementById('mr-preset-modal').classList.remove('open');
+  _mrEditingPresetName = null;
 }
 async function submitPresetModal() {
   const nameInput = document.getElementById('mr-preset-name');
   const name = nameInput.value.trim();
-  const isEdit = nameInput.disabled;
+  const previousName = _mrEditingPresetName;
   const errEl = document.getElementById('mr-preset-err');
   if (!name) { errEl.textContent = '名称不能为空'; return; }
 
@@ -675,6 +680,9 @@ async function submitPresetModal() {
   body.provider_kind = document.getElementById('mr-preset-kind').value;
 
   try {
+    if (previousName && previousName !== name) {
+      await api('POST', `/model-presets/presets/${encodeURIComponent(previousName)}/rename`, { new_name: name });
+    }
     await api('PUT', `/model-presets/presets/${encodeURIComponent(name)}`, body);
     toast(`preset '${name}' 已保存`, 'ok');
     closePresetModal();

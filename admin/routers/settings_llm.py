@@ -650,6 +650,10 @@ class PresetUpsert(BaseModel):
     tool_preset: Optional[str] = None
 
 
+class PresetRename(BaseModel):
+    new_name: str
+
+
 def _require_model_presets_block(full_cfg: dict) -> dict:
     mp = full_cfg.get("model_presets")
     if not mp:
@@ -721,6 +725,47 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
         "message": f"preset '{name}' 已{'创建' if is_new else '更新'}",
         "name": name,
         "preset": _mask_presets({name: presets[name]})[name],
+    }
+
+
+@router.post("/model-presets/presets/{name}/rename", summary="重命名 model preset 并更新 routing profile 引用")
+async def rename_preset(name: str, body: PresetRename, auth=Depends(require_scopes("admin"))):
+    """Rename one preset atomically with every routing-profile reference to it."""
+    new_name = body.new_name.strip()
+    if not new_name:
+        raise HTTPException(status_code=422, detail="新的 preset 名称不能为空")
+
+    full_cfg = read_config_file(CONFIG_FILE)
+    mp = _require_model_presets_block(full_cfg)
+    presets = mp.setdefault("presets", {})
+    if name not in presets:
+        raise HTTPException(status_code=404, detail=f"preset {name!r} 不存在")
+    if new_name != name and new_name in presets:
+        raise HTTPException(status_code=409, detail=f"preset {new_name!r} 已存在")
+
+    updated_references: list[str] = []
+    if new_name != name:
+        # Rebuild instead of pop+append so the renamed item preserves its order
+        # in the admin UI and config file.
+        mp["presets"] = {
+            (new_name if preset_name == name else preset_name): preset
+            for preset_name, preset in presets.items()
+        }
+        presets = mp["presets"]
+        for profile_name, profile in mp.get("routing_profiles", {}).items():
+            for category, preset_name in profile.items():
+                if preset_name == name:
+                    profile[category] = new_name
+                    updated_references.append(f"{profile_name}.{category}")
+
+        await _persist_model_presets(full_cfg)
+
+    return {
+        "message": f"preset {name!r} 已重命名为 {new_name!r}",
+        "name": new_name,
+        "old_name": name,
+        "updated_references": updated_references,
+        "preset": _mask_presets({new_name: presets[new_name]})[new_name],
     }
 
 

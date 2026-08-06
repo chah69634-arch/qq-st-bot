@@ -3,6 +3,7 @@ tests/test_model_presets_crud.py — W2: model-presets preset/routing-profile CR
 
 覆盖：
   PUT    /model-presets/presets/{name}
+  POST   /model-presets/presets/{name}/rename
   DELETE /model-presets/presets/{name}
   PUT    /model-presets/routing-profiles/{name}
   POST   /model-presets/presets/{name}/test
@@ -186,6 +187,70 @@ def test_put_preset_legacy_mode_rejected(admin_client):
         headers=_auth(),
     )
     assert resp.status_code == 400
+
+
+# ── POST /model-presets/presets/{name}/rename ──────────────────────────────
+
+def test_rename_preset_updates_every_routing_profile_reference(admin_client):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "routing_profiles": {
+            "default": {"chat": "deepseek-default", "probe": "deepseek-default"},
+            "background": {"summary": "deepseek-default", "intent": "deepseek-default"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    resp = client.post(
+        "/model-presets/presets/deepseek-default/rename",
+        json={"new_name": "deepseek-relay"},
+        headers=_auth(),
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "deepseek-relay"
+    assert body["old_name"] == "deepseek-default"
+    assert set(body["updated_references"]) == {
+        "default.chat", "default.probe", "background.summary", "background.intent",
+    }
+
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    presets = saved["model_presets"]["presets"]
+    assert "deepseek-default" not in presets
+    assert presets["deepseek-relay"]["model"] == "deepseek-chat"
+    assert saved["model_presets"]["routing_profiles"] == {
+        "default": {"chat": "deepseek-relay", "probe": "deepseek-relay"},
+        "background": {"summary": "deepseek-relay", "intent": "deepseek-relay"},
+    }
+
+
+def test_rename_preset_rejects_blank_or_existing_target_without_writing(admin_client):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "occupied": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    blank = client.post(
+        "/model-presets/presets/deepseek-default/rename",
+        json={"new_name": "  "}, headers=_auth(),
+    )
+    conflict = client.post(
+        "/model-presets/presets/deepseek-default/rename",
+        json={"new_name": "occupied"}, headers=_auth(),
+    )
+
+    assert blank.status_code == 422
+    assert conflict.status_code == 409
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert set(saved["model_presets"]["presets"]) == {"deepseek-default", "occupied"}
+    assert saved["model_presets"]["routing_profiles"]["default"]["chat"] == "deepseek-default"
 
 
 # ── DELETE /model-presets/presets/{name} ───────────────────────────────────────
@@ -375,6 +440,7 @@ def test_no_token_rejected_on_all_new_endpoints(admin_client):
     _write_cfg(temp_cfg)
 
     assert client.put("/model-presets/presets/x", json={"provider_kind": "openai", "model": "x"}).status_code in (401, 403)
+    assert client.post("/model-presets/presets/deepseek-default/rename", json={"new_name": "x"}).status_code in (401, 403)
     assert client.delete("/model-presets/presets/deepseek-default").status_code in (401, 403)
     assert client.put("/model-presets/routing-profiles/default", json={"chat": "deepseek-default"}).status_code in (401, 403)
     assert client.post("/model-presets/presets/deepseek-default/test").status_code in (401, 403)

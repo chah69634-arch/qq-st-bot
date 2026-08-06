@@ -317,6 +317,7 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 | `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、active_routing；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
 | `PUT /model-presets/active-routing` | 切换 active_routing 并热重载（仅 model_presets 模式） |
 | `PUT /model-presets/presets/{name}` | 新增或更新一个 preset（合并更新；新建须提供 provider_kind；仅 model_presets 模式） |
+| `POST /model-presets/presets/{name}/rename` | 重命名 preset；同一次原子写入会更新所有 routing profile 的 category→preset 引用并热重载；目标名不能为空且不得已存在 |
 | `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile 引用或是唯一剩余 preset 时 409 |
 | `PUT /model-presets/routing-profiles/{name}` | 新增或更新一个 routing profile 的 call_category → preset 映射（合并更新，值须是已存在的 preset） |
 | `GET /model-presets/routing-profiles` | 可选 profile 清单（名字 + 各 category→preset 映射摘要），角色绑定下拉框数据源 |
