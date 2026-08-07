@@ -12,7 +12,7 @@ Action = Literal["enable", "disable", "set_value"]
 class CapabilityChange:
     action: Action
     capability_id: str
-    value: bool | int | None
+    value: Any
     reason: str
     expected_revision: int
     action_id: str
@@ -23,7 +23,7 @@ class ChangeResult:
     ok: bool
     code: str
     revision: int
-    value: bool | int | None = None
+    value: Any = None
     message: str = ""
 
 
@@ -34,6 +34,7 @@ def state_template(uid: str, char_id: str) -> dict[str, Any]:
         "char_id": str(char_id),
         "grants": {},
         "agent_state": {},
+        "agent_baseline": {},
         "locks": {},
         "applied_actions": {},
         "revision": 0,

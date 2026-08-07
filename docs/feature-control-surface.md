@@ -107,3 +107,31 @@ policy 和 `reload_status` 是管理面的唯一状态来源；未连接或没�
 
 严格本地策略通过 `GET /settings/mcp` 返回的 `require_local_policy` 显示。严格模式空白
 `allow_tools` 是零授权；legacy 非严格模式才保留空白即全开的兼容语义。
+# Brief 152: Self Capability management controls
+
+Self Capability management IDs are separate from admin API scopes.  A fresh
+installation exposes safe, reversible `setting.*` controls through the internal
+management gateway: Tool Loop switches and exposure/presets, ordinary tool
+execution switches, the MCP global switch plus configured-server enablement and
+allowlists, and ordinary scheduler/autonomy switches, budgets, and intervals.
+
+The registry publishes `default_grant`, `mutable_by_agent`, `user_lockable`,
+`requires_confirmation`, `high_risk`, and `value_type` for every management
+capability.  MCP capabilities identify a configured server by name; the model
+cannot provide a URL, headers, or transport configuration.  Secrets, auth/token
+profiles and scopes, proxy/bind/listen settings, destructive deletion/retention,
+and MCP imports are protected with stable rejection codes.  High-risk tool
+policies remain observable but are never agent-mutable; only an explicit admin
+action can enable them.
+
+Every accepted mutation uses the character-scoped optimistic revision and an
+idempotent action ID, appends an audit record, and increments the effective
+schema revision.  Audit values are bounded and omit URLs, headers, tokens,
+passwords, API keys, and raw tool results.  The admin read endpoint is
+`GET /admin/self-management` (with `policy_matrix` and `audit`), while the
+agent has only the dedicated `manage_self_capability` gateway.
+
+Configured MCP tools may expose a safe `setting.mcp.server:<name>.policy:<tool>`
+control for ordinary `read`/`write` policy and confirmation flags. Existing
+`actuate`, `emergency`, and `unrestricted` policies are marked high risk and
+cannot be changed by the agent.

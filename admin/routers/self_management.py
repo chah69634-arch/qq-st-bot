@@ -30,6 +30,12 @@ async def get_self_management(auth=Depends(require_scopes("state.read"))):
     return view(uid, char_id)
 
 
+@router.get("/admin/self-management/policy")
+async def get_self_management_policy(auth=Depends(require_scopes("state.read"))):
+    from core.self_management.registry import policy_matrix
+    return {"policy": policy_matrix()}
+
+
 @router.post("/admin/self-management/grants")
 async def set_grant(body: dict, auth=Depends(require_scopes("admin"))):
     from core.self_management.service import user_grant

@@ -1181,7 +1181,7 @@ _TOOL_REGISTRY["manage_self_capability"] = {
         "properties": {
             "action": {"type": "string", "enum": ["enable", "disable", "set_value"]},
             "capability_id": {"type": "string", "maxLength": 160},
-            "value": {"type": ["boolean", "integer", "null"]},
+            "value": {"type": ["boolean", "integer", "string", "array", "object", "null"]},
             "reason": {"type": "string", "minLength": 1, "maxLength": 240},
             "expected_revision": {"type": "integer", "minimum": 0},
             "action_id": {"type": "string", "minLength": 1, "maxLength": 128},
