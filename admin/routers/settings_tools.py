@@ -27,11 +27,18 @@ class ToolPresetInput(BaseModel):
     tools: list[str] = Field(default_factory=list)
 
 
+class ToolExposureInput(BaseModel):
+    categories: Optional[list[str]] = None
+    tools: Optional[list[str]] = None
+    exclude_tools: Optional[list[str]] = None
+
+
 class ToolControlUpdate(BaseModel):
     tool_presets: Optional[list[ToolPresetInput]] = None
     model_bindings: Optional[dict[str, Optional[str]]] = None
     execution_enabled: Optional[dict[str, bool]] = None
     global_default_tools: Optional[list[str]] = None
+    exposure: Optional[dict[str, ToolExposureInput]] = None
 
 
 def _static_tool_enabled(name: str, tools_config: dict) -> bool:
@@ -77,6 +84,20 @@ def _response(cfg: dict) -> dict:
         row["name"] for row in rows
         if row["category"] in global_categories and row["name"] not in global_excluded
     ]
+    exposure_cfg = cfg.get("tool_exposure") if isinstance(cfg.get("tool_exposure"), dict) else {}
+    path_c_legacy = tool_loop.get("categories", ["info", "desktop", "memory"])
+    path_c_excludes = tool_loop.get("exclude_tools", [])
+    path_exposure = {}
+    for path, defaults in {
+        "path_a": {"categories": ["info", "desktop"], "tools": None, "exclude_tools": []},
+        "path_c": {"categories": path_c_legacy, "tools": None, "exclude_tools": path_c_excludes},
+    }.items():
+        block = exposure_cfg.get(path) if isinstance(exposure_cfg.get(path), dict) else {}
+        path_exposure[path] = {
+            "categories": block.get("categories", defaults["categories"]),
+            "tools": block.get("tools", defaults["tools"]),
+            "exclude_tools": block.get("exclude_tools", defaults["exclude_tools"]),
+        }
     tool_presets = [
         {"name": item["name"], "tools": [tool for tool in item["tools"] if tool in builtin_names]}
         for item in normalize_tool_presets(tool_loop.get("tool_presets"))
@@ -95,6 +116,7 @@ def _response(cfg: dict) -> dict:
         "global_default_tools": global_default_tools,
         "global_categories": global_categories,
         "global_exclude_tools": global_excluded,
+        "path_exposure": path_exposure,
     }
 
 
@@ -207,6 +229,30 @@ async def update_tool_controls(body: ToolControlUpdate, auth=Depends(require_sco
             if row["category"] in selected_category_set and row["name"] not in selected
         ]
         tool_loop["exclude_tools"] = list(dict.fromkeys(preserved_excluded + derived_excluded))
+
+    if body.exposure is not None:
+        from core.tool_dispatcher import _TOOL_REGISTRY
+
+        all_registry_names = set(_TOOL_REGISTRY)
+        exposure_cfg = full_cfg.setdefault("tool_exposure", {})
+        for path, update in body.exposure.items():
+            if path not in {"path_a", "path_c"}:
+                raise HTTPException(status_code=422, detail=f"未知工具路径: {path}")
+            block = exposure_cfg.setdefault(path, {})
+            if update.categories is not None:
+                block["categories"] = list(dict.fromkeys(str(v).strip() for v in update.categories if str(v).strip()))
+            if update.tools is not None:
+                selected = list(dict.fromkeys(str(v).strip() for v in update.tools if str(v).strip()))
+                unknown = [name for name in selected if name not in all_registry_names]
+                if unknown:
+                    raise HTTPException(status_code=422, detail=f"{path} 含未注册工具: {', '.join(unknown)}")
+                block["tools"] = selected
+            if update.exclude_tools is not None:
+                selected = list(dict.fromkeys(str(v).strip() for v in update.exclude_tools if str(v).strip()))
+                unknown = [name for name in selected if name not in all_registry_names]
+                if unknown:
+                    raise HTTPException(status_code=422, detail=f"{path} 含未注册工具: {', '.join(unknown)}")
+                block["exclude_tools"] = selected
 
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader

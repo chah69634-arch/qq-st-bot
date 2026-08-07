@@ -1135,6 +1135,8 @@ function exportSnapshotMd(kind) {
       md += `- 风险: ${s.fast_path_risk ?? ''}\n`;
     } else {
       md += `## LLM 探针决策\n`;
+      md += `- 暴露路径: ${s.exposure_path || 'path_a'} (${s.exposure_source || 'unknown'})\n`;
+      md += `- 暴露类别: ${(s.exposure_categories || []).join(', ')}\n`;
       md += `- 可用工具: ${(s.tools_available||[]).join(', ')}\n`;
       const tcs = (s.tool_calls && s.tool_calls.length)
         ? s.tool_calls.map(tc => `${tc.name||'?'}(${JSON.stringify(tc.arguments||{})})`).join(', ')
@@ -1224,7 +1226,7 @@ async function loadObserveTools() {
     const rows = entries.length ? entries.map(entry => {
       const statusClass = entry.status === 'ok' ? 'badge-success' : entry.status === 'failed' ? 'badge-danger' : 'badge-warn';
       const ts = entry.ts ? new Date(entry.ts * 1000).toLocaleString() : '—';
-      return `<div style="padding:10px 14px;border-top:1px solid var(--border);font-size:12px"><div><code>${escapeHtml(entry.tool || '?')}</code> <span class="badge">${escapeHtml(entry.category || 'unknown')}</span> <span class="badge ${statusClass}">${escapeHtml(entry.status || '?')}</span> <span style="color:var(--muted)">${escapeHtml(entry.origin || '?')} · ${escapeHtml(ts)}</span></div>${entry.args_digest ? `<div style="margin-top:4px;color:var(--muted)">${escapeHtml(t('observe.tools.args', '参数：'))}${escapeHtml(entry.args_digest)}</div>` : ''}${entry.result_digest ? `<div style="margin-top:3px">${escapeHtml(t('observe.tools.result', '结果摘要：'))}${escapeHtml(entry.result_digest)}</div>` : ''}</div>`;
+      return `<div style="padding:10px 14px;border-top:1px solid var(--border);font-size:12px"><div><code>${escapeHtml(entry.tool || '?')}</code> <span class="badge">${escapeHtml(entry.category || 'unknown')}</span> <span class="badge">${escapeHtml(entry.provider || 'builtin')}</span> <span class="badge">${escapeHtml(entry.execution_path || 'other')}</span> <span class="badge ${statusClass}">${escapeHtml(entry.status || '?')}</span> <span style="color:var(--muted)">${escapeHtml(entry.origin || '?')} · ${escapeHtml(ts)}</span></div>${entry.args_digest ? `<div style="margin-top:4px;color:var(--muted)">${escapeHtml(t('observe.tools.args', '参数：'))}${escapeHtml(entry.args_digest)}</div>` : ''}${entry.result_digest ? `<div style="margin-top:3px">${escapeHtml(t('observe.tools.result', '结果摘要：'))}${escapeHtml(entry.result_digest)}</div>` : ''}</div>`;
     }).join('') : `<div class="empty">${escapeHtml(t('observe.tools.empty', '该筛选条件下暂无执行痕迹。'))}</div>`;
     el.innerHTML = `<div class="card"><div class="card-header"><h3>${escapeHtml(t('observe.tools.recent', '最近工具执行'))}</h3><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('observe.tools.summary', '全部类目：'))}${summary}</span></div>${rows}</div>`;
     if (!category || category === 'mcp') el.innerHTML += await _loadObserveToolMcpLedger(entries);
@@ -1278,6 +1280,8 @@ async function loadObserveProbe(el = document.getElementById('obs-probe-content'
         <div style="padding:10px 14px;font-weight:600;border-bottom:1px solid var(--border)">LLM 探针决策</div>
         <div style="padding:10px 14px;font-size:13px">
           <div><span style="color:var(--muted)">解析出的 tool_calls：</span> <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px">${toolCallsStr}</code></div>
+          <div style="margin-top:6px"><span style="color:var(--muted)">暴露路径：</span><code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px">${escapeHtml(s.exposure_path || 'path_a')}</code> ${escapeHtml(s.exposure_source || 'unknown')}</div>
+          <div style="margin-top:6px"><span style="color:var(--muted)">暴露类别：</span>${(s.exposure_categories||[]).map(c=>`<code style="font-size:11px;background:var(--bg-secondary);padding:1px 4px;margin-right:4px">${escapeHtml(c)}</code>`).join('')}</div>
           <div style="margin-top:6px"><span style="color:var(--muted)">可用工具：</span> ${(s.tools_available||[]).map(t=>`<code style="font-size:11px;background:var(--bg-secondary);padding:1px 4px;border-radius:3px;margin-right:4px">${escapeHtml(t)}</code>`).join('')}</div>
           <div style="margin-top:6px"><span style="color:var(--muted)">用户消息：</span>${escapeHtml((s.user_message||'').slice(0,300))}</div>
         </div>

@@ -36,9 +36,14 @@
 工具暴露分类或危险工具排除。`examples/assistant.example.json` 展示人机直连组合，普通角色卡未声明时
 继续遵从全局默认关闭。
 
-Path A 没有独立通道开关：QQ、desktop、mobile 都经 `core.pretool_router.route_pretool()`；类别由入口
-固定为 QQ/mobile `info`、desktop `info + desktop`。显式快速路径白名单当前仅 `get_time`，不由设置页
-或工具 keywords 扩大；Path C 激活时只跳过普通 probe，快速成功会从本轮 loop schema 排除同名工具。
+工具暴露面按路径而非端区分：QQ、desktop、mobile 都经 `core.pretool_router.route_pretool()`，共享
+`tool_exposure.path_a`；Path C 共享 `tool_exposure.path_c`。每条路径都可设置 `categories`、精确
+`tools` 白名单和 `exclude_tools`，后两者只会收窄 schema，不能授予执行权限。Path C 缺少新配置时兼容
+`tool_loop.categories/exclude_tools`，且既有模型 `tool_preset` 仍是最终的内置工具收窄层。角色卡可用
+`tool_categories_path_a/path_c`、`tool_tools_path_a/path_c`、`tool_exclude_path_a/path_c` 覆盖；旧
+`tool_categories` 仅保留为 Path C 兼容别名。`GET/PUT /settings/tools` 读写全局 `tool_exposure`，
+`GET /observability/character-permissions` 回显两条路径的解析结果与来源。显式快速路径白名单当前仅
+`get_time`，不由设置页或工具 keywords 扩大；Path C 激活时只跳过普通 probe，快速成功会从本轮 loop schema 排除同名工具。
 
 TTS 有三个层次的开关：`tts.enabled` 是服务端能力总开关；`tts.desktop_enabled` 是旧桌面语音条显示兼容项，并与 `tts.auto_play.desktop_pet` 双向同步；`tts.auto_play` 则按 `chat`、`dream`、`video_call`、`desktop_pet`、`mobile` 独立决定客户端是否自动请求/播放，全部默认关闭。`GET/POST /settings/tts-auto-play` 是该落盘状态的读回观测面。桌面设置页提供已接入语音条的聊天与桌宠气泡开关，并在收到回复后实际自动合成播放。`POST /tts/synthesize` 只在能力总开关开启且 persona 鉴权通过时按需合成，接受可选 `scene`（旧客户端可省略），并在合成前移除中英文括号中的旁白/动作描写；返回 base64 WAV。手机轮询消息只携带 `voice_available` 轻量标记，绝不携带音频本体；手机端在本机“自动播放语音”开启时，以该标记按需请求并播放音频。管理面“观测 → 资源完整性”分别报告 TTS 服务就绪和桌宠手动语音条可用性；前者为关闭时，后者即使单独开启也会明确报告为不可合成。
 
@@ -72,7 +77,11 @@ schema 校验、连接或 proficiency。selector 缺失时保持旧行为；启�
 完整 `_meta`、原始 description 或完整参数 schema；控制台显示有界参数摘要，调用时仍由服务端用
 完整 registry schema 校验。直接加载的 MCP JS、i18n 和 page fragment 使用同一静态资源版本。
 
-管理面「运维 → 工具」经 admin-only `GET/PUT /settings/tools` 统一观察内置已注册工具、保存命名的 `tool_loop.tool_presets`，并把预设绑定到 `model_presets.presets.<name>.tool_preset`。该预设只收窄该聊天模型收到的内置 function schema，且不替代 `tools.<name>.enabled` 全局执行闸门。未绑定模型明确显示为「全局默认」：勾选并保存会把内置工具选择编译为全局 `tool_loop.categories` / `exclude_tools` 并热更新；面板未表示的类别与排除项会原样保留。MCP 在此页只显示全局启用状态，动态工具目录、连接与配置仍不由此页维护。删除工具预设会同步清除引用它的模型绑定。
+管理面「运维 → 工具」经 admin-only `GET/PUT /settings/tools` 统一观察内置已注册工具、读写
+`tool_exposure.path_a/path_c`，并保存命名的 `tool_loop.tool_presets` 后绑定到
+`model_presets.presets.<name>.tool_preset`。Path 暴露配置可以同时收窄 category 和具体工具名；该预设
+只继续收窄该聊天模型收到的内置 function schema，且不替代 `tools.<name>.enabled` 全局执行闸门。
+MCP 在此页只显示全局启用状态，动态工具目录、连接与配置仍不由此页维护。删除工具预设会同步清除引用它的模型绑定。
 
 LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admin-only 的
 `GET/PUT /llm-debug-requests` 控制 `llm_debug_requests.enabled` 与 `keep_days`（1–7，默认关闭/1 天）。

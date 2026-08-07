@@ -58,6 +58,38 @@ def _patch_exposure(monkeypatch, schemas: list[dict]) -> None:
 
 
 @pytest.mark.asyncio
+async def test_default_path_a_exposure_filters_schemas_without_channel_branching(monkeypatch):
+    from core import tool_dispatcher
+    from core.pretool_router import route_pretool
+
+    seen_categories = []
+
+    def _schemas(categories=None):
+        seen_categories.append(categories)
+        return [_schema("fs_list"), _schema("get_time")]
+
+    monkeypatch.setattr(tool_dispatcher, "get_tools_schema", _schemas)
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"tool_exposure": {"path_a": {
+            "categories": ["fs"], "tools": ["fs_list"],
+        }}},
+    )
+    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
+    monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
+
+    result = await route_pretool(
+        "列一下文件", "u1", "c1", "qq", "u1", False, _State(),
+        tool_loop_enabled=True,
+    )
+
+    assert seen_categories == [["fs"]]
+    assert result.route == "skipped_for_tool_loop"
+    assert result.tools_available == ["fs_list"]
+    assert result.observation("列一下文件")["exposure_categories"] == ["fs"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("channel,categories", [("qq", ["info"]), ("desktop", ["info", "desktop"])])
 async def test_get_time_fast_match_is_channel_consistent(monkeypatch, channel, categories):
     from core import tool_dispatcher

@@ -92,31 +92,41 @@ async def phone_control_step(body: dict = Body(...), auth=Depends(require_scopes
 async def phone_control_status(auth=Depends(require_scopes("chat"))):
     """给手机端能力检查页用的只读诊断，不暴露 api_key 等敏感字段本身，只给布尔判断。
 
-    - tool_enabled：当前活跃角色的 presence_ext.tool_categories 是否包含 "phone_control"；
-      未声明 tool_categories 时角色用全局 tool_loop.categories 兜底（不含 phone_control），
-      所以这里同样按未声明 = False 处理。
+    - tool_enabled：保留为 Path C 是否暴露 ``phone_control`` 的兼容字段；同时返回
+      path_a_enabled/path_c_enabled，二者都由共享 tool_exposure 解析器计算。
     - vision_configured：core/phone_control/vision_client.get_phone_control_vision_config()
       合并出来的 base_url + model 是否都非空（不检查 api_key 是否真的有效，只检查有没有填）。
     """
     from admin.routers.character import _active_character_id
     from core.phone_control.vision_client import get_phone_control_vision_config
 
-    tool_enabled = False
+    path_a_enabled = False
+    path_c_enabled = False
     active_id = _active_character_id()
     if active_id:
         try:
-            from core.character_loader import load as _load_char
-            char = _load_char(active_id)
-            categories = (char.presence_ext or {}).get("tool_categories")
-            tool_enabled = isinstance(categories, list) and "phone_control" in categories
+            from core.tool_exposure import resolve as resolve_exposure
+
+            def _enabled(path: str) -> bool:
+                exposure = resolve_exposure(path, char_id=active_id)
+                return (
+                    "phone_control" in exposure.categories
+                    and (exposure.tools is None or "phone_control_start" in exposure.tools)
+                    and "phone_control_start" not in exposure.exclude_tools
+                )
+
+            path_a_enabled = _enabled("path_a")
+            path_c_enabled = _enabled("path_c")
         except Exception:
-            tool_enabled = False
+            pass
 
     vision_cfg = get_phone_control_vision_config()
     vision_configured = bool(vision_cfg.get("base_url")) and bool(vision_cfg.get("model"))
 
     return {
-        "tool_enabled": tool_enabled,
+        "tool_enabled": path_c_enabled,
+        "path_a_enabled": path_a_enabled,
+        "path_c_enabled": path_c_enabled,
         "vision_configured": vision_configured,
         "char_id": active_id,
     }

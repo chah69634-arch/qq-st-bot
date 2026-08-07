@@ -137,3 +137,36 @@ def test_global_default_tools_compile_to_categories_and_exclusions_without_touch
     saved = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert saved["tool_loop"]["categories"] == ["mcp", "info"]
     assert saved["tool_loop"]["exclude_tools"] == ["legacy_dynamic", "read_two"]
+
+
+def test_path_exposure_can_be_saved_independently_for_a_and_c(tmp_path, monkeypatch):
+    import admin.routers.settings_tools as st
+    from core import tool_dispatcher
+
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(_config(), allow_unicode=True), encoding="utf-8")
+    monkeypatch.setattr(st, "CONFIG_FILE", path)
+    monkeypatch.setattr("admin.auth.get_admin_secret", lambda: VALID_TOKEN)
+    monkeypatch.setattr(st, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
+    monkeypatch.setattr(tool_dispatcher, "_TOOL_REGISTRY", {
+        "get_time": {"category": "info", "description": "time"},
+        "fs_list": {"category": "fs", "description": "files"},
+    })
+
+    app = FastAPI()
+    app.include_router(st.router)
+    with patch("core.config_loader.reload_config", return_value=None):
+        response = TestClient(app).put(
+            "/settings/tools",
+            headers=_auth(),
+            json={"exposure": {
+                "path_a": {"categories": ["info"], "tools": ["get_time"]},
+                "path_c": {"categories": ["fs"], "exclude_tools": ["fs_list"]},
+            }},
+        )
+
+    assert response.status_code == 200
+    saved = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert saved["tool_exposure"]["path_a"] == {"categories": ["info"], "tools": ["get_time"]}
+    assert saved["tool_exposure"]["path_c"] == {"categories": ["fs"], "exclude_tools": ["fs_list"]}
+    assert response.json()["path_exposure"]["path_a"]["tools"] == ["get_time"]

@@ -23,3 +23,9 @@
   <p data-i18n="tools.registry_hint" style="color:var(--muted);font-size:12px">“在此模型中暴露”只影响工具循环传给当前聊天模型的 schema；全局执行开关关闭后，任何模型都不能调用该内置工具。</p>
   <div id="tools-registry-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
 </div>
+
+<div class="card">
+  <div class="card-header"><h3>路径工具类别</h3><button class="btn btn-primary btn-sm" data-action="savePathExposure">保存类别</button></div>
+  <p style="color:var(--muted);font-size:12px">Path A 对 QQ、desktop、mobile 统一生效；Path C 仅控制工具循环。角色卡可进一步覆盖这两个全局默认值。</p>
+  <div id="tools-path-exposure"><div class="loading">加载中...</div></div>
+</div>

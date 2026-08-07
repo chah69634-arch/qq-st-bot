@@ -31,16 +31,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_ALL_CATEGORIES = ("info", "desktop", "memory", "system", "fs", "phone_control")
+_ALL_CATEGORIES = ("info", "desktop", "memory", "system", "fs", "phone_control", "mcp")
 
 # 与 core/tool_dispatcher.py 保持一致（不 import 私有名以外的逻辑，这里只读只报告）。
 _MODE_RESTRICTED_CATEGORIES = frozenset({"desktop", "system", "phone_control"})
-
-# Path A 探针固定暴露面（core/tool_dispatcher.py::get_probe_prompt 硬编码 ("info","desktop")）。
-_PROBE_DEFAULT_CATEGORIES = ("info", "desktop")
-# Path C tool loop 默认暴露面（config.tool_loop.categories 缺省值）。
-_LOOP_DEFAULT_CATEGORIES = ("info", "desktop", "memory")
-
 
 def _load_character(char_id: str):
     from core.character_loader import load
@@ -61,14 +55,10 @@ def get_tool_category_status(char_id: str) -> dict:
     except Exception as e:
         return {"error": f"角色加载失败: {e}"}
 
-    char_categories_override = presence_ext.get("tool_categories")
-    loop_cfg = cfg.get("tool_loop", {})
-    loop_categories = (
-        char_categories_override if char_categories_override is not None
-        else loop_cfg.get("categories", list(_LOOP_DEFAULT_CATEGORIES))
-    )
-    exclude_tools = set(loop_cfg.get("exclude_tools", []))
-    loop_enabled = bool(loop_cfg.get("enabled", False))
+    from core.tool_exposure import resolve as resolve_exposure
+    path_a = resolve_exposure("path_a", char_id=char_id)
+    path_c = resolve_exposure("path_c", char_id=char_id)
+    loop_enabled = bool((cfg.get("tool_loop") or {}).get("enabled", False))
 
     current_mode = _current_mode()
 
@@ -81,13 +71,16 @@ def get_tool_category_status(char_id: str) -> dict:
             "name": name,
             "dangerous": bool(spec.get("dangerous", False)),
             "config_enabled": tool_cfg.get("enabled", True),
-            "excluded_by_char": name in exclude_tools,
+            "excluded_by_path_a": name in path_a.exclude_tools or (path_a.tools is not None and name not in path_a.tools),
+            "excluded_by_path_c": name in path_c.exclude_tools or (path_c.tools is not None and name not in path_c.tools),
+            # Compatibility field consumed by the existing panel.
+            "excluded_by_char": name in path_c.exclude_tools or (path_c.tools is not None and name not in path_c.tools),
         })
 
     categories = []
     for cat in _ALL_CATEGORIES:
-        exposed_probe = cat in _PROBE_DEFAULT_CATEGORIES
-        exposed_loop = loop_enabled and cat in loop_categories
+        exposed_probe = cat in path_a.categories
+        exposed_loop = loop_enabled and cat in path_c.categories
         mode_restricted = cat in _MODE_RESTRICTED_CATEGORIES
         mode_blocks_now = mode_restricted and current_mode != "danger"
         categories.append({
@@ -103,7 +96,21 @@ def get_tool_category_status(char_id: str) -> dict:
         "char_id": char_id,
         "char_name": char_name,
         "tool_loop_enabled": loop_enabled,
-        "tool_categories_source": "presence_ext.tool_categories" if char_categories_override is not None else "全局默认",
+        "tool_categories_source": path_c.source,
+        "path_exposure": {
+            "path_a": {
+                "categories": list(path_a.categories),
+                "tools": sorted(path_a.tools) if path_a.tools is not None else None,
+                "exclude_tools": sorted(path_a.exclude_tools),
+                "source": path_a.source,
+            },
+            "path_c": {
+                "categories": list(path_c.categories),
+                "tools": sorted(path_c.tools) if path_c.tools is not None else None,
+                "exclude_tools": sorted(path_c.exclude_tools),
+                "source": path_c.source,
+            },
+        },
         "current_mode": current_mode,
         "categories": categories,
     }

@@ -390,7 +390,9 @@ async def handle_message(message: dict):
             is_group=is_group,
             session_state=state,
             tool_loop_enabled=_loop_active,
-            categories=["info"],
+            # Path A exposure is resolved centrally and is identical for QQ,
+            # desktop, and mobile.  The transport no longer chooses categories.
+            categories=None,
             before_execute=_mark_pretool_thinking,
         )
         if _pretool.should_stop_for_user_input:

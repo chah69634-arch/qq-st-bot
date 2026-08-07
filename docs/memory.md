@@ -1593,7 +1593,7 @@ DELETE /memory/{uid}/event-log/{YYYY-MM-DD}
 
 ### 自主记忆更正（Brief 107 B1）
 
-`revise_memory` 与 `revise_user_profile` 只通过 Path C tool loop 向角色开放，不提供用户手工编辑入口。前者按 episode id 将旧条目降强度、标记更正，并追加一条更正记录；后者覆写一个合法 `user_identity` 维度。两者均写 provenance，工具调度器自动写 action_trace；管理面板可通过既有 `GET /provenance/{uid}?artifact=episodic` 或 `artifact=user_identity` 查询历史。
+`revise_memory` 与 `revise_user_profile` 默认只通过 Path C tool loop 向角色开放，不提供用户手工编辑入口；管理员可明确加入共享 Path A，但不会绕过用户确认、执行闸门或审计。前者按 episode id 将旧条目降强度、标记更正，并追加一条更正记录；后者覆写一个合法 `user_identity` 维度。两者均写 provenance，工具调度器自动写 action_trace；管理面板可通过既有 `GET /provenance/{uid}?artifact=episodic` 或 `artifact=user_identity` 查询历史。
 
 ---
 

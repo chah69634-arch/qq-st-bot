@@ -8,9 +8,9 @@ core/mcp_client.py — MCP (Model Context Protocol) 客户端（Brief 29 · 4）
 list_tools，动态注册进 core.tool_dispatcher._TOOL_REGISTRY（name="mcp__{server}__{tool}"，
 category="mcp"）。单 server 初始化失败只跳过该 server（log + 继续），不影响其他 server 与主流程。
 
-工具只经 tool loop（Path C）暴露：角色卡 presence_ext.tool_categories 不含 "mcp" 就永远看不到
-这些工具（探针 prompt 只拼 info/desktop，不覆盖 mcp 类），这就是"本我接 MCP、角色扮演不受影响"
-的实现方式。
+MCP 默认只在 Path C tool loop 暴露。管理员也可显式把 ``mcp`` 加入共享的
+``tool_exposure.path_a``，让 QQ、desktop、mobile 的预探针一致看到同一批经过
+本地 policy/proficiency/allowlist 过滤后的 schema；这不会绕过任一执行闸门。
 
 action_trace 落痕在 tool_dispatcher.execute() 的收口埋点自动生效，本模块不新增记账代码；
 MCP 工具注册时不声明 trace_args，参数不落痕（防外部 server 的敏感入参入盘）。

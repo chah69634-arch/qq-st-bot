@@ -30,7 +30,13 @@ async def test_status_reports_enabled_when_category_present(monkeypatch):
     )
 
     result = await pc.phone_control_status(auth=None)
-    assert result == {"tool_enabled": True, "vision_configured": True, "char_id": "yexuan"}
+    assert result == {
+        "tool_enabled": True,
+        "path_a_enabled": False,
+        "path_c_enabled": True,
+        "vision_configured": True,
+        "char_id": "yexuan",
+    }
 
 
 @pytest.mark.asyncio
@@ -48,7 +54,13 @@ async def test_status_reports_disabled_when_category_missing(monkeypatch):
     )
 
     result = await pc.phone_control_status(auth=None)
-    assert result == {"tool_enabled": False, "vision_configured": False, "char_id": "yexuan"}
+    assert result == {
+        "tool_enabled": False,
+        "path_a_enabled": False,
+        "path_c_enabled": False,
+        "vision_configured": False,
+        "char_id": "yexuan",
+    }
 
 
 @pytest.mark.asyncio
@@ -68,7 +80,29 @@ async def test_status_handles_character_load_failure(monkeypatch):
 
     result = await pc.phone_control_status(auth=None)
     assert result["tool_enabled"] is False
+    assert result["path_a_enabled"] is False
+    assert result["path_c_enabled"] is False
     assert result["vision_configured"] is True
+
+
+@pytest.mark.asyncio
+async def test_status_uses_path_c_global_exposure_when_character_has_no_legacy_field(monkeypatch):
+    monkeypatch.setattr("admin.routers.character._active_character_id", lambda: "character")
+    monkeypatch.setattr("core.character_loader.load", lambda _char_id: _FakeChar({}))
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"tool_exposure": {"path_c": {"categories": ["phone_control"]}}},
+    )
+    monkeypatch.setattr(
+        "core.phone_control.vision_client.get_phone_control_vision_config",
+        lambda: {"base_url": "https://example.com", "model": "vision"},
+    )
+
+    result = await pc.phone_control_status(auth=None)
+
+    assert result["tool_enabled"] is True
+    assert result["path_a_enabled"] is False
+    assert result["path_c_enabled"] is True
 
 
 @pytest.mark.asyncio

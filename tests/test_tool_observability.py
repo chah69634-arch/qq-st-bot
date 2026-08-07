@@ -15,6 +15,8 @@ def test_action_trace_query_classifies_filters_and_lists_persisted_uids(sandbox,
 
     rows = action_trace.query("tool_audit", DEFAULT_CHAR_ID)
     assert [row["category"] for row in rows] == ["mcp", "info"]
+    assert [row["execution_path"] for row in rows] == ["path_c", "path_a"]
+    assert [row["provider"] for row in rows] == ["mcp", "builtin"]
     assert [row["tool"] for row in action_trace.query("tool_audit", DEFAULT_CHAR_ID, category="mcp")] == [
         "mcp__calendar__lookup"
     ]

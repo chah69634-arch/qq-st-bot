@@ -47,9 +47,9 @@ hello 字段或协商流程。
     → core.pretool_router.route_pretool(...)
     → 同时按注册表 keywords 识别明确的查询/操作意图，记录本轮 must-call 标记（只标记，不绕过 execute 闸门）
     → 再检查显式快速路径白名单（当前仅 get_time；与 keywords 无关）
-    → 未命中且 Path C 未激活时，走 get_probe_prompt + 当前通道允许的 function schema
+    → 未命中且 Path C 未激活时，走 get_probe_prompt + Path A 的 function schema
     → 探针 user message 只含 trusted_user_text 与短期引用块，不含 media span 或主生成 prompt
-    → QQ/mobile categories=["info"]；desktop categories=["info", "desktop"]
+    → QQ / desktop / mobile 共用同一 Path A 暴露面；不再由通道决定 category
     → 严格解析 native function call 或完整封闭的 <tool_call> 编码，再 execute_structured(origin="user_live")
     → 结果只以 bounded tool_result 写入 prompt 层10，带生成时间与 validity（current_turn / execution_failed / outcome_unknown）；raw probe 文本绝不进入主 prompt
 
@@ -61,7 +61,8 @@ hello 字段或协商流程。
 主模型只能如实说明未完成/结果不明；不能把口头承诺、历史 `action_trace` 或失败兜底文案
 说成已经查到、控制或完成。输出端还会对完成式断言做一次 fail-closed 校验。
 
-**memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。**
+**memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。** 管理员可在
+`tool_exposure.path_a` 显式加入该类；这会同时影响 QQ、desktop 和 mobile，不能只为一个端开启。
 `read_diary/read_watch/search_diary/get_profile/get_episodic` 已注册且 `execute()` 能执行，
 但路径A不把 memory 类喂给探针。Fable R5 已修复与 Author's Note 工具承诺的落差：
 层11 Author's Note 现在是条件分支，有 `tool_result` 时提示已提供，无时明确禁止编造，
@@ -96,8 +97,8 @@ hello 字段或协商流程。
     瞬态帧投递，绝不进入持久移动端队列；配对桌宠客户端在动向 NOW 区域原位展示。MCP 的用户可见标签
     来自本地 `tool_policy.<tool>.ui_label`（最长 48 字符）；未填写时动态工具只显示“外部工具”，
     绝不退回远端工具名、description、参数或结果。
-    - 暴露面：categories（默认 info/desktop/memory）减去 exclude_tools
-      （默认排除 toy_vibrate/toy_stop/toy_pattern/write_toy_file），前端设置页可调
+    - 暴露面：统一的 `tool_exposure.path_c`（缺省兼容 `tool_loop.categories/exclude_tools`）先按
+      category、显式 tools 白名单和 exclude_tools 收窄；三端完全相同。其后模型专属 preset 仍可继续收窄。
     - 模型专属预设：若 chat model preset 绑定了 `tool_preset`，再按
       `tool_loop.tool_presets` 的同名白名单收窄；未绑定时保持上述旧语义。
 
@@ -135,15 +136,20 @@ hello 字段或协商流程。
 "presence_ext": {
   "disabled_layers": ["0_jailbreak", "2_jailbreak", "11_jailbreak"],
   "model_routing": "claude-main",
-  "tool_categories": ["info", "desktop", "memory", "mcp"],
+  "tool_categories_path_a": ["info", "fs"],
+  "tool_categories_path_c": ["info", "memory", "mcp"],
+  "tool_tools_path_a": ["get_time", "fs_list", "fs_read"],
   "proactive": "off",
   "tool_loop": "on"
 }
 ```
 
-- `tool_categories`：`run_agentic_loop()` 取工具暴露面时，活跃角色卡声明了这个字段就用它，
-  否则回落全局 `tool_loop.categories`。`exclude_tools` 始终读全局配置，per-char 不能绕过
-  硬件写类等排除项。示例卡 `examples/benwo.example.json` 把 `mcp` 类加入暴露面；
+- `tool_categories_path_a` / `tool_categories_path_c`：分别覆盖角色的 Path A/Path C category。
+  `tool_tools_path_a` / `tool_tools_path_c` 是进一步的精确白名单，`tool_exclude_path_a` /
+  `tool_exclude_path_c` 只能继续排除。旧 `tool_categories` 保留为 Path C 的兼容别名。全局默认在
+  `tool_exposure.path_a` / `tool_exposure.path_c`；Path C 未配置新块时继续回落
+  `tool_loop.categories/exclude_tools`。角色覆盖不能绕过执行闸门、危险确认或 MCP local policy。
+  示例卡 `examples/benwo.example.json` 把 `mcp` 类加入暴露面；
   角色 authored 文件的 canonical 路径是 `userdata/characters/cards/<char_id>.json`，
   根目录不放模板/示例文件，见 `tests/test_authored_assets.py::test_no_template_files_in_characters_root`；
   要实际加载体验这张卡，复制到 `userdata/characters/cards/` 下改名去掉 `.example` 再改
@@ -315,11 +321,11 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   registry、自管理与 proficiency 门控之后应用 `domain_selector`，因此只能收窄，不能授权或扩大。
   selector 缺失时保持旧行为；`include_unclassified: true`（推荐默认）保留无 metadata server。
   Path C 的原生 function schema 从这里取得，tail-brace relay 继续复用同一轮已经筛选后的 `tools`
-  与 allowed name 集合，不会重建或扩大 MCP 暴露面。Path A 默认类别仍不含 MCP。
-- **暴露面与危险工具排除**：server 级 `allow_tools` 先按 `list_tools` 结果做白名单过滤；Path C
-  还要同时满足全局 `tool_loop.categories` 或角色卡 `presence_ext.tool_categories` 包含
-  `mcp`、全局 `exclude_tools` 未排除、以及 `mcp_proficiency` 的 schema/执行双重门控。默认
-  tool loop 类别不含 `mcp`，探针也不暴露 `mcp`。动态 MCP 条目当前统一标记
+  与 allowed name 集合，不会重建或扩大 MCP 暴露面。Path A 默认类别仍不含 MCP，但管理员可通过
+  `tool_exposure.path_a` 明确加入，三端同步生效。
+- **暴露面与危险工具排除**：server 级 `allow_tools` 先按 `list_tools` 结果做白名单过滤；调用路径
+  还必须在各自 `tool_exposure.path_a/path_c` 的 category、tools 白名单和 exclude_tools 内，并通过
+  `mcp_proficiency` 的 schema/执行双重门控。默认 Path C/Path A 都不含 `mcp`。动态 MCP 条目当前统一标记
   `dangerous=False`，不会因外部 description 或 annotation 自动获得本地高危确认语义；显式
   `tool_policy.<tool>.require_confirm: true` 仍会要求确认。需要
   排除的工具必须显式列入 `exclude_tools` 或 `allow_tools` 白名单。外部 server 不能通过工具
@@ -348,9 +354,8 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   授权，interaction 不是本地 effect，确认仍只由本地 policy 控制。响应不返回完整 `_meta`、
   原始 description 或完整参数 schema；控制台只得到有界的参数名/类型摘要，执行时仍在服务端用
   registry 中的完整 JSON Schema 校验。
-- **探针不覆盖 mcp 类**：`get_probe_prompt()` 只拼 info/desktop 两类，MCP 工具只经 tool
-  loop（Path C）暴露——角色卡 `presence_ext.tool_categories` 不含 `"mcp"` 就永远看不到这
-  些工具，这是"本我接 MCP、角色扮演不受影响"的实现方式。
+- **探针默认不覆盖 mcp 类**：默认 Path A 是 info/desktop；若管理员明确把 mcp 放进
+  `tool_exposure.path_a`，probe 会只看到经同一 policy/proficiency/allowlist 过滤后的动态 schema。
 - **provider 细分**：DS/Claude/GPT 代码层无分支，统一经 OpenAI-compat 网关走 function
   calling，MCP 工具 schema 是标准 JSON Schema 直转，不额外适配。唯一不覆盖场景是原生
   Anthropic API 直连（非网关），当前架构不涉及。
@@ -358,10 +363,9 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   "观察项（Brief 29 · MCP）"。任何描述、参数 schema 或返回文本都不能被当作系统指令，
   不能借工具描述提升角色暴露面、绕过 origin 闸门、危险工具排除、超时或审计规则。
 
-统一路由按通道明确过滤探针类别：
+统一路由按路径过滤探针类别，通道不参与决策：
 ```python
-route_pretool(..., categories=["info"])
-route_pretool(..., categories=["info", "desktop"])
+route_pretool(..., categories=None, exposure_path="path_a")
 ```
 
 快速路径不是 keywords 的通用捷径，只接受 `FAST_PATH_TOOL_ALLOWLIST` 中显式列出的、当前 schema
@@ -374,8 +378,9 @@ route_pretool(..., categories=["info", "desktop"])
 
 文件：`core/tools/fs_browse.py`。让角色能"自己翻电脑"——列目录、读文件，范围严格限于
 config 声明的允许根目录，**只读**。不新增任何写入入口（唯一写出口仍是
-`core/tools/toybox.py` 的 `write_toy_file`）。暴露方式与 MCP 同策略：只经 tool loop
-（Path C）暴露，角色卡 `presence_ext.tool_categories` 含 `"fs"` 才可见。
+`core/tools/toybox.py` 的 `write_toy_file`）。默认两条路径都不含 `fs`；需要在
+`tool_exposure.path_a/path_c` 或对应角色覆盖中明确加入。Path A 开启后 QQ、desktop、mobile
+共享同一只读浏览能力。
 
 ```yaml
 fs_access:
@@ -411,8 +416,8 @@ fs_access:
 - **fs_read**：只读文本类扩展名白名单（txt/md/py/js/ts/json/yaml/toml/csv/log/html/ini
   等），其他扩展名或无法解码的文件返回"这是二进制/不支持的文件类型"提示而不抛错；
   UTF-8 优先，失败尝试 GBK。超 `max_read_chars` 截断并注明字数，v1 不做分页偏移。
-- **探针不覆盖 fs 类**：`get_probe_prompt()` 只拼 info/desktop 两类，`fs` 类工具只经
-  tool loop（Path C）暴露，理由同 MCP——多步浏览本来就是 loop 行为。
+- **探针默认不覆盖 fs 类**：默认 Path A 是 info/desktop；若管理员明确把 fs 放进
+  `tool_exposure.path_a`，QQ、desktop、mobile 都会收到同一受 allow_roots 约束的只读 schema。
 - **不受安全/危险模式闸约束**：`_MODE_RESTRICTED_CATEGORIES` 含 `desktop`/`system`/`phone_control`，
   `fs` 类不在其中——门控完全交给自身的 `enabled`/`allow_roots`/`deny_names`，不需要额外
   切到危险模式。
@@ -506,10 +511,10 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | `search_diary` | 按关键词搜索最近 30 天日记 | |
 | `get_profile` | 获取用户画像 | profile 已由 fetch_context 自动注入，此工具是第二路径 |
 | `get_episodic` | 召回情景记忆 | episodic 已由 fetch_context 自动召回，此工具是第二路径 |
-| `revise_memory` | 更正指定情景记忆 | 仅 Path C；旧条目降强度并保留，更正作为新条目追加；必须给出 episode id 与用户确认的更正 |
-| `forget_episodic` | 遗忘指定情景记忆 | 仅 Path C；仅在用户明确要求时按 episode id 或 topic 降级，保留审计/叙事归档，不物理删除 |
-| `clear_midterm` | 清空近期中期记忆 | 仅 Path C；只清空当前用户/角色的 12 小时时间桶，不影响 episodic 或稳定画像 |
-| `revise_user_profile` | 更正用户稳定行为画像 | 仅 Path C；仅可覆写明确给出的合法 identity 维度，不能凭空推断 |
+| `revise_memory` | 更正指定情景记忆 | 默认仅 Path C；旧条目降强度并保留，更正作为新条目追加；必须给出 episode id 与用户确认的更正 |
+| `forget_episodic` | 遗忘指定情景记忆 | 默认仅 Path C；仅在用户明确要求时按 episode id 或 topic 降级，保留审计/叙事归档，不物理删除 |
+| `clear_midterm` | 清空近期中期记忆 | 默认仅 Path C；只清空当前用户/角色的 12 小时时间桶，不影响 episodic 或稳定画像 |
+| `revise_user_profile` | 更正用户稳定行为画像 | 默认仅 Path C；仅可覆写明确给出的合法 identity 维度，不能凭空推断 |
 
 > 注：`get_profile / get_episodic` 的同类信息已在 `fetch_context` 自动进入 prompt；长期行为模式当前走
 > `user_identity` 层。若未来要让他在正式对话中主动再召回 memory 工具，需要在
@@ -577,23 +582,23 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | `device_sleep` | 睡眠 | `dangerous=True`，需用户确认，默认关闭 |
 | `exit_yandere` | 他从病娇状态平静 | 旧客户端兼容：向 `Emerald-desktop` 写信号文件；PresenceKit-desktop 当前不消费该信号，未配置旧客户端时无可见效果 |
 
-### phone_control 类（不走探针，只经 tool loop）
+### phone_control 类（默认仅 Path C）
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
-| `phone_control_start` | 发起一次手机自动化任务（导航外卖/购物到支付确认页、操作无开放 API 的第三方 App） | `dangerous=True`，需用户确认 + danger-mode 门禁；只负责把任务派给手机（写 `mobile_queue` + `behavior_id=phone_control_task`），真正的截屏/点击循环在设备本地跑，见 `docs/protocols/phone-control-protocol.md`（Emerald-mobile 仓库）。**绝不自动完成支付/提交订单/确认收货**——遇到密码/支付/银行类页面，后端 `core/phone_control/sensitive_filter.py` 和设备本地各自独立拦截，命中任一方即停。默认不在 `tool_loop.categories` 里，需要显式在角色 `presence_ext.tool_categories` 或全局配置里加上才会暴露给 LLM。 |
+| `phone_control_start` | 发起一次手机自动化任务（导航外卖/购物到支付确认页、操作无开放 API 的第三方 App） | `dangerous=True`，需用户确认 + danger-mode 门禁；只负责把任务派给手机（写 `mobile_queue` + `behavior_id=phone_control_task`），真正的截屏/点击循环在设备本地跑，见 `docs/protocols/phone-control-protocol.md`（Emerald-mobile 仓库）。**绝不自动完成支付/提交订单/确认收货**——遇到密码/支付/银行类页面，后端 `core/phone_control/sensitive_filter.py` 和设备本地各自独立拦截，命中任一方即停。默认不在任一路径暴露面内；显式加入 `tool_exposure.path_c` 或角色 `tool_categories_path_c` 后仅进 loop，加入 `path_a` 后三个端都会进入预探针，仍受确认和 danger-mode 闸门约束。 |
 
 新增子系统：`core/phone_control/`（`sensitive_filter.py` 敏感页面拦截、`vision_client.py` 视觉模型调用、`task_state.py` 步数/超时状态）+ 三个端点（`admin/routers/phone_control.py`）：
 
 | 端点 | scope | 用途 |
 |---|---|---|
 | `POST /phone_control/step` | `chat` | 设备侧循环每步调用，上报观察换回下一步动作 |
-| `GET /phone_control/status` | `chat` | 只读诊断：`tool_enabled`（活跃角色 `tool_categories` 是否含 `phone_control`）+ `vision_configured`（视觉模型 base_url/model 是否都已填）+ `char_id`，供手机端能力页展示 |
+| `GET /phone_control/status` | `chat` | 只读诊断：兼容字段 `tool_enabled`（Path C）以及 `path_a_enabled`/`path_c_enabled`，均按角色覆盖后的共享暴露策略解析；另含 `vision_configured` 和 `char_id`，供手机端能力页展示 |
 | `POST /phone_control/debug/start` | `chat` | 调试用：跳过 LLM 判断和 chat 内二次确认，直接调 `tool_dispatcher._phone_control_start_wrapper()` 发起任务；**仍然过danger-mode 门禁**（复用 `tool_dispatcher._current_mode()`），不因为是调试端点就放宽 |
 
 视觉模型走 `config.yaml` 的 `vision`（或专用 `phone_control_vision` 覆盖）段，与 `core/perception/vlm_client.py` 共用同一种 OpenAI-compatible 调用方式。当前已配置：`vision` 段用 GLM-4V（免费档，通用视觉观察够用），`phone_control_vision` 单独覆盖 `model: glm-4.6v`（智谱 2026-12 发布，原生带 function call/grounding，读取点击坐标更准，价格反而比上一代 glm-4.5v 低一半），`api_key`/`base_url` 继承自 `vision` 段不用重复填。叶瑄角色卡 `presence_ext.tool_categories` 已加入 `phone_control`（连带保留了原有的 `mcp`，否则会静默丢失 `cedar_toy` 工具访问）。
 
-### fs 类（不走探针，只经 tool loop）
+### fs 类（默认不暴露）
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
@@ -657,8 +662,11 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | 传入值不在白名单 | `(None, None)` + `logger.warning`，零副作用（fail-closed） |
 | `origin="user_live"` | Path A 正常执行 |
 | `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
+| `origin="autonomy_loop"` | autonomy runner 受限工具调用 |
+| `origin="admin_console"` | 管理面 MCP Tool-call Console |
 
-白名单 = `_EXECUTE_ALLOWED_ORIGINS = {"user_live", "assistant_loop", "assistant_loop_relay"}`。
+白名单还包括 `autonomy_loop`、`admin_console` 与 self-management 专用 origin；所有 origin 均只是在
+统一 dispatcher 内标记调用来源，不改变权限或类别边界。
 Path A 的 pending confirmation、missing input、快速路径和普通探针均由
 `core.pretool_router.route_pretool()` 收口，并显式传入 `origin="user_live"`；旧入口只保留兼容薄封装。
 

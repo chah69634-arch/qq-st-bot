@@ -31,7 +31,7 @@
 | 鉴权、token scope 与安全 | PresenceKit-backend/docs/security.md | admin/auth.py; admin/scopes.py; admin/token_registry.py; admin/routers/auth_tokens.py | docs/security_model.md; docs/token-rotation.md; mobile/docs/backend/integration.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 客户端不复制完整 scope 表；legacy secret/prefs 名称需标兼容。 |
 | Desktop HTTP/WS 协议 | PresenceKit-desktop/docs/protocol-v0.md | desktop/src/shared/api/ws.ts; backend/channels/desktop_ws.py; backend/admin/routers/chat.py | backend/docs/desktop-client-protocol.md; desktop/docs/chat-correlation.md; backend/docs/channels.md | 各仓 docs/archive/*、cc-tasks/*（如有） | v0.1 冻结；user_message/assistant_message/state_update/envelope/capabilities 是 roadmap。 |
 | Mobile 前台聊天与后台主动投递 | PresenceKit-mobile/docs/protocols/mobile-channel.md | mobile/lib/services/backend_client.dart; MobileNotificationService.kt; backend/admin/routers/mobile.py; core/turn_sink.py | mobile/docs/backend/integration.md; mobile/docs/mobile/background-notification-design.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 前台 /desktop/chat；/mobile/* 只做 activation/poll/ack/push。 |
-| Tool loop 与 MCP | PresenceKit-backend/docs/tools.md | core/tool_dispatcher.py; core/mcp_client.py; admin/routers/settings_mcp.py; main.py | docs/feature-control-surface.md; docs/known-issues.md; docs/wake-bridge.md | 各仓 docs/archive/*、cc-tasks/*（如有） | MCP 已实现但 Experimental、默认关闭、仅 Path C，不是 transport。 |
+| Tool loop 与 MCP | PresenceKit-backend/docs/tools.md | core/tool_dispatcher.py; core/mcp_client.py; admin/routers/settings_mcp.py; main.py | docs/feature-control-surface.md; docs/known-issues.md; docs/wake-bridge.md | 各仓 docs/archive/*、cc-tasks/*（如有） | MCP 已实现但 Experimental、默认关闭、默认 Path C；管理员可显式加入共享 Path A，不是 transport。 |
 | Interaction/Event 边界 | PresenceKit-backend/docs/interaction-event-model.md | core/perceive_event.py; core/perceive_event_audit.py; core/pipeline.py; core/stage/runner.py | docs/stage.md; docs/dream.md; docs/tools.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 不存在 v1 统一 EventBus/EventEnvelope dispatcher；Stage/Activity/Dream 各自隔离。 |
 | Data taxonomy 与迁移 | PresenceKit-backend/docs/data-taxonomy.md | core/data_paths.py; core/sandbox.py; core/data_registry.py; core/migration.py; core/asset_registry.py | docs/c1-root-asset-inventory.md; docs/private-content-manifest.md; docs/memory.md | 各仓 docs/archive/*、cc-tasks/*（如有） | userdata authored primary；旧 paths 仅 fallback/seed/history，不能机械删除。 |
 | Memory / prompt / turn sink | PresenceKit-backend/docs/memory.md + docs/prompt-layers.md + docs/assistant-turn-sink.md | core/memory/*; core/prompt_builder.py; core/turn_sink.py; core/conversation_gate.py | desktop/docs/memory.md; backend/docs/channels.md | 各仓 docs/archive/*、cc-tasks/*（如有） | memory writer/sanitize/turn sink 以 backend code 为真；memory.md 需清理旧 audit path。 |
@@ -70,7 +70,7 @@
 - user_message、assistant_message、state_update、capabilities/envelope 是桌面 v1 roadmap 词，不是 v0.1 必需字段。
 - /mobile/chat 与 /sensor/activity 当前代码核对不是正式端点；archive 旧链路只作历史证据。
 - userdata/characters/ 是 authored primary；旧 characters/content 和旧 data 路径仅在明确 fallback/seed/history 语义下保留。
-- MCP 已实现但 Experimental、默认关闭、Path C only，不能写成未实现，也不是 desktop/mobile transport。
+- MCP 已实现但 Experimental、默认关闭、默认 Path C；显式加入共享 Path A 时三个端同步生效。它不是 desktop/mobile transport。
 - Stage、ActivitySession、Dream/Dream Stage 已有实现与 endpoint；各自 deferred knob 需单独描述，不能总括为尚未实现。
 - sensor producer 在 desktop/mobile/firmware，backend routes/state/observability 是接收侧真值，不是独立 Python 进程。
 

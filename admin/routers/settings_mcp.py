@@ -415,14 +415,18 @@ def _current_mcp_exposure_names() -> set[str]:
         pipeline = pipeline_registry.get()
         character = getattr(pipeline, "character", None) if pipeline is not None else None
         char_id = str(getattr(pipeline, "_active_character_id", None) or DEFAULT_CHAR_ID)
-        presence_ext = getattr(character, "presence_ext", None) or {}
-        loop_cfg = cfg.get("tool_loop", {}) or {}
-        categories = presence_ext.get("tool_categories")
-        if categories is None:
-            categories = loop_cfg.get("categories", ["info", "desktop", "memory"])
+        from core.tool_exposure import resolve as resolve_exposure
+        exposure = resolve_exposure("path_c", char_id=char_id)
+        categories = list(exposure.categories)
         if "mcp" not in categories:
             return set()
-        excluded = set(loop_cfg.get("exclude_tools") or [])
+        excluded = set(exposure.exclude_tools)
+        if exposure.tools is not None:
+            excluded.update(
+                str(name)
+                for name in get_tools_schema(categories=categories, char_id=char_id, uid=owner_id)
+                if str((name.get("function") or name).get("name") or "") not in exposure.tools
+            )
         return {
             str((schema.get("function") or schema).get("name") or "")
             for schema in get_tools_schema(

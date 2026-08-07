@@ -55,6 +55,9 @@ class PreToolRouteResult:
     must_call_tool: bool = False
     required_tool_names: set[str] = field(default_factory=set)
     tool_result_generated_at: float | None = None
+    exposure_path: str = "path_a"
+    exposure_source: str = ""
+    exposure_categories: list[str] = field(default_factory=list)
 
     @property
     def has_successful_tool_call(self) -> bool:
@@ -71,6 +74,9 @@ class PreToolRouteResult:
     def observation(self, trusted_user_text: str) -> dict:
         return {
             "channel": self.channel,
+            "exposure_path": self.exposure_path,
+            "exposure_source": self.exposure_source,
+            "exposure_categories": list(self.exposure_categories),
             "route": self.route,
             "fast_path_matched": self.fast_path_matched,
             "matched_keyword": self.matched_keyword,
@@ -265,27 +271,35 @@ async def route_pretool(
     session_state,
     *,
     tool_loop_enabled: bool,
-    categories: list[str],
+    categories: list[str] | None = None,
+    exposure_path: str = "path_a",
     provenance_channel: str | None = None,
     before_execute: Callable[[], Awaitable[None] | None] | None = None,
 ) -> PreToolRouteResult:
     """Run the shared fast-match/probe/execute pre-tool contract."""
     effective_channel = provenance_channel or channel
+    from core.tool_exposure import (
+        filter_schemas as filter_exposure_schemas,
+        resolve as resolve_exposure,
+    )
+    exposure = resolve_exposure(exposure_path, char_id=char_id)
+    effective_categories = list(categories) if categories is not None else list(exposure.categories)
     # Preserve the registry helper's long-standing call shape for local test
     # and plugin compatibility, then apply the same character gates explicitly.
-    schemas = tool_dispatcher.get_tools_schema(categories=categories)
-    from core.growth.mcp_proficiency import filter_schemas
+    schemas = tool_dispatcher.get_tools_schema(categories=effective_categories)
+    from core.growth.mcp_proficiency import filter_schemas as filter_growth_schemas
     from core.self_management.policy import tool_allowed
 
     schemas = [
         schema
-        for schema in filter_schemas(schemas, char_id=char_id)
+        for schema in filter_growth_schemas(schemas, char_id=char_id)
         if tool_allowed(
             uid,
             char_id,
             str((schema.get("function") or schema).get("name") or ""),
         )
     ]
+    schemas = filter_exposure_schemas(schemas, exposure)
     available = [
         str((schema.get("function") or schema).get("name") or "")
         for schema in schemas
@@ -293,6 +307,9 @@ async def route_pretool(
     available = [name for name in available if name]
     result = PreToolRouteResult(
         route="no_tool", channel=effective_channel, tools_available=available,
+        exposure_path=exposure_path,
+        exposure_source=exposure.source,
+        exposure_categories=effective_categories,
     )
     result.required_tool_names = _required_tool_matches(trusted_user_text)
     result.must_call_tool = bool(result.required_tool_names)
@@ -393,7 +410,7 @@ async def route_pretool(
     result.probe_context = _probe_reference_block(uid, char_id)
     result.probe_system = tool_dispatcher.get_probe_prompt(
         location,
-        categories=categories,
+        categories=effective_categories,
         allowed_tool_names=available_set,
     )
     if result.probe_context:

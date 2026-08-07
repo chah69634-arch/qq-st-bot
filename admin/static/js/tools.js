@@ -1,5 +1,6 @@
 let _toolsControl = null;
 let _toolsTargetModel = '';
+const _KNOWN_TOOL_CATEGORIES = ['info', 'desktop', 'memory', 'system', 'fs', 'phone_control', 'mcp'];
 
 function _toolCurrentPreset() {
   return _toolsControl?.model_bindings?.[_toolsTargetModel] || '';
@@ -28,6 +29,27 @@ function _toolsPresetButtons() {
   // These controls are rendered after the page fragment has received its
   // initial binding, so bind the newly-created action buttons explicitly.
   bindPageActions(root);
+}
+
+function _toolExposureCategories() {
+  const categories = new Set(_KNOWN_TOOL_CATEGORIES);
+  for (const tool of (_toolsControl?.tools || [])) categories.add(tool.category);
+  for (const path of ['path_a', 'path_c']) {
+    for (const category of (_toolsControl?.path_exposure?.[path]?.categories || [])) categories.add(category);
+  }
+  return [...categories].filter(Boolean).sort();
+}
+
+function _renderPathExposure() {
+  const root = document.getElementById('tools-path-exposure');
+  if (!root || !_toolsControl) return;
+  const categories = _toolExposureCategories();
+  const pathLabels = {path_a: 'Path A (预探针)', path_c: 'Path C (tool loop)'};
+  root.innerHTML = ['path_a', 'path_c'].map(path => {
+    const selected = new Set(_toolsControl.path_exposure?.[path]?.categories || []);
+    const checks = categories.map(category => `<label class="checkbox-row" style="margin:2px 10px 2px 0"><input type="checkbox" data-tool-path-category="${path}" data-tool-category="${escapeHtml(category)}" ${selected.has(category) ? 'checked' : ''}><span><code>${escapeHtml(category)}</code></span></label>`).join('');
+    return `<div style="padding:10px 0;border-top:1px solid var(--border)"><strong>${pathLabels[path]}</strong><div style="display:flex;flex-wrap:wrap;margin-top:6px">${checks || '<span style="color:var(--muted);font-size:12px">没有可配置的工具类别</span>'}</div></div>`;
+  }).join('');
 }
 
 function _renderToolsRegistry() {
@@ -69,6 +91,7 @@ function _renderToolsPage() {
     ? t('tools.mcp_status_enabled', 'MCP 全局状态：已启用（只读）')
     : t('tools.mcp_status_disabled', 'MCP 全局状态：未启用（只读）');
   _toolsPresetButtons();
+  _renderPathExposure();
   _renderToolsRegistry();
 }
 
@@ -115,6 +138,21 @@ async function saveGlobalToolDefault() {
   try {
     _toolsControl = await api('PUT', '/settings/tools', { global_default_tools: _toolCheckedNames() });
     toast(t('tools.global_saved', '全局默认工具已保存并热更新'), 'ok');
+    _renderToolsPage();
+  } catch (error) { toast(error.message, 'err'); }
+}
+
+async function savePathExposure() {
+  const exposure = {};
+  for (const path of ['path_a', 'path_c']) {
+    exposure[path] = {
+      categories: [...document.querySelectorAll(`[data-tool-path-category="${path}"]:checked`)]
+        .map(input => input.dataset.toolCategory),
+    };
+  }
+  try {
+    _toolsControl = await api('PUT', '/settings/tools', { exposure });
+    toast('Path A/Path C 工具类别已保存，QQ、desktop、mobile 使用相同 Path A 设置。', 'ok');
     _renderToolsPage();
   } catch (error) { toast(error.message, 'err'); }
 }

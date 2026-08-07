@@ -55,6 +55,9 @@ class ToolLoopUpdate(BaseModel):
 @router.get("/settings/tool-loop", summary="获取 tool loop 配置")
 async def get_tool_loop(auth=Depends(require_scopes("persona"))):
     cfg = get_config().get("tool_loop", {})
+    from core.tool_exposure import resolve
+    path_a = resolve("path_a")
+    path_c = resolve("path_c")
     return {
         "enabled": bool(cfg.get("enabled", _DEFAULTS["enabled"])),
         "max_steps": int(cfg.get("max_steps", _DEFAULTS["max_steps"])),
@@ -63,6 +66,20 @@ async def get_tool_loop(auth=Depends(require_scopes("persona"))):
         "exclude_tools": cfg.get("exclude_tools", _DEFAULTS["exclude_tools"]),
         "nudge_hint": cfg.get("nudge_hint", _DEFAULTS["nudge_hint"]),
         "chat_preset_supports_fc": _chat_preset_supports_fc(),
+        "path_exposure": {
+            "path_a": {
+                "categories": list(path_a.categories),
+                "tools": sorted(path_a.tools) if path_a.tools is not None else None,
+                "exclude_tools": sorted(path_a.exclude_tools),
+                "source": path_a.source,
+            },
+            "path_c": {
+                "categories": list(path_c.categories),
+                "tools": sorted(path_c.tools) if path_c.tools is not None else None,
+                "exclude_tools": sorted(path_c.exclude_tools),
+                "source": path_c.source,
+            },
+        },
     }
 
 
@@ -77,8 +94,10 @@ async def update_tool_loop(body: ToolLoopUpdate, auth=Depends(require_scopes("pe
         tl["max_steps"] = max(_MAX_STEPS_MIN, min(_MAX_STEPS_MAX, body.max_steps))
     if body.categories is not None:
         tl["categories"] = body.categories
+        full_cfg.setdefault("tool_exposure", {}).setdefault("path_c", {})["categories"] = body.categories
     if body.exclude_tools is not None:
         tl["exclude_tools"] = body.exclude_tools
+        full_cfg.setdefault("tool_exposure", {}).setdefault("path_c", {})["exclude_tools"] = body.exclude_tools
     if body.total_timeout_s is not None:
         tl["total_timeout_s"] = max(5, min(720, body.total_timeout_s))
     if body.nudge_hint is not None:
@@ -89,8 +108,15 @@ async def update_tool_loop(body: ToolLoopUpdate, auth=Depends(require_scopes("pe
     from core import config_loader
     config_loader.reload_config()
 
+    from core.tool_exposure import resolve
+    path_a = resolve("path_a")
+    path_c = resolve("path_c")
     return {
         "message": "tool loop 配置已更新",
         "tool_loop": full_cfg["tool_loop"],
         "chat_preset_supports_fc": _chat_preset_supports_fc(),
+        "path_exposure": {
+            "path_a": {"categories": list(path_a.categories), "tools": sorted(path_a.tools) if path_a.tools is not None else None, "exclude_tools": sorted(path_a.exclude_tools), "source": path_a.source},
+            "path_c": {"categories": list(path_c.categories), "tools": sorted(path_c.tools) if path_c.tools is not None else None, "exclude_tools": sorted(path_c.exclude_tools), "source": path_c.source},
+        },
     }

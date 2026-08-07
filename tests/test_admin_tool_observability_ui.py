@@ -16,6 +16,8 @@ def test_tool_observability_page_uses_read_only_trace_and_shared_mcp_ledger():
         'value="probe"',
         "category === 'probe' ? '/observe/probe' : '/observability/tool-traces'",
         "await loadObserveProbe(el, uid)",
+        "exposure_path || 'path_a'",
+        "exposure_categories",
     ):
         assert marker in source
 

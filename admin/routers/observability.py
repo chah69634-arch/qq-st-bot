@@ -89,8 +89,8 @@ async def tool_trace_uids(
     "/observability/tool-traces/{uid}",
     summary="读取统一工具执行痕迹（只读）",
     description=(
-        "按工具 category 读取 action_trace 的安全摘要；包含探针、意图解析和 Tool Loop "
-        "三条执行路径，永不返回工具原始结果或未白名单参数。"
+        "按工具 category 读取 action_trace 的安全摘要；每条含 execution_path（Path A/Path C/autonomy）"
+        "与 provider（builtin/MCP），永不返回工具原始结果或未白名单参数。"
     ),
 )
 async def tool_traces(

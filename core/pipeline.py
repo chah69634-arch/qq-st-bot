@@ -961,13 +961,14 @@ class Pipeline:
         cfg = get_config().get("tool_loop", {})
         max_steps = int(cfg.get("max_steps", 5))
         total_timeout_s = float(cfg.get("total_timeout_s", 300))
-        # per-char 工具暴露面覆盖（Brief 29 · 3.4）：活跃角色卡 presence_ext.tool_categories
-        # 存在则用它，否则回落全局 tool_loop.categories。配置排除项与本轮调用方传入的
-        # 排除项都在此应用，不许 per-char 绕过。
-        _active_char = getattr(self, "character", None)
-        char_categories = (_active_char.presence_ext or {}).get("tool_categories") if _active_char else None
-        categories = char_categories if char_categories is not None else cfg.get("categories", ["info", "desktop", "memory"])
-        excluded_tool_names = set(cfg.get("exclude_tools", []))
+        # Path C exposure is shared across all owner-facing channels.  The
+        # resolver preserves the legacy presence_ext.tool_categories and
+        # tool_loop.categories fallbacks while adding explicit path-local
+        # categories/tools/excludes.
+        from core.tool_exposure import filter_schemas as _filter_exposure, resolve as _resolve_exposure
+        _exposure = _resolve_exposure("path_c", char_id=char_id)
+        categories = list(_exposure.categories)
+        excluded_tool_names = set(_exposure.exclude_tools)
         excluded_tool_names.update(exclude_tools or ())
 
         # Keep the registry helper's long-standing call shape for test/plugin
@@ -981,7 +982,7 @@ class Pipeline:
             # filters below when the richer signature is available.
             _raw_tools = get_tools_schema(categories=categories)
         tools = [
-            t for t in _filter_growth_tools(_raw_tools, char_id=char_id)
+            t for t in _filter_exposure(_filter_growth_tools(_raw_tools, char_id=char_id), _exposure)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
         # This internal gateway is not part of the ordinary registry exposure.

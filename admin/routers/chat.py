@@ -387,7 +387,6 @@ async def _probe_and_execute_tools(
     from core.pretool_router import route_pretool
     from core.session_state import get as _get_state
 
-    categories = ["info", "desktop"] if provenance_channel == "desktop" else ["info"]
     return await route_pretool(
         trusted_user_text=message,
         uid=user_id,
@@ -398,7 +397,9 @@ async def _probe_and_execute_tools(
         is_group=False,
         session_state=_get_state(f"user_{user_id}"),
         tool_loop_enabled=tool_dispatcher.tool_loop_active(user_id),
-        categories=categories,
+        # Path A exposure is channel-neutral; resolve it from the shared
+        # path configuration and character override.
+        categories=None,
     )
 
 

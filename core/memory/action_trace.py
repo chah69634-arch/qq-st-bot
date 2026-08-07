@@ -233,6 +233,23 @@ def tool_category(tool_name: str) -> str:
     return "unknown"
 
 
+def execution_path(origin: str) -> str:
+    """Normalize dispatcher origins into user-facing execution paths."""
+    if origin == "user_live":
+        return "path_a"
+    if origin in {"assistant_loop", "assistant_loop_relay"}:
+        return "path_c"
+    if origin in {"autonomy_loop", "autonomy_self_management"}:
+        return "autonomy"
+    if origin == "admin_console":
+        return "admin_console"
+    return "other"
+
+
+def tool_provider(tool_name: str) -> str:
+    return "mcp" if tool_name.startswith("mcp__") else "builtin"
+
+
 def query(
     uid: str,
     char_id: str,
@@ -257,7 +274,10 @@ def query(
         if not isinstance(entry, dict):
             continue
         row = dict(entry)
-        row["category"] = tool_category(str(row.get("tool") or ""))
+        tool_name = str(row.get("tool") or "")
+        row["category"] = tool_category(tool_name)
+        row["execution_path"] = execution_path(str(row.get("origin") or ""))
+        row["provider"] = tool_provider(tool_name)
         if category and row["category"] != category:
             continue
         rows.append(row)

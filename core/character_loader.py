@@ -91,7 +91,8 @@ class Character:
     # per-char 兼容钩子（Brief 29 · "本我"模式）。缺失/字段类型不对 = 全默认 = 现有角色零行为变化。
     # disabled_layers: list[str]   — 与全局消融开关取并集（core/prompt_ablation.py）
     # model_routing:   str | None  — 路由 profile 名，存在于 routing_profiles 才生效（core/model_registry.py）
-    # tool_categories: list[str] | None — tool loop 暴露面覆盖（core/pipeline.py run_agentic_loop）
+    # tool_categories: list[str] | None — Path C 旧兼容覆盖；新字段为 tool_categories_path_a/path_c、
+    # tool_tools_path_a/path_c、tool_exclude_path_a/path_c（core/tool_exposure.py）
     # proactive:       "full"（默认）| "off" — 主动发言总闸（core/scheduler/gating.py）
     # tool_loop:       "on" | "off" | 缺失 — 覆盖/回落全局 tool_loop.enabled（core/tool_dispatcher.py）
     # 角色资产路由（2026-07-25，与 model_routing 同构，端点见

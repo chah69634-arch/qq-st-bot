@@ -42,12 +42,12 @@
 | Surface | Clients | Data ownership | Failure degradation | Blocks v1 |
 |---|---|---|---|---|
 | Android relay persistence across OEM/Doze/reboot | Android | Backend queue + mobile local cursor | Poll compensation can recover only before TTL/eviction | No for ordinary foreground use; must not be marketed as guaranteed until device evidence exists |
-| MCP external tools (optional backend extension) | Backend Path C tool loop only | External server owns tool data; backend exposes tools conditionally | Unconfigured, disabled, or failed MCP leaves Chat, Memory, Scheduler, and Dream on their existing paths; tool failure must not block ordinary chat | No |
+| MCP external tools (optional backend extension) | Path C by default; shared Path A only when explicitly exposed | External server owns tool data; backend exposes tools conditionally | Unconfigured, disabled, or failed MCP leaves Chat, Memory, Scheduler, and Dream on their existing paths; tool failure must not block ordinary chat | No |
 | Dream Stage, Live2D/3D, hardware, Garden, Activity | Respective clients | Backend domain data; clients render/control | Feature-local error/empty state; no cross-domain fallback | No |
 
 MCP remains **Experimental**, not a stable or supported-but-optional v1 surface. Its optionality means
 the backend can run without any configured server; it does not expand the v1 release contract. When
-enabled, MCP is still constrained by Path C owner-private-turn gating, tool exposure and role boundaries,
+enabled, MCP is still constrained by its path-specific owner-turn gating, tool exposure and role boundaries,
 server/tool allowlists, `exclude_tools`, timeouts/cancellation, bounded untrusted-result framing, and
 API-call/action observability. `hardware_gateway` is an external MCP Server implementation and neither
 MCP nor that gateway blocks v1.0.
