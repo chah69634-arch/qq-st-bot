@@ -518,7 +518,14 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         confirm_available = True; run.talk_soft_blocked = True
                         messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps({"status": "soft_blocked", "reason": gate_reason}, ensure_ascii=False)})
                         continue
-                    ok, reason = await talk_gate.send(job.uid, job.char_id, str(args.get("text") or ""), source=job.source, run_id=run.id)
+                    ok, reason = await talk_gate.send(
+                        job.uid,
+                        job.char_id,
+                        str(args.get("text") or ""),
+                        source=job.source,
+                        run_id=run.id,
+                        correlation_id=run.opportunity_id or job.id,
+                    )
                     run.talk_sent = ok
                     if ok:
                         run.disposition = Disposition.COMPLETED_TOOLS_AND_TALK_SENT.value if saw_tool else Disposition.COMPLETED_TALK_SENT.value
@@ -538,7 +545,15 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         _record_event(run, "talk_grounding_rejected", reason="unsupported_memory_claim")
                         run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value
                         return _finish(run)
-                    ok, reason = await talk_gate.send(job.uid, job.char_id, text, source=job.source, run_id=run.id, bypass_soft_once=True)
+                    ok, reason = await talk_gate.send(
+                        job.uid,
+                        job.char_id,
+                        text,
+                        source=job.source,
+                        run_id=run.id,
+                        correlation_id=run.opportunity_id or job.id,
+                        bypass_soft_once=True,
+                    )
                     run.talk_sent = ok
                     run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_SENT.value if ok else (reason if reason in Disposition._value2member_map_ else Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value)
                     return _finish(run)
@@ -818,6 +833,14 @@ async def tick(uid: str, char_id: str) -> None:
     now = time.time()
     due_signals: list[Signal] = []
     dedupe_parts: list[str] = []
+
+    # Scheduler and sensor producers persist facts here instead of opening an
+    # assistant turn.  Drain once per tick so every currently pending source is
+    # merged into the same durable opportunity.
+    for signal in store.drain_pending_signals(uid, char_id):
+        if signal.expiry <= 0 or signal.expiry > now:
+            due_signals.append(signal)
+            dedupe_parts.append(f"queued:{signal.signal_id}")
 
     # Sensor, memory and session adapters are read-only.  They contribute
     # bounded facts to the same opportunity as configured interval/schedule

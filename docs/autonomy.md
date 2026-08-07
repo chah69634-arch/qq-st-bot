@@ -78,6 +78,27 @@ When autonomy is enabled, the scheduler's native proposal pass remains a
 read-only shadow audit. It does not execute a second proactive turn; the
 autonomy runner is the sole evaluator and delivery path for that tick.
 
+## Retired Direct Executors
+
+Scheduler-facing conversational triggers are compatibility producers only.
+If an old callback reaches `scheduler._pipeline_send`, the callback's prompt is
+discarded and a bounded signal is persisted for the next autonomy tick. It does
+not enter the LLM pipeline or a channel. The runner drains all pending signals
+once, merges them into one opportunity, and `talk_owner` remains the only
+user-visible outlet.
+
+The migration currently covers routine greetings, night/midday cues, fixed
+random messages, ordinary heart-rate/sensor attention, recall/follow-up,
+calendar reminders, and birthday candidates. Birthday and serious health
+candidates retain higher signal urgency, but do not bypass autonomy admission,
+the talk gate, conversation serialization, active-user cancellation, or the
+proactive ledger.
+
+Manual scheduler triggering queues the same kind of opportunity. It never
+forces a direct assistant message. Delivery also records an opportunity
+correlation id; an already claimed id is rejected before another `talk_owner`
+send can happen.
+
 ## Observable Outcomes
 
 `GET /observability/autonomy-opportunities` (scope `state.read`) returns a
@@ -95,26 +116,20 @@ redacted lifecycle stream. The `status` field distinguishes:
 Prompt snapshots remain behind the existing admin-only run prompt endpoint and
 are not included in this state-read surface.
 
-## Migration Checklist
+## Migration Registry
 
-The following legacy scheduler paths are still tracked in
-`core/scheduler/gating.py::MIGRATED_TRIGGERS` and must be migrated one at a
-time. For each trigger:
+`core/scheduler/gating.py::MIGRATED_TRIGGERS` is the retired-speech registry.
+Names in this set may still appear in cooldown, proposer, or audit code, but
+their executor is never run by the gating layer and the compatibility
+`_pipeline_send` boundary can only persist a signal. This covers time-based
+greetings/reminders and recall, watch and sensor events, diary and period
+reminders, overflow, presence nag, dream exit, festival/timenode, garden
+events, coplay commentary, and letter writer.
 
-1. Replace its assistant-turn `execute_prompt` callback with a pure signal
-   proposer carrying factual `evidence`, `reason`, `expiry`, `priority`, an
-   anchored `memory_query` when needed, and `action_mode`.
-2. Submit the signal to the autonomy tick/opportunity merger.
-3. Remove or archive the trigger's direct `_pipeline_send`/assistant-turn
-   executor. `talk_owner` remains the only proactive delivery path.
-4. Keep the trigger's existing state scan, dedupe, and audit behavior, and add
-   proposer/live/blocked tests before removing the old executor.
-
-Tracked groups include time-based greetings/reminders and recall, watch and
-sensor events, diary and period reminders, overflow, presence nag, dream exit,
-festival/timenode, garden events, coplay commentary, and letter writer. The
-interval, configured schedule, and overflow sources already enter autonomy as
-one merged opportunity; concrete trigger migration is intentionally outside
-this work item.
+Maintenance-only tasks are deliberately outside this registry. Examples are
+`diary_inject`, episodic/log cleanup, memory janitor, event-log salvage,
+hidden-state decay/consolidation, storyline aggregation, and garden state
+maintenance. They continue to mutate their owned state without creating an
+assistant turn or entering `talk_owner`.
 
 No global EventBus or model-visible trigger tool is introduced by this design.

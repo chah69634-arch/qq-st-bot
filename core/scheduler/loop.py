@@ -388,6 +388,40 @@ async def _pipeline_send(
     # Kind guard: reject disallowed / unknown kinds before any work is done.
     _assert_trigger_outlet_kind(kind)
 
+    # Direct scheduler speech is retired.  A migrated trigger may still reach
+    # this compatibility surface while old checks are being removed, but it is
+    # converted to a durable autonomy fact before any pipeline, gate, or
+    # channel work can occur.  Prompt text is deliberately discarded: it is
+    # legacy template material, not evidence for a new user-visible message.
+    try:
+        from core.scheduler.gating import MIGRATED_TRIGGERS
+        migrated = trigger_name in MIGRATED_TRIGGERS
+    except Exception:
+        migrated = False
+    if migrated:
+        oid = _owner_id()
+        resolved_char_id = char_id or _active_char_id_or_none()
+        if not oid or not resolved_char_id:
+            logger.warning("[scheduler] cannot queue migrated trigger=%s without owner and character", trigger_name)
+            return None
+        from core.autonomy.signal_adapters import emit_trigger_signal
+        priority = 0.9 if trigger_name in _HIGH_PRIORITY_TRIGGERS else 0.2
+        queued, status = emit_trigger_signal(
+            oid,
+            resolved_char_id,
+            trigger_name,
+            evidence=[{"fact": "legacy_trigger_candidate", "trigger": trigger_name}],
+            priority=priority,
+            urgency=priority,
+        )
+        logger.info(
+            "[scheduler] migrated trigger=%s queued_autonomy_signal=%s status=%s",
+            trigger_name,
+            queued,
+            status,
+        )
+        return None
+
     # R2-C: active-window and DND decisions are authoritative in gating._decide().
     # _pipeline_send is execution-only; it does not re-gate proposer-path winners.
     oid = _owner_id()
@@ -811,6 +845,27 @@ def get_status() -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def manual_trigger(name: str) -> str:
+    """Queue a manual autonomy opportunity; this endpoint never sends a turn."""
+    from core.scheduler.gating import MIGRATED_TRIGGERS
+    if name in MIGRATED_TRIGGERS:
+        oid = _owner_id()
+        char_id = _active_char_id_or_none()
+        if not oid or not char_id:
+            return "owner_id or active character not configured"
+        from core.autonomy.signal_adapters import emit_trigger_signal
+        priority = 0.9 if name in _HIGH_PRIORITY_TRIGGERS else 0.2
+        queued, status = emit_trigger_signal(
+            oid,
+            char_id,
+            name,
+            evidence=[{"fact": "manual_autonomy_opportunity", "trigger": name}],
+            priority=priority,
+            urgency=priority,
+        )
+        if queued or status == "duplicate":
+            return f"{name} autonomy opportunity {status}"
+        return f"{name} autonomy opportunity failed: {status}"
+
     """手动触发指定动作（绕过冷却时间和条件检查）。"""
     _last_trigger[name] = 0  # 清零冷却
 

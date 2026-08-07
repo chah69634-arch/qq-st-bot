@@ -495,6 +495,35 @@ async def handle_tick() -> None:
             snapshot["cooldown_remaining_seconds"] = remaining
             return
 
+        # Signal-first migration: the selected sensor fact is queued for
+        # autonomy evaluation; the historical LLM/action branch below is kept
+        # unreachable as a compatibility archive during rollout.
+        _sensor_oid = _owner_id()
+        try:
+            from core.scheduler.loop import _active_char_id_or_none
+            _sensor_char = _active_char_id_or_none()
+        except Exception:
+            _sensor_char = None
+        if _sensor_oid and _sensor_char:
+            from core.autonomy.signal_adapters import emit_trigger_signal
+            emit_trigger_signal(
+                _sensor_oid,
+                _sensor_char,
+                "sensor_aware",
+                evidence=[{
+                    "fact": "sensor_candidate",
+                    "event_type": best_type,
+                    "score": best_score,
+                    "tier": best_tier,
+                    "behavior_id": behavior.get("behavior_id"),
+                }],
+                reason="A bounded sensor state change is eligible for autonomy evaluation.",
+                priority=min(1.0, max(0.1, best_score / 100.0)),
+                urgency=min(1.0, max(0.1, best_score / 100.0)),
+            )
+        snapshot["final_stage"] = "signal_queued"
+        return
+
         # ── 4. _pipeline_send 入参组装 ────────────────────────────────────────
         prompt = build_situation_narrative(behavior)
         snapshot["pipeline_send_prompt"] = prompt

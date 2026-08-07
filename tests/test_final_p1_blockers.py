@@ -200,6 +200,7 @@ class TestWatchUnifiedGating:
 
     @pytest.mark.asyncio
     async def test_hr_critical_emergency_exempt_passes(self, monkeypatch):
+        from core.autonomy import store
         from core.scheduler import loop
         from core.scheduler.state_machine import TriggerState
         from core.scheduler.triggers import watch
@@ -214,11 +215,13 @@ class TestWatchUnifiedGating:
         marks = []
         monkeypatch.setattr(loop, "_pipeline_send", send)
         monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+        monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "char")
 
         await watch.on_watch_event("heart_rate", {"value": 130})
 
-        send.assert_awaited_once()
-        assert marks == ["hr_critical"]
+        send.assert_not_awaited()
+        assert marks == []
+        assert store.load("u1", "char")["pending_signals"]
 
     @pytest.mark.asyncio
     async def test_sleep_end_state_filter_blocks(self, monkeypatch):

@@ -26,11 +26,14 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
     "period_reminder",
     "morning_greeting",
     "night_reminder",
+    "good_night",
+    "midday",
     "daily_journal",
     "diary_reminder",
     "diary_share_reminder",
     "random_message",
     "hr_high",
+    "sensor_aware",
     "sleep_end",
     "weather_alert",
     "topic_followup",
@@ -50,6 +53,41 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
     "letter_writer",
     "coplay_commentary",
 })
+
+MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
+    "diary_inject",
+    "episodic_decay",
+    "episodic_sweep",
+    "inner_diary_write",
+    "dlq_monitor",
+    "log_maintenance",
+    "garden_water",
+    "garden_daily",
+    "hidden_state_decay",
+    "hidden_state_consolidate",
+    "storyline_weekly",
+    "event_log_salvage",
+    "memory_janitor",
+    "private_exchange",
+    "spend_monitor",
+    "interest_seed",
+    "practice",
+})
+
+RETIRED_TRIGGER_EXECUTORS: frozenset[str] = frozenset({
+    "scheduler_pipeline_send",
+    "manual_direct_trigger",
+})
+
+TRIGGER_MIGRATION_STATUS: dict[str, str] = {
+    **{name: "migrated" for name in MIGRATED_TRIGGERS},
+    **{name: "maintenance-only" for name in MAINTENANCE_ONLY_TRIGGERS},
+    **{name: "retired" for name in RETIRED_TRIGGER_EXECUTORS},
+}
+
+
+def trigger_migration_status(name: str) -> str:
+    return TRIGGER_MIGRATION_STATUS.get(str(name or ""), "unregistered")
 
 
 @dataclass(frozen=True)
@@ -121,7 +159,14 @@ def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
 
 async def run_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     picked = write_shadow_tick(uid)
-    if picked is not None and picked.execute is not None:
+    # Migrated proposals are observability-only.  Their factual producers feed
+    # the autonomy queue; executing the historical prompt callback here would
+    # recreate a second path to a user-visible turn.
+    if (
+        picked is not None
+        and picked.execute is not None
+        and picked.trigger_name not in MIGRATED_TRIGGERS
+    ):
         await picked.execute(dry_run=not is_live_mode())
     return picked
 
@@ -136,6 +181,20 @@ async def decide_and_execute_event(
     picked, reason, _ = _decide(uid, proposals)
     if picked is None or picked.execute is None:
         return picked, reason, None
+    if picked.trigger_name in MIGRATED_TRIGGERS:
+        from core.autonomy.signal_adapters import emit_trigger_signal
+        from core.scheduler.loop import _active_char_id_or_none
+        char_id = picked.char_id or _active_char_id_or_none()
+        if char_id:
+            emit_trigger_signal(
+                uid,
+                char_id,
+                picked.trigger_name,
+                evidence=[{"fact": "event_proposal_candidate", "trigger": picked.trigger_name}],
+                priority=min(1.0, max(0.1, float(picked.urgency))),
+                urgency=min(1.0, max(0.1, float(picked.urgency))),
+            )
+        return picked, "queued_autonomy_signal", None
     result = await picked.execute(dry_run=dry_run)
     return picked, reason, result
 

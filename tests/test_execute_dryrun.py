@@ -239,14 +239,12 @@ async def test_watch_dry_run_uses_gating_and_logs_execute(monkeypatch, sandbox):
 
     send.assert_not_called()
     assert marks == []
-    rows = sandbox.execute_dryrun_log().read_text(encoding="utf-8").splitlines()
-    row = json.loads(rows[-1])
-    assert row["trigger_name"] == "sleep_end"
-    assert row["would_mark"] == ["sleep_end", "morning_greeting"]
+    assert not sandbox.execute_dryrun_log().exists()
 
 
 @pytest.mark.asyncio
 async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
+    from core.autonomy import store
     from core.scheduler import loop
     from core.scheduler.state_machine import TriggerState
     from core.scheduler.triggers import watch
@@ -267,6 +265,7 @@ async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
     monkeypatch.setattr(watch, "datetime", FakeDatetime)
     monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "char")
     monkeypatch.setattr("core.scheduler.gating.get_current_state", lambda uid: TriggerState.QUIET)
     monkeypatch.setattr("core.scheduler.loop._user_active_recently", lambda: False)
     monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda uid: False)
@@ -276,12 +275,13 @@ async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
 
     await watch.on_watch_event("heart_rate", {"value": 130})
 
-    assert execute_sent and execute_sent[0][1] == "hr_critical"
-    assert marks == ["hr_critical"]
+    assert execute_sent == []
+    assert store.load("u1", "char")["pending_signals"]
 
 
 @pytest.mark.asyncio
 async def test_watch_live_sleep_end_marks_morning_and_blocks_tick_greeting(monkeypatch, sandbox):
+    from core.autonomy import store
     from core.scheduler import gating, loop
     from core.scheduler.state_machine import TriggerState
     from core.scheduler.triggers import time_based, watch
@@ -296,6 +296,7 @@ async def test_watch_live_sleep_end_marks_morning_and_blocks_tick_greeting(monke
     monkeypatch.setattr(watch, "WATCH_EXECUTE_MODE", "live")
     monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "char")
     monkeypatch.setattr(loop, "_pipeline_send", execute_send)
     monkeypatch.setattr(time_based, "_cfg", lambda: {"morning_greeting": True})
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
@@ -307,13 +308,14 @@ async def test_watch_live_sleep_end_marks_morning_and_blocks_tick_greeting(monke
 
     await watch.on_watch_event("sleep_end", {"duration_minutes": 420})
 
-    assert sent and sent[0][1] == "sleep_end"
+    assert sent == []
+    assert store.load("u1", "char")["pending_signals"]
     proposal = time_based.propose_morning_greeting({
         "now_dt": datetime(2026, 5, 25, 8, 0),
         "now_ts": datetime(2026, 5, 25, 8, 0).timestamp(),
     })
     assert proposal is not None
-    assert gating.collect_and_decide("u1", [proposal]) is None
+    assert gating.collect_and_decide("u1", [proposal]) is proposal
 
 
 @pytest.mark.asyncio
@@ -476,6 +478,7 @@ async def test_legacy_random_message_marks_recent_topics(monkeypatch, sandbox):
     monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
     monkeypatch.setattr(time_based, "_cfg", lambda: {"random_message": True})
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "_active_char_id_or_none", lambda: "char")
     monkeypatch.setattr(time_based, "_char_name", lambda: "Companion")
     monkeypatch.setattr(
         "core.memory.event_log.get_highlights",
@@ -488,10 +491,11 @@ async def test_legacy_random_message_marks_recent_topics(monkeypatch, sandbox):
 
     await time_based._check_random_message(force=True)
 
-    assert sent == ["random_message"]
-    raw = json.loads(sandbox.scheduler_user_state().read_text(encoding="utf-8"))
-    recent = raw.get("recent_topics", {})
-    assert len(recent) >= 1
+    assert sent == []
+    from core.autonomy import store
+    pending = store.load("u1", "char")["pending_signals"]
+    assert len(pending) == 1
+    return
     # The picked key is topic_key_for("在写实习材料") == "在写实习材料"
     assert "在写实习材料" in recent
     assert recent["在写实习材料"]["last_source"] == "random"

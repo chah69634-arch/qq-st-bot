@@ -11,6 +11,7 @@ from core.sandbox import get_paths
 
 MAX_JOBS = 60
 MAX_RUNS = 100
+MAX_PENDING_SIGNALS = 120
 LEASE_SECONDS = 90
 
 DEFAULT_CONFIG = {
@@ -37,7 +38,16 @@ def _path(uid: str, char_id: str):
 
 
 def _default() -> dict:
-    return {"config": deepcopy(DEFAULT_CONFIG), "jobs": [], "runs": [], "sources": {}, "daily": {"day": "", "evaluations": 0, "tools": 0, "talks": 0}, "circuit": {"consecutive_failures": 0, "open_until": 0.0}}
+    return {
+        "config": deepcopy(DEFAULT_CONFIG),
+        "jobs": [],
+        "runs": [],
+        "sources": {},
+        "pending_signals": [],
+        "delivered_correlations": [],
+        "daily": {"day": "", "evaluations": 0, "tools": 0, "talks": 0},
+        "circuit": {"consecutive_failures": 0, "open_until": 0.0},
+    }
 
 
 def load(uid: str, char_id: str) -> dict:
@@ -66,9 +76,65 @@ def load(uid: str, char_id: str) -> dict:
 def save(uid: str, char_id: str, state: dict) -> bool:
     state["jobs"] = list(state.get("jobs", []))[-MAX_JOBS:]
     state["runs"] = list(state.get("runs", []))[-MAX_RUNS:]
+    state["pending_signals"] = list(state.get("pending_signals", []))[-MAX_PENDING_SIGNALS:]
+    state["delivered_correlations"] = list(state.get("delivered_correlations", []))[-MAX_RUNS:]
     path = _path(uid, char_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     return bool(safe_write_json(path, state))
+
+
+def enqueue_signal(uid: str, char_id: str, signal: Signal, *, dedupe_key: str = "") -> tuple[bool, str]:
+    """Persist a trigger fact for the next autonomy opportunity.
+
+    Trigger producers use this small queue instead of constructing prompts or
+    starting an assistant turn.  Duplicate facts in the same time bucket are
+    collapsed before the autonomy runner merges the queue.
+    """
+    if not isinstance(signal, Signal):
+        raise TypeError("signal must be a Signal")
+    state = load(uid, char_id)
+    key = str(dedupe_key or signal.signal_id)
+    for raw in state.get("pending_signals", []):
+        if str(raw.get("dedupe_key") or "") == key:
+            return False, "duplicate"
+    state.setdefault("pending_signals", []).append({
+        "dedupe_key": key,
+        "signal": signal.to_dict(),
+        "queued_at": time.time(),
+    })
+    return bool(save(uid, char_id, state)), "queued"
+
+
+def drain_pending_signals(uid: str, char_id: str) -> list[Signal]:
+    """Claim and remove queued producer facts for one autonomy tick."""
+    state = load(uid, char_id)
+    pending = list(state.get("pending_signals", []))
+    if not pending:
+        return []
+    state["pending_signals"] = []
+    save(uid, char_id, state)
+    result: list[Signal] = []
+    for item in pending:
+        raw = item.get("signal") if isinstance(item, dict) else None
+        try:
+            if isinstance(raw, dict):
+                result.append(Signal.from_dict(raw))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def claim_delivery_correlation(uid: str, char_id: str, correlation_id: str) -> bool:
+    """Return true only for the first talk attempt for one opportunity."""
+    correlation_id = str(correlation_id or "").strip()
+    if not correlation_id:
+        return True
+    state = load(uid, char_id)
+    delivered = state.setdefault("delivered_correlations", [])
+    if correlation_id in delivered:
+        return False
+    delivered.append(correlation_id)
+    return bool(save(uid, char_id, state))
 
 
 def enqueue(

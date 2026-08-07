@@ -32,7 +32,16 @@ def check(uid: str, *, allow_soft: bool = True) -> tuple[str, str]:
     return "allow", "ok"
 
 
-async def send(uid: str, char_id: str, text: str, *, source: str, run_id: str, bypass_soft_once: bool = False) -> tuple[bool, str]:
+async def send(
+    uid: str,
+    char_id: str,
+    text: str,
+    *,
+    source: str,
+    run_id: str,
+    correlation_id: str = "",
+    bypass_soft_once: bool = False,
+) -> tuple[bool, str]:
     text = str(text or "").strip()
     if not text or len(text) > 600: return False, "empty_text"
     # Reality output sanitation is intentionally applied before deciding that
@@ -50,11 +59,20 @@ async def send(uid: str, char_id: str, text: str, *, source: str, run_id: str, b
     from channels.registry import get_active
     if not get_active():
         return False, "no_delivery_channel"
+    from core.autonomy.store import claim_delivery_correlation
+    correlation_id = str(correlation_id or run_id)
+    if not claim_delivery_correlation(uid, char_id, correlation_id):
+        return False, Disposition.DUPLICATE.value
     from core.turn_sink import TurnSource, record_assistant_turn
     result = await record_assistant_turn(
         pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
         trigger_name="autonomy", char_id=char_id, bypass_gate=False,
-        audit_extras={"source": "autonomy", "trigger_source": source, "run_id": run_id},
+        audit_extras={
+            "source": "autonomy",
+            "trigger_source": source,
+            "run_id": run_id,
+            "correlation_id": correlation_id,
+        },
     )
     if not result.fanout_targets: return False, "no_delivery_channel"
     from core.scheduler.proactive_ledger import record_send

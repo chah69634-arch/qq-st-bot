@@ -43,7 +43,28 @@ async def status(auth=Depends(require_scopes("state.read"))):
     for run in state.get("runs", []):
         outcome = str(run.get("evaluation_status") or "evaluated")
         outcome_counts[outcome] = outcome_counts.get(outcome, 0) + 1
-    return {"uid": uid, "char_id": char_id, "config_enabled": cfg.get("enabled"), "runtime_state": runtime_state, "current_run_id": (current or {}).get("id", ""), "current_stage": (current or {}).get("status", ""), "next_due_at": next_interval, "daily": state.get("daily"), "sources": state.get("sources"), "circuit": state.get("circuit"), "queued_jobs": jobs, "last_run": (state.get("runs") or [None])[-1], "outcome_counts": outcome_counts, "talk": {"available": talk_mode == "allow" and cfg.get("talk_enabled"), "mode": talk_mode, "reason": talk_reason, **continuity_status(uid)}}
+    return {"uid": uid, "char_id": char_id, "config_enabled": cfg.get("enabled"), "runtime_state": runtime_state, "current_run_id": (current or {}).get("id", ""), "current_stage": (current or {}).get("status", ""), "next_due_at": next_interval, "daily": state.get("daily"), "sources": state.get("sources"), "circuit": state.get("circuit"), "queued_jobs": jobs, "queued_signals": _redact_pending_signals(state.get("pending_signals") or []), "delivery_correlation_count": len(state.get("delivered_correlations") or []), "last_run": (state.get("runs") or [None])[-1], "outcome_counts": outcome_counts, "talk": {"available": talk_mode == "allow" and cfg.get("talk_enabled"), "mode": talk_mode, "reason": talk_reason, **continuity_status(uid)}}
+
+
+def _redact_pending_signals(rows: list[dict]) -> list[dict]:
+    """Expose queue state without returning legacy prompt/template content."""
+    result = []
+    for row in rows[-50:]:
+        signal = row.get("signal") if isinstance(row, dict) else None
+        if not isinstance(signal, dict):
+            continue
+        result.append({
+            "dedupe_key": row.get("dedupe_key", ""),
+            "queued_at": row.get("queued_at", 0),
+            "signal_id": signal.get("signal_id") or signal.get("id", ""),
+            "source": signal.get("source", ""),
+            "reason": signal.get("reason", ""),
+            "evidence": signal.get("evidence") or [],
+            "priority": signal.get("priority", 0),
+            "urgency": signal.get("urgency", 0),
+            "expires_at": signal.get("expires_at", signal.get("expiry", 0)),
+        })
+    return result
 
 
 @router.get("/admin/autonomy/config", summary="读取内置唤醒配置")
@@ -120,6 +141,12 @@ async def opportunities(limit: int = 50, auth=Depends(require_scopes("state.read
     uid, char_id = _scope()
     state = store.load(uid, char_id)
     entries = []
+    for signal in _redact_pending_signals(state.get("pending_signals") or []):
+        entries.append({
+            "kind": "signal",
+            "status": "unevaluated",
+            **signal,
+        })
     for job in state.get("jobs", []):
         opportunity = job.get("opportunity") or {}
         signals = []

@@ -20,6 +20,27 @@ _SPONTANEOUS_RECALL_TOP_K = 3
 
 
 async def _check_morning(force: bool = False):
+    if not _cfg().get("morning_greeting", True) or not _is_ready("morning_greeting"):
+        return
+    if not force:
+        now = datetime.now()
+        if not (7 <= now.hour < 9):
+            return
+        oid = _owner_id()
+        if oid and _user_talked_today(oid):
+            return
+    oid, char_id = _owner_id(), _active_char_id_or_none()
+    if oid and char_id:
+        from core.autonomy.signal_adapters import emit_trigger_signal
+        queued, _ = emit_trigger_signal(
+            oid, char_id, "morning_greeting",
+            evidence=[{"fact": "configured_time_window", "window": "07:00-09:00"}],
+            reason="A configured morning time window is eligible for autonomy evaluation.",
+            priority=0.1,
+        )
+        if queued:
+            _mark("morning_greeting")
+    return
     """早安触发：7-9点，且用户今天还没说过话。force=True 跳过时间和对话检查"""
     from core.scheduler.execution import legacy_tick_should_send
 
@@ -45,6 +66,22 @@ async def _check_morning(force: bool = False):
 
 
 async def _check_night(force: bool = False):
+    if not _cfg().get("night_reminder", True) or not _is_ready("night_reminder"):
+        return
+    if not force and datetime.now().hour < 23:
+        return
+    oid, char_id = _owner_id(), _active_char_id_or_none()
+    if oid and char_id:
+        from core.autonomy.signal_adapters import emit_trigger_signal
+        queued, _ = emit_trigger_signal(
+            oid, char_id, "night_reminder",
+            evidence=[{"fact": "configured_time_window", "window": "23:00-24:00"}],
+            reason="A configured night time window is eligible for autonomy evaluation.",
+            priority=0.1,
+        )
+        if queued:
+            _mark("night_reminder")
+    return
     """晚安催睡：23点后。force=True 跳过时间检查"""
     from core.scheduler.execution import legacy_tick_should_send
 
@@ -172,6 +209,22 @@ def propose_daily_journal(ctx: dict | None = None):
 
 
 async def _check_random_message(force: bool = False):
+    if not _cfg().get("random_message", True) or not _is_ready("random_message"):
+        return
+    if not force and not (10 <= datetime.now().hour < 18):
+        return
+    oid, char_id = _owner_id(), _active_char_id_or_none()
+    if oid and char_id:
+        from core.autonomy.signal_adapters import emit_trigger_signal
+        queued, _ = emit_trigger_signal(
+            oid, char_id, "random_message",
+            evidence=[{"fact": "random_message_window", "window": "10:00-18:00"}],
+            reason="A bounded daytime opportunity is eligible for autonomy evaluation.",
+            priority=0.1,
+        )
+        if queued:
+            _mark("random_message")
+    return
     """随机日间消息：10-18点，每天随机触发一次。force=True 跳过时间和概率检查"""
     from core.scheduler.execution import legacy_tick_should_send
 

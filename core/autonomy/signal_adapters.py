@@ -12,6 +12,65 @@ from typing import Any
 from core.autonomy.models import ActionMode, ProactiveSignal
 
 
+# Trigger names that historically carried an assistant prompt.  They remain
+# useful as observability labels, but their only runtime product is a bounded
+# fact consumed by the autonomy runner.
+_MIGRATED_TRIGGER_TTLS = {
+    "hr_critical": 10 * 60,
+    "hr_high": 10 * 60,
+    "birthday_midnight": 60 * 60,
+    "birthday_eve": 60 * 60,
+    "birthday_afternoon": 60 * 60,
+    "birthday_night": 60 * 60,
+    "period_reminder": 30 * 60,
+}
+
+
+def registered_signal_adapter(trigger_name: str):
+    """Return the producer registered for a migrated conversational trigger."""
+    from core.scheduler.gating import MIGRATED_TRIGGERS
+    return emit_trigger_signal if str(trigger_name or "") in MIGRATED_TRIGGERS else None
+
+
+def emit_trigger_signal(
+    uid: str,
+    char_id: str,
+    trigger_name: str,
+    *,
+    evidence: list[dict] | None = None,
+    reason: str = "",
+    priority: float = 0.2,
+    urgency: float | None = None,
+    confidence: float = 1.0,
+    memory_query: str | dict | None = None,
+    action_mode: str = ActionMode.TALK.value,
+    now: float | None = None,
+    dedupe_bucket_seconds: int = 15 * 60,
+) -> tuple[bool, str]:
+    """Queue one factual trigger candidate; never calls an LLM or channel."""
+    now = time.time() if now is None else float(now)
+    name = str(trigger_name or "").strip()
+    if not name:
+        return False, "missing_trigger"
+    ttl = _MIGRATED_TRIGGER_TTLS.get(name, 20 * 60)
+    signal = ProactiveSignal(
+        source="sensor" if name.startswith("hr_") else "scheduler",
+        reason=reason or f"A bounded {name} event is eligible for autonomy evaluation.",
+        evidence=list(evidence or [{"fact": "trigger_candidate", "trigger": name}])[:12],
+        created_at=now,
+        expires_at=now + ttl,
+        priority=priority,
+        urgency=priority if urgency is None else urgency,
+        confidence=confidence,
+        memory_query=memory_query,
+        action_mode=action_mode,
+        suggested_action="message" if action_mode == ActionMode.TALK.value else "silent",
+    )
+    from core.autonomy import store
+    key = f"trigger:{name}:{int(now // max(60, dedupe_bucket_seconds))}"
+    return store.enqueue_signal(uid, char_id, signal, dedupe_key=key)
+
+
 def adapt_routine(
     source: str,
     *,
