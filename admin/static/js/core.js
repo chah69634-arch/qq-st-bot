@@ -20,7 +20,55 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-i18n-completeness-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-control-center-navigation-1';
+
+const ADMIN_PAGE_CONTEXT = Object.freeze({
+  setup: {related: ['model-routing', 'character']},
+  character: {related: ['lorebook', 'tools']},
+  lorebook: {related: ['character']},
+  'dream-settings': {related: ['character']},
+  'model-routing': {related: ['setup']},
+  scheduler: {related: ['observe-autonomy', 'integrations']},
+  tools: {related: ['mcp', 'character']},
+  mcp: {related: ['tools']},
+  integrations: {related: ['scheduler']},
+  'relationship-facts': {related: ['character', 'observe-memory']},
+  'auth-tokens': {related: ['users']},
+  status: {related: ['model-routing', 'auth-tokens']},
+});
+
+function decoratePageContext(page, container) {
+  const context = ADMIN_PAGE_CONTEXT[page];
+  if (!context || container.querySelector('.page-context')) return;
+  const title = container.querySelector('.page-title');
+  if (!title) return;
+  const panel = document.createElement('section');
+  panel.className = 'page-context';
+  const purpose = document.createElement('p');
+  purpose.className = 'page-context-purpose';
+  purpose.textContent = t(`page_context.${page}.purpose`, 'Manage this feature and its effective configuration.');
+  const source = document.createElement('p');
+  source.className = 'page-context-source';
+  source.textContent = t(`page_context.${page}.source`, 'Configuration source and effective scope are shown on this page.');
+  const related = document.createElement('div');
+  related.className = 'page-context-related';
+  const label = document.createElement('span');
+  label.textContent = t('page_context.related', 'Related settings');
+  related.append(label);
+  context.related.forEach(target => {
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'btn btn-ghost btn-sm';
+    link.dataset.action = 'goto';
+    link.dataset.actionArgs = JSON.stringify([target]);
+    const navLabel = document.querySelector(`nav a[data-page="${target}"] [data-i18n]`);
+    link.textContent = navLabel ? t(navLabel.dataset.i18n, navLabel.textContent) : target;
+    related.append(link);
+  });
+  panel.append(purpose, source, related);
+  title.insertAdjacentElement('afterend', panel);
+  bindPageActions(panel);
+}
 
 function getRememberedPage() {
   try {
@@ -104,6 +152,7 @@ async function loadPageFragment(page, {reload = false} = {}) {
         container.dataset.pageLoaded = 'true';
         window.AdminI18n?.applyI18n(container);
         bindPageActions(container);
+        decoratePageContext(page, container);
         return container;
       })
       .catch(error => {
@@ -182,6 +231,7 @@ async function goto(page, {reloadFragment = false} = {}) {
     users:           () => { loadUsers(); loadBlacklist(); },
     logs:            loadLogs,
     'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
+    overview:        () => {},
     'model-routing': loadModelRouting,
     mcp:             loadMcpPage,
     tools:           loadToolsPage,

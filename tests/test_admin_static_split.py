@@ -27,14 +27,14 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     fragments = sorted(PAGES.glob("*.html"))
 
-    assert len(fragments) == 34
+    assert len(fragments) == 37
     for fragment in fragments:
         page = fragment.stem
         assert f'id="page-{page}" data-page-fragment="{page}"' in index
         assert fragment.read_text(encoding="utf-8").strip()
 
     source = read_admin_client_source()
-    assert "async function loadPageFragment(page)" in source
+    assert "async function loadPageFragment(page, {reload = false} = {})" in source
     assert "fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`)" in source
     assert "window.AdminI18n?.applyI18n(container)" in source
 

@@ -111,6 +111,35 @@ main {
 h1.page-title { font-size: 20px; margin-bottom: 20px; }
 .page-subtitle { color: var(--muted); font-size: 12px; font-weight: 400; }
 
+.page-context {
+  border-left: 3px solid var(--accent2);
+  margin: -10px 0 20px;
+  padding: 8px 12px;
+  background: rgba(124, 106, 255, .06);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.page-context-purpose { color: var(--text); }
+.page-context-source { margin-top: 2px; }
+.page-context-related { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.page-context-related > span { margin-right: 2px; }
+.page-context-related .btn { margin: 0; }
+
+.control-center { max-width: 1080px; }
+.control-center-heading { border-bottom: 1px solid var(--border); margin-bottom: 24px; padding-bottom: 18px; }
+.control-center-heading .page-title { margin-bottom: 8px; }
+.control-center-heading p { color: var(--muted); max-width: 680px; line-height: 1.6; }
+.control-center-section { margin-top: 26px; }
+.control-center-section h2 { font-size: 14px; margin-bottom: 10px; }
+.control-center-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.control-center-card { appearance: none; width: 100%; min-height: 130px; text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; }
+.control-center-card:hover, .control-center-card:focus-visible { border-color: var(--accent); background: rgba(124, 106, 255, .08); outline: none; }
+.control-center-card strong { font-size: 14px; }
+.control-center-card span { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.control-center-card em { align-self: flex-start; color: var(--muted); font-size: 11px; font-style: normal; }
+.control-center-card-readonly { border-style: dashed; }
+
 /* ── Cards & panels ── */
 .card {
   background: var(--surface);
@@ -334,6 +363,8 @@ textarea { resize: vertical; min-height: 72px; }
 .nav-group-header{padding:8px 20px 2px;font-size:11px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
 .nav-group-header:hover{color:var(--text)}
 .nav-caret{display:inline-block;font-size:9px;width:10px}
+.nav-group-readonly a { color: color-mix(in srgb, var(--muted) 88%, var(--text)); }
+.nav-group-header.nav-group-readonly { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
 
 .nav-menu-toggle,
 .nav-backdrop {
