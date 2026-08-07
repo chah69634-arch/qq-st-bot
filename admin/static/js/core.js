@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-control-center-navigation-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-global-effective-state-overview-1';
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
@@ -231,7 +231,7 @@ async function goto(page, {reloadFragment = false} = {}) {
     users:           () => { loadUsers(); loadBlacklist(); },
     logs:            loadLogs,
     'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
-    overview:        () => {},
+    overview:        loadOverview,
     'model-routing': loadModelRouting,
     mcp:             loadMcpPage,
     tools:           loadToolsPage,

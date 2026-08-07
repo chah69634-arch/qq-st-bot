@@ -73,9 +73,10 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=admin-control-center-navigation-1">' in index
-    assert '<script src="/static/i18n.js?v=admin-control-center-navigation-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=admin-control-center-navigation-1"></script>' in index
+    assert '<link rel="stylesheet" href="/static/style.css?v=admin-global-effective-state-overview-1">' in index
+    assert '<script src="/static/i18n.js?v=admin-global-effective-state-overview-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=admin-global-effective-state-overview-1"></script>' in index
+    assert '<script src="/static/js/overview.js?v=admin-global-effective-state-overview-1"></script>' in index
     assert '<script src="/static/js/mcp.js?v=admin-i18n-completeness-1"></script>' in index
     assert '<script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>' in index
     assert '<script src="/static/js/integrations.js?v=admin-i18n-completeness-1"></script>' in index

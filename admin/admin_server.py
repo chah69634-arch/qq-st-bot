@@ -52,7 +52,7 @@ from admin.routers import (
     group, group_dream, relationship_facts,
     transcribe, provenance,
     auth_tokens, coplay, perception, spend, growth, observability, wake_bridge, integrations, autonomy, self_management,
-    phone_control,
+    phone_control, control_center,
 )
 
 # chess 路由依赖 python-chess（requirements-full.txt 的可选依赖，见 cc-tasks/92 §1），
@@ -117,6 +117,7 @@ app.include_router(wake_bridge.router,          prefix="", tags=["外部集成"]
 app.include_router(autonomy.router,             prefix="", tags=["观测"])
 app.include_router(self_management.router,      prefix="", tags=["角色自主管理"])
 app.include_router(integrations.router,         prefix="", tags=["外部集成"])
+app.include_router(control_center.router,        prefix="", tags=["控制中心"])
 
 # ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────
 from fastapi import WebSocket as _WebSocket

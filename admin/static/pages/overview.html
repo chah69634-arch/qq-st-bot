@@ -4,6 +4,19 @@
     <p data-i18n="overview.subtitle">Choose what you want to configure. Existing pages and direct links remain available.</p>
   </div>
 
+  <section class="control-center-section" aria-labelledby="overview-effective-title">
+    <div class="card-header">
+      <div>
+        <h2 id="overview-effective-title" data-i18n="overview.effective.title">Effective runtime state</h2>
+        <p class="admin-source-hint" data-i18n="overview.effective.description">Configured values, runtime values, source, blockers, and the canonical edit page.</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" type="button" data-action="loadOverview" data-i18n="common.refresh">Refresh</button>
+    </div>
+    <div id="overview-effective-state" class="tbl-wrap">
+      <div class="loading" data-i18n="common.loading">Loading...</div>
+    </div>
+  </section>
+
   <section class="control-center-section" aria-labelledby="overview-start-title">
     <h2 id="overview-start-title" data-i18n="overview.start.title">Get started</h2>
     <div class="control-center-grid">

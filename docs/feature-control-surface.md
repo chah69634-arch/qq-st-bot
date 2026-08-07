@@ -107,6 +107,14 @@ inferring state from unrelated status/config/ledger responses. Manual trigger en
 test-only queue fixtures and advertise `direct_delivery=false`; they never bypass production
 autonomy admission.
 
+The control-center overview reads `GET /admin/control-center/effective-state` (`state.read`) as
+its only global state source. The contract includes a row for Tool Loop, MCP, Self Capability,
+autonomy, scheduler, channels, model routing, Embedding, TTS, and the frozen Intiface reserve
+line. Each row carries default/configured/effective values, override source, runtime status,
+blocking reason, reload mode, runtime consumer, and its canonical edit page. The overview does
+not infer effective values from unrelated status or settings responses; Intiface is reported as
+dormant/frozen independently from MCP.
+
 MCP 管理页的 server 卡片提供“默认授权全部”和“无限制授权全部”两个 server 级动作。
 它们分别发送一次 `PATCH /settings/mcp/{name}`，请求体只允许
 `{"bulk_authorize":"default"}` 或 `{"bulk_authorize":"unrestricted"}`；服务端从当前连接态
