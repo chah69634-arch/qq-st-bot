@@ -136,7 +136,8 @@ admin:
   # （P3 落地后可用；见 docs/security.md），不要把这个 secret_key 烧进边缘设备配置里。
   secret_key: YOUR_ADMIN_SECRET
 notify:
-  enabled: true
+  # Conservative first-run default: startup must not send an unsolicited QQ notice.
+  enabled: false
   target_qq: YOUR-TARGET-QQ
   message: 已上线，等你回来
 # 手机后台推送唤醒中继（ntfy）。三项都填才生效；不填则后台推送只剩手机端每 6 小时的补偿轮询。
@@ -624,7 +625,8 @@ anniversaries: []
 session:
   timeout_minutes: 10
 scheduler:
-  enabled: true
+  # Keep proactive evaluation off until the owner has explicitly configured it.
+  enabled: false
   overflow_trigger: true
   presence_nag: true
   presence_nag_minutes: 60

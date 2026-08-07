@@ -36,6 +36,7 @@
 - [security_model.md](security_model.md)：风险边界与部署假设。
 - [token-rotation.md](token-rotation.md)、[private-content-manifest.md](private-content-manifest.md)
 - [fresh-clone-testing.md](fresh-clone-testing.md)、[system-readiness.md](system-readiness.md)
+- [v1-cold-start-single-user-deployment.md](v1-cold-start-single-user-deployment.md)：v1 首次启动、readiness、迁移、备份恢复与单用户部署 runbook
 - [test_record.md](test_record.md)：手动测试记录模板。
 
 ## 归档

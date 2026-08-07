@@ -174,6 +174,9 @@ secrets file and the admin panel — the panel lands on the "配置"
 > `characters/`, `content/`, `defaults/`, `examples/`, `core/`, `scripts/`, or
 > `.venv/`. See [Backend Upgrade and Recovery](docs/backend-upgrade-recovery.md).
 
+For the complete first-run, readiness, backup, restart, and single-user server
+procedure, see [v1 Cold Start and Single-User Deployment](docs/v1-cold-start-single-user-deployment.md).
+
 **Configure**
 
 ```bash
@@ -261,6 +264,7 @@ python tests/run_eval.py
 | [docs/known-issues.md](docs/known-issues.md) | Current tech debt and verified fixes |
 | [docs/v1-release-contract.md](docs/v1-release-contract.md) | v1 product contract: supported surfaces, exclusions, ownership, and fallbacks |
 | [docs/v1-release-readiness.md](docs/v1-release-readiness.md) | Evidence-based v1 release blockers, compatibility matrix, and validation plan |
+| [docs/v1-cold-start-single-user-deployment.md](docs/v1-cold-start-single-user-deployment.md) | v1 cold-start, readiness, migration, backup, restart, and single-user deployment runbook |
 
 ---
 

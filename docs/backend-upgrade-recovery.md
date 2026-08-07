@@ -26,8 +26,10 @@ conversion.
    `secrets.local.yaml` (if present), plus classified legacy private assets.
 2. Install v1 into a **new empty directory**. Do not overlay the v0.x program
    directory.
-3. There is currently no restore command or restore drill.  Any manual
-   migration from the snapshot must be operator-reviewed and limited to its
+3. Restore the verified snapshot into a new empty target with
+   `python main.py backup-state restore <snapshot> --target <new-empty-directory>`.
+   The restore is read-only with outbound calls disabled and never replaces the
+   live installation. Final cutover remains operator-reviewed and limited to
    declared private files; do not copy old program assets or environments such
    as `defaults/`, `examples/`, `core/`, `scripts/`, or `.venv/`.
 4. Before relying on legacy authored fallback, run the read-only C1.3 check:
