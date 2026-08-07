@@ -1195,6 +1195,17 @@ _TOOL_REGISTRY["manage_self_capability"] = {
 }
 
 
+# Brief 151: Intiface is a dormant reserve capability.  Keep these entries in
+# the registry so a future, explicit opt-in can reuse the implementation, but
+# do not let ordinary configuration accidentally expose or execute them.
+_INTIFACE_TOOL_NAMES: frozenset[str] = frozenset({
+    "toy_vibrate",
+    "toy_stop",
+    "toy_pattern",
+    "toy_job_status",
+})
+
+
 # ─── N7: 快速路径风险标记 helper ──────────────────────────────────────────────
 #
 # 规则（保守优先）：
@@ -1265,6 +1276,8 @@ def _is_tool_enabled(tool_name: str) -> bool:
     """检查 config.yaml tools 配置中工具是否启用（默认启用）。
     优先查 tools.<tool_name>.enabled，再回退到旧的 group 键。
     """
+    if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
+        return False
     cfg = get_config().get("tools", {})
     if tool_name in cfg:
         v = cfg[tool_name]
@@ -1279,6 +1292,12 @@ def _is_tool_enabled(tool_name: str) -> bool:
     elif tool_name == "add_reminder":
         group = "reminder"
     return cfg.get(group, {}).get("enabled", True)
+
+
+def intiface_opted_in() -> bool:
+    """Return whether the dormant Intiface reserve line was explicitly opted in."""
+    hardware = (get_config() or {}).get("hardware", {})
+    return bool(isinstance(hardware, dict) and hardware.get("intiface_opt_in") is True)
 
 
 def mcp_domain_selector_allows(info: dict) -> bool:
@@ -1802,6 +1821,10 @@ async def _execute_structured_impl(
         return _execution_outcome("tool_unknown", _fail)
 
     tool_info = _TOOL_REGISTRY[tool_name]
+    if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
+        _msg = "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
+        _trace("failed", _msg)
+        return _execution_outcome("tool_failed", _msg)
     if tool_info.get("self_management"):
         if origin not in {"assistant_self_management", "autonomy_self_management"}:
             _trace("failed", "self-management origin rejected")

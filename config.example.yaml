@@ -190,13 +190,13 @@ tools:
   peek_screen_content:
     enabled: true
   toy_vibrate:
-    enabled: true
+    enabled: false
   toy_stop:
-    enabled: true
+    enabled: false
   toy_pattern:
-    enabled: true
+    enabled: false
   toy_job_status:
-    enabled: true
+    enabled: false
 dream:
   impression:
     forced_rounds: 3        # 出梦后强制连续注入轮数（精确现实回合数，非时间窗）
@@ -283,6 +283,7 @@ tts:
       speed: 1.1
 hardware:
   enabled: false
+  intiface_opt_in: false  # Brief 151: dormant reserve; explicit opt-in required
   buttplug_ws: ws://127.0.0.1:12345
   max_job_duration_ms: 900000  # 单个后台硬件动作最长 15 分钟
 # 爱意探针命中时请求板子画爱心，独立于 hardware（振动等）之外的具身反馈通道

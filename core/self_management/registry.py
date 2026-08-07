@@ -15,13 +15,15 @@ class CapabilitySpec:
 
 
 def capability_for_tool(tool_name: str) -> str | None:
-    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_dispatcher import _INTIFACE_TOOL_NAMES, _TOOL_REGISTRY, intiface_opted_in
 
     info = _TOOL_REGISTRY.get(tool_name)
     if not isinstance(info, dict):
         return None
     if info.get("self_management"):
         # The management gateway is intentionally never a managed capability.
+        return None
+    if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
         return None
     if info.get("category") == "mcp":
         server = str(info.get("mcp_server") or "")

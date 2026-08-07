@@ -51,7 +51,7 @@ def _static_tool_enabled(name: str, tools_config: dict) -> bool:
 
 
 def _registry_rows(cfg: dict) -> list[dict]:
-    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_dispatcher import _INTIFACE_TOOL_NAMES, _TOOL_REGISTRY, intiface_opted_in
 
     tools_config = cfg.get("tools", {})
     rows: list[dict] = []
@@ -64,7 +64,10 @@ def _registry_rows(cfg: dict) -> list[dict]:
             "name": name,
             "description": (info.get("description") or info.get("desc") or "").strip(),
             "category": info.get("category") or "other",
-            "execution_enabled": _static_tool_enabled(name, tools_config),
+            "execution_enabled": _static_tool_enabled(name, tools_config) and (
+                name not in _INTIFACE_TOOL_NAMES or intiface_opted_in()
+            ),
+            "frozen": name in _INTIFACE_TOOL_NAMES and not intiface_opted_in(),
         })
     return sorted(rows, key=lambda item: (item["category"], item["name"]))
 
@@ -82,7 +85,9 @@ def _response(cfg: dict) -> dict:
         global_excluded = []
     global_default_tools = [
         row["name"] for row in rows
-        if row["category"] in global_categories and row["name"] not in global_excluded
+        if row["category"] in global_categories
+        and row["name"] not in global_excluded
+        and not row.get("frozen")
     ]
     exposure_cfg = cfg.get("tool_exposure") if isinstance(cfg.get("tool_exposure"), dict) else {}
     path_c_legacy = tool_loop.get("categories", ["info", "desktop", "memory"])
@@ -113,6 +118,7 @@ def _response(cfg: dict) -> dict:
         "model_presets": sorted(model_presets),
         "legacy_mode": "model_presets" not in cfg,
         "mcp_enabled": bool(cfg.get("mcp_servers", {}).get("enabled", False)),
+        "intiface_opt_in": bool((cfg.get("hardware") or {}).get("intiface_opt_in") is True),
         "global_default_tools": global_default_tools,
         "global_categories": global_categories,
         "global_exclude_tools": global_excluded,

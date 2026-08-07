@@ -2,6 +2,13 @@
 
 ---
 
+## Intiface / 硬件工具冻结（Brief 151）
+
+`toy_vibrate`、`toy_stop`、`toy_pattern` 与 `toy_job_status` 的实现和注册表条目保留，
+但 `hardware.intiface_opt_in` 默认为 `false`。冻结时它们不会进入普通聊天 schema、
+Tool Loop、autonomy 或 Self Capability，也不能通过直接 dispatch 执行；配置中的单工具
+开关不能绕过这个总闸。显式 opt-in 后仍保留 owner 私聊、danger-mode 和现有硬件安全门。
+
 ## MCP 批量授权与严格白名单（Brief 135）
 
 管理面 `PATCH /settings/mcp/{name}` 支持一次性的 `bulk_authorize` 动作，值只能是

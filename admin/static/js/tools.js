@@ -59,8 +59,10 @@ function _renderToolsRegistry() {
   const preset = (_toolsControl.tool_presets || []).find(item => item.name === presetName);
   const exposed = new Set(preset ? preset.tools : (_toolsControl.global_default_tools || []));
   const rows = (_toolsControl.tools || []).map(tool => {
-    const execution = `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(t('tools.execution_enabled', '全局执行'))}</span></label>`;
-    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(tool.description || '')}</div></td><td>${escapeHtml(tool.category)}</td><td>${execution}</td><td><label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label></td></tr>`;
+    const frozen = tool.frozen === true;
+    const execution = `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} ${frozen ? 'disabled' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(frozen ? '冻结（需 Intiface opt-in）' : t('tools.execution_enabled', '全局执行'))}</span></label>`;
+    const exposure = frozen ? '<span style="color:var(--muted)">冻结</span>' : `<label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label>`;
+    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(tool.description || '')}</div></td><td>${escapeHtml(tool.category)}</td><td>${execution}</td><td>${exposure}</td></tr>`;
   }).join('');
   root.innerHTML = rows ? `<div class="tbl-wrap"><table><thead><tr><th>${escapeHtml(t('tools.name', '工具'))}</th><th>${escapeHtml(t('tools.category', '分类'))}</th><th>${escapeHtml(t('tools.execution', '执行'))}</th><th>${escapeHtml(t('tools.exposure', '模型暴露'))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${escapeHtml(t('tools.empty', '没有已注册工具'))}</div>`;
   const count = document.getElementById('tools-exposure-count');
@@ -79,6 +81,7 @@ function _renderToolsPage() {
   selector.innerHTML = (_toolsControl.model_presets || []).map(name => `<option value="${escapeHtml(name)}" ${name === _toolsTargetModel ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
   const note = document.getElementById('tools-binding-note');
   const mcpStatus = document.getElementById('tools-mcp-status');
+  const intifaceStatus = document.getElementById('tools-intiface-status');
   const bound = _toolCurrentPreset();
   if (note) note.textContent = bound
     ? t('tools.bound_note', '当前模型绑定工具预设：{name}', { name: bound })
@@ -90,6 +93,9 @@ function _renderToolsPage() {
   if (mcpStatus) mcpStatus.textContent = _toolsControl.mcp_enabled
     ? t('tools.mcp_status_enabled', 'MCP 全局状态：已启用（只读）')
     : t('tools.mcp_status_disabled', 'MCP 全局状态：未启用（只读）');
+  if (intifaceStatus) intifaceStatus.textContent = _toolsControl.intiface_opt_in
+    ? 'Intiface 硬件能力：已 opt-in（仍受 owner、danger-mode 与硬件安全闸保护）'
+    : 'Intiface 硬件能力：冻结（默认关闭；四个 toy_* 工具不会进入聊天、autonomy 或 Self Capability）';
   _toolsPresetButtons();
   _renderPathExposure();
   _renderToolsRegistry();
