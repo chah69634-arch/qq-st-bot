@@ -56,6 +56,16 @@ false`), and receives an explicit local reality timestamp. Ordinary model text
 is private. It may use the autonomy allowlist, call `talk_owner` once, or end
 with no user-visible message.
 
+The runner keeps this prompt projection intentionally smaller than a normal chat
+prompt. It includes system-observed activity, bounded profile/mid-term/history
+layers, and a system-executed `memory_query` layer. Recall cards retain their
+source, event/recorded timestamps, speaker provenance, strength, and source-turn
+IDs. Missing or unknown provenance is not a valid historical anchor, and signal
+evidence is always labeled as a candidate reason rather than past dialogue.
+Successful tool results and active hardware jobs are separate factual layers;
+neither one requires a user-facing message. `talk_owner` rejects unsupported
+memory claims such as an ungrounded 'I remember'/'you said' statement.
+
 Scheduler and sensor adapters live in `core.autonomy.signal_adapters`. They
 only emit bounded facts for routine/time-background, heart-rate state changes,
 memory reactivation, unfinished topics, desktop reopen, and runtime restart.

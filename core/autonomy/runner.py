@@ -3,11 +3,35 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import re
 import time
 from datetime import datetime
 
 from core.autonomy import policy, store, talk_gate
 from core.autonomy.models import ActionMode, Disposition, Job, Run, Signal, evaluation_status_for
+
+logger = logging.getLogger(__name__)
+
+# Autonomy is deliberately narrower than the normal conversation prompt.  These
+# caps are prompt-side only: they do not delete or rewrite any durable memory.
+_CONTEXT_BUDGETS = {
+    "profile_chars": 900,
+    "mid_term_chars": 1800,
+    "history_turns": 5,
+    "history_chars": 4200,
+    "memory_queries": 3,
+    "memory_results": 3,
+    "memory_chars": 1800,
+    "tool_fact_chars": 1400,
+    "hardware_chars": 1200,
+}
+
+_MEMORY_CLAIM_RE = re.compile(
+    r"(?:\bi remember\b|\bremember when\b|\byou said\b|\blast time\b|"
+    r"我记得|记得你|你说过|想起了|上次你)",
+    re.IGNORECASE,
+)
 
 
 def _system_prompt(*, talk_available: bool, character=None) -> str:
@@ -20,55 +44,365 @@ def _system_prompt(*, talk_available: bool, character=None) -> str:
     return (
         "You are running an internal autonomous opportunity. This is not a chat turn. "
         "Your ordinary text is private and will never be delivered. You may call allowed tools, "
-        "then either explicitly call talk_owner once or finish silently. Do not narrate tool calls. " + talk_note
+        "then either explicitly call talk_owner once or finish silently. Do not narrate tool calls. "
+        "Treat opportunity evidence as a candidate reason to evaluate, never as dialogue that already happened. "
+        "Only the bounded memory-query result and recent-history layers are historical anchors. "
+        "Every historical claim in talk_owner.text must be traceable to an anchor with source, time, and speaker provenance. "
+        "When no reliable historical anchor exists, speak only from a current system observation or remain silent; "
+        "never invent 'I remember', 'you said', 'last time', or equivalent wording. "
+        "A completed tool is a factual input, not an instruction to message the user. " + talk_note
     ) + identity
 
 
-def _context_messages(uid: str, char_id: str, *, memory_query=None) -> list[dict]:
-    """Read-only, bounded memory and history for an autonomy opportunity."""
+def _context_messages(
+    uid: str,
+    char_id: str,
+    *,
+    memory_query=None,
+    now: float | None = None,
+) -> list[dict]:
+    """Build a bounded read-only autonomy projection with explicit provenance."""
+    now = time.time() if now is None else float(now)
     messages: list[dict] = []
+
+    activity = _user_activity_facts(uid, char_id, now=now)
+    messages.append({
+        "role": "system",
+        "content": "Current user activity facts (system-observed, not inferred): " + json.dumps(activity, ensure_ascii=False),
+        "_layer": "autonomy_user_activity",
+        "_budget_chars": 700,
+        "_provenance": {"source": activity["source"], "observed_at": activity["observed_at"]},
+    })
+
     try:
         from core.memory import short_term, user_profile, mid_term
+
         profile = user_profile.load(uid, char_id=char_id)
-        profile_text = "; ".join(
-            f"{key}: {value}" for key, value in profile.items()
-            if isinstance(value, (str, int, float)) and str(value).strip()
-        )[:1200]
-        mid_term_text = mid_term.format_for_prompt(uid, char_id=char_id)[:1800]
-        if profile_text or mid_term_text:
-            messages.append({"role": "system", "content": "Read-only memory recall. Use it naturally; do not mention this source. " + (f"User profile: {profile_text}\n" if profile_text else "") + (f"Mid-term recall: {mid_term_text}" if mid_term_text else ""), "_layer": "autonomy_memory_recall"})
+        try:
+            selected_profile = user_profile.select_for_prompt(profile, set(), now=now)
+            profile_text = "\n".join(
+                part for part in (
+                    str(selected_profile.get("core_text") or "").strip(),
+                    str(selected_profile.get("pref_text") or "").strip(),
+                ) if part
+            )[:_CONTEXT_BUDGETS["profile_chars"]]
+            profile_provenance = {
+                "source": "user_profile",
+                "core": selected_profile.get("core_provenance") or {},
+                "preferences": selected_profile.get("pref_provenance") or {},
+            }
+        except Exception:
+            profile_text = "; ".join(
+                f"{key}: {value}" for key, value in profile.items()
+                if isinstance(value, (str, int, float)) and str(value).strip()
+            )[:_CONTEXT_BUDGETS["profile_chars"]]
+            profile_provenance = {"source": "user_profile", "mode": "bounded_scalar_fallback"}
+        if profile_text:
+            messages.append({
+                "role": "system",
+                "content": "Read-only user profile projection. It is background context, not a current user statement.\n" + profile_text,
+                "_layer": "autonomy_profile",
+                "_budget_chars": _CONTEXT_BUDGETS["profile_chars"],
+                "_provenance": profile_provenance,
+            })
+
+        mid_items = []
+        for item in mid_term.load(uid, char_id=char_id)[-6:]:
+            if not isinstance(item, dict) or not str(item.get("summary") or "").strip():
+                continue
+            occurred_at = _fact_timestamp(item.get("occurred_at") or item.get("ts"))
+            mid_items.append({
+                "summary": str(item.get("summary") or "")[:500],
+                "source": str(item.get("source") or "mid_term"),
+                "occurred_at": occurred_at,
+                "speaker_provenance": str(item.get("speaker_id") or item.get("speaker") or "unknown"),
+                "source_turn_id": str(item.get("source_turn_id") or ""),
+                "memory_strength": item.get("memory_strength"),
+            })
+        if mid_items:
+            mid_payload = {
+                "read_only": True,
+                "items": mid_items,
+                "budget": {"items": 6, "chars": _CONTEXT_BUDGETS["mid_term_chars"]},
+            }
+            messages.append({
+                "role": "system",
+                "content": "Bounded mid-term memory projection: " + json.dumps(mid_payload, ensure_ascii=False)[:_CONTEXT_BUDGETS["mid_term_chars"]],
+                "_layer": "autonomy_mid_term",
+                "_budget_chars": _CONTEXT_BUDGETS["mid_term_chars"],
+                "_provenance": {"source": "mid_term", "item_count": len(mid_items)},
+            })
+
+        history = []
+        history_chars = 0
         for item in short_term.get_history(uid, max_turns=5, char_id=char_id):
             role, content = str(item.get("role") or ""), str(item.get("content") or "").strip()
-            if item.get("_source") != "trigger_stub" and role in {"user", "assistant"} and content:
-                messages.append({"role": role, "content": content[:1200], "_layer": "autonomy_recent_history"})
-        query_parts = []
-        query_items = [memory_query] if isinstance(memory_query, str) else (memory_query or [])
-        for item in query_items:
-            if isinstance(item, dict):
-                query_parts.extend(str(value) for value in item.values() if isinstance(value, (str, int, float)))
-            elif str(item).strip():
-                query_parts.append(str(item))
-        if query_parts:
-            from core.memory import episodic_memory
-            query = " ".join(query_parts)[:500]
-            recalled = episodic_memory.retrieve(uid, query, top_k=3, char_id=char_id, allow_strengthen=False)
-            if recalled:
-                summaries = []
-                for item in recalled[:3]:
-                    if not isinstance(item, dict):
-                        continue
-                    summary = item.get("narrative_summary") or item.get("summary") or ""
-                    if summary:
-                        summaries.append(str(summary)[:500])
-                if summaries:
-                    messages.append({
-                        "role": "system",
-                        "content": "Read-only anchored memory recall (do not infer new user state): " + " | ".join(summaries),
-                        "_layer": "autonomy_anchored_memory",
-                    })
+            if item.get("_source") == "trigger_stub" or role not in {"user", "assistant"} or not content:
+                continue
+            remaining = _CONTEXT_BUDGETS["history_chars"] - history_chars
+            if remaining <= 0:
+                break
+            clipped = content[:min(1200, remaining)]
+            history_chars += len(clipped)
+            history.append({
+                "role": role,
+                "content": clipped,
+                "speaker_id": str(item.get("speaker_id") or ("owner" if role == "user" else char_id)),
+                "timestamp": _fact_timestamp(item.get("timestamp")),
+                "turn_id": str(item.get("_turn_id") or ""),
+                "source": str(item.get("_source") or "short_term"),
+            })
+        if history:
+            messages.append({
+                "role": "system",
+                "content": "The following bounded items are actual recent conversation history. Their role, speaker, and timestamp are authoritative; do not merge them with opportunity evidence.",
+                "_layer": "autonomy_recent_history_policy",
+                "_budget_chars": 500,
+                "_provenance": {"source": "short_term", "turn_budget": _CONTEXT_BUDGETS["history_turns"]},
+            })
+            for item in history:
+                messages.append({
+                    "role": item["role"],
+                    "content": item["content"],
+                    "_layer": "autonomy_recent_history",
+                    "_budget_chars": 1200,
+                    "_provenance": {key: item[key] for key in ("source", "speaker_id", "timestamp", "turn_id")},
+                })
+    except Exception as exc:
+        logger.debug("[autonomy] bounded ambient context failed: %s", exc)
+
+    messages.append(_memory_query_message(uid, char_id, memory_query, now=now))
+
+    hardware_message = _hardware_job_message(now=now)
+    if hardware_message is not None:
+        messages.append(hardware_message)
+    return messages
+
+
+def _fact_timestamp(value) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _user_activity_facts(uid: str, char_id: str, *, now: float) -> dict:
+    """Return observable activity facts without guessing intent or mood."""
+    active_recently = False
+    try:
+        from core.scheduler.loop import _user_active_recently
+        active_recently = bool(_user_active_recently())
     except Exception:
         pass
-    return messages
+
+    last_message_at = None
+    try:
+        from core.sandbox import get_paths
+        path = get_paths().presence()
+        if path.exists():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            last_message_at = _fact_timestamp((raw.get(str(uid)) or {}).get("last_message_at"))
+    except Exception:
+        pass
+    seconds_since = max(0.0, now - last_message_at) if last_message_at else None
+    if active_recently or (seconds_since is not None and seconds_since < 120):
+        status = "active"
+    elif last_message_at is None:
+        status = "unknown"
+    else:
+        status = "idle"
+    return {
+        "status": status,
+        "active_recently": active_recently,
+        "active_window_seconds": 120,
+        "last_user_message_at": last_message_at,
+        "seconds_since_last_user_message": round(seconds_since, 3) if seconds_since is not None else None,
+        "observed_at": now,
+        "source": "scheduler_activity_and_presence",
+        "uid_scope": str(uid),
+        "char_id": str(char_id),
+    }
+
+
+def _normalise_memory_queries(memory_query) -> list[dict]:
+    values = [memory_query] if isinstance(memory_query, (str, dict)) else (memory_query or [])
+    queries: list[dict] = []
+    for raw in values:
+        if isinstance(raw, dict):
+            query = {
+                str(key): str(value)[:240]
+                for key, value in raw.items()
+                if isinstance(value, (str, int, float)) and str(value).strip()
+            }
+            text = " ".join(query.values()).strip()
+        else:
+            text = str(raw or "").strip()[:500]
+            query = {"text": text} if text else {}
+        if text and query:
+            query["query_text"] = text[:500]
+            queries.append(query)
+        if len(queries) >= _CONTEXT_BUDGETS["memory_queries"]:
+            break
+    return queries
+
+
+def _memory_speaker(memory: dict) -> str:
+    for key in ("speaker_id", "speaker", "source_speaker", "speaker_provenance"):
+        value = memory.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    provenance = memory.get("provenance")
+    if isinstance(provenance, dict):
+        for key in ("speaker_id", "speaker"):
+            value = provenance.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return "unknown"
+
+
+def _memory_query_message(uid: str, char_id: str, memory_query, *, now: float) -> dict:
+    queries = _normalise_memory_queries(memory_query)
+    result_items: list[dict] = []
+    query_error = ""
+    if queries:
+        try:
+            from core.memory import episodic_memory
+            for query_spec in queries:
+                query_text = query_spec["query_text"]
+                try:
+                    recalled = episodic_memory.retrieve(
+                        uid,
+                        query_text,
+                        top_k=_CONTEXT_BUDGETS["memory_results"],
+                        char_id=char_id,
+                        allow_strengthen=False,
+                        return_trace=True,
+                    )
+                except TypeError:
+                    # Compatibility with narrow test doubles and older adapters.
+                    recalled = episodic_memory.retrieve(
+                        uid,
+                        query_text,
+                        top_k=_CONTEXT_BUDGETS["memory_results"],
+                        char_id=char_id,
+                        allow_strengthen=False,
+                    )
+                hits = recalled[0] if isinstance(recalled, tuple) else recalled
+                for memory in (hits or []):
+                    if not isinstance(memory, dict):
+                        continue
+                    summary = str(memory.get("narrative_summary") or memory.get("summary") or "").strip()
+                    if not summary:
+                        continue
+                    result_items.append({
+                        "memory_id": str(memory.get("id") or ""),
+                        "source": "episodic",
+                        "summary": summary[:500],
+                        "occurred_at": _fact_timestamp(memory.get("occurred_at") or memory.get("timestamp")),
+                        "recorded_at": _fact_timestamp(memory.get("timestamp")),
+                        "speaker_provenance": _memory_speaker(memory),
+                        "strength": round(float(memory.get("strength") or 0.0), 3),
+                        "status": str(memory.get("status") or "open"),
+                        "source_turn_ids": [str(value) for value in (memory.get("source_turn_ids") or memory.get("source_mid_ids") or []) if value],
+                        "query": query_text[:240],
+                    })
+                    if len(result_items) >= _CONTEXT_BUDGETS["memory_results"]:
+                        break
+                if len(result_items) >= _CONTEXT_BUDGETS["memory_results"]:
+                    break
+        except Exception as exc:
+            query_error = type(exc).__name__
+            logger.debug("[autonomy] memory query failed: %s", exc)
+
+    payload = {
+        "query_status": "executed" if queries else "not_requested",
+        "queries": queries,
+        "results": result_items,
+        "result_count": len(result_items),
+        "reliable_anchor_count": sum(
+            1
+            for item in result_items
+            if item.get("source")
+            and item.get("occurred_at") is not None
+            and item.get("recorded_at") is not None
+            and item.get("speaker_provenance") not in {None, "", "unknown"}
+            and float(item.get("strength") or 0.0) >= 0.5
+        ),
+        "query_error": query_error,
+        "executed_at": now,
+        "source": "episodic_memory.retrieve" if queries else "none",
+        "allow_strengthen": False,
+        "grounding_rule": "Results are historical evidence only when source, time, and speaker provenance are present. Empty or unknown provenance is not a memory anchor.",
+    }
+    content = "System-executed memory query (not user dialogue): " + json.dumps(payload, ensure_ascii=False)
+    if not result_items:
+        content += "\nNo reliable anchored memory was found; do not claim to remember a user fact."
+    return {
+        "role": "system",
+        "content": content[:_CONTEXT_BUDGETS["memory_chars"]],
+        "_layer": "autonomy_memory_query",
+        "_budget_chars": _CONTEXT_BUDGETS["memory_chars"],
+        "_provenance": {
+            "source": payload["source"],
+            "query_count": len(queries),
+            "result_count": len(result_items),
+            "reliable_anchor_count": payload["reliable_anchor_count"],
+            "allow_strengthen": False,
+        },
+    }
+
+
+def _hardware_job_message(*, now: float) -> dict | None:
+    try:
+        from core.hardware import jobs
+        rendered = str(jobs.format_prompt() or "").strip()
+    except Exception as exc:
+        logger.debug("[autonomy] hardware job state failed: %s", exc)
+        return None
+    if not rendered:
+        return None
+    return {
+        "role": "system",
+        "content": "System hardware job state (not user dialogue; status is authoritative):\n" + rendered[:_CONTEXT_BUDGETS["hardware_chars"]],
+        "_layer": "autonomy_hardware_jobs",
+        "_budget_chars": _CONTEXT_BUDGETS["hardware_chars"],
+        "_provenance": {"source": "core.hardware.jobs.format_prompt", "observed_at": now},
+    }
+
+
+def _tool_fact_message(name: str, result, outcome: str, *, now: float) -> dict:
+    from core.tools.tool_result import to_tool_result
+    validity = "current_turn" if outcome == "ok" else "outcome_unknown" if outcome == "outcome_unknown" else "execution_failed"
+    tool_result = to_tool_result(result, meta={"tool_name": name, "generated_at": now, "validity": validity})
+    payload = {
+        "tool_name": name,
+        "status": outcome,
+        "generated_at": now,
+        "validity": validity,
+        "safe_summary": tool_result.safe_summary[:_CONTEXT_BUDGETS["tool_fact_chars"]],
+        "grounding_rule": "A successful tool result is a fact about the tool boundary only; it is not proof that a user-facing message is needed.",
+    }
+    return {
+        "role": "system",
+        "content": "Completed autonomy tool fact: " + json.dumps(payload, ensure_ascii=False),
+        "_layer": "autonomy_tool_fact",
+        "_budget_chars": _CONTEXT_BUDGETS["tool_fact_chars"],
+        "_provenance": {"source": "tool_result", "tool_name": name, "generated_at": now, "validity": validity},
+    }
+
+
+def _memory_anchor_available(messages: list[dict]) -> bool:
+    for message in messages:
+        if message.get("_layer") != "autonomy_memory_query":
+            continue
+        provenance = message.get("_provenance") or {}
+        return bool(provenance.get("reliable_anchor_count"))
+    return False
+
+
+def _talk_text_has_unsupported_memory_claim(text: str, *, memory_anchor_available: bool) -> bool:
+    return bool(_MEMORY_CLAIM_RE.search(text or "")) and not memory_anchor_available
 
 
 async def run_job(job: Job) -> Run:
@@ -118,13 +452,14 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     talk_available = bool(state["config"].get("talk_enabled", True) and mode != "hard")
     if talk_available:
         tools.append(talk_gate.schema())
-    messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy"}]
-    messages.extend(_context_messages(job.uid, job.char_id, memory_query=(job.opportunity or {}).get("memory_query")))
+    run_now = time.time()
+    messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy", "_budget_chars": 1800}]
+    messages.extend(_context_messages(job.uid, job.char_id, memory_query=(job.opportunity or {}).get("memory_query"), now=run_now))
     if self_context is not None:
         messages.append(_self_context_message(self_context))
     messages.append({"role": "system", "content": _opportunity_context(job), "_layer": "autonomy_opportunity"})
     messages.append({"role": "user", "content": "Evaluate this opportunity and decide what to do, if anything."})
-    run.prompt_snapshot = [{key: value for key, value in message.items() if key in {"role", "content", "_layer"}} for message in messages]
+    _set_prompt_snapshot(run, messages)
     cfg = state["config"]
     max_steps = max(1, min(int(cfg.get("max_steps") or 4), 8))
     max_tools = max(0, min(int(cfg.get("max_tools") or 4), 8))
@@ -170,6 +505,13 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     run.disposition = Disposition.TOOL_CALL_DENIED.value
                     return _finish(run)
                 if name == "talk_owner":
+                    if _talk_text_has_unsupported_memory_claim(
+                        str(args.get("text") or ""),
+                        memory_anchor_available=_memory_anchor_available(messages),
+                    ):
+                        _record_event(run, "talk_grounding_rejected", reason="unsupported_memory_claim")
+                        run.disposition = Disposition.TALK_CANCELED.value
+                        return _finish(run)
                     gate_mode, gate_reason = talk_gate.check(job.uid, allow_soft=True)
                     if gate_mode == "soft" and not confirm_available:
                         pending_talk_text = str(args.get("text") or "")
@@ -189,6 +531,13 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value
                         return _finish(run)
                     text = str(args.get("revised_text") or pending_talk_text)
+                    if _talk_text_has_unsupported_memory_claim(
+                        text,
+                        memory_anchor_available=_memory_anchor_available(messages),
+                    ):
+                        _record_event(run, "talk_grounding_rejected", reason="unsupported_memory_claim")
+                        run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value
+                        return _finish(run)
                     ok, reason = await talk_gate.send(job.uid, job.char_id, text, source=job.source, run_id=run.id, bypass_soft_once=True)
                     run.talk_sent = ok
                     run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_SENT.value if ok else (reason if reason in Disposition._value2member_map_ else Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value)
@@ -227,7 +576,24 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     saw_tool = True
                 if name != "manage_self_capability" and _is_write_tool(name):
                     write_tool_count += 1
-                messages.append({"role": "tool", "tool_call_id": call["id"], "content": (result or "tool failed")[:1200]})
+                generated_at = time.time()
+                from core.tools.tool_result import frame_tool_message, to_tool_result
+                safe_result = to_tool_result(result, meta={"tool_name": name, "generated_at": generated_at, "validity": "current_turn" if outcome == "ok" else "outcome_unknown" if outcome == "outcome_unknown" else "execution_failed"})
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": frame_tool_message(safe_result.safe_summary[:_CONTEXT_BUDGETS["tool_fact_chars"]], generated_at=generated_at, validity="current_turn" if outcome == "ok" else "outcome_unknown" if outcome == "outcome_unknown" else "execution_failed"),
+                    "_layer": "autonomy_tool_result",
+                    "_budget_chars": _CONTEXT_BUDGETS["tool_fact_chars"],
+                    "_provenance": {"source": "tool_result", "tool_name": name, "generated_at": generated_at, "validity": "current_turn" if outcome == "ok" else "execution_failed"},
+                })
+                messages.append(_tool_fact_message(name, result, outcome, now=generated_at))
+                # A tool may have created, completed, or changed a long-running
+                # hardware job. Re-read the authoritative job projection rather
+                # than inferring status from a tool acknowledgement.
+                refreshed_hardware = _hardware_job_message(now=generated_at)
+                if refreshed_hardware is not None:
+                    messages.append(refreshed_hardware)
             if run.disposition == Disposition.CANCELED_BY_USER_ACTIVITY.value: break
         else:
             run.disposition = _completed_disposition(saw_tool, saw_self_change)
@@ -235,6 +601,8 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
         run.disposition = Disposition.TIMEOUT.value
     except Exception:
         run.disposition = Disposition.LLM_FAILED.value
+    finally:
+        _set_prompt_snapshot(run, messages)
     return _finish(run)
 
 
@@ -244,10 +612,58 @@ def _finish(run: Run) -> Run:
     return run
 
 
+def _set_prompt_snapshot(run: Run, messages: list[dict]) -> None:
+    """Persist a redacted, bounded view of the actual autonomy prompt."""
+    snapshot: list[dict] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        item = {
+            key: message[key]
+            for key in (
+                "role",
+                "content",
+                "_layer",
+                "_budget_chars",
+                "_provenance",
+                "tool_call_id",
+            )
+            if key in message
+        }
+        if isinstance(item.get("content"), str):
+            item["content"] = item["content"][:2400]
+        snapshot.append(item)
+    if run.disposition:
+        snapshot.append({
+            "role": "system",
+            "content": "Autonomy final disposition: " + json.dumps({
+                "disposition": run.disposition,
+                "evaluation_status": evaluation_status_for(run.disposition),
+                "talk_sent": run.talk_sent,
+                "tool_names": run.tool_names,
+            }, ensure_ascii=False),
+            "_layer": "autonomy_final_disposition",
+            "_budget_chars": 600,
+            "_provenance": {"source": "autonomy_runner"},
+        })
+    # Keep the evaluation instruction visible as the final snapshot item for
+    # compatibility with the existing admin/debug contract, while retaining
+    # all post-tool fact layers immediately before it.
+    evaluation_items = [
+        item for item in snapshot
+        if item.get("role") == "user" and item.get("content") == "Evaluate this opportunity and decide what to do, if anything."
+    ]
+    if evaluation_items:
+        snapshot = [item for item in snapshot if item not in evaluation_items] + evaluation_items[-1:]
+    run.prompt_snapshot = snapshot[-40:]
+
+
 def _opportunity_context(job: Job) -> str:
     """Render only the versioned signal facts; the model never receives a bare trigger source."""
     opportunity = job.opportunity or {}
-    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    now_ts = time.time()
+    now_dt = datetime.fromtimestamp(now_ts).astimezone()
+    now = now_dt.isoformat(timespec="seconds")
     facts = []
     for signal in opportunity.get("signals") or []:
         if not isinstance(signal, dict):
@@ -256,6 +672,7 @@ def _opportunity_context(job: Job) -> str:
         facts.append({
             "source": signal.get("source", ""),
             "evidence": evidence[:8] if isinstance(evidence, list) else str(evidence)[:800],
+            "evidence_semantics": "candidate_system_fact_not_dialogue",
             "reason": str(signal.get("reason") or "")[:500],
             "priority": signal.get("priority", 0),
             "expiry": signal.get("expiry", 0),
@@ -271,7 +688,16 @@ def _opportunity_context(job: Job) -> str:
         "action_mode": opportunity.get("action_mode", ActionMode.NONE.value),
         "signals": facts,
         "reality_time": now,
-        "reality_time_policy": "Use this timestamp as the only current-time fact; do not infer user state from greetings or time-of-day labels.",
+        "reality_time_facts": {
+            "unix": now_ts,
+            "iso": now,
+            "timezone": str(now_dt.tzinfo or "local"),
+            "local_date": now_dt.date().isoformat(),
+            "weekday": now_dt.strftime("%A"),
+            "source": "system_clock",
+        },
+        "reality_time_policy": "Use this system timestamp as the only current-time fact; do not infer user state from greetings or time-of-day labels.",
+        "candidate_evidence_policy": "Signals explain why evaluation is being considered. They are not proof that a user conversation or event already happened.",
     }
     return "Autonomy opportunity facts (system-provided, not user claims): " + json.dumps(payload, ensure_ascii=False)
 

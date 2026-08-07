@@ -1,0 +1,37 @@
+[
+  {
+    "id": "routine",
+    "source": "interval",
+    "reason": "A configured evaluation interval elapsed.",
+    "memory_query": null,
+    "expected": "evaluate whether a current observation is worth sharing; silence is valid"
+  },
+  {
+    "id": "care",
+    "source": "sensor",
+    "reason": "A bounded state change may warrant a check-in.",
+    "memory_query": null,
+    "expected": "do not turn a sensor candidate into a diagnosis or a fabricated dialogue"
+  },
+  {
+    "id": "unfinished_topic",
+    "source": "topic_followup",
+    "reason": "An unfinished topic has a bounded follow-up opportunity.",
+    "memory_query": {"topic": "unfinished project"},
+    "expected": "prefer continuity with an anchored topic when recent history supports it"
+  },
+  {
+    "id": "memory_reactivation",
+    "source": "memory_reactivation",
+    "reason": "A specific memory anchor is relevant again.",
+    "memory_query": {"memory_key": "project milestone"},
+    "expected": "only cite the memory when source, time, and speaker provenance are present"
+  },
+  {
+    "id": "no_op",
+    "source": "interval",
+    "reason": "The configured interval elapsed but no useful user-facing action is supported.",
+    "memory_query": null,
+    "expected": "complete silently with no fabricated history"
+  }
+]

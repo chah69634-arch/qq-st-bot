@@ -4,7 +4,7 @@ from core.autonomy.models import Disposition
 
 
 def schema() -> dict:
-    return {"type": "function", "function": {"name": "talk_owner", "description": "Only use when you deliberately choose to send one concise user-visible proactive message. Do not use for internal narration.", "parameters": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 600}, "reason": {"type": "string", "maxLength": 120}}, "required": ["text", "reason"]}}}
+    return {"type": "function", "function": {"name": "talk_owner", "description": "Only use for one deliberate concise user-visible proactive message. The text must be grounded in the opportunity, current system facts, recent conversation, or a system-executed memory result. Candidate evidence is not dialogue; without a reliable memory anchor do not claim to remember, quote, or refer to what the owner said before. Tool completion alone is not a reason to speak.", "parameters": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 600}, "reason": {"type": "string", "maxLength": 120, "description": "Short reason naming the grounded fact strength: current observation, recent history, anchored memory, or deliberate no-memory choice."}}, "required": ["text", "reason"]}}}
 
 
 def confirm_schema() -> dict:
