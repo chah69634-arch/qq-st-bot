@@ -4,9 +4,10 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from datetime import datetime
 
 from core.autonomy import policy, store, talk_gate
-from core.autonomy.models import Disposition, Job, Run
+from core.autonomy.models import ActionMode, Disposition, Job, Run, Signal
 
 
 def _system_prompt(*, talk_available: bool, character=None) -> str:
@@ -23,7 +24,7 @@ def _system_prompt(*, talk_available: bool, character=None) -> str:
     ) + identity
 
 
-def _context_messages(uid: str, char_id: str) -> list[dict]:
+def _context_messages(uid: str, char_id: str, *, memory_query=None) -> list[dict]:
     """Read-only, bounded memory and history for an autonomy opportunity."""
     messages: list[dict] = []
     try:
@@ -40,6 +41,31 @@ def _context_messages(uid: str, char_id: str) -> list[dict]:
             role, content = str(item.get("role") or ""), str(item.get("content") or "").strip()
             if item.get("_source") != "trigger_stub" and role in {"user", "assistant"} and content:
                 messages.append({"role": role, "content": content[:1200], "_layer": "autonomy_recent_history"})
+        query_parts = []
+        query_items = [memory_query] if isinstance(memory_query, str) else (memory_query or [])
+        for item in query_items:
+            if isinstance(item, dict):
+                query_parts.extend(str(value) for value in item.values() if isinstance(value, (str, int, float)))
+            elif str(item).strip():
+                query_parts.append(str(item))
+        if query_parts:
+            from core.memory import episodic_memory
+            query = " ".join(query_parts)[:500]
+            recalled = episodic_memory.retrieve(uid, query, top_k=3, char_id=char_id, allow_strengthen=False)
+            if recalled:
+                summaries = []
+                for item in recalled[:3]:
+                    if not isinstance(item, dict):
+                        continue
+                    summary = item.get("narrative_summary") or item.get("summary") or ""
+                    if summary:
+                        summaries.append(str(summary)[:500])
+                if summaries:
+                    messages.append({
+                        "role": "system",
+                        "content": "Read-only anchored memory recall (do not infer new user state): " + " | ".join(summaries),
+                        "_layer": "autonomy_anchored_memory",
+                    })
     except Exception:
         pass
     return messages
@@ -47,14 +73,23 @@ def _context_messages(uid: str, char_id: str) -> list[dict]:
 
 async def run_job(job: Job) -> Run:
     state = store.load(job.uid, job.char_id)
-    run = Run(uid=job.uid, char_id=job.char_id, source=job.source, job_id=job.id)
+    opportunity = job.opportunity or {}
+    run = Run(
+        uid=job.uid,
+        char_id=job.char_id,
+        source=job.source,
+        job_id=job.id,
+        opportunity_id=str(opportunity.get("id") or ""),
+        signal_count=len(opportunity.get("signals") or []),
+        evaluation_status="evaluating",
+    )
     blocked = policy.admission(job.uid, job.char_id, state)
     if blocked:
-        run.disposition = blocked; run.finished_at = time.time(); return run
+        run.disposition = blocked; return _finish(run)
     from core.conversation_gate import conversation_lock
     lock = conversation_lock(job.uid)
     if lock.locked():
-        run.disposition = Disposition.BLOCKED_USER_ACTIVE.value; run.finished_at = time.time(); return run
+        run.disposition = Disposition.BLOCKED_USER_ACTIVE.value; return _finish(run)
     lease_lost = asyncio.Event()
 
     async def _keep_lease() -> None:
@@ -84,10 +119,11 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     if talk_available:
         tools.append(talk_gate.schema())
     messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy"}]
-    messages.extend(_context_messages(job.uid, job.char_id))
+    messages.extend(_context_messages(job.uid, job.char_id, memory_query=(job.opportunity or {}).get("memory_query")))
     if self_context is not None:
         messages.append(_self_context_message(self_context))
-    messages.append({"role": "user", "content": f"Autonomy opportunity source: {job.source}. Decide what to do, if anything."})
+    messages.append({"role": "system", "content": _opportunity_context(job), "_layer": "autonomy_opportunity"})
+    messages.append({"role": "user", "content": "Evaluate this opportunity and decide what to do, if anything."})
     run.prompt_snapshot = [{key: value for key, value in message.items() if key in {"role", "content", "_layer"}} for message in messages]
     cfg = state["config"]
     max_steps = max(1, min(int(cfg.get("max_steps") or 4), 8))
@@ -204,7 +240,50 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
 
 def _finish(run: Run) -> Run:
     run.finished_at = time.time()
+    disposition = str(run.disposition or "")
+    if disposition == Disposition.COMPLETED_NO_OP.value:
+        run.evaluation_status = "evaluated_silent"
+    elif disposition == Disposition.COMPLETED_TOOLS_ONLY.value:
+        run.evaluation_status = "tools_completed_no_talk"
+    elif "talk_sent" in disposition:
+        run.evaluation_status = "talk_sent"
+    elif disposition == Disposition.CANCELED_BY_USER_ACTIVITY.value:
+        run.evaluation_status = "canceled_user_activity"
+    elif disposition:
+        run.evaluation_status = "blocked_or_failed"
     return run
+
+
+def _opportunity_context(job: Job) -> str:
+    """Render only the versioned signal facts; the model never receives a bare trigger source."""
+    opportunity = job.opportunity or {}
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    facts = []
+    for signal in opportunity.get("signals") or []:
+        if not isinstance(signal, dict):
+            continue
+        evidence = signal.get("evidence") or []
+        facts.append({
+            "source": signal.get("source", ""),
+            "evidence": evidence[:8] if isinstance(evidence, list) else str(evidence)[:800],
+            "reason": str(signal.get("reason") or "")[:500],
+            "priority": signal.get("priority", 0),
+            "expiry": signal.get("expiry", 0),
+            "action_mode": signal.get("action_mode", ActionMode.NONE.value),
+        })
+    payload = {
+        "version": opportunity.get("version", "autonomy-opportunity.v1"),
+        "opportunity_id": opportunity.get("id", ""),
+        "priority": opportunity.get("priority", 0),
+        "reason": str(opportunity.get("reason") or "")[:1200],
+        "expiry": opportunity.get("expiry", 0),
+        "memory_query": opportunity.get("memory_query") or [],
+        "action_mode": opportunity.get("action_mode", ActionMode.NONE.value),
+        "signals": facts,
+        "reality_time": now,
+        "reality_time_policy": "Use this timestamp as the only current-time fact; do not infer user state from greetings or time-of-day labels.",
+    }
+    return "Autonomy opportunity facts (system-provided, not user claims): " + json.dumps(payload, ensure_ascii=False)
 
 
 def _record_event(run: Run, status: str, **details) -> None:
@@ -311,7 +390,7 @@ class _AutonomySession:
 
 
 async def tick(uid: str, char_id: str) -> None:
-    """Called only by the existing scheduler tick; creates jobs only at actual due times."""
+    """Collect all due signals, merge one opportunity, then consume at most one job."""
     state = store.load(uid, char_id)
     cfg = state["config"]
     if not cfg.get("enabled"):
@@ -321,19 +400,71 @@ async def tick(uid: str, char_id: str) -> None:
         return
     effective_minimum = autonomy_min_interval(uid, char_id, int(cfg.get("min_interval_seconds") or 0))
     now = time.time()
+    due_signals: list[Signal] = []
+    dedupe_parts: list[str] = []
     interval = cfg.get("interval", {})
     if interval.get("enabled") and now - store.source_last_evaluated(state, "interval") >= int(interval.get("seconds") or 0):
-        store.enqueue(uid, char_id, "interval", dedupe_key=f"interval:{int(now // max(60, int(interval.get('seconds') or 60)))}")
+        seconds = max(60, int(interval.get("seconds") or 60))
+        due_signals.append(Signal(
+            source="interval",
+            evidence=[{"fact": "configured_interval_elapsed", "elapsed_seconds": max(0, int(now - store.source_last_evaluated(state, "interval"))), "threshold_seconds": seconds}],
+            reason="A configured autonomy evaluation interval elapsed.",
+            expiry=now + min(seconds, 20 * 60),
+            priority=0.2,
+            memory_query=None,
+            action_mode=ActionMode.REFLECT.value,
+        ))
+        dedupe_parts.append(f"interval:{int(now // seconds)}")
     schedule = cfg.get("schedule", {})
     if _schedule_due(schedule, now, store.source_last_evaluated(state, "schedule")):
-        store.enqueue(uid, char_id, "schedule", dedupe_key=f"schedule:{time.strftime('%Y%m%d%H%M', time.localtime(now))}")
+        due_signals.append(Signal(
+            source="schedule",
+            evidence=[{"fact": "configured_schedule_due", "configured_time": str(schedule.get("time") or ""), "observed_at": datetime.fromtimestamp(now).astimezone().isoformat(timespec="seconds")}],
+            reason="A configured autonomy evaluation time is due.",
+            expiry=now + 10 * 60,
+            priority=0.4,
+            memory_query=None,
+            action_mode=ActionMode.REFLECT.value,
+        ))
+        dedupe_parts.append(f"schedule:{time.strftime('%Y%m%d%H%M', time.localtime(now))}")
     overflow = cfg.get("overflow", {})
     if overflow.get("enabled"):
         from core.scheduler.overflow_bucket import compute_signals
         signals = compute_signals(uid, char_id=char_id)
-        if signals.bucket_score() >= float(overflow.get("threshold") or 1.6):
-            key = f"overflow:{int(now // max(60, effective_minimum or 900))}"
-            store.enqueue(uid, char_id, "overflow", dedupe_key=key)
+        score = signals.bucket_score()
+        threshold = float(overflow.get("threshold") or 1.6)
+        if score >= threshold:
+            due_signals.append(Signal(
+                source="overflow",
+                evidence=[{
+                    "fact": "overflow_threshold_reached",
+                    "score": round(score, 4),
+                    "threshold": threshold,
+                    "components": {
+                        "time_gap": signals.time_gap_score,
+                        "episodic": signals.episodic_score,
+                        "hidden_need": signals.hidden_need_score,
+                        "garden": signals.garden_score,
+                        "mood": signals.mood_score,
+                    },
+                    "top_signal": signals.top_signal,
+                }],
+                reason="Several bounded autonomy reasons accumulated above the configured threshold.",
+                expiry=now + max(5 * 60, min(effective_minimum or 15 * 60, 20 * 60)),
+                priority=min(1.0, score / max(threshold, 0.01)),
+                memory_query=({"topic": signals.top_signal_detail} if signals.top_signal == "episodic" and signals.top_signal_detail else None),
+                action_mode=ActionMode.REFLECT.value,
+            ))
+            dedupe_parts.append(f"overflow:{int(now // max(60, effective_minimum or 900))}")
+    if due_signals:
+        expiry = min((signal.expiry for signal in due_signals if signal.expiry > now), default=now + 20 * 60)
+        store.enqueue_opportunity(
+            uid,
+            char_id,
+            due_signals,
+            dedupe_key="|".join(sorted(dedupe_parts)),
+            ttl_seconds=max(60, min(int(expiry - now), 3600)),
+        )
     job = store.claim_due(uid, char_id)
     if job is None: return
     run = await run_job(job)

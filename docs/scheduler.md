@@ -1,5 +1,7 @@
 # docs/scheduler.md — 调度器设计
 
+> 主动性架构边界：调度器和 sensor 只产生候选 signal，不生成台词。signal 在一个 tick 内合并为单一 autonomy opportunity，由 `core/autonomy` 完成评估；`talk_owner` 是主动消息进入 `turn_sink` 的唯一出口。契约、状态观测和旧直发迁移清单见 `docs/autonomy.md`。
+
 ---
 
 ## 定位

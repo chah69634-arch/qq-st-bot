@@ -39,7 +39,11 @@ async def status(auth=Depends(require_scopes("state.read"))):
     else: runtime_state = "空闲"
     interval = cfg.get("interval") or {}
     next_interval = ((state.get("sources", {}).get("interval", {}) or {}).get("next_due_at") or (store.source_last_evaluated(state, "interval") + int(interval.get("seconds") or 0))) if interval.get("enabled") else None
-    return {"uid": uid, "char_id": char_id, "config_enabled": cfg.get("enabled"), "runtime_state": runtime_state, "current_run_id": (current or {}).get("id", ""), "current_stage": (current or {}).get("status", ""), "next_due_at": next_interval, "daily": state.get("daily"), "sources": state.get("sources"), "circuit": state.get("circuit"), "queued_jobs": jobs, "last_run": (state.get("runs") or [None])[-1], "talk": {"available": talk_mode == "allow" and cfg.get("talk_enabled"), "mode": talk_mode, "reason": talk_reason, **continuity_status(uid)}}
+    outcome_counts: dict[str, int] = {}
+    for run in state.get("runs", []):
+        outcome = str(run.get("evaluation_status") or "evaluated")
+        outcome_counts[outcome] = outcome_counts.get(outcome, 0) + 1
+    return {"uid": uid, "char_id": char_id, "config_enabled": cfg.get("enabled"), "runtime_state": runtime_state, "current_run_id": (current or {}).get("id", ""), "current_stage": (current or {}).get("status", ""), "next_due_at": next_interval, "daily": state.get("daily"), "sources": state.get("sources"), "circuit": state.get("circuit"), "queued_jobs": jobs, "last_run": (state.get("runs") or [None])[-1], "outcome_counts": outcome_counts, "talk": {"available": talk_mode == "allow" and cfg.get("talk_enabled"), "mode": talk_mode, "reason": talk_reason, **continuity_status(uid)}}
 
 
 @router.get("/admin/autonomy/config", summary="读取内置唤醒配置")
@@ -106,6 +110,51 @@ async def runs(limit: int = 30, auth=Depends(require_scopes("state.read"))):
     uid, char_id = _scope(); data = store.load(uid, char_id).get("runs", [])
     rows = list(reversed(data[-max(1, min(limit, 100)):]))
     return {"runs": [{key: value for key, value in row.items() if key != "prompt_snapshot"} for row in rows]}
+
+
+@router.get("/observability/autonomy-opportunities", summary="Read proactive opportunity lifecycle")
+async def opportunities(limit: int = 50, auth=Depends(require_scopes("state.read"))):
+    """Read a redacted lifecycle view: queued, silent, tools-only, sent, or canceled."""
+    from core.autonomy import store
+
+    uid, char_id = _scope()
+    state = store.load(uid, char_id)
+    entries = []
+    for job in state.get("jobs", []):
+        opportunity = job.get("opportunity") or {}
+        entries.append({
+            "kind": "opportunity",
+            "status": "unevaluated" if job.get("status") in {"pending", "processing"} else "expired_or_finished",
+            "job_id": job.get("id", ""),
+            "opportunity_id": opportunity.get("id", ""),
+            "source": job.get("source", ""),
+            "signal_sources": job.get("signal_sources") or [],
+            "signal_count": len(opportunity.get("signals") or []),
+            "opportunity": {key: opportunity.get(key) for key in ("version", "priority", "reason", "expiry", "memory_query", "action_mode")},
+            "created_at": job.get("created_at", 0),
+        })
+    for run in state.get("runs", []):
+        entries.append({
+            "kind": "run",
+            "status": run.get("evaluation_status") or "evaluated",
+            "run_id": run.get("id", ""),
+            "job_id": run.get("job_id", ""),
+            "opportunity_id": run.get("opportunity_id", ""),
+            "source": run.get("source", ""),
+            "signal_count": run.get("signal_count", 0),
+            "disposition": run.get("disposition", ""),
+            "talk_sent": bool(run.get("talk_sent")),
+            "tool_names": run.get("tool_names") or [],
+            "started_at": run.get("started_at", 0),
+            "finished_at": run.get("finished_at", 0),
+        })
+    entries.sort(key=lambda item: float(item.get("finished_at") or item.get("created_at") or item.get("started_at") or 0), reverse=True)
+    entries = entries[:max(1, min(int(limit), 100))]
+    counts: dict[str, int] = {}
+    for item in entries:
+        status = str(item.get("status") or "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    return {"uid": uid, "char_id": char_id, "entries": entries, "count": len(entries), "status_counts": counts}
 
 
 @router.get("/admin/autonomy/runs/{run_id}/prompt", summary="Read one autonomy prompt snapshot")

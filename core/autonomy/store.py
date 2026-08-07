@@ -5,7 +5,7 @@ import json
 import time
 from copy import deepcopy
 
-from core.autonomy.models import Job, Run
+from core.autonomy.models import Job, Opportunity, Run, Signal
 from core.safe_write import safe_write_json
 from core.sandbox import get_paths
 
@@ -71,16 +71,50 @@ def save(uid: str, char_id: str, state: dict) -> bool:
     return bool(safe_write_json(path, state))
 
 
-def enqueue(uid: str, char_id: str, source: str, *, dedupe_key: str = "", ttl_seconds: int = 20 * 60) -> tuple[Job | None, str]:
+def enqueue(
+    uid: str,
+    char_id: str,
+    source: str,
+    *,
+    dedupe_key: str = "",
+    ttl_seconds: int = 20 * 60,
+    opportunity: Opportunity | dict | None = None,
+) -> tuple[Job | None, str]:
     state = load(uid, char_id)
     now = time.time()
     for raw in state["jobs"]:
         if raw.get("status") in {"pending", "processing"} and raw.get("dedupe_key") and raw.get("dedupe_key") == dedupe_key:
             return None, "duplicate"
-    job = Job(uid=str(uid), char_id=str(char_id), source=str(source), dedupe_key=dedupe_key, ttl_seconds=max(60, min(int(ttl_seconds), 3600)))
+    opportunity_dict = opportunity.to_dict() if isinstance(opportunity, Opportunity) else (dict(opportunity) if isinstance(opportunity, dict) else {})
+    signal_sources = sorted({str(item.get("source") or "") for item in opportunity_dict.get("signals", []) if isinstance(item, dict) and item.get("source")})
+    job = Job(
+        uid=str(uid), char_id=str(char_id), source=str(source), dedupe_key=dedupe_key,
+        ttl_seconds=max(60, min(int(ttl_seconds), 3600)), opportunity=opportunity_dict,
+        signal_sources=signal_sources,
+    )
     state["jobs"].append(job.to_dict())
     save(uid, char_id, state)
     return job, "queued"
+
+
+def enqueue_opportunity(
+    uid: str,
+    char_id: str,
+    signals: list[Signal],
+    *,
+    dedupe_key: str = "",
+    ttl_seconds: int = 20 * 60,
+) -> tuple[Job | None, str]:
+    """Merge all signals from one tick into exactly one durable autonomy job."""
+    opportunity = Opportunity.merge(signals)
+    return enqueue(
+        uid,
+        char_id,
+        "autonomy",
+        dedupe_key=dedupe_key or f"opportunity:{opportunity.id}",
+        ttl_seconds=ttl_seconds,
+        opportunity=opportunity,
+    )
 
 
 def claim_due(uid: str, char_id: str) -> Job | None:
@@ -98,7 +132,11 @@ def claim_due(uid: str, char_id: str) -> Job | None:
         job = Job.from_dict(raw)
         if now - job.created_at > job.ttl_seconds:
             raw["status"] = "done"; changed = True
-            state["runs"].append(Run(uid=uid, char_id=char_id, source=job.source, job_id=job.id, disposition="expired", finished_at=now).to_dict())
+            state["runs"].append(Run(
+                uid=uid, char_id=char_id, source=job.source, job_id=job.id,
+                disposition="expired", finished_at=now, opportunity_id=str((job.opportunity or {}).get("id") or ""),
+                signal_count=len(job.signal_sources), evaluation_status="expired",
+            ).to_dict())
             continue
         raw["status"] = "processing"; raw["lease_until"] = now + LEASE_SECONDS; raw["lease_token"] = __import__("uuid").uuid4().hex; raw["attempts"] = int(raw.get("attempts") or 0) + 1
         save(uid, char_id, state)
@@ -144,12 +182,14 @@ def finish(job: Job, run: Run, *, retry: bool = False) -> None:
     state["runs"].append(run.to_dict())
     if owns_claim:
         evaluated_at = run.finished_at or time.time()
-        source_state = state.setdefault("sources", {}).setdefault(job.source, {})
-        source_state["last_evaluated_at"] = evaluated_at
-        if job.source == "interval" and state["config"].get("interval", {}).get("enabled"):
-            source_state["next_due_at"] = evaluated_at + int(state["config"]["interval"].get("seconds") or 0)
-        elif job.source == "overflow":
-            source_state["next_due_at"] = evaluated_at + int(state["config"].get("min_interval_seconds") or 0)
+        sources = job.signal_sources or [job.source]
+        for source in sources:
+            source_state = state.setdefault("sources", {}).setdefault(source, {})
+            source_state["last_evaluated_at"] = evaluated_at
+            if source == "interval" and state["config"].get("interval", {}).get("enabled"):
+                source_state["next_due_at"] = evaluated_at + int(state["config"]["interval"].get("seconds") or 0)
+            elif source == "overflow":
+                source_state["next_due_at"] = evaluated_at + int(state["config"].get("min_interval_seconds") or 0)
         roll_daily(state)
         state["daily"]["evaluations"] += 1
         state["daily"]["tools"] += len(run.tool_names)
@@ -160,7 +200,7 @@ def finish(job: Job, run: Run, *, retry: bool = False) -> None:
             circuit["consecutive_failures"] = int(circuit.get("consecutive_failures") or 0) + 1
             if circuit["consecutive_failures"] >= int(state["config"].get("circuit_failure_threshold") or 3):
                 circuit["open_until"] = time.time() + int(state["config"].get("circuit_cooldown_seconds") or 3600)
-        elif run.disposition.startswith("completed_") or run.disposition.startswith("talk_"):
+        elif run.disposition.startswith("completed_") or run.disposition.startswith("talk_") or run.disposition == "canceled_by_user_activity":
             circuit.update({"consecutive_failures": 0, "open_until": 0.0})
     save(job.uid, job.char_id, state)
 

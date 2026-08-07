@@ -1,5 +1,7 @@
 # ARCHITECTURE.md — 系统架构总览
 
+主动消息采用 signal-first autonomy：scheduler/sensor 只产生带事实、理由、优先级、时效、记忆锚点和行动模式的 `autonomy-signal.v1`；每个 tick 合并为一个 `autonomy-opportunity.v1`，由 `core/autonomy` 评估。只有 autonomy job 内显式调用 `talk_owner` 才能进入 `turn_sink`，旧 scheduler 直发路径按 `docs/autonomy.md` 迁移清单逐项封存。
+
 ---
 
 ## 系统全貌
