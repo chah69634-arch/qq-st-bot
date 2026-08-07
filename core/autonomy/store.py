@@ -106,7 +106,12 @@ def enqueue_opportunity(
     ttl_seconds: int = 20 * 60,
 ) -> tuple[Job | None, str]:
     """Merge all signals from one tick into exactly one durable autonomy job."""
-    opportunity = Opportunity.merge(signals)
+    try:
+        opportunity = Opportunity.merge(signals)
+    except ValueError:
+        # A restart or a slow queue can leave every candidate past its TTL.
+        # Treat that as a normal admission miss, never as a replayable job.
+        return None, "expired"
     return enqueue(
         uid,
         char_id,

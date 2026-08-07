@@ -19,6 +19,11 @@ Signals use `autonomy-signal.v1`:
   "priority": 0.0,
   "memory_query": null,
   "action_mode": "none|reflect|use_tools|talk",
+  "signal_id": "stable-per-signal-id",
+  "expires_at": 0,
+  "urgency": 0.0,
+  "confidence": 0.0,
+  "suggested_action": "silent|message|question|suggestion|tool_then_talk",
   "created_at": 0,
   "id": "stable-per-signal-id"
 }
@@ -50,6 +55,18 @@ the complete opportunity, performs bounded memory recall (`allow_strengthen =
 false`), and receives an explicit local reality timestamp. Ordinary model text
 is private. It may use the autonomy allowlist, call `talk_owner` once, or end
 with no user-visible message.
+
+Scheduler and sensor adapters live in `core.autonomy.signal_adapters`. They
+only emit bounded facts for routine/time-background, heart-rate state changes,
+memory reactivation, unfinished topics, desktop reopen, and runtime restart.
+Candidates in the same 15-minute opportunity window are deduplicated by
+`reason` and memory key. Expired candidates are discarded before queueing;
+urgency can elevate the recorded priority but never bypasses dream, active-user,
+conversation, or budget gates.
+
+When autonomy is enabled, the scheduler's native proposal pass remains a
+read-only shadow audit. It does not execute a second proactive turn; the
+autonomy runner is the sole evaluator and delivery path for that tick.
 
 ## Observable Outcomes
 

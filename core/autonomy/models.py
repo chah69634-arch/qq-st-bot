@@ -39,6 +39,13 @@ class Signal:
     action_mode: str = ActionMode.NONE.value
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    # Signal-first adapters use the more descriptive names below.  The legacy
+    # fields remain serialized as well so existing autonomy state can be read.
+    signal_id: str = ""
+    expires_at: float | None = None
+    urgency: float | None = None
+    confidence: float = 0.0
+    suggested_action: str = ""
 
     def __post_init__(self) -> None:
         if not str(self.source).strip():
@@ -49,8 +56,32 @@ class Signal:
             raise TypeError("signal reason must be a string")
         if not isinstance(self.priority, (int, float)) or isinstance(self.priority, bool):
             raise TypeError("signal priority must be numeric")
-        if self.action_mode not in {item.value for item in ActionMode}:
-            raise ValueError(f"unknown signal action_mode: {self.action_mode!r}")
+        action_aliases = {
+            "silent": ActionMode.NONE.value,
+            "message": ActionMode.TALK.value,
+            "question": ActionMode.TALK.value,
+            "suggestion": ActionMode.TALK.value,
+            "tool_then_talk": ActionMode.USE_TOOLS.value,
+        }
+        action = str(self.suggested_action or self.action_mode or ActionMode.NONE.value)
+        action = action_aliases.get(action, action)
+        if action not in {item.value for item in ActionMode}:
+            raise ValueError(f"unknown signal action_mode: {action!r}")
+        object.__setattr__(self, "action_mode", action)
+        object.__setattr__(self, "suggested_action", self.suggested_action or action)
+        sid = str(self.signal_id or self.id or uuid.uuid4().hex)
+        object.__setattr__(self, "signal_id", sid)
+        object.__setattr__(self, "id", sid)
+        expiry = self.expiry if self.expires_at is None else self.expires_at
+        object.__setattr__(self, "expiry", float(expiry or 0.0))
+        object.__setattr__(self, "expires_at", float(expiry or 0.0))
+        effective_urgency = self.priority if self.urgency is None else self.urgency
+        if not isinstance(effective_urgency, (int, float)) or isinstance(effective_urgency, bool):
+            raise TypeError("signal urgency must be numeric")
+        object.__setattr__(self, "urgency", float(effective_urgency))
+        if not isinstance(self.confidence, (int, float)) or isinstance(self.confidence, bool):
+            raise TypeError("signal confidence must be numeric")
+        object.__setattr__(self, "confidence", min(1.0, max(0.0, float(self.confidence))))
 
     def to_dict(self) -> dict:
         data = asdict(self)
@@ -63,7 +94,7 @@ class Signal:
 
     @property
     def action_type(self) -> str:
-        return self.action_mode
+        return self.suggested_action
 
     @classmethod
     def from_dict(cls, raw: dict) -> "Signal":
@@ -85,6 +116,9 @@ class Opportunity:
     action_mode: str = ActionMode.NONE.value
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    urgency: float = 0.0
+    confidence: float = 0.0
+    suggested_action: str = ""
 
     def __post_init__(self) -> None:
         if self.action_mode not in {item.value for item in ActionMode}:
@@ -105,14 +139,19 @@ class Opportunity:
 
     @property
     def action_type(self) -> str:
-        return self.action_mode
+        return self.suggested_action or self.action_mode
 
     @classmethod
     def merge(cls, signals: list[Signal], *, now: float | None = None) -> "Opportunity":
-        valid = [item for item in signals if isinstance(item, Signal)]
+        now = time.time() if now is None else float(now)
+        valid = [
+            item for item in signals
+            if isinstance(item, Signal)
+            and (float(item.expiry or 0.0) <= 0.0 or float(item.expiry) > now)
+        ]
         if not valid:
             raise ValueError("at least one signal is required")
-        now = time.time() if now is None else float(now)
+        valid = merge_signal_candidates(valid, now=now)
         # A lower expiry is the conservative boundary for the merged reason.
         expiries = [float(item.expiry) for item in valid if float(item.expiry) > 0]
         action_rank = {ActionMode.NONE.value: 0, ActionMode.REFLECT.value: 1, ActionMode.USE_TOOLS.value: 2, ActionMode.TALK.value: 3}
@@ -121,12 +160,17 @@ class Opportunity:
         memory_query = [item.memory_query for item in valid if item.memory_query not in (None, "", [])]
         return cls(
             signals=[item.to_dict() for item in valid],
-            priority=max(float(item.priority) for item in valid),
+            # Urgency is an admission hint, not a gate bypass, but it must be
+            # visible to the normal autonomy policy as a priority elevation.
+            priority=max(max(float(item.priority), float(item.urgency or 0.0)) for item in valid),
             reason="; ".join(dict.fromkeys(reasons))[:1200],
             expiry=min(expiries) if expiries else 0.0,
             memory_query=memory_query,
             action_mode=action_mode,
             created_at=now,
+            urgency=max(float(item.urgency or 0.0) for item in valid),
+            confidence=max(float(item.confidence or 0.0) for item in valid),
+            suggested_action=max((item.suggested_action for item in valid), key=lambda value: action_rank.get({"silent": "none", "message": "talk", "question": "talk", "suggestion": "talk", "tool_then_talk": "use_tools"}.get(value, value), 0)),
         )
 
     @classmethod
@@ -238,3 +282,53 @@ class Run:
 # Explicit names for callers that prefer domain-qualified contracts.
 AutonomySignal = Signal
 AutonomyOpportunity = Opportunity
+ProactiveSignal = Signal
+
+
+def merge_signal_candidates(
+    signals: list[Signal], *, now: float | None = None, window_seconds: int = 15 * 60
+) -> list[Signal]:
+    """Deduplicate bounded candidates within one proactive opportunity window."""
+    now = time.time() if now is None else float(now)
+    grouped: dict[tuple[str, str], Signal] = {}
+    for signal in signals:
+        key = (signal.reason.strip().lower(), _memory_key(signal.memory_query))
+        existing = grouped.get(key)
+        if existing is None:
+            grouped[key] = signal
+            continue
+        if abs(float(signal.created_at) - float(existing.created_at)) > window_seconds:
+            # Same reason may be valid again outside the opportunity window.
+            grouped[(key[0], f"{key[1]}:{signal.signal_id}")] = signal
+            continue
+        preferred = max((existing, signal), key=lambda item: (float(item.urgency or 0), float(item.priority or 0), float(item.confidence or 0)))
+        evidence: list = []
+        for item in (existing, signal):
+            for fact in item.evidence:
+                if fact not in evidence:
+                    evidence.append(fact)
+        grouped[key] = Signal(
+            source=preferred.source,
+            evidence=evidence[:12],
+            reason=preferred.reason,
+            expiry=min(x for x in (existing.expiry, signal.expiry) if x > 0) if existing.expiry and signal.expiry else max(existing.expiry, signal.expiry),
+            priority=max(existing.priority, signal.priority),
+            memory_query=preferred.memory_query or existing.memory_query or signal.memory_query,
+            action_mode=preferred.action_mode,
+            created_at=min(existing.created_at, signal.created_at),
+            id=preferred.id,
+            urgency=max(existing.urgency or 0, signal.urgency or 0),
+            confidence=max(existing.confidence, signal.confidence),
+            suggested_action=preferred.suggested_action,
+        )
+    return list(grouped.values())
+
+
+def _memory_key(value: str | dict | None) -> str:
+    if value in (None, "", []):
+        return ""
+    if isinstance(value, dict):
+        for key in ("key", "memory_key", "id", "topic_key"):
+            if value.get(key):
+                return str(value[key]).strip().lower()
+    return str(value).strip().lower()

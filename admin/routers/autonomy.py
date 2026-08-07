@@ -122,6 +122,23 @@ async def opportunities(limit: int = 50, auth=Depends(require_scopes("state.read
     entries = []
     for job in state.get("jobs", []):
         opportunity = job.get("opportunity") or {}
+        signals = []
+        for signal in opportunity.get("signals") or []:
+            if not isinstance(signal, dict):
+                continue
+            signals.append({
+                "signal_id": signal.get("signal_id") or signal.get("id", ""),
+                "source": signal.get("source", ""),
+                "reason": signal.get("reason", ""),
+                "evidence": signal.get("evidence") or [],
+                "memory_query": signal.get("memory_query"),
+                "priority": signal.get("priority", 0),
+                "urgency": signal.get("urgency", 0),
+                "confidence": signal.get("confidence", 0),
+                "suggested_action": signal.get("suggested_action") or signal.get("action_mode", "none"),
+                "created_at": signal.get("created_at", 0),
+                "expires_at": signal.get("expires_at", signal.get("expiry", 0)),
+            })
         entries.append({
             "kind": "opportunity",
             "status": "unevaluated" if job.get("status") in {"pending", "processing"} else "expired_or_finished",
@@ -130,7 +147,8 @@ async def opportunities(limit: int = 50, auth=Depends(require_scopes("state.read
             "source": job.get("source", ""),
             "signal_sources": job.get("signal_sources") or [],
             "signal_count": len(opportunity.get("signals") or []),
-            "opportunity": {key: opportunity.get(key) for key in ("version", "priority", "reason", "expiry", "memory_query", "action_mode")},
+            "opportunity": {key: opportunity.get(key) for key in ("version", "priority", "reason", "expiry", "memory_query", "action_mode", "urgency", "confidence", "suggested_action")},
+            "signals": signals,
             "created_at": job.get("created_at", 0),
         })
     for run in state.get("runs", []):

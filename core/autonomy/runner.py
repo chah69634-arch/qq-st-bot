@@ -392,6 +392,55 @@ async def tick(uid: str, char_id: str) -> None:
     now = time.time()
     due_signals: list[Signal] = []
     dedupe_parts: list[str] = []
+
+    # Sensor, memory and session adapters are read-only.  They contribute
+    # bounded facts to the same opportunity as configured interval/schedule
+    # sources; no adapter can send a turn by itself.
+    try:
+        from core.autonomy.signal_adapters import (
+            adapt_heart_rate,
+            adapt_memory_reactivation,
+            adapt_time_background,
+            adapt_topic_followup,
+        )
+        from core.scheduler.triggers.watch import get_last_heart_rate_event
+
+        external: list[Signal] = []
+        heart_rate = adapt_heart_rate(get_last_heart_rate_event(), now=now)
+        if heart_rate is not None:
+            external.append(heart_rate)
+        if datetime.fromtimestamp(now).hour in {7, 8}:
+            external.append(adapt_time_background("morning_greeting", now=now, window="07:00-09:00"))
+        elif datetime.fromtimestamp(now).hour >= 23:
+            external.append(adapt_time_background("night_reminder", now=now, window="23:00-24:00"))
+        try:
+            from core.scheduler.last_mentioned import recall_last_mentioned
+            topic = recall_last_mentioned(uid, now=datetime.fromtimestamp(now), char_id=char_id, dry_run=True)
+            topic_signal = adapt_topic_followup(topic, now=now)
+            if topic_signal is not None:
+                external.append(topic_signal)
+        except Exception:
+            pass
+        try:
+            from core.memory.episodic_memory import _load_memories
+            memories = [item for item in _load_memories(uid, char_id=char_id) if isinstance(item, dict)]
+            memories.sort(key=lambda item: float(item.get("strength") or 0.0), reverse=True)
+            if memories:
+                memory_signal = adapt_memory_reactivation(memories[0], now=now)
+                if memory_signal is not None:
+                    external.append(memory_signal)
+        except Exception:
+            pass
+        for signal in external:
+            due_signals.append(signal)
+            memory_key = str(signal.memory_query or "")
+            dedupe_parts.append(
+                f"signal:{signal.source}:{signal.reason}:{memory_key}:{int(now // (15 * 60))}"
+            )
+    except Exception:
+        # Optional signal sources are fail-open for the scheduler; configured
+        # autonomy interval/schedule/overflow evaluation remains available.
+        pass
     interval = cfg.get("interval", {})
     if interval.get("enabled") and now - store.source_last_evaluated(state, "interval") >= int(interval.get("seconds") or 0):
         seconds = max(60, int(interval.get("seconds") or 60))
@@ -448,13 +497,17 @@ async def tick(uid: str, char_id: str) -> None:
             dedupe_parts.append(f"overflow:{int(now // max(60, effective_minimum or 900))}")
     if due_signals:
         expiry = min((signal.expiry for signal in due_signals if signal.expiry > now), default=now + 20 * 60)
-        store.enqueue_opportunity(
-            uid,
-            char_id,
-            due_signals,
-            dedupe_key="|".join(sorted(dedupe_parts)),
-            ttl_seconds=max(60, min(int(expiry - now), 3600)),
-        )
+        try:
+            store.enqueue_opportunity(
+                uid,
+                char_id,
+                due_signals,
+                dedupe_key="|".join(sorted(dedupe_parts)) or f"signals:{int(now // (15 * 60))}",
+                ttl_seconds=max(60, min(int(expiry - now), 3600)),
+            )
+        except ValueError:
+            # Every candidate may have expired between collection and enqueue.
+            pass
     job = store.claim_due(uid, char_id)
     if job is None: return
     run = await run_job(job)
