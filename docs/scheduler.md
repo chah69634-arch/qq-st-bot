@@ -101,6 +101,18 @@ spend:
 
 ---
 
+### Scheduler/autonomy effective state (Brief 153)
+
+调度器总闸、例行来源闸、autonomy 配置/代理覆盖、talk gate、冷却与预算的读取统一使用
+`GET /admin/autonomy/effective-state`。`core/autonomy/effective_state.py` 是运行时解析
+入口；生产消费者也从该模块读取相同 effective 值，避免管理面把多个配置端点拼成另一套
+语义。响应中的 `runtime_consumer` 记录每个显示开关唯一消费点，`restart_required` 用于
+明确热加载/持久状态是否需要重启（当前这些开关均不需要）。
+
+trigger 生命周期注册表位于 `core/scheduler/gating.py::TRIGGER_MIGRATION_STATUS`，除
+`migrated`、`maintenance-only`、`retired` 外，autonomy 原生 interval/schedule/overflow、
+desktop wake 和外部事实来源标为 `active`。未注册名称不会被管理面静默推断为 active。
+
 ## 主循环
 
 每 60 秒检查一次。每个 tick 先跑 `core/scheduler/gating.py::run_shadow_tick()` 收集原生
@@ -874,9 +886,10 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 ## 管理面板集成
 
 - `get_status()` → 返回所有触发器的上次触发时间、冷却剩余秒数、是否 ready
-- `manual_trigger(name)` → 绕过冷却和条件检查，强制触发部分触发器（管理面板用）
+- `manual_trigger(name)` → test-only 兼容入口，只排队一个 autonomy signal；不绕过冷却、
+  talk gate 或生产 admission，也不直接发送。HTTP 响应带 `direct_delivery=false`。
 
-当前手动触发覆盖：`morning_greeting`、`night_reminder`、`random_message`、`daily_journal`、
+当前手动测试触发覆盖：`morning_greeting`、`night_reminder`、`random_message`、`daily_journal`、
 `period_reminder`、`diary_reminder`、`diary_share_reminder`、`topic_followup`、
 生日四段、`timenode`、`festival`、`holiday_boost`。
 未覆盖：天气、记忆衰减、episodic sweep、garden_water、garden_daily、watch 事件、DLQ 监控、activity switch 等。

@@ -170,11 +170,12 @@ async function loadObserveAutonomy() {
   const runsEl = document.getElementById('autonomy-runs');
   if (!overviewEl) return;
   try {
-    const [status, config, runs, tools] = await Promise.all([
-      api('GET', '/admin/autonomy/status'), api('GET', '/admin/autonomy/config'),
+    const [status, effectiveState, config, runs, tools] = await Promise.all([
+      api('GET', '/admin/autonomy/status'), api('GET', '/admin/autonomy/effective-state'),
+      api('GET', '/admin/autonomy/config'),
       api('GET', '/admin/autonomy/runs'), api('GET', '/admin/autonomy/tools'),
     ]);
-    _renderAutonomyOverview(overviewEl, status, config);
+    _renderAutonomyOverview(overviewEl, status, config, effectiveState);
     _renderAutonomyRuns(runsEl, runs.runs || []);
     if ((runs.runs || []).length) await loadAutonomyPrompt(runs.runs[0].id);
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
@@ -259,18 +260,19 @@ function _autonomyTalkLabel(talk) {
   return '可主动发言';
 }
 
-function _renderAutonomyOverview(host, status, config) {
+function _renderAutonomyOverview(host, status, config, effectiveState) {
   const daily = status.daily || {};
   const talk = status.talk || {};
   const last = status.last_run || {};
-  const state = _autonomyStateLabel(status.runtime_state);
-  const stateClass = !config.enabled ? 'autonomy-state-off' : ['熔断', '冷却'].includes(status.runtime_state) ? 'autonomy-state-attention' : 'autonomy-state-running';
+  const effective = effectiveState?.proactive || {};
+  const state = effective.reason ? `${effective.state}（${effective.reason}）` : _autonomyStateLabel(status.runtime_state);
+  const stateClass = ['disabled', 'blocked', 'unavailable'].includes(effective.state) ? 'autonomy-state-off' : ['cooled_down', 'queued'].includes(effective.state) ? 'autonomy-state-attention' : 'autonomy-state-running';
   const cards = [
-    ['内置唤醒', config.enabled ? '已启用' : '已关闭', config.enabled ? '满足条件时才创建自主活动机会' : '不会创建新的自主活动机会'],
+    ['内置唤醒', effective.state || (config.enabled ? 'enabled' : 'disabled'), effective.reason || '统一生效状态'],
     ['当前状态', state, status.current_run_id ? `当前运行：${String(status.current_run_id).slice(0, 8)}` : '没有正在进行的活动'],
     ['下一次间隔检查', _autonomyTime(status.next_due_at), config.interval?.enabled ? '按上一次完成评估计算' : '间隔唤醒未启用'],
-    ['今日评估', `${Number(daily.evaluations || 0)} / ${Number(config.daily_evaluation_budget || 0)}`, `工具 ${Number(daily.tools || 0)} 次；Talk ${Number(daily.talks || 0)} 次`],
-    ['Talk 状态', _autonomyTalkLabel(talk), `连续未回复主动发言：${Number(talk.consecutive_unanswered_talks || 0)} / 2`],
+    ['今日评估', `${Number(effectiveState?.daily_evaluation_budget?.used ?? daily.evaluations ?? 0)} / ${Number(effectiveState?.daily_evaluation_budget?.effective_value ?? config.daily_evaluation_budget ?? 0)}`, `工具 ${Number(daily.tools || 0)} 次；Talk ${Number(daily.talks || 0)} 次`],
+    ['Talk 状态', effectiveState?.talk?.effective ? '可主动发言' : (effectiveState?.talk?.gate_reason || _autonomyTalkLabel(talk)), `gate=${effectiveState?.talk?.gate_mode || talk.mode || 'unknown'}`],
     ['最近一次运行', _autonomyRunLabel(last), last.finished_at ? _autonomyTime(last.finished_at) : '尚无记录'],
   ];
   host.innerHTML = `<div class="autonomy-overview-grid">${cards.map(([label, value, detail], index) => `<div class="stat"><div class="val ${index === 1 ? stateClass : ''}">${escapeHtml(value)}</div><div class="lbl">${escapeHtml(label)}</div><div class="detail">${escapeHtml(detail)}</div></div>`).join('')}</div>`;

@@ -55,6 +55,8 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
 })
 
 MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
+    "activity_switch",
+    "coplay_watch",
     "diary_inject",
     "episodic_decay",
     "episodic_sweep",
@@ -79,10 +81,22 @@ RETIRED_TRIGGER_EXECUTORS: frozenset[str] = frozenset({
     "manual_direct_trigger",
 })
 
+ACTIVE_TRIGGERS: frozenset[str] = frozenset({
+    "desktop_wake",
+    "heart_rate",
+    "interval",
+    "memory_reactivation",
+    "overflow_autonomy",
+    "restart",
+    "schedule",
+    "topic_reactivation",
+})
+
 TRIGGER_MIGRATION_STATUS: dict[str, str] = {
     **{name: "migrated" for name in MIGRATED_TRIGGERS},
     **{name: "maintenance-only" for name in MAINTENANCE_ONLY_TRIGGERS},
     **{name: "retired" for name in RETIRED_TRIGGER_EXECUTORS},
+    **{name: "active" for name in ACTIVE_TRIGGERS},
 }
 
 

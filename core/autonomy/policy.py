@@ -43,8 +43,8 @@ def admission(uid: str, char_id: str, state: dict) -> str | None:
     cfg = state["config"]
     if not cfg.get("enabled", False):
         return Disposition.SUPPRESSED_PROACTIVE_OFF.value
-    from core.self_management.policy import autonomy_enabled, autonomy_min_interval
-    if not autonomy_enabled(uid, char_id, bool(cfg.get("enabled"))):
+    from core.autonomy.effective_state import autonomy_enabled, autonomy_min_interval
+    if not autonomy_enabled(uid, char_id, state):
         return Disposition.SUPPRESSED_PROACTIVE_OFF.value
     from core.autonomy.store import circuit_open
     if circuit_open(state):
@@ -99,7 +99,7 @@ def admission(uid: str, char_id: str, state: dict) -> str | None:
         default=0.0,
     )
     import time
-    effective_minimum = autonomy_min_interval(uid, char_id, int(cfg.get("min_interval_seconds") or 0))
+    effective_minimum = autonomy_min_interval(uid, char_id, state)
     if latest and time.time() - latest < effective_minimum:
         return Disposition.DUPLICATE.value
     return None

@@ -467,7 +467,8 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     mode, talk_reason = talk_gate.check(job.uid)
     # A soft limit still exposes talk once so the model can make one explicit
     # re-decision. Hard limits remove it at schema construction time.
-    talk_enabled = bool(state["config"].get("talk_enabled", True))
+    from core.autonomy.effective_state import autonomy_talk_enabled
+    talk_enabled = autonomy_talk_enabled(job.uid, job.char_id, state)
     talk_available = talk_enabled and mode != "hard"
     talk_unavailable_reason = talk_reason if mode == "hard" else "talk_disabled"
     if not talk_available:
@@ -853,8 +854,8 @@ def _self_change_audit(uid: str, char_id: str, action_id: str) -> dict | None:
 
 
 def _autonomy_still_enabled(uid: str, char_id: str, state: dict) -> bool:
-    from core.self_management.policy import autonomy_enabled
-    return autonomy_enabled(uid, char_id, bool(state["config"].get("enabled")))
+    from core.autonomy.effective_state import autonomy_enabled
+    return autonomy_enabled(uid, char_id, state)
 
 
 def _user_became_active(uid: str) -> bool:
@@ -920,8 +921,8 @@ async def tick(uid: str, char_id: str) -> None:
     """Collect all due signals, merge one opportunity, then consume at most one job."""
     state = store.load(uid, char_id)
     cfg = state["config"]
-    from core.self_management.policy import autonomy_enabled, autonomy_min_interval
-    enabled = autonomy_enabled(uid, char_id, bool(cfg.get("enabled")))
+    from core.autonomy.effective_state import autonomy_enabled, autonomy_min_interval
+    enabled = autonomy_enabled(uid, char_id, state)
     if not enabled:
         # Reopen is a one-shot observation. If autonomy was disabled after HTTP
         # admission but before this tick, consume it as a terminal suppression
@@ -937,7 +938,7 @@ async def tick(uid: str, char_id: str) -> None:
                 event_status="signal_suppressed_autonomy_disabled",
             )
         return
-    effective_minimum = autonomy_min_interval(uid, char_id, int(cfg.get("min_interval_seconds") or 0))
+    effective_minimum = autonomy_min_interval(uid, char_id, state)
     now = time.time()
     due_signals: list[Signal] = []
     dedupe_parts: list[str] = []

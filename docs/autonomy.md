@@ -143,6 +143,24 @@ forces a direct assistant message. Delivery also records an opportunity
 correlation id; an already claimed id is rejected before another `talk_owner`
 send can happen.
 
+## Unified Effective State
+
+`GET /admin/autonomy/effective-state`（`state.read`）是 scheduler/autonomy 控制面的只读
+生效状态契约。它是管理页读取开关的唯一后端入口，返回 `contract_version`、配置值、
+effective runtime value、override source、`restart_required` 和唯一 runtime consumer。
+契约还包含 scheduler task availability、autonomy queue/circuit、`talk_owner` gate、
+全局发送冷却、autonomy evaluation/daily talk budget，以及每个 trigger 的
+`migrated` / `maintenance-only` / `retired` / `active` 生命周期状态。
+
+顶层 `proactive.state` 只使用 `enabled`、`disabled`、`unavailable`、`queued`、`running`、
+`cooled_down`、`blocked`。`proactive.reason` 是当前最先命中的阻断原因，因此客户端不
+需要拼接多个 status/config/ledger 端点来猜测“为什么没有主动行为”。所有这些配置均为
+hot-reload 或 durable autonomy state，`restart_required` 当前为 `false`。
+
+`POST /scheduler/trigger/{name}` 与 `POST /admin/autonomy/test-enqueue` 是 test-only 入口。
+它们只排队事实/测试任务，响应明确标记 `direct_delivery=false`，生产发送仍必须经过
+scheduler tick、autonomy admission 与 `talk_owner`。
+
 ## Observable Outcomes
 
 `GET /observability/autonomy-opportunities` (scope `state.read`) returns a

@@ -867,7 +867,9 @@ async def manual_trigger(name: str) -> str:
             return f"{name} autonomy opportunity {status}"
         return f"{name} autonomy opportunity failed: {status}"
 
-    """手动触发指定动作（绕过冷却时间和条件检查）。"""
+    # Legacy direct execution is retained only as a compatibility fallback for
+    # names outside the migrated registry; registered conversational triggers
+    # always return from the signal-first branch above.
     _last_trigger[name] = 0  # 清零冷却
 
     try:
@@ -1004,7 +1006,8 @@ async def _loop():
         try:
             cfg = _cfg()
             _log_effective_gap_if_changed()
-            if cfg.get("enabled", True):
+            from core.autonomy.effective_state import scheduler_enabled
+            if scheduler_enabled(cfg):
                 from core.scheduler.triggers.time_based import (
                     _check_morning, _check_night, _check_random_message,
                     _check_weather, _check_daily_journal, _check_episodic_decay,

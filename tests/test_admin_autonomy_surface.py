@@ -10,6 +10,7 @@ def test_autonomy_admin_router_and_observability_page_are_wired_together():
     paths = {route.path for route in app.routes}
     expected = {
         "/admin/autonomy/status",
+        "/admin/autonomy/effective-state",
         "/admin/autonomy/config",
         "/admin/autonomy/runs",
         "/admin/autonomy/tools",
@@ -20,6 +21,7 @@ def test_autonomy_admin_router_and_observability_page_are_wired_together():
     source = read_admin_client_source()
     for endpoint in (
         "/admin/autonomy/status",
+        "/admin/autonomy/effective-state",
         "/admin/autonomy/config",
         "/admin/autonomy/runs",
         "/admin/autonomy/tools",

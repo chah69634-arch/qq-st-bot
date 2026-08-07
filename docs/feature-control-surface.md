@@ -99,6 +99,14 @@ Self Capability P0 uses `GET /admin/self-management` and fixed `POST` actions fo
 
 Signal-first autonomy lifecycle is read-only at `GET /observability/autonomy-opportunities` (`state.read`): it reports queued, silent, tools-only, sent, and user-canceled outcomes without prompt snapshots. The companion `GET /admin/autonomy/runs` view retains bounded run events; memory-reactivation runs expose `memory_read`, `memory_candidate_evaluated`, and `memory_recall_talk_sent`, so a silent evaluation is not confused with a successful proactive recollection. Proactive delivery remains restricted to the autonomy `talk_owner` outlet.
 
+Brief 153 adds `GET /admin/autonomy/effective-state` (`state.read`) as the single scheduler /
+autonomy effective-state contract. It joins configured values, Self Capability overrides, effective
+runtime values, source lifecycle, talk gate, cooldown, daily budgets, runtime task availability,
+and the owning runtime consumer. Scheduler/autonomy pages should consume this contract instead of
+inferring state from unrelated status/config/ledger responses. Manual trigger endpoints are
+test-only queue fixtures and advertise `direct_delivery=false`; they never bypass production
+autonomy admission.
+
 MCP 管理页的 server 卡片提供“默认授权全部”和“无限制授权全部”两个 server 级动作。
 它们分别发送一次 `PATCH /settings/mcp/{name}`，请求体只允许
 `{"bulk_authorize":"default"}` 或 `{"bulk_authorize":"unrestricted"}`；服务端从当前连接态

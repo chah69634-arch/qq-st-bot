@@ -46,6 +46,14 @@ async def status(auth=Depends(require_scopes("state.read"))):
     return {"uid": uid, "char_id": char_id, "config_enabled": cfg.get("enabled"), "runtime_state": runtime_state, "current_run_id": (current or {}).get("id", ""), "current_stage": (current or {}).get("status", ""), "next_due_at": next_interval, "daily": state.get("daily"), "sources": state.get("sources"), "circuit": state.get("circuit"), "queued_jobs": jobs, "queued_signals": _redact_pending_signals(state.get("pending_signals") or []), "delivery_correlation_count": len(state.get("delivered_correlations") or []), "last_run": (state.get("runs") or [None])[-1], "outcome_counts": outcome_counts, "talk": {"available": talk_mode == "allow" and cfg.get("talk_enabled"), "mode": talk_mode, "reason": talk_reason, **continuity_status(uid)}}
 
 
+@router.get("/admin/autonomy/effective-state", summary="读取调度器与自主性的统一生效状态")
+async def effective_state(auth=Depends(require_scopes("state.read"))):
+    from core.autonomy.effective_state import build_effective_state
+
+    uid, char_id = _scope()
+    return build_effective_state(uid, char_id)
+
+
 def _redact_pending_signals(rows: list[dict]) -> list[dict]:
     """Expose queue state without returning legacy prompt/template content."""
     result = []
@@ -276,4 +284,10 @@ async def test_enqueue(body: dict | None = None, auth=Depends(require_scopes("ad
     uid, char_id = _scope(); source = str((body or {}).get("source") or "manual")
     if source not in {"manual", "overflow", "schedule", "interval"}: raise HTTPException(status_code=422, detail="无效 source")
     job, status = store.enqueue(uid, char_id, source, dedupe_key=f"manual:{source}:{__import__('uuid').uuid4().hex}")
-    return {"status": status, "job_id": job.id if job else ""}
+    return {
+        "status": status,
+        "job_id": job.id if job else "",
+        "test_only": True,
+        "direct_delivery": False,
+        "runtime_admission_required": True,
+    }

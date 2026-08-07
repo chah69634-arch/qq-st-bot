@@ -362,11 +362,10 @@ def enqueue_desktop_wake_signal(
     from core.autonomy import store
 
     state = store.load(uid, char_id)
-    configured = bool((state.get("config") or {}).get("enabled"))
     try:
-        from core.self_management.policy import autonomy_enabled
+        from core.autonomy.effective_state import autonomy_enabled
 
-        enabled = autonomy_enabled(uid, char_id, configured)
+        enabled = autonomy_enabled(uid, char_id, state)
     except Exception:
         enabled = False
     if not enabled:
@@ -483,10 +482,9 @@ def routine_trigger_enabled(name: str) -> bool:
     if name not in ROUTINE_TRIGGER_NAMES:
         return True
     try:
-        from core.scheduler.loop import _cfg
+        from core.autonomy.effective_state import scheduler_source_enabled
 
-        cfg = _cfg()
-        return bool(cfg.get("enabled", True) and cfg.get(name, True))
+        return scheduler_source_enabled(name)
     except Exception:
         return False
 

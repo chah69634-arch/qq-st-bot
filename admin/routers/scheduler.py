@@ -181,7 +181,7 @@ async def delete_signature(body: dict, auth=Depends(require_scopes("admin"))):
 
 # ── 手动触发 ─────────────────────────────────────────────────────────────────
 
-@router.post("/scheduler/trigger/{name}", summary="手动触发指定动作")
+@router.post("/scheduler/trigger/{name}", summary="排队一次测试触发（不直接发送）")
 async def manual_trigger(name: str, auth=Depends(require_scopes("admin"))):
     """
     可触发的名称：
@@ -189,7 +189,12 @@ async def manual_trigger(name: str, auth=Depends(require_scopes("admin"))):
     """
     from core.scheduler import manual_trigger as _trigger
     result = await _trigger(name)
-    return {"message": result}
+    return {
+        "message": result,
+        "test_only": True,
+        "direct_delivery": False,
+        "runtime_admission_required": True,
+    }
 
 
 # ── sensor_aware 审计 ─────────────────────────────────────────────────────────
