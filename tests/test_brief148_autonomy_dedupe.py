@@ -193,6 +193,7 @@ def test_silent_memory_evaluation_records_read_and_evaluated_not_recalled(
 
     assert run.disposition == "completed_no_op"
     assert [event["status"] for event in run.events] == [
+        "talk_unavailable",
         "memory_read",
         "memory_candidate_evaluated",
     ]

@@ -5,7 +5,7 @@ import json
 import time
 from copy import deepcopy
 
-from core.autonomy.models import Job, Opportunity, Run, Signal
+from core.autonomy.models import Job, Opportunity, Run, Signal, evaluation_status_for
 from core.safe_write import safe_write_json
 from core.sandbox import get_paths
 
@@ -122,6 +122,82 @@ def drain_pending_signals(uid: str, char_id: str) -> list[Signal]:
         except (TypeError, ValueError):
             continue
     return result
+
+
+def discard_pending_signals_by_source(
+    uid: str, char_id: str, sources: set[str] | frozenset[str]
+) -> list[Signal]:
+    """Remove one-shot pending facts for sources that must never replay later."""
+    wanted = {str(source) for source in sources}
+    state = load(uid, char_id)
+    kept: list[dict] = []
+    discarded: list[Signal] = []
+    for item in state.get("pending_signals", []):
+        raw = item.get("signal") if isinstance(item, dict) else None
+        try:
+            signal = Signal.from_dict(raw) if isinstance(raw, dict) else None
+        except (TypeError, ValueError):
+            signal = None
+        if signal is not None and signal.source in wanted:
+            discarded.append(signal)
+        else:
+            kept.append(item)
+    if len(kept) != len(state.get("pending_signals", [])):
+        state["pending_signals"] = kept
+        save(uid, char_id, state)
+    return discarded
+
+
+def record_signal_outcome(
+    uid: str,
+    char_id: str,
+    signal: Signal,
+    *,
+    disposition: str,
+    event_status: str,
+) -> None:
+    """Keep a bounded lifecycle record for a signal discarded before merging."""
+    opportunity = Opportunity(
+        signals=[signal.to_dict()],
+        priority=max(float(signal.priority), float(signal.urgency or 0.0)),
+        reason=signal.reason,
+        expiry=signal.expiry,
+        memory_query=[signal.memory_query] if signal.memory_query not in (None, "", []) else [],
+        action_mode=signal.action_mode,
+        created_at=signal.created_at,
+        id=f"signal:{signal.signal_id}",
+        urgency=float(signal.urgency or 0.0),
+        confidence=float(signal.confidence or 0.0),
+        suggested_action=signal.suggested_action,
+    )
+    job = Job(
+        uid=str(uid),
+        char_id=str(char_id),
+        source="autonomy",
+        created_at=signal.created_at,
+        ttl_seconds=max(60, min(int(max(0.0, signal.expiry - signal.created_at)), 3600)),
+        dedupe_key=f"terminal:{signal.signal_id}",
+        status="done",
+        opportunity=opportunity.to_dict(),
+        signal_sources=[signal.source],
+    )
+    finished_at = time.time()
+    run = Run(
+        uid=str(uid),
+        char_id=str(char_id),
+        source="autonomy",
+        job_id=job.id,
+        finished_at=finished_at,
+        disposition=disposition,
+        events=[{"status": event_status, "signal_id": signal.signal_id, "source": signal.source}],
+        opportunity_id=opportunity.id,
+        signal_count=1,
+        evaluation_status=("expired" if disposition == "expired" else evaluation_status_for(disposition)),
+    )
+    state = load(uid, char_id)
+    state["jobs"].append(job.to_dict())
+    state["runs"].append(run.to_dict())
+    save(uid, char_id, state)
 
 
 def claim_delivery_correlation(uid: str, char_id: str, correlation_id: str) -> bool:

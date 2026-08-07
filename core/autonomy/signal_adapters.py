@@ -5,6 +5,8 @@ call an LLM, mark a trigger, or send through a channel.
 """
 from __future__ import annotations
 
+import hashlib
+import math
 import time
 from datetime import datetime
 from typing import Any
@@ -34,6 +36,9 @@ _MIGRATED_TRIGGER_TTLS = {
     "birthday_night": 60 * 60,
     "period_reminder": 30 * 60,
 }
+
+_DESKTOP_WAKE_TTL_SECONDS = 10 * 60
+_DESKTOP_WAKE_MAX_OFFLINE_SECONDS = 30 * 24 * 60 * 60
 
 
 def registered_signal_adapter(trigger_name: str):
@@ -301,26 +306,80 @@ def adapt_desktop_wake(
     *,
     last_seen: float | None = None,
     now: float | None = None,
-    ttl_seconds: int = 10 * 60,
+    ttl_seconds: int = _DESKTOP_WAKE_TTL_SECONDS,
+    event_id: str = "",
+    dedupe_key: str = "",
 ) -> ProactiveSignal:
     now = time.time() if now is None else float(now)
-    seen = float(last_seen or now)
-    offline_seconds = max(0.0, now - seen)
+    offline_seconds, duration_known, duration_capped = _bounded_offline_duration(
+        last_seen, now=now
+    )
+    safe_event_id = _safe_correlation_value(event_id)
+    dedupe_fingerprint = _correlation_fingerprint(dedupe_key)
+    evidence = {
+        "fact": "desktop_session_reopened",
+        "offline_seconds": round(offline_seconds, 1),
+        "offline_duration_known": duration_known,
+        "offline_duration_capped": duration_capped,
+    }
+    if safe_event_id:
+        evidence["perceive_event_id"] = safe_event_id
+    if dedupe_fingerprint:
+        evidence["perceive_dedupe_fingerprint"] = dedupe_fingerprint
+    ttl_seconds = max(60, min(int(ttl_seconds), 15 * 60))
+    identity = f"desktop-wake:{safe_event_id}" if safe_event_id else ""
     return ProactiveSignal(
         source="desktop_wake",
-        reason="routine",
-        evidence=[{
-            "fact": "desktop_session_reopened",
-            "offline_seconds": round(offline_seconds, 1),
-            "last_seen_at": seen,
-        }],
+        reason="session_reopen",
+        evidence=[evidence],
         created_at=now,
         expires_at=now + ttl_seconds,
         priority=min(0.7, 0.2 + offline_seconds / (24 * 3600)),
         urgency=0.2,
         confidence=1.0,
-        suggested_action="message",
+        action_mode=ActionMode.REFLECT.value,
+        suggested_action=ActionMode.REFLECT.value,
+        signal_id=identity,
     )
+
+
+def enqueue_desktop_wake_signal(
+    uid: str,
+    char_id: str,
+    *,
+    last_seen: float | None = None,
+    event_id: str = "",
+    dedupe_key: str = "",
+    now: float | None = None,
+) -> tuple[bool, str, ProactiveSignal]:
+    """Persist one bounded reopen fact when autonomy is currently enabled."""
+    signal = adapt_desktop_wake(
+        last_seen=last_seen,
+        now=now,
+        event_id=event_id,
+        dedupe_key=dedupe_key,
+    )
+    from core.autonomy import store
+
+    state = store.load(uid, char_id)
+    configured = bool((state.get("config") or {}).get("enabled"))
+    try:
+        from core.self_management.policy import autonomy_enabled
+
+        enabled = autonomy_enabled(uid, char_id, configured)
+    except Exception:
+        enabled = False
+    if not enabled:
+        return False, "autonomy_disabled", signal
+    persistent_key = (
+        f"desktop_wake:{_correlation_fingerprint(dedupe_key)}"
+        if dedupe_key
+        else f"desktop_wake:{signal.signal_id}"
+    )
+    queued, status = store.enqueue_signal(
+        uid, char_id, signal, dedupe_key=persistent_key
+    )
+    return queued, status, signal
 
 
 def adapt_restart(*, started_at: float, now: float | None = None) -> ProactiveSignal:
@@ -385,6 +444,38 @@ def _bounded_number(value: Any, *, default: float = 0.0) -> float:
         return min(1.0, max(0.0, float(value)))
     except (TypeError, ValueError):
         return float(default)
+
+
+def _bounded_offline_duration(
+    last_seen: float | None, *, now: float
+) -> tuple[float, bool, bool]:
+    if (
+        isinstance(last_seen, bool)
+        or not isinstance(last_seen, (int, float))
+        or not math.isfinite(float(last_seen))
+        or float(last_seen) <= 0
+    ):
+        return 0.0, False, False
+    raw = max(0.0, now - float(last_seen))
+    return (
+        min(raw, float(_DESKTOP_WAKE_MAX_OFFLINE_SECONDS)),
+        True,
+        raw > _DESKTOP_WAKE_MAX_OFFLINE_SECONDS,
+    )
+
+
+def _safe_correlation_value(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if len(raw) <= 128 and all(ch.isalnum() or ch in "._:-" for ch in raw):
+        return raw
+    return f"sha256:{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]}"
+
+
+def _correlation_fingerprint(value: str) -> str:
+    raw = str(value or "").strip()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24] if raw else ""
 
 
 def routine_trigger_enabled(name: str) -> bool:

@@ -110,6 +110,7 @@ def test_final_prompt_snapshot_contains_opportunity_recall_and_disposition(sandb
     monkeypatch.setattr(runner.policy, "admission", lambda *args: None)
     monkeypatch.setattr(runner.policy, "allowed_tools", lambda *args: [])
     monkeypatch.setattr(runner.talk_gate, "check", lambda *args, **kwargs: ("hard", "suppressed_unanswered_cap"))
+    monkeypatch.setattr(runner, "_user_became_active", lambda _uid: False)
 
     async def chat_turn(*_args, **_kwargs):
         return SimpleNamespace(tool_calls=[], continuation_items=[], assistant_message={})

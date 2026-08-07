@@ -85,38 +85,6 @@ async def test_push_segments_fires_only_when_desktop_in_fanout(monkeypatch):
     assert push_msg_calls[0]["msg_id"] == push_seg_calls[0]["msg_id"] == "t-morn"
 
 
-async def test_push_segments_skipped_when_fanout_empty(monkeypatch):
-    """fanout=[] → push_segments 不发出（desktop_wake Path B 场景）。"""
-    from channels import registry
-    from channels.desktop import DesktopChannel
-    from core.turn_sink import record_assistant_turn
-
-    await _reset_channels()
-    registry.register(DesktopChannel())
-
-    push_seg_calls: list[dict] = []
-
-    async def fake_push_segments(content, segments, msg_id=None):
-        push_seg_calls.append({"content": content, "msg_id": msg_id})
-        return True
-
-    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: True)
-    monkeypatch.setattr("channels.desktop_ws._new_msg_id", lambda: "should-not-be-used")
-    monkeypatch.setattr("channels.desktop_ws.push_segments", fake_push_segments)
-
-    await record_assistant_turn(
-        assistant_text="重开问候",
-        uid="u2",
-        source="trigger",
-        trigger_name="desktop_wake",
-        fanout=[],       # desktop_wake Path B 传入
-        pipeline=_FakePipeline(),
-    )
-
-    # fanout=[] 时 push_segments 不应被调用
-    assert push_seg_calls == [], f"push_segments should not fire with fanout=[], got {push_seg_calls}"
-
-
 # ── Test 2: WS 未连接时 pending trigger → Path A 补发 ────────────────────────
 
 async def test_path_a_returns_pending_trigger_when_ws_disconnected(monkeypatch):
@@ -195,7 +163,7 @@ async def test_desktop_wake_path_a_returns_canonical_ids(sandbox, monkeypatch):
 
 
 async def test_desktop_wake_path_a_replay_is_at_most_once(sandbox, monkeypatch):
-    """同一个 stale last_seen 重试时，后端 ledger 阻止 Path A 重放和 Path B 新生成。"""
+    """同一个 stale last_seen 重试时，ledger 阻止 Path A 重放和 Path B 新入队。"""
     import json
 
     monkeypatch.setattr(

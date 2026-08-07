@@ -7,15 +7,15 @@ Design constraints:
 - Process-local TTL dict (no Redis).  90-second dedup window.
 - Fail-closed: dream guard check failure → BLOCKED_DREAM, not allowed through.
 - char_id resolution always from active_prompt_assets.json (no hardcoded fallback).
-- Does NOT call LLM or touch short_term/event_log — only a gate.
+- The gate does not call an LLM or touch short_term. Callers may explicitly
+  append its metadata-only result to the existing trigger audit.
 
 Usage:
   event = PerceiveEvent(source="desktop_wake", uid=uid, channel="desktop", kind="wake")
   result = await receive_perceive_event(event)
   if result.status != PerceiveStatus.ACCEPTED:
-      return        # drop — caller must not run LLM or fanout
-  async with conversation_lock(uid):
-      ...           # run LLM + record_assistant_turn(bypass_gate=True)
+      return        # drop — caller must not enqueue work or fanout
+  enqueue_desktop_wake_signal(...)
 """
 
 from __future__ import annotations
@@ -103,6 +103,10 @@ class PerceiveResult:
     reason: str = ""
     # event_id of the first accepted event that this is a duplicate of
     existing_turn_id: Optional[str] = None
+    # The exact role scope used to construct dedupe_key. Callers that persist
+    # follow-up work must reuse this value instead of resolving the active role
+    # a second time after the gate.
+    char_id: Optional[str] = None
 
 
 # ── module-level dedup state ─────────────────────────────────────────────────
@@ -179,8 +183,8 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
     4. Dream Guard: if blocked or unconfirmable → BLOCKED_DREAM (fail-closed)
     5. Reserve slot, return ACCEPTED
 
-    The CALLER is responsible for running LLM + turn-sink only on ACCEPTED.
-    Duplicate events must not fanout or trigger post_process.
+    The caller may enter its declared next stage only on ACCEPTED. Duplicate
+    events must not enqueue work, fanout, or trigger post_process.
     """
     resolved_char = _resolve_char_id(event.uid, event.char_id)
     event_id = event.event_id or str(uuid.uuid4())
@@ -211,6 +215,7 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
                 dedupe_key=dedupe_key,
                 reason=f"duplicate of {first_eid} seen {age:.1f}s ago",
                 existing_turn_id=first_eid,
+                char_id=resolved_char,
             )
         # Reserve slot immediately so concurrent arrivals are rejected.
         _dedup_registry[dedupe_key] = (now, event_id)
@@ -234,6 +239,7 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
                 event_id=event_id,
                 dedupe_key=dedupe_key,
                 reason="dream guard check raised exception (fail-closed)",
+                char_id=resolved_char,
             )
         if guard != DreamGuardStatus.ALLOW:
             # BLOCK_UNCERTAIN means the dream state file is unreadable/corrupt/unknown.
@@ -258,6 +264,7 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
                 event_id=event_id,
                 dedupe_key=dedupe_key,
                 reason=f"dream guard: {guard}",
+                char_id=resolved_char,
             )
 
     logger.info(
@@ -269,7 +276,49 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
         event_id=event_id,
         dedupe_key=dedupe_key,
         reason="accepted",
+        char_id=resolved_char,
     )
+
+
+def record_perceive_result(event: PerceiveEvent, result: PerceiveResult) -> None:
+    """Append one metadata-only gate result to the existing stimulus audit.
+
+    Gate callers opt in explicitly so legacy trigger paths that already audit
+    their assistant turn do not gain a duplicate entry. This helper never
+    stores the event payload or a generated reply.
+    """
+    try:
+        from core.memory.fixation_pipeline import _write_trigger_audit_log
+
+        if result.status == PerceiveStatus.ACCEPTED:
+            dream_guard_status = "ALLOW"
+        elif result.status == PerceiveStatus.BLOCKED_DREAM:
+            dream_guard_status = "BLOCKED"
+        else:
+            dream_guard_status = "NOT_EVALUATED"
+        _write_trigger_audit_log(
+            uid=event.uid,
+            turn_id="",
+            trigger_name=event.source,
+            reply=None,
+            emotion="neutral",
+            char_id=str(result.char_id or event.char_id or ""),
+            event_id=result.event_id,
+            dedupe_key=result.dedupe_key,
+            source=event.source,
+            kind="stimulus",
+            trust=event.trust,
+            dream_guard_status=dream_guard_status,
+            gate_result=result.status.value,
+            did_generate_reply=False,
+        )
+    except Exception:
+        logger.warning(
+            "[perceive_event] audit write failed source=%s event_id=%s",
+            event.source,
+            result.event_id,
+            exc_info=True,
+        )
 
 
 def clear_dedup_registry_for_test() -> None:

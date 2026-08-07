@@ -281,8 +281,9 @@ async def test_desktop_wake_payload_is_empty_in_handler(monkeypatch):
 async def test_desktop_wake_with_last_seen_in_body_deduped(monkeypatch):
     """
     End-to-end: desktop_wake called twice within TTL, second body includes last_seen.
-    Fixed handler uses payload={} → same dedupe_key → second call returns duplicate_wake.
+    Path B queues one signal and the second request is rejected before enqueue.
     """
+    from core.autonomy import store
     from core.perceive_event import clear_dedup_registry_for_test
     clear_dedup_registry_for_test()
 
@@ -290,39 +291,10 @@ async def test_desktop_wake_with_last_seen_in_body_deduped(monkeypatch):
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "owner-ls"}},
     )
-
-    llm_calls = [0]
-
-    class _FakePipeline:
-        character = type("C", (), {"name": "Companion"})()
-
-        def _current_reality_scope(self, uid):
-            from core.memory.scope import MemoryScope
-            return MemoryScope.reality_scope(uid, "char-a")
-
-        async def fetch_context(self, uid, prompt, *a, **kw):
-            return {}
-
-        def build_prompt(self, uid, prompt, context, **kw):
-            return [], {}
-
-        async def run_llm(self, messages):
-            llm_calls[0] += 1
-            return "问候"
-
-        async def post_process_critical(self, uid, content, reply, **kwargs):
-            return {"turn_id": "t-ls", "critical_written": True, "emotion": "neutral"}
-
-        async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
-            return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
-
-    import core.pipeline_registry as _preg
-    monkeypatch.setattr(_preg, "_pipeline", _FakePipeline())
-
-    # char_id resolution → stable fixed value
+    state = store.load("owner-ls", "char-a")
+    state["config"]["enabled"] = True
+    assert store.save("owner-ls", "char-a", state)
     monkeypatch.setattr("core.perceive_event._resolve_char_id", lambda uid, cid: "char-a")
-
-    # Path A: no active_prompt_assets (let it fail → falls to Path B)
     import json as _json
 
     class _FakeAPA:
@@ -331,32 +303,18 @@ async def test_desktop_wake_with_last_seen_in_body_deduped(monkeypatch):
 
     monkeypatch.setattr("core.sandbox.DataPaths.active_prompt_assets", lambda self: _FakeAPA())
     monkeypatch.setattr("core.memory.short_term.load", lambda uid, char_id=None: [])
-
-    async def fake_record(**kwargs):
-        from core.turn_sink import TurnResult
-        return TurnResult(turn_id="t-ls-wake", written_to_memory=True, fanout_targets=[])
-
-    import core.turn_sink as _ts
-    monkeypatch.setattr(_ts, "record_assistant_turn", fake_record)
-    monkeypatch.setattr("core.response_processor.strip_render_tags", lambda s: s)
-    monkeypatch.setattr("core.reality_output_guard.clean_reality_reply_text", lambda text, name: text)
     monkeypatch.setattr("channels.desktop_ws.get_connect_time", lambda: 0.0)
-    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
+    _allow_dream_guard(monkeypatch)
 
     from admin.routers.chat import desktop_wake
 
-    # First call: no last_seen
     r1 = await desktop_wake({})
-    # Second call: has last_seen (simulates reconnect with local state)
     r2 = await desktop_wake({"last_seen": time.time() - 5})
 
-    assert llm_calls[0] == 1, (
-        f"LLM must fire exactly once; last_seen variation must not bypass dedupe; got {llm_calls[0]}"
-    )
-    assert r1.get("source") == "live_wake", f"first call: {r1}"
-    assert r2.get("source") == "duplicate_wake", (
-        f"second call with different last_seen must be dedupe-killed: {r2}"
-    )
+    assert r1.get("source") == "queued_autonomy_signal"
+    assert r1.get("reply") is None
+    assert r2 == {"reply": None, "source": "duplicate_wake"}
+    assert len(store.load("owner-ls", "char-a")["pending_signals"]) == 1
 
 
 # ── Test 8: dedupe_key composition check for both sources ────────────────────

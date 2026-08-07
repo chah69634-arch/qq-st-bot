@@ -3,6 +3,16 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _no_cross_test_user_activity(monkeypatch):
+    """Autonomy unit tests control user activity explicitly when it matters."""
+    monkeypatch.setattr(
+        "core.autonomy.runner._user_became_active", lambda _uid: False
+    )
+
 
 def test_autonomy_state_is_durable_and_manual_enqueue_is_not_execution(sandbox):
     from core.autonomy import store

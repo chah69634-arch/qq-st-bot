@@ -92,7 +92,8 @@ HTTP assistant reply 保留 `turn_id`，并同时返回兼容字段 `msg_id`；�
 provenance 是 `mobile`（prompt、probe 与观测），实时来源也是 `mobile`（不启用 desktop stream，
 不激活 desktop），但 USER_CHAT 的 mobile durable mirror 是独立策略，始终写入一次队列。该 canonical ID
 也用于同一 assistant turn 的 WS `channel_message.msg_id` / `message_segments.msg_id`。
-`/desktop/wake` 在实际返回 assistant reply 时同样返回相等的 `turn_id` / `msg_id`。
+`/desktop/wake` 只有 Path A 回放已有 assistant turn 时返回 reply，并保持相等的
+`turn_id` / `msg_id`。Path B 只确认 autonomy signal 已入队，不生成新 turn ID。
 
 ---
 
@@ -103,7 +104,7 @@ provenance 是 `mobile`（prompt、probe 与观测），实时来源也是 `mobi
 | 端点 | 影响 |
 |---|---|
 | `POST /desktop/activate` | 激活 desktop channel；鉴权失败不执行通道操作 |
-| `POST /desktop/wake` | 触发 LLM 轮（Path B）并写记忆；鉴权失败不触发 LLM，不写记忆 |
+| `POST /desktop/wake` | Path A 回放一次已有 trigger turn；否则 Path B 只入队有时效的 autonomy signal。鉴权失败不回放、不入队 |
 
 `POST /desktop/deactivate` 已作为 legacy 删除（下线由 `/ws/desktop` 断连触发
 `set_active(False)` 处理，HTTP 版从未被调用；cc-tasks round-接口盘点，2026-07-11）。
@@ -340,17 +341,19 @@ HTTP /desktop/chat 触发 turn
    `record_assistant_turn` 才用 `asyncio.create_task` 调度
    `pipeline.post_process_slow(...)`（detect_emotion / mood_state / mid_term
    等），不阻塞任何通道的收发。
-4. 触发器 / 主动路径（scheduler、sensor、`desktop_wake` Path B 等 `TurnSource.TRIGGER`）没有
-   流式帧，直接发 `channel_message`（+ 可选 `message_segments`），前端应把它当作一条完整
-   新消息追加。
+4. 触发器 / 主动发言（`TurnSource.TRIGGER`）没有流式帧，直接发 `channel_message`
+   （+ 可选 `message_segments`），前端应把它当作一条完整新消息追加。`desktop_wake`
+   Path B 的 HTTP 入队动作本身不属于 assistant turn；只有 autonomy 后续选择
+   `talk_owner` 时，才按这条主动发言契约收到 WS 帧。
 5. 各路径实际发帧情况：
 
    | 路径 | 流式帧 | `channel_message` | `message_segments` |
    |---|---|---|---|
    | 聊天·流式（`/desktop/chat`，desktop 或 device 已连接） | 有（仅发往 desktop） | 有：`push_message()` 直发 desktop（不经 `exclude_origin_channel` 排除的 fanout） | 有（可选）：`push_message` 之后同 `msg_id` 直发 desktop；其余活跃通道仍走 `record_assistant_turn` 的常规 fanout，按「该通道是否在本轮 targets 内」判断是否收到 |
    | 聊天·非流式（mobile / QQ 入口，或 desktop 无 UI 连接） | 无 | 有：`record_assistant_turn` 常规 fanout 广播给除发起通道外的活跃通道；发起通道本身只通过 HTTP response 拿到 reply，不额外收 WS 帧 | 有（可选）：随常规 fanout 发给 targets 中的 desktop / device |
-   | 触发器 / 主动路径（scheduler、sensor、`desktop_wake` Path B） | 无 | 有：`record_assistant_turn` 常规 fanout | 有（可选）：同上 |
+   | 触发器 / autonomy `talk_owner` 主动发言 | 无 | 有：`record_assistant_turn` 常规 fanout | 有（可选）：同上 |
    | `desktop_wake` Path A（历史 pending trigger turn，HTTP 直接返回） | 无 | 无——完全不经 WS，`reply`/`msg_id` 只出现在 HTTP response 里 | 无 |
+   | `desktop_wake` Path B（HTTP 返回 `queued_autonomy_signal`） | 无 | 无；客户端继续监听既有 WS，queued 不承诺后续一定发言 | 无 |
 
 ---
 

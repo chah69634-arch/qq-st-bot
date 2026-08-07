@@ -69,7 +69,9 @@ v0.1 这些字段的实际位置：
 2. **Dream Guard**：`DREAM_ACTIVE / DREAM_CLOSING` 时拒绝 reality 事件（`BLOCKED_DREAM`）
 3. **返回 PerceiveStatus**：调用方凭此决定是否继续进入 pipeline
 
-它**不是**事件路由器，不做 kind dispatch，不维护 session 状态，不写任何存储。
+它**不是**事件路由器，不做 kind dispatch，不维护 session 状态。gate 函数本身不写存储；
+`desktop_wake` 等入口会把返回的 metadata-only 结果写入既有 trigger audit，再决定是否
+进入后续路径。
 
 Stage 同样不把 `perceive_event` 当作 session 路由器。`core/stage/runner.py` 只接受已经确定属于某个
 Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排回复。
@@ -89,7 +91,7 @@ Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排�
 | 约束 | 说明 |
 |---|---|
 | **tool result never re-enters as stimulus** | 工具执行结果通过 `tool_result` prompt 层注入当前轮，不重新经过 perceive_event gate，不产生新的 kind=stimulus 事件 |
-| **stimulus cannot implicitly upgrade to tool** | stimulus/trigger 事件触发 LLM 生成，但生成结果中的 desktop intent 走 intent parser，不作为 kind=tool 事件回注；tool 调用是显式的，不由 stimulus 隐式升级 |
+| **stimulus cannot implicitly upgrade to tool** | stimulus 可以进入既有 reality Pipeline，也可以像 `desktop_wake` 一样只产生 autonomy signal；后续工具调用必须由 autonomy/tool loop 显式执行，不把结果重新包装成 kind=tool 事件 |
 | **dream does not go through reality gate** | `POST /dream/chat` 直接进入 dream pipeline，完全绕过 `receive_perceive_event()`；Dream Guard 反向保护现实侧，不是梦境侧的入口守卫 |
 | **LLM reply outlet: kind ∈ {message, stimulus}** | 助手回复通过 `record_assistant_turn / turn_sink` 广播，归属于触发本轮的 kind；系统不从 LLM 回复中派生新的 kind=tool 或 kind=activity 事件 |
 | **Stage session is explicitly driven** | Stage 由上游显式创建、关闭和调用；P2 不通过 `perceive_event` 自动发现或推进 Stage，也不把 AI 续聊重新注入 event gate |
@@ -104,7 +106,9 @@ Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排�
 
 只读观测入口：`GET /observability/perceive-events`（`state.read` scope），支持 `source`、`gate_result` 精确过滤及 `offset` / `limit` 分页。
 
-**Trigger 不写 short_term**：stimulus 事件触发的助手回复通过正常 `record_assistant_turn` 写 short_term（`bypass_gate=True`），但 stimulus 事件本身不写任何 short_term 记录。
+**Trigger 不写 short_term**：stimulus 事件本身不写任何 short_term 记录。直接生成回复的
+legacy 路径仍通过正常 `record_assistant_turn` 写 assistant turn；`desktop_wake` Path B
+只入队 signal，只有 autonomy 后续实际调用 `talk_owner` 时才产生 assistant turn。
 
 ### 3.5 MCP 边界
 
@@ -128,10 +132,17 @@ Stage 的 owner turn，并在 Stage 自己的锁与 transcript 边界内编排�
               └─ turn_sink → channels.broadcast (reality)
 
 系统触发 (stimulus / trigger)
-  └─ scheduler._pipeline_send / sensor / desktop_wake
-        └─ perceive_event [reality gate]
-              └─ ACCEPTED → conversation_lock → Pipeline → LLM → record_assistant_turn
-                    └─ turn_sink → channels.broadcast (reality)
+  ├─ legacy direct reality path
+  │    └─ perceive_event [reality gate]
+  │          └─ ACCEPTED → conversation_lock → Pipeline → LLM → record_assistant_turn
+  │                └─ turn_sink → channels.broadcast (reality)
+  └─ signal-first source
+       ├─ scheduler migrated producer → enqueue signal
+       └─ desktop_wake Path B → perceive_event [reality gate] + metadata-only audit
+             └─ ACCEPTED → enqueue signal
+           scheduler tick merge → autonomy runner
+             ├─ silent / tools-only / terminal gate outcome
+             └─ talk_owner → turn_sink → channels.broadcast (reality)
 
 工具结果 (tool result)
   └─ 注入 prompt 层 10 (tool_result)，参与当前轮 LLM 生成

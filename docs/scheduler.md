@@ -122,7 +122,7 @@ loop.py tick ──gating log──→ logs/gating_shadow.jsonl
         └────legacy/maintenance asyncio.gather──→ 未迁移检查或状态扫描
 ```
 
-`_pipeline_send()` 内部执行顺序（P1 gate）：
+非迁移兼容触发进入 `_pipeline_send()` 后的执行顺序（P1 gate）：
 
 ```
 receive_perceive_event(source="scheduler", kind="scheduled")
@@ -133,16 +133,35 @@ conversation_lock(uid)
   → record_assistant_turn(bypass_gate=True)
 ```
 
-- **conversation_lock** 是 uid 级，与 `desktop_wake Path B` 和 `run_owner_chat_turn` 共用同一把锁，保证同 uid 的 reality LLM 串行。
+- **conversation_lock** 是 uid 级，`_pipeline_send` 与 `run_owner_chat_turn` 的 reality LLM
+  共享同一把锁。`desktop_wake` Path B 不在 HTTP 请求中取得这把锁或调用 Pipeline；若
+  autonomy 最终选择发言，统一由 `talk_owner` 在发送边界取得既有会话门闩。
 - **desktop_wake Path A delivery ledger**：回放前在 uid 锁内读取 `wake_delivered: {turn_id: ts}`，
   筛选时排除已送达 turn，并在 HTTP 返回前原子写入；因此重复/并发 wake 对同一 turn 至多返回一次。
 - **Dream Guard** 通过 `receive_perceive_event` fail-closed：BLOCK_ACTIVE / BLOCK_UNCERTAIN → 直接返回 None，不进 LLM。
 - **TTL dedup**：同一 trigger_name 在同一 60s 时间桶内重复触发 → DUPLICATE，静默丢弃。
 - **dedupe_key 组成（scheduler）**：`scheduler:uid:char:system:scheduled:hash({"trigger_name":name}):bucket` — payload 只含 trigger_name，key 稳定。
 - **dedupe_key 组成（desktop_wake）**：`desktop_wake:uid:char:desktop:wake:hash({}):bucket` — payload 固定为 `{}`，last_seen 等 per-request 字段不入 hash，rapid reconnect 内幂等。
-- **dedupe 原则（P1.1 稳定化）**：`event_id` / `correlation_id` 仅用于 tracing，不参与 dedupe（event_id is tracing only）。`dedupe_key` 只能包含稳定语义字段；`last_seen`、timestamp、随机 UUID、request time 等观测字段不得加入 payload（last_seen must not be part of dedupe payload）。违反此原则会导致同语义请求因 key 不同而各自通过去重、多次触发 LLM。
-- **DUPLICATE / BLOCKED_DREAM no-op 保证**：命中 DUPLICATE 或 BLOCKED_DREAM 的调用必须立即返回，不进入 LLM、不调用 record / post_process、不向任何 channel fanout。
+- **dedupe 原则（P1.1 稳定化）**：`event_id` / `correlation_id` 仅用于 tracing，不参与 dedupe（event_id is tracing only）。`dedupe_key` 只能包含稳定语义字段；`last_seen`、timestamp、随机 UUID、request time 等观测字段不得加入 payload（last_seen must not be part of dedupe payload）。违反此原则会导致同语义请求因 key 不同而各自通过去重、产生多个候选机会。
+- **DUPLICATE / BLOCKED_DREAM no-op 保证**：命中 DUPLICATE 或 BLOCKED_DREAM 的调用必须立即返回，不入队 signal、不进入 LLM、不调用 record / post_process、不向任何 channel fanout。
 - `bypass_gate=True` 传给 `record_assistant_turn`，避免锁重入。
+
+`desktop_wake` Path B 现走独立的 signal-first 路径：
+
+```
+POST /desktop/wake
+  → receive_perceive_event(source="desktop_wake", payload={})
+  → 记录 accepted / duplicate / dream-blocked trigger audit
+  → ACCEPTED + autonomy enabled
+  → enqueue_desktop_wake_signal()（有界离线时长、10 分钟 TTL）
+  → scheduler tick drain + 与同窗口其他低权重 signal 合并
+  → autonomy runner：silent / tools-only / talk_owner
+```
+
+HTTP handler 不取得 Pipeline，不创建 task，不写 turn sink 或 ProactiveLedger。autonomy
+关闭时不保留 wake signal；入队后关闭、signal 过期或入队后再次被 Dream Guard 阻断时，
+都写入 autonomy 的终态观测且不在未来补发。Path A 的历史 turn 回放与 delivery ledger
+保持原语义，不属于这次迁移。
 
 ---
 
@@ -203,7 +222,7 @@ snapshot() -> dict
 |---|---|
 | `execution.execute_prompt()` | 发送成功后 `record_send()`（替代旧 `_mark_global_proactive`） |
 | `sensor_aware.handle_tick()` | judge/LLM 之前先 `can_send()` 拦截；发送成功后 `record_send()`（此前完全不记账，RC1） |
-| `desktop_wake` Path B（`admin/routers/chat.py`） | record-only：wake 问候语义上必须发，不受 ledger 限流，但要计入账本，防止刚 wake 又来一条 `random_message` |
+| autonomy `talk_owner`（包括由 `desktop_wake` signal 合并出的机会） | `talk_gate` 先查间隔/预算，真实发送成功后以 `trigger_name="autonomy"` 调用 `record_send()`；仅入队或静默不记发送账 |
 | `manual_trigger`（管理面板测试） | record-only：绕过冷却/条件检查属设计，但也该记账 |
 | watch emergency（`hr_critical` 等） | 经 `execute_prompt()` 自动覆盖；`priority="emergency"` 豁免限流但仍记账 |
 
@@ -862,14 +881,15 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 
 ## 主动触发 Prompt 可观测性（admin-panel-round6）
 
-`_pipeline_send()`（scheduler 触发）和 `desktop_wake` Path B（桌宠重开问候）均在调用
-`build_prompt()` 前，通过 `core/observe/prompt_capture.py` 的 ContextVar `_capture_origin`
-写入主动触发的元数据，`capture()` 随即把这些信息写入快照：
+`_pipeline_send()`（scheduler 兼容触发）在调用 `build_prompt()` 前，通过
+`core/observe/prompt_capture.py` 的 ContextVar `_capture_origin` 写入主动触发的元数据，
+`capture()` 随即把这些信息写入快照。`desktop_wake` Path B 已不调用这条 pipeline；它的
+signal、合并机会、run 和 disposition 由 autonomy 观测面记录：
 
 | 字段 | 内容 |
 |---|---|
 | `origin.origin` | `"proactive"` |
-| `origin.trigger_name` | 触发器名，如 `"random_message"`、`"desktop_wake"` |
+| `origin.trigger_name` | 触发器名，如 `"random_message"` |
 | `origin.seed_prompt` | 喂给 `build_prompt` 的用户位消息（第 12 层实际来源） |
 | `origin.search_query` | 驱动 RAG/event 召回的锚点词（`fetch_context` 第二参数）；空字符串表示与 seed_prompt 相同 |
 | `origin.recall_policy` | CC 任务 19 · C：`"none"` / `"anchored"` / `"seed"`，见下方「召回锚点治理」 |
@@ -891,7 +911,7 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 |---|---|---|
 | `"none"`（主动触发默认取向） | `fetch_context` 完全跳过 `episodic_memory.retrieve`/`retrieve_fallback`、`event_log.search`、web_recall 三个检索层（含驱动它们的 embedding 计算），只保留 identity/mood/short_term/花园等状态层 | `random_message`、`weather_alert`、`sensor_aware`、`presence_nag`、`garden_bloom`/`garden_harvest_expired`/`garden_handle_*`/`garden_vase_wilted`、`festival`、`holiday_boost`、`timenode`、`daily_journal`、`morning_greeting`、`night_reminder`、`diary_reminder`、`diary_share_reminder` |
 | `"anchored"` | 检索层照常开启，锚点是触发器自带的具体话题（话题 key、被选中记忆的原文），不是宽泛种子词 | `topic_followup`、`spontaneous_recall`、`birthday` 系列、`period_reminder`（`search_query="生理期"`） |
-| `"seed"`（默认，兼容过渡） | 现状：锚点是 `search_query` 或 prompt 全文，检索层照常开启 | 未显式指定 recall_policy 的触发器（如 `reminders`、`overflow`、`dream_exit`、`letter_writer`、watch 系列）；desktop_wake Path B 保持默认，因为"重开对话"场景确实需要记忆延续 |
+| `"seed"`（默认，兼容过渡） | 现状：锚点是 `search_query` 或 prompt 全文，检索层照常开启 | 未显式指定 recall_policy 的触发器（如 `reminders`、`overflow`、`dream_exit`、`letter_writer`、watch 系列） |
 
 `daily_journal` 的特例：不再传 `search_query="今天"` 驱动语义检索，改为只依赖种子
 prompt 里已经拼好的当日 `event_log` 原文（`log_hint`），`recall_policy="none"`。
@@ -1083,13 +1103,7 @@ has_real_interaction_history(uid, *, char_id=None, min_turns=COLD_START_MIN_REAL
 不构成虚假记忆；后三者的时间差信号已经用 `if timestamps:` / `last_owner_turn <= 0 →
 None` 等方式正确区分"没有数据"与"很久以前"，本就不受冷启动误判影响，不需要重复加门控。
 
-同一原则也用在 `desktop_wake` Path B 的首轮种子 prompt（见下）和关系层注入判断
-（`core/user_relation.has_configured_relation()`，见 `docs/prompt-layers.md` `3_relation`）。
-
-### desktop_wake 首轮专用种子
-
-`admin/routers/chat.py::desktop_wake()` Path B 原种子固定是"用户重新打开了和你对话
-的软件，请结合真实记忆自然接续"——零记忆时这句话等于点名要求角色编造往事。
-现在用 `real_turn_count(uid, char_id=_wake_scope.character_id) == 0` 判断冷启动，
-为真时换用首见版种子："用户第一次打开和你对话的软件。说出你想说的话吧：打个招呼，
-礼貌地询问，或者随便说几句。不要假装拥有与用户过去的记忆。"非首次仍走原种子。
+同一原则也用于关系层注入判断（`core/user_relation.has_configured_relation()`，见
+`docs/prompt-layers.md` `3_relation`）。`desktop_wake` Path B 不再构造首轮或重开 seed
+prompt；它只提供 `desktop_session_reopened` 这一当前事实，是否读取有界历史、使用工具或
+发言由 autonomy runner 决定。

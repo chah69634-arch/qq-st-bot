@@ -35,7 +35,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/desktop/chat"): "桌宠对话入口，由 Emerald-client 直连，非管理面板功能",
     ("POST", "/mobile/chat"): "手机普通对话入口，由 PresenceKit-mobile 直连，非管理面板功能",
     ("POST", "/desktop/activate"): "桌宠上线激活 desktop 通道，由 Emerald-client 直连",
-    ("POST", "/desktop/wake"): "桌宠重开问候，由 Emerald-client 直连",
+    ("POST", "/desktop/wake"): "桌宠重开回放或 autonomy signal 入队，由 Emerald-client 直连",
     ("POST", "/upload/ingest"): "三端统一文件上传入口，管理面板不做上传 UI",
     ("POST", "/hardware/connect"): "硬件配对，Emerald-client shared/api/hardware.ts 消费",
     ("POST", "/hardware/jobs/{job_id}/stop"): "硬件安全停止接口，供具备 hardware scope 的客户端或运维调用",

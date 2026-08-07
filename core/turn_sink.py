@@ -338,7 +338,7 @@ async def record_assistant_turn(
     # Narrative segments: push a parallel message_segments envelope to UI clients
     # (desktop + device) — but only to the ones actually included in this fanout.
     # Sending segments to a client that never got the corresponding channel_message
-    # (e.g. fanout=[] on desktop_wake Path B, or an exclude_origin_channel gap)
+    # (e.g. an explicit fanout=[] call or an exclude_origin_channel gap)
     # would push an orphaned message that client can never correlate and consume,
     # violating the single-display-path invariant.
     if "desktop" in targets or "device" in targets:

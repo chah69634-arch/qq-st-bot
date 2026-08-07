@@ -370,8 +370,9 @@ async def _pipeline_send(
 ) -> Optional[str]:
     """LOW-TRUST STIMULUS / TRIGGER-ONLY REALITY REPLY outlet.
 
-    This function is the single exit point for scheduler/sensor/wake triggers entering
-    the run_llm → record_assistant_turn → fanout path.  It is NOT a general event bus.
+    This function is the compatibility exit for non-migrated scheduler/sensor triggers
+    entering the run_llm → record_assistant_turn → fanout path. It is NOT a general
+    event bus. Migrated conversational triggers are converted to autonomy signals.
     Only kinds in _TRIGGER_OUTLET_ALLOWED_KINDS ("trigger", "sensor", "scheduled", "wake")
     are accepted; any other kind raises ValueError before touching the LLM pipeline.
 
@@ -382,8 +383,8 @@ async def _pipeline_send(
     output_mode="speak"（默认）：发送后返回 reply 文本；被策略拦截或失败时返回 None。
 
     P1 gate：perceive_event 统一入口（Dream Guard + TTL dedup），通过后用 conversation_lock
-    覆盖 fetch_context → build_prompt → run_llm → record_assistant_turn，与 desktop_wake
-    Path B 和 owner chat 串行，避免同 uid 并发 LLM。perceive_event=true 日志标识已通过 gate。
+    覆盖 fetch_context → build_prompt → run_llm → record_assistant_turn，并与 owner chat
+    串行，避免同 uid 并发 LLM。perceive_event=true 日志标识已通过 gate。
     """
     # Kind guard: reject disallowed / unknown kinds before any work is done.
     _assert_trigger_outlet_kind(kind)

@@ -6,18 +6,16 @@ TTL dedup) and holds conversation_lock(uid) for the full fetch_context → build
 → run_llm → record_assistant_turn critical section.
 
 Covers:
-1. _pipeline_send + desktop_wake Path B concurrent → same uid, at most one LLM in section
-2. Two _pipeline_send calls, same uid, different triggers → serialize, never concurrent LLM
-3. Different uid → not blocked by each other (uid-level lock, no cross-uid serialization)
-4. conversation_lock is uid-level, not char_id level (different char_id same uid → same lock)
-5. Dream Guard BLOCK_ACTIVE → _pipeline_send returns None, no LLM
-6. Dream Guard BLOCK_UNCERTAIN → _pipeline_send returns None (fail-closed)
-7. Duplicate scheduler event (same trigger, same 60s bucket) → no LLM, no post_process/fanout
+1. Two _pipeline_send calls, same uid, different triggers → serialize, never concurrent LLM
+2. Different uid → not blocked by each other (uid-level lock, no cross-uid serialization)
+3. conversation_lock is uid-level, not char_id level (different char_id same uid → same lock)
+4. Dream Guard BLOCK_ACTIVE → _pipeline_send returns None, no LLM
+5. Dream Guard BLOCK_UNCERTAIN → _pipeline_send returns None (fail-closed)
+6. Duplicate scheduler event (same trigger, same 60s bucket) → no LLM, no post_process/fanout
 """
 
 import asyncio
 import time
-import uuid
 
 import pytest
 
@@ -116,57 +114,7 @@ def _setup_pipeline_send(monkeypatch, owner_id="owner1", char_id="yexuan", pipel
     monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
 
 
-# ── Test 1: _pipeline_send + desktop_wake Path B concurrent → serialize ───────
-
-async def test_pipeline_send_and_path_b_serialize_on_same_uid(monkeypatch):
-    """
-    _pipeline_send and a desktop_wake Path B-style caller both acquire
-    conversation_lock(uid).  For the same uid, run_llm must never be concurrent.
-    """
-    concurrent_count = [0]
-    max_concurrent = [0]
-    total_llm = [0]
-
-    async def tracked_llm(messages):
-        concurrent_count[0] += 1
-        max_concurrent[0] = max(max_concurrent[0], concurrent_count[0])
-        await asyncio.sleep(0.05)  # hold slot; lets other coroutine try to enter
-        concurrent_count[0] -= 1
-        total_llm[0] += 1
-        return "reply"
-
-    fp = _make_fake_pipeline(tracked_llm)
-    _allow_dream_guard(monkeypatch)
-    _setup_pipeline_send(monkeypatch, owner_id="owner-wake", char_id="yexuan", pipeline=fp)
-
-    from core.conversation_gate import conversation_lock as _conv_lock
-    from core.perceive_event import PerceiveEvent, receive_perceive_event, PerceiveStatus
-    import core.scheduler.loop as _loop
-
-    async def path_b_style_call():
-        """Simulates desktop_wake Path B: perceive_event gate → conversation_lock → LLM."""
-        event = PerceiveEvent(
-            source="desktop_wake", uid="owner-wake", channel="desktop", kind="wake",
-            event_id=str(uuid.uuid4()),  # unique id → never deduped
-        )
-        result = await receive_perceive_event(event)
-        if result.status != PerceiveStatus.ACCEPTED:
-            return None
-        async with _conv_lock("owner-wake"):
-            return await fp.run_llm([])
-
-    await asyncio.gather(
-        _loop._pipeline_send("morning prompt", trigger_name="morning_greeting"),
-        path_b_style_call(),
-    )
-
-    assert max_concurrent[0] <= 1, (
-        f"at most 1 concurrent run_llm for same uid; max was {max_concurrent[0]}"
-    )
-    assert total_llm[0] >= 1, "at least one LLM call must complete"
-
-
-# ── Test 2: Two _pipeline_send, same uid, different triggers → serialize ──────
+# ── Test 1: Two _pipeline_send, same uid, different triggers → serialize ──────
 
 async def test_two_pipeline_sends_same_uid_serialize(monkeypatch):
     """
@@ -193,8 +141,8 @@ async def test_two_pipeline_sends_same_uid_serialize(monkeypatch):
     import core.scheduler.loop as _loop
 
     await asyncio.gather(
-        _loop._pipeline_send("morning", trigger_name="morning_greeting"),
-        _loop._pipeline_send("night",   trigger_name="night_reminder"),
+        _loop._pipeline_send("first", trigger_name="legacy_gate_one"),
+        _loop._pipeline_send("second", trigger_name="legacy_gate_two"),
     )
 
     assert not overlap_detected[0], (
@@ -285,7 +233,9 @@ async def test_dream_guard_block_active_prevents_llm(monkeypatch):
     _setup_pipeline_send(monkeypatch, owner_id="owner5", pipeline=fp)
 
     import core.scheduler.loop as _loop
-    result = await _loop._pipeline_send("test", trigger_name="morning_greeting")
+    result = await _loop._pipeline_send(
+        "test", trigger_name="legacy_dream_guard_active"
+    )
 
     assert result is None, f"BLOCK_ACTIVE should make _pipeline_send return None, got {result!r}"
     assert llm_called[0] == 0, (
@@ -308,7 +258,9 @@ async def test_dream_guard_block_uncertain_prevents_llm(monkeypatch):
     _setup_pipeline_send(monkeypatch, owner_id="owner6", pipeline=fp)
 
     import core.scheduler.loop as _loop
-    result = await _loop._pipeline_send("test", trigger_name="morning_greeting")
+    result = await _loop._pipeline_send(
+        "test", trigger_name="legacy_dream_guard_uncertain"
+    )
 
     assert result is None, f"BLOCK_UNCERTAIN should return None (fail-closed), got {result!r}"
     assert llm_called[0] == 0, (
@@ -376,9 +328,29 @@ async def test_duplicate_scheduler_event_no_llm_no_post_process(monkeypatch):
     monkeypatch.setattr(_ts, "record_assistant_turn", _record_with_pp)
     monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
 
-    # Both calls in the same 60s time bucket (default created_at = time.time())
-    result1 = await _loop._pipeline_send("test1", trigger_name="morning_greeting")
-    result2 = await _loop._pipeline_send("test2", trigger_name="morning_greeting")
+    # Pin both envelopes to one bucket so the test cannot become flaky at a
+    # wall-clock minute boundary.
+    from core.perceive_event import PerceiveEvent
+
+    created_at = time.time()
+    events = [
+        PerceiveEvent(
+            source="scheduler",
+            uid="owner7",
+            channel="system",
+            kind="scheduled",
+            char_id="yexuan",
+            payload={"trigger_name": "legacy_duplicate"},
+            created_at=created_at,
+        )
+        for _ in range(2)
+    ]
+    result1 = await _loop._pipeline_send(
+        "test1", trigger_name="legacy_duplicate", perceive_event=events[0]
+    )
+    result2 = await _loop._pipeline_send(
+        "test2", trigger_name="legacy_duplicate", perceive_event=events[1]
+    )
 
     assert result1 == "reply", f"first call should succeed: {result1!r}"
     assert result2 is None, f"duplicate should return None: {result2!r}"
@@ -407,7 +379,7 @@ async def test_pipeline_send_logs_perceive_event_true(monkeypatch, caplog):
     import core.scheduler.loop as _loop
 
     with caplog.at_level(logging.INFO, logger="core.scheduler.loop"):
-        result = await _loop._pipeline_send("test", trigger_name="morning_greeting")
+        result = await _loop._pipeline_send("test", trigger_name="legacy_audit_log")
 
     assert result is not None, "gate-accepted call should return a reply"
 

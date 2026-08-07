@@ -34,8 +34,16 @@ _MEMORY_CLAIM_RE = re.compile(
 )
 
 
-def _system_prompt(*, talk_available: bool, character=None) -> str:
-    talk_note = "talk_owner is available only for a deliberate final message." if talk_available else "用户尚未回应最近两次主动发言，本轮不可继续向用户发送消息。你仍可以进行其他允许的自主活动，也可以选择什么都不做。"
+def _system_prompt(*, talk_available: bool, talk_unavailable_reason: str = "", character=None) -> str:
+    talk_note = (
+        "talk_owner is available only for a deliberate final message."
+        if talk_available
+        else (
+            "talk_owner is unavailable for this run because "
+            f"{talk_unavailable_reason or 'user-facing talk is disabled'}. "
+            "You may still use allowed tools or finish silently."
+        )
+    )
     identity = ""
     if character is not None:
         name = str(getattr(character, "name", "") or "")
@@ -456,14 +464,27 @@ async def run_job(job: Job) -> Run:
 
 async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     tools, self_context = _runtime_tools(job.uid, job.char_id, state)
-    mode, _ = talk_gate.check(job.uid)
+    mode, talk_reason = talk_gate.check(job.uid)
     # A soft limit still exposes talk once so the model can make one explicit
     # re-decision. Hard limits remove it at schema construction time.
-    talk_available = bool(state["config"].get("talk_enabled", True) and mode != "hard")
+    talk_enabled = bool(state["config"].get("talk_enabled", True))
+    talk_available = talk_enabled and mode != "hard"
+    talk_unavailable_reason = talk_reason if mode == "hard" else "talk_disabled"
+    if not talk_available:
+        _record_event(run, "talk_unavailable", reason=talk_unavailable_reason)
     if talk_available:
         tools.append(talk_gate.schema())
     run_now = time.time()
-    messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy", "_budget_chars": 1800}]
+    messages = [{
+        "role": "system",
+        "content": _system_prompt(
+            talk_available=talk_available,
+            talk_unavailable_reason=talk_unavailable_reason,
+            character=_character_for(job.char_id),
+        ),
+        "_layer": "autonomy_policy",
+        "_budget_chars": 1800,
+    }]
     messages.extend(_context_messages(job.uid, job.char_id, memory_query=(job.opportunity or {}).get("memory_query"), now=run_now))
     _record_memory_reads(run, messages)
     if self_context is not None:
@@ -899,10 +920,22 @@ async def tick(uid: str, char_id: str) -> None:
     """Collect all due signals, merge one opportunity, then consume at most one job."""
     state = store.load(uid, char_id)
     cfg = state["config"]
-    if not cfg.get("enabled"):
-        return
     from core.self_management.policy import autonomy_enabled, autonomy_min_interval
-    if not autonomy_enabled(uid, char_id, bool(cfg.get("enabled"))):
+    enabled = autonomy_enabled(uid, char_id, bool(cfg.get("enabled")))
+    if not enabled:
+        # Reopen is a one-shot observation. If autonomy was disabled after HTTP
+        # admission but before this tick, consume it as a terminal suppression
+        # instead of letting it surprise the user after a future re-enable.
+        for signal in store.discard_pending_signals_by_source(
+            uid, char_id, {"desktop_wake"}
+        ):
+            store.record_signal_outcome(
+                uid,
+                char_id,
+                signal,
+                disposition=Disposition.SUPPRESSED_PROACTIVE_OFF.value,
+                event_status="signal_suppressed_autonomy_disabled",
+            )
         return
     effective_minimum = autonomy_min_interval(uid, char_id, int(cfg.get("min_interval_seconds") or 0))
     now = time.time()
@@ -913,14 +946,22 @@ async def tick(uid: str, char_id: str) -> None:
     # assistant turn.  Drain once per tick so every currently pending source is
     # merged into the same durable opportunity.
     for signal in store.drain_pending_signals(uid, char_id):
-        if signal.expiry <= 0 or signal.expiry > now:
-            from core.autonomy.signal_adapters import routine_key_for_signal, routine_trigger_enabled
+        if signal.expiry > 0 and signal.expiry <= now:
+            store.record_signal_outcome(
+                uid,
+                char_id,
+                signal,
+                disposition=Disposition.EXPIRED.value,
+                event_status="signal_expired",
+            )
+            continue
+        from core.autonomy.signal_adapters import routine_key_for_signal, routine_trigger_enabled
 
-            routine_key = routine_key_for_signal(signal)
-            if routine_key and not routine_trigger_enabled(routine_key):
-                continue
-            due_signals.append(signal)
-            dedupe_parts.append(f"queued:{signal.signal_id}")
+        routine_key = routine_key_for_signal(signal)
+        if routine_key and not routine_trigger_enabled(routine_key):
+            continue
+        due_signals.append(signal)
+        dedupe_parts.append(f"queued:{signal.signal_id}")
 
     # Sensor, memory and session adapters are read-only.  They contribute
     # bounded facts to the same opportunity as configured interval/schedule
@@ -1036,7 +1077,12 @@ async def tick(uid: str, char_id: str) -> None:
     job = store.claim_due(uid, char_id)
     if job is None: return
     run = await run_job(job)
-    store.finish(job, run, retry=run.disposition in {Disposition.BLOCKED_DREAM.value, Disposition.BLOCKED_DREAM_UNCERTAIN.value})
+    retry_dream_block = (
+        run.disposition
+        in {Disposition.BLOCKED_DREAM.value, Disposition.BLOCKED_DREAM_UNCERTAIN.value}
+        and "desktop_wake" not in set(job.signal_sources or [])
+    )
+    store.finish(job, run, retry=retry_dream_block)
 
 
 def _schedule_due(cfg: dict, now: float, last: float) -> bool:

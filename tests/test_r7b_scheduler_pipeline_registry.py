@@ -8,8 +8,7 @@ Coverage:
 1.  _pipeline_send uses the pipeline currently held in pipeline_registry.
 2.  Replacing the registry pipeline causes _pipeline_send to use the new object.
 3.  loop.py has no module-level _pipeline attribute (no private true-value).
-4.  desktop_wake / _pipeline_send still finds the pipeline after hot-swap.
-5.  Existing scheduler active-window tests do not regress.
+4.  Existing scheduler active-window tests do not regress.
 
 （Brief 35：set_pipeline() 兼容壳已删除，原 "3. set_pipeline shim 委托测试" 随之移除；
  main.py 现直接调用 pipeline_registry.register()。）
@@ -90,7 +89,9 @@ async def test_pipeline_send_reads_from_registry(monkeypatch):
     monkeypatch.setattr("core.conversation_gate.conversation_lock", _passthrough_lock)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
-    result = await loop._pipeline_send("hello", trigger_name="morning_greeting", kind="trigger")
+    result = await loop._pipeline_send(
+        "hello", trigger_name="legacy_registry_probe", kind="trigger"
+    )
 
     assert result == "reply-from-registered"
 
@@ -125,12 +126,16 @@ async def test_hot_swap_registry_pipeline(monkeypatch):
     monkeypatch.setattr("core.conversation_gate.conversation_lock", _passthrough_lock)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
-    r1 = await loop._pipeline_send("turn1", trigger_name="night_reminder", kind="trigger")
+    r1 = await loop._pipeline_send(
+        "turn1", trigger_name="legacy_registry_hot_swap", kind="trigger"
+    )
     assert r1 == "reply-from-first"
 
     # Hot-swap to 'second'
     _preg.register(second)
-    r2 = await loop._pipeline_send("turn2", trigger_name="night_reminder", kind="trigger")
+    r2 = await loop._pipeline_send(
+        "turn2", trigger_name="legacy_registry_hot_swap", kind="trigger"
+    )
     assert r2 == "reply-from-second"
 
 
@@ -168,7 +173,9 @@ async def test_pipeline_send_degrades_when_registry_empty(monkeypatch):
     monkeypatch.setattr(loop, "_user_active_recently", lambda: False)
     monkeypatch.setattr(loop, "_send", fake_send)
 
-    result = await loop._pipeline_send("fallback", trigger_name="morning_greeting", kind="trigger")
+    result = await loop._pipeline_send(
+        "fallback", trigger_name="legacy_registry_fallback", kind="trigger"
+    )
 
     assert result == "fallback"
     assert sent == ["fallback"]

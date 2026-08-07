@@ -12,7 +12,7 @@ Signals use `autonomy-signal.v1`:
 ```json
 {
   "version": "autonomy-signal.v1",
-  "source": "sensor|scheduler|interval|schedule|overflow",
+  "source": "sensor|scheduler|desktop_wake|interval|schedule|overflow",
   "evidence": [{"fact": "..."}],
   "reason": "A bounded explanation for considering this opportunity.",
   "expiry": 0,
@@ -77,6 +77,27 @@ default to `action_mode=none` and never force `TALK`. Expired candidates are dis
 urgency can elevate the recorded priority but never bypasses dream, active-user,
 conversation, or budget gates.
 
+### Desktop reopen signal
+
+`POST /desktop/wake` Path B is a signal producer, not an assistant-turn
+executor. After the existing perceive-event dedupe and Dream Guard accept the
+request, `enqueue_desktop_wake_signal()` stores one `desktop_wake` signal with
+`action_mode=reflect` and a ten-minute TTL. Evidence contains only the reopen
+fact, a bounded offline duration (maximum 30 days), a safe perceive event id,
+and a truncated SHA-256 fingerprint of the perceive dedupe key. Raw `last_seen`, raw
+`last_seen_at`, request bodies and the dedupe key are not persisted in the
+signal.
+
+The HTTP response acknowledges queueing and does not promise speech. The signal
+can merge with other candidates in the next tick, and the runner may finish
+silent, use tools only, or call `talk_owner` once. Perceive duplicates and Dream
+blocks never enqueue. If autonomy is already disabled, no wake signal is
+stored; if it is disabled after queueing, the pending wake is removed and
+recorded as a terminal suppression. Expired wake signals also receive terminal
+job/run records, and a Dream block after job creation is terminal rather than
+retryable. These one-shot rules prevent a stale reopen from firing after a
+later re-enable.
+
 Memory reactivation reuses the scheduler recall ledger with separate stages.
 Selecting a candidate records its stable memory key in opportunity evidence; a
 completed system recall is reported as `memory_read`; the first completed model
@@ -124,10 +145,17 @@ redacted lifecycle stream. The `status` field distinguishes:
 | `tools_completed_no_talk` | Tools completed, but `talk_owner` was not called. |
 | `talk_sent` | `talk_owner` delivered through `turn_sink`. |
 | `canceled_user_activity` | A real user turn took priority and canceled the run. |
+| `expired` | The signal or opportunity reached its TTL without evaluation. |
 | `blocked_or_failed` | A gate, budget, lease, model, or tool failure stopped evaluation. |
 
 Prompt snapshots remain behind the existing admin-only run prompt endpoint and
 are not included in this state-read surface.
+
+For `desktop_wake`, the safe signal id is the HTTP `correlation_id`; the signal
+also carries the perceive event id and a dedupe fingerprint. The existing
+perceive-event audit records accepted, duplicate and Dream-blocked gate results,
+while autonomy opportunity/run records show merge membership and the terminal
+disposition. No separate wake ledger is introduced for Path B.
 
 ## Migration Registry
 

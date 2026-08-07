@@ -1,6 +1,5 @@
 """
 tests/test_r6_reality_scrub_audit.py — R6-A: Reality output scrub boundary audit
-
 Static + behavioral guards that pin the current scrub boundary so that:
  1. Every REALITY_VISIBLE exit applies strip_render_tags (no markup tags sent to users).
  2. Every REALITY_MEMORY write applies scrub_reality_output_text (no action/narration in history).
@@ -254,15 +253,6 @@ def test_s2c_strip_tags_in_desktop_chat_visible():
     assert hits, (
         "admin/routers/chat.py: strip_render_tags not found — "
         "desktop chat visible reply may leak render tags"
-    )
-
-
-def test_s2d_strip_tags_in_desktop_wake_visible():
-    """S2d: admin/routers/chat.py desktop_wake Path B must strip render tags for visible reply."""
-    src = _source("admin/routers/chat.py")
-    assert "live_wake" in src, "desktop_wake live path not found in chat.py"
-    assert "strip_render_tags" in src, (
-        "admin/routers/chat.py: strip_render_tags not applied to wake visible reply"
     )
 
 
@@ -679,25 +669,4 @@ def test_s5c_sensor_aware_uses_record_assistant_turn():
     assert "record_assistant_turn" in src, (
         "sensor_aware.py: record_assistant_turn not called — "
         "sensor reply memory write may bypass turn_sink scrub"
-    )
-
-
-def test_s5d_desktop_wake_uses_record_assistant_turn():
-    """S5d: desktop_wake Path B must use record_assistant_turn."""
-    src = _source("admin/routers/chat.py")
-    lines = src.splitlines()
-    # Find the desktop_wake function region and check record_assistant_turn is called
-    in_wake = False
-    found = False
-    for ln in lines:
-        if "async def desktop_wake(" in ln or "def desktop_wake(" in ln:
-            in_wake = True
-        if in_wake and "record_assistant_turn" in ln:
-            found = True
-            break
-        if in_wake and ln.startswith("@router") and "wake" not in ln:
-            break
-    assert found, (
-        "desktop_wake Path B does not call record_assistant_turn — "
-        "wake reply memory write bypasses turn_sink scrub"
     )

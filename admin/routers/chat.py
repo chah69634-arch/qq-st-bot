@@ -7,6 +7,7 @@ POST /chat — 接收消息，走完整 Pipeline，返回回复 + 好感度
 
 import asyncio
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -622,19 +623,25 @@ async def desktop_activate(_auth=Depends(require_scopes("chat"))):
     return {"status": "ok"}
 
 
-@router.post("/desktop/wake", summary="桌宠重开问候（仅触发 assistant turn，不写 user 历史）")
+@router.post("/desktop/wake", summary="桌宠重开（回放历史消息或排队 autonomy signal）")
 async def desktop_wake(body: dict = Body(default={}), _auth=Depends(require_scopes("chat"))):
     """
-    桌宠重开时调用，绝不向 user 历史写入机器合成文本。
+    桌宠重开时调用；HTTP 请求本身绝不生成新的 assistant turn。
 
     Path A（优先）: last_seen 之后若有未回放的 assistant trigger turn，返回最新一条。
-    Path B（兜底）: 无 pending turn 则现场跑一次 wake pipeline，
-                   以 trigger_name="desktop_wake" 落库，fanout=[] 避免双推。
+    Path B（兜底）: 无 pending turn 则排队一个有时效的 desktop_wake signal，
+                   由 scheduler tick 下的 autonomy runner 决定静默、工具或发言。
     """
     from core.config_loader import get_config as _cfg
     uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
 
-    last_seen: float | None = body.get("last_seen")
+    body = body if isinstance(body, dict) else {}
+    raw_last_seen = body.get("last_seen")
+    last_seen: float | None = None
+    if isinstance(raw_last_seen, (int, float)) and not isinstance(raw_last_seen, bool):
+        candidate = float(raw_last_seen)
+        if math.isfinite(candidate):
+            last_seen = candidate
 
     # ── Path A: pending trigger turns ──────────────────────────────────────
     if last_seen is not None:
@@ -646,7 +653,7 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(require_scop
             from channels import desktop_ws as _dws_pa
             # Resolve active character to scope history read correctly.
             # If active_prompt_assets.json is absent or empty, let exception propagate
-            # so Path A is skipped and Path B (full pipeline) takes over.
+            # so Path A is skipped and Path B signal admission takes over.
             import json as _json_wake
             from core.sandbox import get_paths as _gp_wake
             _apa = _json_wake.loads(_gp_wake().active_prompt_assets().read_text(encoding="utf-8"))
@@ -698,7 +705,12 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(require_scop
     # wakes (rapid reconnects, concurrent HTTP calls) and blocks during dream.
     # Dream Guard is now delegated to receive_perceive_event (fail-closed).
     try:
-        from core.perceive_event import PerceiveEvent, PerceiveStatus, receive_perceive_event as _rpe
+        from core.perceive_event import (
+            PerceiveEvent,
+            PerceiveStatus,
+            receive_perceive_event as _rpe,
+            record_perceive_result as _audit_perceive_result,
+        )
         _pe = PerceiveEvent(
             source="desktop_wake",
             uid=uid,
@@ -709,6 +721,7 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(require_scop
             payload={},
         )
         _pe_result = await _rpe(_pe)
+        _audit_perceive_result(_pe, _pe_result)
     except Exception:
         logger.error("[desktop_wake] perceive_event gate 异常 — fail-closed uid=%s", uid, exc_info=True)
         return {"reply": None, "source": "perceive_error"}
@@ -724,115 +737,57 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(require_scop
         }.get(_pe_result.status, f"perceive_{_pe_result.status.value}")
         return {"reply": None, "source": source_tag}
 
-    # ── Path B: 现场生成 wake trigger ──────────────────────────────────────
-    # conversation_lock wraps fetch_context + LLM + record_assistant_turn so
-    # concurrent user_chat or a duplicate wake call cannot race into the same
-    # turn.  bypass_gate=True tells record_assistant_turn to skip the inner
-    # lock re-acquisition (we already hold it here).
+    # ── Path B: persist one bounded reopen fact ─────────────────────────────
+    # The role scope is the exact value used by perceive_event to construct its
+    # dedupe key. No second active-character lookup is allowed between gate and
+    # persistence.
+    char_id = str(getattr(_pe_result, "char_id", None) or "").strip()
+    if not char_id:
+        logger.error(
+            "[desktop_wake] accepted event has no character scope uid=%s event_id=%s",
+            uid,
+            _pe_result.event_id,
+        )
+        return {"reply": None, "source": "wake_scope_unavailable"}
+
     try:
-        from core.pipeline_registry import get as _get_pipeline
-        pipeline = _get_pipeline()
-        if pipeline is None:
-            return {"reply": None, "source": "no_pipeline"}
+        from core.autonomy.signal_adapters import enqueue_desktop_wake_signal
 
-        from core.conversation_gate import conversation_lock as _conv_lock
-
-        async with _conv_lock(uid):
-            logger.info(
-                "[desktop_wake] Path B LLM start uid=%s event_id=%s",
-                uid, _pe_result.event_id,
-            )
-            # N1: turn-level scope freeze（与 run_owner_chat_turn / _pipeline_send 一致）
-            _wake_scope = pipeline._current_reality_scope(uid)
-            # Brief 97 §4：冷启动首轮不能用"结合真实记忆自然接续"——零记忆时这句话
-            # 等于点名要求角色编造往事（诊断链路见 docs/scheduler.md）。真实用户轮数
-            # 为 0 时换用首见版种子，明确禁止假装拥有过去的记忆。
-            from core.scheduler.rhythm import real_turn_count as _real_turn_count
-            _is_first_open = _real_turn_count(uid, char_id=_wake_scope.character_id) == 0
-            prompt = (
-                "（用户第一次打开和你对话的软件。说出你想说的话吧：打个招呼，礼貌地询问，"
-                "或者随便说几句。不要假装拥有与用户过去的记忆。）"
-                if _is_first_open
-                else "（用户重新打开了和你对话的软件，请结合真实记忆自然接续）"
-            )
-            context = await pipeline.fetch_context(
-                uid, prompt, frozen_scope=_wake_scope
-            )
-            try:
-                from core.observe.prompt_capture import set_capture_origin as _set_capture_origin
-                _set_capture_origin({
-                    "origin": "proactive",
-                    "trigger_name": "desktop_wake",
-                    "seed_prompt": prompt,
-                    "search_query": "",
-                })
-            except Exception:
-                pass
-            messages, _ = pipeline.build_prompt(
-                uid, prompt, context, char_id=_wake_scope.character_id
-            )
-            reply = await pipeline.run_llm(messages)
-            if reply:
-                try:
-                    from core.observe.prompt_capture import update_llm_output as _upd_wake
-                    _upd_wake(uid, reply)
-                except Exception:
-                    pass
-            if reply:
-                # Shared reality guard before record_assistant_turn. Paragraph
-                # enforcement is reserved for the outgoing copy after record.
-                from core.reality_output_guard import (
-                    clean_reality_reply_text as _clean_wake_reply,
-                    clean_reality_reply_text_for_memory as _clean_wake_memory_reply,
-                )
-                reply = _clean_wake_memory_reply(reply, pipeline.character.name) or reply
-            if reply:
-                logger.info(
-                    "[desktop_wake] Path B LLM done uid=%s event_id=%s reply_len=%d",
-                    uid, _pe_result.event_id, len(reply),
-                )
-                from core.turn_sink import TurnSource, record_assistant_turn
-                from core.write_envelope import stamp_trigger
-                turn_result = await record_assistant_turn(
-                    assistant_text=reply,
-                    uid=uid,
-                    source=TurnSource.TRIGGER,
-                    trigger_name="desktop_wake",
-                    fanout=[],      # 客户端直接展示，不通过 channel 二次推送
-                    bypass_gate=True,  # already inside conversation_lock
-                    pipeline=pipeline,
-                    envelope=stamp_trigger(),
-                    audit_extras={
-                        "event_id": _pe_result.event_id,
-                        "dedupe_key": _pe_result.dedupe_key,
-                        "gate_result": _pe_result.status,
-                        "dream_guard_status": "ALLOW",
-                        "source": _pe.source,
-                        "kind": "stimulus",
-                        "trust": _pe.trust,
-                        "did_generate_reply": True,
-                    },
-                    frozen_scope=_wake_scope,
-                    web_echo=bool(context.get("web_recall_result")),
-                )
-                # B: record-only —— wake 问候语义上必须发，不受 ledger 限流，但要计入
-                # 账本，防止刚 wake 又紧跟一条 random_message 之类的背靠背主动消息（RC5）。
-                try:
-                    from core.scheduler.proactive_ledger import record_send as _ledger_record
-                    _ledger_record("desktop_wake", channel="desktop", gist=reply)
-                except Exception:
-                    logger.exception("[desktop_wake] proactive_ledger record_send 失败")
-                # Visible reply: strip render/NMP tags only; memory already scrubbed
-                # inside record_assistant_turn (memory_text path).
-                from core.response_processor import strip_render_tags as _strip_tags
-                visible_reply = _clean_wake_reply(reply, pipeline.character.name) or reply
-                return {
-                    "reply": _strip_tags(visible_reply) or visible_reply,
-                    "source": "live_wake",
-                    "turn_id": turn_result.turn_id,
-                    "msg_id": turn_result.turn_id,
-                }
-            return {"reply": None, "source": "live_wake_empty"}
+        queued, status, signal = enqueue_desktop_wake_signal(
+            uid,
+            char_id,
+            last_seen=last_seen,
+            event_id=_pe_result.event_id,
+            dedupe_key=_pe_result.dedupe_key,
+        )
     except Exception:
-        logger.exception("[desktop_wake] Path B 失败")
-        return {"reply": None, "source": "error"}
+        logger.exception("[desktop_wake] autonomy signal enqueue failed")
+        return {"reply": None, "source": "autonomy_queue_error"}
+
+    if not queued:
+        source_tag = {
+            "autonomy_disabled": "autonomy_disabled",
+            "duplicate": "duplicate_wake",
+        }.get(status, "autonomy_queue_error")
+        logger.info(
+            "[desktop_wake] signal not queued uid=%s char_id=%s status=%s event_id=%s",
+            uid,
+            char_id,
+            status,
+            _pe_result.event_id,
+        )
+        return {"reply": None, "source": source_tag}
+
+    logger.info(
+        "[desktop_wake] queued autonomy signal uid=%s char_id=%s signal_id=%s event_id=%s",
+        uid,
+        char_id,
+        signal.signal_id,
+        _pe_result.event_id,
+    )
+    return {
+        "reply": None,
+        "source": "queued_autonomy_signal",
+        "correlation_id": signal.signal_id,
+        "expires_at": signal.expires_at,
+    }

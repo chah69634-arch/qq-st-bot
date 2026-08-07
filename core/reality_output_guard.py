@@ -16,7 +16,6 @@ Design constraints:
 
 Call sites:
   - admin/routers/chat.py  run_owner_chat_turn()   (desktop + mobile)
-  - admin/routers/chat.py  desktop_wake Path B
 
 QQ path (main.py) continues to call response_processor.process() which
 applies the same three filters internally — no logic is duplicated.
