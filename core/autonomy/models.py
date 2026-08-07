@@ -167,6 +167,19 @@ class Disposition(StrEnum):
     CIRCUIT_OPEN = "circuit_open"
 
 
+def evaluation_status_for(disposition: str) -> str:
+    value = str(disposition or "")
+    if value == Disposition.COMPLETED_NO_OP.value:
+        return "evaluated_silent"
+    if value == Disposition.COMPLETED_TOOLS_ONLY.value:
+        return "tools_completed_no_talk"
+    if "talk_sent" in value:
+        return "talk_sent"
+    if value == Disposition.CANCELED_BY_USER_ACTIVITY.value:
+        return "canceled_user_activity"
+    return "blocked_or_failed" if value else "unevaluated"
+
+
 @dataclass
 class Job:
     uid: str
@@ -211,6 +224,10 @@ class Run:
     opportunity_id: str = ""
     signal_count: int = 0
     evaluation_status: str = "unevaluated"
+
+    def __post_init__(self) -> None:
+        if self.evaluation_status == "unevaluated" and self.disposition:
+            self.evaluation_status = evaluation_status_for(self.disposition)
 
     def to_dict(self) -> dict:
         data = asdict(self)

@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 
 from core.autonomy import policy, store, talk_gate
-from core.autonomy.models import ActionMode, Disposition, Job, Run, Signal
+from core.autonomy.models import ActionMode, Disposition, Job, Run, Signal, evaluation_status_for
 
 
 def _system_prompt(*, talk_available: bool, character=None) -> str:
@@ -240,17 +240,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
 
 def _finish(run: Run) -> Run:
     run.finished_at = time.time()
-    disposition = str(run.disposition or "")
-    if disposition == Disposition.COMPLETED_NO_OP.value:
-        run.evaluation_status = "evaluated_silent"
-    elif disposition == Disposition.COMPLETED_TOOLS_ONLY.value:
-        run.evaluation_status = "tools_completed_no_talk"
-    elif "talk_sent" in disposition:
-        run.evaluation_status = "talk_sent"
-    elif disposition == Disposition.CANCELED_BY_USER_ACTIVITY.value:
-        run.evaluation_status = "canceled_user_activity"
-    elif disposition:
-        run.evaluation_status = "blocked_or_failed"
+    run.evaluation_status = evaluation_status_for(run.disposition)
     return run
 
 
