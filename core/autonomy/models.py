@@ -231,7 +231,7 @@ class Job:
     source: str
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: float = field(default_factory=time.time)
-    ttl_seconds: int = 20 * 60
+    ttl_seconds: float = 20 * 60
     dedupe_key: str = ""
     status: str = "pending"
     lease_until: float = 0.0
@@ -240,6 +240,8 @@ class Job:
     next_attempt_at: float = 0.0
     opportunity: dict = field(default_factory=dict)
     signal_sources: list[str] = field(default_factory=list)
+    retry_parent_job_id: str = ""
+    retry_parent_run_id: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)

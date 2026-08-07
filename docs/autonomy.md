@@ -98,6 +98,16 @@ job/run records, and a Dream block after job creation is terminal rather than
 retryable. These one-shot rules prevent a stale reopen from firing after a
 later re-enable.
 
+Dream blocking is applied per signal when an opportunity contains a desktop
+reopen plus other sources. The blocked parent job always finishes. Its
+`desktop_wake` signal receives a terminal `not_replayed` event, while each
+still-valid non-wake signal is merged into one bounded child retry job. The
+child keeps the shortest remaining signal TTL (and never extends the parent
+TTL), records `retry_parent_job_id` / `retry_parent_run_id`, and retains the
+normal Dream retry backoff. Non-wake signals that expire before the split get
+terminal `expired` events instead. A pure non-wake opportunity continues to
+retry the original job; a pure wake opportunity creates no child.
+
 Memory reactivation reuses the scheduler recall ledger with separate stages.
 Selecting a candidate records its stable memory key in opportunity evidence; a
 completed system recall is reported as `memory_read`; the first completed model
@@ -150,6 +160,10 @@ redacted lifecycle stream. The `status` field distinguishes:
 
 Prompt snapshots remain behind the existing admin-only run prompt endpoint and
 are not included in this state-read surface.
+
+Split Dream retries are correlated on this surface by the child opportunity's
+`retry_parent_job_id` / `retry_parent_run_id` and the parent run's bounded
+signal terminal/child-queued events. No separate wake or retry ledger exists.
 
 For `desktop_wake`, the safe signal id is the HTTP `correlation_id`; the signal
 also carries the perceive event id and a dedupe fingerprint. The existing

@@ -160,8 +160,12 @@ POST /desktop/wake
 
 HTTP handler 不取得 Pipeline，不创建 task，不写 turn sink 或 ProactiveLedger。autonomy
 关闭时不保留 wake signal；入队后关闭、signal 过期或入队后再次被 Dream Guard 阻断时，
-都写入 autonomy 的终态观测且不在未来补发。Path A 的历史 turn 回放与 delivery ledger
-保持原语义，不属于这次迁移。
+都写入 autonomy 的终态观测且不在未来补发。若 Dream 阻断的是混合 opportunity，parent
+job 终结且 `desktop_wake` 记为 `not_replayed`；仍在原始 TTL 内的 non-wake signals 合并为
+一个带 parent job/run lineage 的 child retry job，过期项记为 terminal `expired`。纯
+non-wake job 仍按原有退避重试，纯 wake job 不创建 child。parent 完成、run 追加与 child
+入队在同一次 scoped state load/save 内完成，避免并发 signal/config 写入互相覆盖。Path A
+的历史 turn 回放与 delivery ledger 保持原语义，不属于这次迁移。
 
 ---
 

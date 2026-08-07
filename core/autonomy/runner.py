@@ -1077,12 +1077,19 @@ async def tick(uid: str, char_id: str) -> None:
     job = store.claim_due(uid, char_id)
     if job is None: return
     run = await run_job(job)
-    retry_dream_block = (
-        run.disposition
-        in {Disposition.BLOCKED_DREAM.value, Disposition.BLOCKED_DREAM_UNCERTAIN.value}
-        and "desktop_wake" not in set(job.signal_sources or [])
-    )
-    store.finish(job, run, retry=retry_dream_block)
+    dream_blocked = run.disposition in {
+        Disposition.BLOCKED_DREAM.value,
+        Disposition.BLOCKED_DREAM_UNCERTAIN.value,
+    }
+    signal_sources = {
+        str(signal.get("source") or "")
+        for signal in (job.opportunity or {}).get("signals") or []
+        if isinstance(signal, dict)
+    }
+    if dream_blocked and "desktop_wake" in signal_sources:
+        store.finish_dream_blocked_with_signal_split(job, run)
+    else:
+        store.finish(job, run, retry=dream_blocked)
 
 
 def _schedule_due(cfg: dict, now: float, last: float) -> bool:

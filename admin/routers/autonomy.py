@@ -67,6 +67,33 @@ def _redact_pending_signals(rows: list[dict]) -> list[dict]:
     return result
 
 
+def _redact_dream_retry_events(rows: list[dict]) -> list[dict]:
+    allowed_statuses = {
+        "signal_terminal_one_shot",
+        "signal_terminal_expired",
+        "signal_terminal_invalid",
+        "dream_retry_child_queued",
+    }
+    allowed_keys = {
+        "status",
+        "signal_id",
+        "signal_index",
+        "source",
+        "outcome",
+        "expires_at",
+        "error",
+        "child_job_id",
+        "child_opportunity_id",
+        "signal_ids",
+        "signal_sources",
+    }
+    return [
+        {key: value for key, value in event.items() if key in allowed_keys}
+        for event in rows
+        if isinstance(event, dict) and event.get("status") in allowed_statuses
+    ]
+
+
 @router.get("/admin/autonomy/config", summary="读取内置唤醒配置")
 async def config(auth=Depends(require_scopes("state.read"))):
     from core.autonomy import store
@@ -122,7 +149,7 @@ async def patch_config(body: dict, auth=Depends(require_scopes("admin"))):
         raise HTTPException(status_code=422, detail="overflow.threshold 需在 (0, 10] 内")
     if cfg["max_write_tools"] > cfg["max_tools"]:
         raise HTTPException(status_code=422, detail="max_write_tools 不能超过 max_tools")
-    store.save(uid, char_id, state); return cfg
+    store.replace_config(uid, char_id, cfg); return cfg
 
 
 @router.get("/admin/autonomy/runs", summary="读取最近内置唤醒运行")
@@ -174,6 +201,8 @@ async def opportunities(limit: int = 50, auth=Depends(require_scopes("state.read
             "source": job.get("source", ""),
             "signal_sources": job.get("signal_sources") or [],
             "signal_count": len(opportunity.get("signals") or []),
+            "retry_parent_job_id": job.get("retry_parent_job_id", ""),
+            "retry_parent_run_id": job.get("retry_parent_run_id", ""),
             "opportunity": {key: opportunity.get(key) for key in ("version", "priority", "reason", "expiry", "memory_query", "action_mode", "urgency", "confidence", "suggested_action")},
             "signals": signals,
             "created_at": job.get("created_at", 0),
@@ -190,6 +219,7 @@ async def opportunities(limit: int = 50, auth=Depends(require_scopes("state.read
             "disposition": run.get("disposition", ""),
             "talk_sent": bool(run.get("talk_sent")),
             "tool_names": run.get("tool_names") or [],
+            "events": _redact_dream_retry_events(run.get("events") or []),
             "started_at": run.get("started_at", 0),
             "finished_at": run.get("finished_at", 0),
         })
@@ -237,7 +267,7 @@ async def patch_tools(body: dict, auth=Depends(require_scopes("admin"))):
     if effect not in {"read", "write"} or info.get("dangerous") or info.get("require_confirm"):
         raise HTTPException(status_code=422, detail="该工具不允许 autonomy")
     state = store.load(uid, char_id); state["config"].setdefault("tools", {})[name] = policy
-    store.save(uid, char_id, state); return {"ok": True}
+    store.replace_config(uid, char_id, state["config"]); return {"ok": True}
 
 
 @router.post("/admin/autonomy/test-enqueue", summary="排队一次内置唤醒测试")
