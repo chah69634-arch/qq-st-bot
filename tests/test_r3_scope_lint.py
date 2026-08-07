@@ -14,7 +14,6 @@ those allowlists.
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -134,34 +133,44 @@ DATA_PATH_ALLOWLIST: frozenset[str] = frozenset({
 
     # existing violations / to migrate
     "core/dream/scenario_loader.py",               # static authored-content path, not per-user
+    "core/paths.py",                               # unused future taxonomy planning module
+    "core/tool_dispatcher.py",                     # configured external desktop legacy IPC root
 })
-
-# Matches bare data/ path construction patterns:
-#   Path("data")  Path("data/...")  Path('data/...')
-#   f"data/..."   f'data/...'
-#   "data/" + ... 'data/' + ...
-_BARE_DATA_PATH_RE = re.compile(
-    r"""(?x)
-    Path\(\s*["']data(?:/[^"']*)?["']\s*\)   # Path("data") or Path("data/...")
-    | f["']data/                              # f-string starting with data/
-    | ["']data/["']\s*\+                      # string concatenation "data/" + ...
-    """
-)
 
 
 def _find_bare_data_paths(source: str) -> list[int]:
-    """Return line numbers where bare data/ paths are constructed."""
-    hits: list[int] = []
-    for lineno, line in enumerate(source.splitlines(), 1):
-        stripped = line.strip()
-        # Skip comment-only lines and standalone docstring delimiters.
-        if stripped.startswith("#"):
-            continue
-        if stripped.startswith('"""') or stripped.startswith("'''"):
-            continue
-        if _BARE_DATA_PATH_RE.search(line):
-            hits.append(lineno)
-    return hits
+    """Return real filesystem data-path construction, not archive path values."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    hits: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name) or node.func.id != "Path" or not node.args:
+                continue
+            value = node.args[0]
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                if value.value == "data" or value.value.startswith("data/"):
+                    hits.add(node.lineno)
+        elif isinstance(node, ast.JoinedStr) and node.values:
+            first = node.values[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                if first.value.startswith("data/"):
+                    hits.add(node.lineno)
+        elif isinstance(node, ast.BinOp):
+            if isinstance(node.op, ast.Add):
+                left = node.left
+                if isinstance(left, ast.Constant) and isinstance(left.value, str):
+                    if left.value.startswith("data/"):
+                        hits.add(node.lineno)
+            elif isinstance(node.op, ast.Div):
+                right = node.right
+                if isinstance(right, ast.Constant) and isinstance(right.value, str):
+                    if right.value == "data" or right.value.startswith("data/"):
+                        hits.add(node.lineno)
+    return sorted(hits)
 
 
 def test_no_new_bare_data_paths():
@@ -234,30 +243,38 @@ def test_detector_ignores_callsite_kwarg():
 
 
 def test_bare_data_path_detector_catches_path_literal():
-    """Regex catches Path('data/something')."""
+    """AST detector catches Path('data/something')."""
     assert _find_bare_data_paths('base = Path("data/dream/scenarios")\n') != []
 
 
 def test_bare_data_path_detector_catches_path_root():
-    """Regex catches Path('data')."""
+    """AST detector catches Path('data')."""
     assert _find_bare_data_paths("self._base = Path('data')\n") != []
 
 
 def test_bare_data_path_detector_catches_fstring():
-    """Regex catches f'data/...' construction."""
+    """AST detector catches f'data/...' construction."""
     assert _find_bare_data_paths('p = f"data/{char_id}/state.json"\n') != []
 
 
 def test_bare_data_path_detector_catches_concat():
-    """Regex catches 'data/' + variable."""
+    """AST detector catches 'data/' + variable."""
     assert _find_bare_data_paths('p = "data/" + char_id\n') != []
 
 
+def test_bare_data_path_detector_catches_path_join():
+    assert _find_bare_data_paths('p = installation / "data" / "runtime"\n') != []
+
+
+def test_bare_data_path_detector_ignores_manifest_relative_paths():
+    assert _find_bare_data_paths('p = PurePosixPath("data/runtime")\n') == []
+
+
 def test_bare_data_path_detector_skips_comment_lines():
-    """Regex does not fire on pure comment lines."""
+    """AST detector does not fire on pure comment lines."""
     assert _find_bare_data_paths('# Path("data/foo") is the old path\n') == []
 
 
 def test_bare_data_path_detector_skips_docstring_lines():
-    """Regex does not fire on standalone docstring delimiter lines."""
+    """AST detector does not fire on standalone docstring delimiter lines."""
     assert _find_bare_data_paths('    """data/runtime/... layout\n') == []

@@ -85,19 +85,37 @@ def _read_config_mode() -> str:
 
 
 class DataPaths:
-    def __init__(self, mode: str | None = None, test_session_id: str | None = None):
+    def __init__(
+        self,
+        mode: str | None = None,
+        test_session_id: str | None = None,
+        project_root: str | Path | None = None,
+    ):
         if mode is None:
             mode = _read_config_mode()
         self.mode = mode
+        self._project_root = (
+            Path(project_root).expanduser().resolve()
+            if project_root is not None
+            else None
+        )
 
         if mode == "test":
             if test_session_id is None:
                 test_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.test_session_id = safe_user_id(test_session_id)
-            self._base = Path("data") / "test_sandbox" / self.test_session_id
+            relative_base = Path("data") / "test_sandbox" / self.test_session_id
         else:
             self.test_session_id = None
-            self._base = Path("data")
+            relative_base = Path("data")
+        self._base = self._project_path(relative_base)
+
+    def _project_path(self, relative: Path) -> Path:
+        return (
+            self._project_root / relative
+            if self._project_root is not None
+            else relative
+        )
 
     def _p(self, *parts: str | Path) -> Path:
         clean_parts = []
@@ -138,12 +156,12 @@ class DataPaths:
     # These accessors centralize the C1 migration from several root-level
     # private-asset directories to one user-owned root.
     def userdata_root(self) -> Path:
-        return _USERDATA_ROOT
+        return self._project_path(_USERDATA_ROOT)
 
     # ── Packaged public assets (read-only; never a writer target) ──────────
     def bundled_root(self) -> Path:
         """Root for release-owned public assets shipped with the program."""
-        return _BUNDLED_ROOT
+        return self._project_path(_BUNDLED_ROOT)
 
     def bundled_default_character_dir(self) -> Path:
         return self.bundled_root() / "characters" / "default"

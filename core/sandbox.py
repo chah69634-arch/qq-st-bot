@@ -5,6 +5,7 @@
 
 import logging
 import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -39,3 +40,8 @@ def init_paths(mode: str | None = None, test_session_id: str | None = None) -> D
             f"数据根目录={_instance._base}"
         )
     return _instance
+
+
+def paths_for_installation(installation: str | Path) -> DataPaths:
+    """Return production paths anchored to an explicit offline installation."""
+    return DataPaths(mode="production", project_root=installation)

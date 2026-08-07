@@ -57,6 +57,23 @@ def test_test_session_id_cannot_escape_test_sandbox():
         DataPaths(mode="test", test_session_id="../outside")
 
 
+def test_explicit_installation_paths_are_anchored_without_changing_cwd(tmp_path):
+    import core.sandbox as sandbox
+
+    installation = tmp_path / "offline-installation"
+    cwd_before = Path.cwd()
+    singleton_before = sandbox._instance
+    paths = sandbox.paths_for_installation(installation)
+
+    assert paths.mode == "production"
+    assert paths.root_dir() == installation.resolve() / "data"
+    assert paths.layout_version() == installation.resolve() / "data" / "layout_version.json"
+    assert paths.service_state() == installation.resolve() / "data" / "runtime" / "service_state.json"
+    assert paths.userdata_root() == installation.resolve() / "userdata"
+    assert Path.cwd() == cwd_before
+    assert sandbox._instance is singleton_before
+
+
 def test_test_runtime_accepts_test_uid_in_isolated_root(tmp_path):
     paths = DataPaths(mode="test", test_session_id="pytest_worker_0")
     paths._base = tmp_path

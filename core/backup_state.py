@@ -21,6 +21,8 @@ from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
+from core.sandbox import paths_for_installation
+
 
 MANIFEST_NAME = "manifest.json"
 MANIFEST_CHECKSUM_NAME = "manifest.sha256"
@@ -155,8 +157,14 @@ def _selected_files(installation: Path) -> tuple[list[tuple[Path, str]], list[st
         raise BackupError("unclassified_private_root", "存在未分类的已知私人写入根，已拒绝创建备份。")
     selected: list[tuple[Path, str]] = []
     optional_missing: list[str] = []
+    paths = paths_for_installation(installation)
     for root in PROTECTION_ROOTS:
-        source = installation.joinpath(*root.relative_path.parts)
+        if root.root_id == "data":
+            source = paths.root_dir()
+        elif root.root_id == "userdata":
+            source = paths.userdata_root()
+        else:
+            source = installation.joinpath(*root.relative_path.parts)
         if root.kind == "legacy_selector":
             selected.extend((path, root.root_id) for path in _legacy_private_files(installation))
             continue
@@ -193,7 +201,7 @@ def _sha256(path: Path) -> str:
 
 
 def _read_layout_marker(installation: Path) -> dict[str, Any]:
-    marker = installation / "data" / "layout_version.json"
+    marker = paths_for_installation(installation).layout_version()
     try:
         payload = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -217,7 +225,7 @@ def _current_version(installation: Path) -> str:
 
 def service_state(installation: Path) -> ServiceState:
     """Fail closed when process inspection cannot establish a safe offline state."""
-    marker = installation / "data" / "runtime" / "service_state.json"
+    marker = paths_for_installation(installation).service_state()
     if marker.exists():
         try:
             payload = json.loads(marker.read_text(encoding="utf-8"))
@@ -299,7 +307,8 @@ def _validate_output(installation: Path, output: Path) -> Path:
     if not resolved.parent.is_dir():
         raise BackupError("invalid_output_path", "备份目标的父目录不存在或不可用。")
     installation = installation.resolve()
-    protected = [installation / "data", installation / "userdata"]
+    paths = paths_for_installation(installation)
+    protected = [paths.root_dir(), paths.userdata_root()]
     if any(resolved == installation or parent == resolved or resolved in parent.parents for parent in protected):
         raise BackupError("output_inside_installation", "备份目标必须位于安装目录及保护根之外。")
     try:
@@ -500,7 +509,12 @@ def _validate_restore_target(installation: Path, snapshot: Path, target: Path) -
         raise BackupError("invalid_output_path", "恢复目标的父目录不存在。")
     if _is_reparse_point(resolved) if resolved.exists() else _is_reparse_point(resolved.parent):
         raise BackupError("unsafe_link", "恢复目标或其父目录不能是 reparse point。")
-    if resolved == installation.resolve() or any(resolved == root or root in resolved.parents for root in (installation / "data", installation / "userdata")):
+    installation = installation.resolve()
+    paths = paths_for_installation(installation)
+    if resolved == installation or any(
+        resolved == root or root in resolved.parents
+        for root in (paths.root_dir(), paths.userdata_root())
+    ):
         raise BackupError("target_is_live_path", "恢复目标不能是当前安装或其私人状态根。")
     if resolved == snapshot or snapshot in resolved.parents:
         raise BackupError("target_is_live_path", "恢复目标不能位于备份快照内部。")

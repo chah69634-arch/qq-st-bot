@@ -10,6 +10,7 @@ from typing import Any, Iterator
 import yaml
 
 from core.no_outbound import recovery_no_outbound
+from core.sandbox import paths_for_installation
 
 
 class RecoveryValidationError(RuntimeError):
@@ -39,7 +40,7 @@ def _restored_cwd(root: Path) -> Iterator[None]:
 
 def _validate_json_states(root: Path) -> tuple[int, int]:
     checked = dream_or_stage = 0
-    for path in root.joinpath("data").rglob("*.json"):
+    for path in paths_for_installation(root).root_dir().rglob("*.json"):
         try:
             json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:

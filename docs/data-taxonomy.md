@@ -20,6 +20,12 @@ _LAYOUT_REALITY = "v1"
 _LAYOUT_DREAM = "v1"
 ```
 
+离线备份/恢复工具需要检查显式指定的安装目录，不能依赖进程当前工作目录，也不能临时改写
+全局 sandbox 单例。此类只读离线操作使用
+`core.sandbox.paths_for_installation(installation)`，得到固定为 production 布局、锚定到该
+安装根的 `DataPaths` 投影。运行中业务代码仍使用 `get_paths()`；不得把显式安装投影用于
+绕过 test sandbox。
+
 生产环境的实际写入根目录如下。不要根据旧设计稿中的 `data/memory/`、`data/characters/`
 或 `data/dreams/` 推断当前落盘位置。
 
