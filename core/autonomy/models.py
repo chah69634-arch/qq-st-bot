@@ -292,7 +292,7 @@ def merge_signal_candidates(
     now = time.time() if now is None else float(now)
     grouped: dict[tuple[str, str], Signal] = {}
     for signal in signals:
-        key = (signal.reason.strip().lower(), _memory_key(signal.memory_query))
+        key = _semantic_signal_key(signal)
         existing = grouped.get(key)
         if existing is None:
             grouped[key] = signal
@@ -332,3 +332,13 @@ def _memory_key(value: str | dict | None) -> str:
             if value.get(key):
                 return str(value[key]).strip().lower()
     return str(value).strip().lower()
+
+
+def _semantic_signal_key(signal: Signal) -> tuple[str, str]:
+    for fact in signal.evidence:
+        if isinstance(fact, dict) and fact.get("routine_key"):
+            return "routine", str(fact["routine_key"]).strip().lower()
+    memory_key = _memory_key(signal.memory_query)
+    if memory_key:
+        return signal.reason.strip().lower(), memory_key
+    return signal.reason.strip().lower(), ""

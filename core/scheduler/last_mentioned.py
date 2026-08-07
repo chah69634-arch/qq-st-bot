@@ -24,6 +24,11 @@ TOPIC_REFOLLOW_WINDOW_SECONDS = 3 * 24 * 3600
 # TODO(policy.yaml): move filler memory-level refollow suppression into scheduler policy.
 RECALL_REFOLLOW_WINDOW_SECONDS = 12 * 3600
 
+# Autonomy evaluations use the same durable scheduler ledger as successful
+# recalls, but keep a separate stage so a silent decision is not reported as a
+# user-visible recollection.
+RECALL_EVALUATION_WINDOW_SECONDS = 12 * 3600
+
 # recent_topics soft-downweight parameters (Phase 1)
 FULL_RECOVER_SECONDS = 6 * 3600   # 6h: base_decay goes 0→1 over this window
 REPEAT_K = 0.3                    # repeat_penalty = 1/(1 + REPEAT_K * speak_count)
@@ -235,6 +240,35 @@ def load_recalled_memories() -> dict[str, float]:
 
 def load_recalled_memories_shadow() -> dict[str, float]:
     return _load_state_map("recalled_memories_shadow")
+
+
+def is_memory_recall_evaluated(
+    memory_key: str,
+    *,
+    now_ts: float | None = None,
+    window_seconds: int = RECALL_EVALUATION_WINDOW_SECONDS,
+) -> bool:
+    if not memory_key:
+        return False
+    return _is_recently_in_state(
+        "evaluated_memories",
+        memory_key,
+        now_ts=now_ts,
+        window_seconds=window_seconds,
+    )
+
+
+def mark_memory_recall_evaluated(memory_key: str, *, now_ts: float | None = None) -> None:
+    _mark_state_map(
+        "evaluated_memories",
+        memory_key,
+        now_ts=now_ts,
+        prune_window_seconds=RECALL_EVALUATION_WINDOW_SECONDS,
+    )
+
+
+def load_evaluated_memories() -> dict[str, float]:
+    return _load_state_map("evaluated_memories")
 
 
 def compute_topic_freshness(

@@ -13,8 +13,8 @@
 | 入口 | 写 event_log | 写 short_term | broadcast | 备注 |
 |---|---|---|---|---|
 | `/desktop/chat`（desktop 与 mobile 前台共用） | ✓ user+assistant | ✓ user+assistant | ✓ 全 channel | 基线，conversation_gate 串行，post_process 关键块 await |
-| 普通 scheduler 触发器（morning_greeting / period_reminder / birthday / festival / timenode / topic_followup / reminders / diary_reminder / hr_high / hr_critical / garden_bloom 等） | ✓ assistant only | ✓ assistant only | ✓ 全 channel | 弱于基线：无 probe、无 conversation_gate、post_process 不 await |
-| **sensor_aware** | ✓ assistant only（异步、不 await） | ✓ assistant only（异步、不 await） | ✗ **直推 desktop_ws，跳过 broadcast** | 漏 mobile、漏 QQ、离线 fallback 失效 |
+| 普通 scheduler conversational trigger（morning_greeting / period_reminder / birthday / festival / timenode / topic_followup / reminders / diary_reminder / hr_high / hr_critical / garden_bloom 等） | 成功发言后 ✓ assistant only | 成功发言后 ✓ assistant only | 成功发言后 ✓ 全 channel | 当前先提交 signal，经 autonomy admission；仅 `talk_owner` 成功时进入 sink |
+| **sensor_aware** | 成功发言后 ✓ assistant only | 成功发言后 ✓ assistant only | 成功发言后 ✓ 全 channel | 当前提交高 urgency sensor signal；仍经过统一 autonomy admission 与 `talk_owner` |
 | **sleep_end**（`admin/routers/watch.py:_flush_sleep_buffer`） | ✓ 但**写成 user+assistant**（污染 user 行） | 同左 | ✓ broadcast | 没传 `trigger_name`，被当成 owner turn；同时绕过 `watch.py:on_watch_event` |
 | 维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / activity_switch / dnd） | — | — | — | 不是 assistant turn，不在 Phase 1 范围 |
 
@@ -158,9 +158,9 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
 | 调用方 | 当前路径 | 改造后 | 行为差异 |
 |---|---|---|---|
 | `admin/routers/chat.py::run_owner_chat_turn` | 自己 await post_process + broadcast | `await record_assistant_turn(source=USER_CHAT, fanout="all", ...)` | 等价；首批回归 |
-| `core/scheduler/loop.py::_pipeline_send` 内部出口 | broadcast + capture + create_task | 调 `record_assistant_turn` | 触发器代码层面无感 |
-| `core/scheduler/triggers/time_based.py`（morning_greeting / night_reminder / random_message / weather_alert / daily_journal / spontaneous_recall） | 经 `_pipeline_send` | 不动 | 写入语义不变，多了 conversation_gate 串行 |
-| `core/scheduler/triggers/diary.py`（diary_reminder / diary_share_reminder） | 同上 | 同上 | 同上 |
+| `core/scheduler/loop.py::_pipeline_send` migrated compatibility 边界 | 旧 broadcast + capture + create_task | 丢弃旧 prompt，只排有界 signal | 不再直接产生 assistant turn |
+| `core/scheduler/triggers/time_based.py`（morning_greeting / night_reminder / random_message / weather_alert / daily_journal / spontaneous_recall） | 旧 `_pipeline_send` 发言 | 例行 `_check_*` 是配置感知的 signal 生产者；autonomy runner 不重复按时钟造 routine | 发言统一由 admission 后的 `talk_owner` 进入 sink |
+| `core/scheduler/triggers/diary.py`（diary_reminder / diary_share_reminder） | 旧 `_pipeline_send` 发言 | 提交 signal | 成功 `talk_owner` 后才写入与广播 |
 | `core/scheduler/triggers/period.py` | 同上 | 同上 | 同上 |
 | `core/scheduler/triggers/birthday.py` 四档 | 同上 | 同上 | 同上 |
 | `core/scheduler/triggers/timenode.py` | 同上 | 同上 | 同上 |
@@ -170,7 +170,7 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
 | `core/scheduler/triggers/garden_daily.py` 各事件 | 同上 | 同上 | 同上 |
 | `core/scheduler/triggers/watch.py`（hr_high / hr_critical） | `_pipeline_send` | hr_critical 用 `bypass_gate=True` | 极高优先级不被用户输入阻塞 |
 | `core/scheduler/loop.py::reminders` 分支 | `_pipeline_send` | 不动 | 同上 |
-| **`core/scheduler/triggers/sensor_aware.py`** | `_pipeline_send(output_mode="return") + desktop_ws.push_message` 直推 | 显式 `record_assistant_turn(source=SENSOR, fanout=["desktop", "mobile"], payload={"behavior": ...})` | **行为变更：从 desktop-only 到 desktop+mobile fanout** |
+| **`core/scheduler/triggers/sensor_aware.py`** | 旧 `_pipeline_send(output_mode="return") + desktop_ws.push_message` | 提交 sensor signal，统一由 autonomy `talk_owner` 调 `record_assistant_turn` | 不再有独立直推出口 |
 | **`admin/routers/watch.py::_flush_sleep_buffer`** | broadcast 但无 `trigger_name`，写成 user+assistant | `record_assistant_turn(source=WATCH, trigger_name="sleep_end", ...)`，回写也接入 `watch.py:on_watch_event` 统一入口 | **修 bug：user 行不再被污染、watch 事件流不再被绕过** |
 
 ---

@@ -978,7 +978,10 @@ def _spontaneous_recall_candidates(
     now_ts: float,
     shadow: bool,
 ) -> list[dict]:
-    from core.scheduler.last_mentioned import is_recently_recalled
+    from core.scheduler.last_mentioned import (
+        is_memory_recall_evaluated,
+        is_recently_recalled,
+    )
 
     prepared_memories: list[dict] = []
     for memory in memories:
@@ -1006,6 +1009,7 @@ def _spontaneous_recall_candidates(
     return [
         item for item in recall_window
         if not is_recently_recalled(item["_memory_key"], now_ts=now_ts, shadow=shadow)
+        and not is_memory_recall_evaluated(item["_memory_key"], now_ts=now_ts)
     ]
 
 

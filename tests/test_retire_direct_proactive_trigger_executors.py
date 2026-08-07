@@ -26,7 +26,12 @@ async def test_migrated_pipeline_send_queues_a_signal_without_touching_pipeline(
     assert len(pending) == 1
     signal = pending[0]["signal"]
     assert signal["source"] == "scheduler"
-    assert signal["evidence"] == [{"fact": "legacy_trigger_candidate", "trigger": "morning_greeting"}]
+    assert signal["evidence"] == [{
+        "fact": "legacy_trigger_candidate",
+        "trigger": "morning_greeting",
+        "routine_key": "morning_greeting",
+    }]
+    assert signal["action_mode"] == "none"
 
 
 def test_pending_trigger_signals_merge_into_one_opportunity(sandbox):

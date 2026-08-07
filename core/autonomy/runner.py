@@ -295,8 +295,15 @@ def _memory_query_message(uid: str, char_id: str, memory_query, *, now: float) -
                     summary = str(memory.get("narrative_summary") or memory.get("summary") or "").strip()
                     if not summary:
                         continue
+                    try:
+                        from core.scheduler.triggers.time_based import memory_key_for_recall
+
+                        result_memory_key = memory_key_for_recall(memory)
+                    except Exception:
+                        result_memory_key = str(memory.get("id") or "").strip()
                     result_items.append({
                         "memory_id": str(memory.get("id") or ""),
+                        "memory_key": result_memory_key,
                         "source": "episodic",
                         "summary": summary[:500],
                         "occurred_at": _fact_timestamp(memory.get("occurred_at") or memory.get("timestamp")),
@@ -348,6 +355,9 @@ def _memory_query_message(uid: str, char_id: str, memory_query, *, now: float) -
             "query_count": len(queries),
             "result_count": len(result_items),
             "reliable_anchor_count": payload["reliable_anchor_count"],
+            "memory_keys": [
+                item["memory_key"] for item in result_items if item.get("memory_key")
+            ],
             "allow_strengthen": False,
         },
     }
@@ -455,6 +465,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     run_now = time.time()
     messages = [{"role": "system", "content": _system_prompt(talk_available=talk_available, character=_character_for(job.char_id)), "_layer": "autonomy_policy", "_budget_chars": 1800}]
     messages.extend(_context_messages(job.uid, job.char_id, memory_query=(job.opportunity or {}).get("memory_query"), now=run_now))
+    _record_memory_reads(run, messages)
     if self_context is not None:
         messages.append(_self_context_message(self_context))
     messages.append({"role": "system", "content": _opportunity_context(job), "_layer": "autonomy_opportunity"})
@@ -470,6 +481,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     pending_talk_text = ""
     confirm_available = False
     write_tool_count = 0
+    memory_candidates_evaluated = False
     deadline = time.monotonic() + max(1.0, float(cfg.get("total_timeout_seconds") or 120))
     try:
         from core import llm_client
@@ -491,6 +503,9 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 llm_client.chat_turn(messages, active_tools, char_id=job.char_id, is_proactive=True),
                 timeout=remaining,
             )
+            if not memory_candidates_evaluated:
+                _mark_memory_candidates_evaluated(job, run)
+                memory_candidates_evaluated = True
             if not turn.tool_calls:
                 run.disposition = _completed_disposition(saw_tool, saw_self_change)
                 break
@@ -528,6 +543,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     )
                     run.talk_sent = ok
                     if ok:
+                        _mark_memory_recall_sent(job, run)
                         run.disposition = Disposition.COMPLETED_TOOLS_AND_TALK_SENT.value if saw_tool else Disposition.COMPLETED_TALK_SENT.value
                     else:
                         run.disposition = reason if reason in Disposition._value2member_map_ else Disposition.TALK_CANCELED.value
@@ -555,6 +571,8 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         bypass_soft_once=True,
                     )
                     run.talk_sent = ok
+                    if ok:
+                        _mark_memory_recall_sent(job, run)
                     run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_SENT.value if ok else (reason if reason in Disposition._value2member_map_ else Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value)
                     return _finish(run)
                 if len([tool for tool in run.tool_names if tool != "manage_self_capability"]) >= max_tools:
@@ -721,6 +739,63 @@ def _record_event(run: Run, status: str, **details) -> None:
     run.events.append({"status": status, **{key: value for key, value in details.items() if value not in (None, "")}})
 
 
+def _memory_candidate_keys(job: Job) -> list[str]:
+    result: list[str] = []
+    for signal in (job.opportunity or {}).get("signals") or []:
+        if not isinstance(signal, dict) or signal.get("reason") != "memory_reactivation":
+            continue
+        for fact in signal.get("evidence") or []:
+            if isinstance(fact, dict) and fact.get("memory_key"):
+                key = str(fact["memory_key"]).strip()
+                if key and key not in result:
+                    result.append(key)
+    return result
+
+
+def _record_memory_reads(run: Run, messages: list[dict]) -> None:
+    for message in messages:
+        if message.get("_layer") != "autonomy_memory_query":
+            continue
+        provenance = message.get("_provenance") or {}
+        for memory_key in provenance.get("memory_keys") or []:
+            _record_event(run, "memory_read", memory_key=str(memory_key))
+
+
+def _mark_memory_candidates_evaluated(job: Job, run: Run) -> None:
+    from core.scheduler.last_mentioned import mark_memory_recall_evaluated
+
+    for memory_key in _memory_candidate_keys(job):
+        try:
+            mark_memory_recall_evaluated(memory_key)
+            _record_event(run, "memory_candidate_evaluated", memory_key=memory_key)
+        except Exception as exc:
+            _record_event(
+                run,
+                "memory_candidate_evaluation_mark_failed",
+                memory_key=memory_key,
+                error=type(exc).__name__,
+            )
+
+
+def _mark_memory_recall_sent(job: Job, run: Run) -> None:
+    from core.scheduler.last_mentioned import mark_memory_recalled, mark_recent_topic
+
+    for memory_key in _memory_candidate_keys(job):
+        try:
+            mark_memory_recalled(memory_key)
+            mark_recent_topic(memory_key, "recall")
+            _record_event(run, "memory_recall_talk_sent", memory_key=memory_key)
+        except Exception as exc:
+            # Delivery has already succeeded. Ledger/audit failure must not
+            # rewrite that user-visible outcome as an LLM failure.
+            _record_event(
+                run,
+                "memory_recall_talk_mark_failed",
+                memory_key=memory_key,
+                error=type(exc).__name__,
+            )
+
+
 def _completed_disposition(saw_tool: bool, saw_self_change: bool) -> str:
     if saw_tool:
         return Disposition.COMPLETED_TOOLS_ONLY.value
@@ -839,6 +914,11 @@ async def tick(uid: str, char_id: str) -> None:
     # merged into the same durable opportunity.
     for signal in store.drain_pending_signals(uid, char_id):
         if signal.expiry <= 0 or signal.expiry > now:
+            from core.autonomy.signal_adapters import routine_key_for_signal, routine_trigger_enabled
+
+            routine_key = routine_key_for_signal(signal)
+            if routine_key and not routine_trigger_enabled(routine_key):
+                continue
             due_signals.append(signal)
             dedupe_parts.append(f"queued:{signal.signal_id}")
 
@@ -849,7 +929,6 @@ async def tick(uid: str, char_id: str) -> None:
         from core.autonomy.signal_adapters import (
             adapt_heart_rate,
             adapt_memory_reactivation,
-            adapt_time_background,
             adapt_topic_followup,
         )
         from core.scheduler.triggers.watch import get_last_heart_rate_event
@@ -858,10 +937,6 @@ async def tick(uid: str, char_id: str) -> None:
         heart_rate = adapt_heart_rate(get_last_heart_rate_event(), now=now)
         if heart_rate is not None:
             external.append(heart_rate)
-        if datetime.fromtimestamp(now).hour in {7, 8}:
-            external.append(adapt_time_background("morning_greeting", now=now, window="07:00-09:00"))
-        elif datetime.fromtimestamp(now).hour >= 23:
-            external.append(adapt_time_background("night_reminder", now=now, window="23:00-24:00"))
         try:
             from core.scheduler.last_mentioned import recall_last_mentioned
             topic = recall_last_mentioned(uid, now=datetime.fromtimestamp(now), char_id=char_id, dry_run=True)
@@ -874,10 +949,11 @@ async def tick(uid: str, char_id: str) -> None:
             from core.memory.episodic_memory import _load_memories
             memories = [item for item in _load_memories(uid, char_id=char_id) if isinstance(item, dict)]
             memories.sort(key=lambda item: float(item.get("strength") or 0.0), reverse=True)
-            if memories:
-                memory_signal = adapt_memory_reactivation(memories[0], now=now)
+            for memory in memories:
+                memory_signal = adapt_memory_reactivation(memory, now=now)
                 if memory_signal is not None:
                     external.append(memory_signal)
+                    break
         except Exception:
             pass
         for signal in external:

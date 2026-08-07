@@ -70,9 +70,22 @@ Scheduler and sensor adapters live in `core.autonomy.signal_adapters`. They
 only emit bounded facts for routine/time-background, heart-rate state changes,
 memory reactivation, unfinished topics, desktop reopen, and runtime restart.
 Candidates in the same 15-minute opportunity window are deduplicated by
-`reason` and memory key. Expired candidates are discarded before queueing;
+stable routine key or by `reason` and memory key. The scheduler `_check_*`
+module is the only producer for configured morning/night/midday/random routine
+facts; the runner does not synthesize a second clock-based copy. Routine facts
+default to `action_mode=none` and never force `TALK`. Expired candidates are discarded before queueing;
 urgency can elevate the recorded priority but never bypasses dream, active-user,
 conversation, or budget gates.
+
+Memory reactivation reuses the scheduler recall ledger with separate stages.
+Selecting a candidate records its stable memory key in opportunity evidence; a
+completed system recall is reported as `memory_read`; the first completed model
+evaluation records `memory_candidate_evaluated`; only a delivered `talk_owner`
+call writes the existing successful-recall ledger and reports
+`memory_recall_talk_sent`. Silent, blocked, failed, and canceled delivery never
+pretend to be a successful recollection. A recently evaluated/recalled memory is
+suppressed for the recall window unless a caller supplies explicit new anchored
+context, such as a new owner turn or new evidence.
 
 When autonomy is enabled, the scheduler's native proposal pass remains a
 read-only shadow audit. It does not execute a second proactive turn; the

@@ -12,6 +12,16 @@ from typing import Any
 from core.autonomy.models import ActionMode, ProactiveSignal
 
 
+ROUTINE_TRIGGER_NAMES = frozenset({
+    "morning_greeting",
+    "night_reminder",
+    "good_night",
+    "midday",
+    "random_message",
+    "timenode",
+})
+
+
 # Trigger names that historically carried an assistant prompt.  They remain
 # useful as observability labels, but their only runtime product is a bounded
 # fact consumed by the autonomy runner.
@@ -43,7 +53,7 @@ def emit_trigger_signal(
     urgency: float | None = None,
     confidence: float = 1.0,
     memory_query: str | dict | None = None,
-    action_mode: str = ActionMode.TALK.value,
+    action_mode: str | None = None,
     now: float | None = None,
     dedupe_bucket_seconds: int = 15 * 60,
 ) -> tuple[bool, str]:
@@ -52,22 +62,33 @@ def emit_trigger_signal(
     name = str(trigger_name or "").strip()
     if not name:
         return False, "missing_trigger"
+    if name in ROUTINE_TRIGGER_NAMES and not routine_trigger_enabled(name):
+        return False, "disabled"
+    effective_action_mode = (
+        ActionMode.NONE.value
+        if action_mode is None and name in ROUTINE_TRIGGER_NAMES
+        else (action_mode or ActionMode.TALK.value)
+    )
+    signal_evidence = list(evidence or [{"fact": "trigger_candidate", "trigger": name}])[:12]
+    if name in ROUTINE_TRIGGER_NAMES:
+        signal_evidence = _with_routine_key(signal_evidence, name)
     ttl = _MIGRATED_TRIGGER_TTLS.get(name, 20 * 60)
     signal = ProactiveSignal(
         source="sensor" if name.startswith("hr_") else "scheduler",
         reason=reason or f"A bounded {name} event is eligible for autonomy evaluation.",
-        evidence=list(evidence or [{"fact": "trigger_candidate", "trigger": name}])[:12],
+        evidence=signal_evidence,
         created_at=now,
         expires_at=now + ttl,
         priority=priority,
         urgency=priority if urgency is None else urgency,
         confidence=confidence,
         memory_query=memory_query,
-        action_mode=action_mode,
-        suggested_action="message" if action_mode == ActionMode.TALK.value else "silent",
+        action_mode=effective_action_mode,
+        suggested_action="message" if effective_action_mode == ActionMode.TALK.value else "silent",
     )
     from core.autonomy import store
-    key = f"trigger:{name}:{int(now // max(60, dedupe_bucket_seconds))}"
+    prefix = "routine" if name in ROUTINE_TRIGGER_NAMES else "trigger"
+    key = f"{prefix}:{name}:{int(now // max(60, dedupe_bucket_seconds))}"
     return store.enqueue_signal(uid, char_id, signal, dedupe_key=key)
 
 
@@ -82,7 +103,12 @@ def adapt_routine(
     return ProactiveSignal(
         source=source,
         reason="routine",
-        evidence=[{"fact": "configured_time_window", "source": source, "window": window}],
+        evidence=[{
+            "fact": "configured_time_window",
+            "source": source,
+            "routine_key": source,
+            "window": window,
+        }],
         created_at=now,
         expires_at=now + 15 * 60,
         priority=priority,
@@ -165,6 +191,7 @@ def adapt_memory_reactivation(
     *,
     now: float | None = None,
     ttl_seconds: int = 30 * 60,
+    anchor_context: str | dict[str, Any] | None = None,
 ) -> ProactiveSignal | None:
     if not isinstance(memory, dict):
         return None
@@ -188,11 +215,40 @@ def adapt_memory_reactivation(
     if not memory_key:
         return None
     now = time.time() if now is None else float(now)
+    anchor = _normalise_anchor_context(anchor_context)
+    if not anchor:
+        try:
+            from core.scheduler.last_mentioned import (
+                is_memory_recall_evaluated,
+                is_recently_recalled,
+            )
+
+            if is_recently_recalled(memory_key, now_ts=now) or is_memory_recall_evaluated(
+                memory_key, now_ts=now
+            ):
+                return None
+        except Exception:
+            # Ledger read failures must not break unrelated autonomy sources.
+            pass
+    evidence = [{
+        "fact": "eligible_memory",
+        "memory_key": memory_key,
+        "recall_stage": "candidate_selected",
+        "summary": summary[:160],
+    }]
+    memory_query: str | dict[str, str] = memory_key
+    if anchor:
+        evidence.append({
+            "fact": "new_anchored_context",
+            "memory_key": memory_key,
+            "anchor": anchor[:240],
+        })
+        memory_query = {"memory_key": memory_key, "anchor_context": anchor[:240]}
     return ProactiveSignal(
         source="spontaneous_recall",
         reason="memory_reactivation",
-        evidence=[{"fact": "eligible_memory", "memory_key": memory_key, "summary": summary[:160]}],
-        memory_query=memory_key,
+        evidence=evidence,
+        memory_query=memory_query,
         created_at=now,
         expires_at=now + ttl_seconds,
         priority=_bounded_number(memory.get("strength"), default=0.35),
@@ -285,12 +341,18 @@ def adapt_restart(*, started_at: float, now: float | None = None) -> ProactiveSi
 def adapt_trigger(name: str, payload: Any = None, *, now: float | None = None) -> ProactiveSignal | None:
     """Map a legacy trigger payload to a signal without executing it."""
     name = str(name or "").strip()
-    if name in {"morning_greeting", "night_reminder", "midday", "random_message", "timenode"}:
+    if name in ROUTINE_TRIGGER_NAMES:
         return adapt_time_background(name, now=now, window=name)
     if name in {"hr_high", "hr_critical", "heart_rate"}:
         return adapt_heart_rate(payload if isinstance(payload, dict) else None, now=now)
     if name in {"spontaneous_recall", "memory_reactivation"}:
-        return adapt_memory_reactivation(payload if isinstance(payload, dict) else None, now=now)
+        memory_payload = payload if isinstance(payload, dict) else None
+        anchor_context = memory_payload.get("anchor_context") if memory_payload else None
+        return adapt_memory_reactivation(
+            memory_payload,
+            now=now,
+            anchor_context=anchor_context,
+        )
     if name in {"topic_followup", "unfinished_topic"}:
         return adapt_topic_followup(payload, now=now)
     if name in {"desktop_wake", "reopen"}:
@@ -323,3 +385,42 @@ def _bounded_number(value: Any, *, default: float = 0.0) -> float:
         return min(1.0, max(0.0, float(value)))
     except (TypeError, ValueError):
         return float(default)
+
+
+def routine_trigger_enabled(name: str) -> bool:
+    """Respect the scheduler source switch at production and consumption time."""
+    if name not in ROUTINE_TRIGGER_NAMES:
+        return True
+    try:
+        from core.scheduler.loop import _cfg
+
+        cfg = _cfg()
+        return bool(cfg.get("enabled", True) and cfg.get(name, True))
+    except Exception:
+        return False
+
+
+def routine_key_for_signal(signal: ProactiveSignal) -> str:
+    for fact in signal.evidence:
+        if isinstance(fact, dict) and fact.get("routine_key"):
+            return str(fact["routine_key"]).strip()
+    return ""
+
+
+def _with_routine_key(evidence: list[dict], name: str) -> list[dict]:
+    result: list[dict] = []
+    for raw in evidence:
+        item = dict(raw) if isinstance(raw, dict) else {"fact": str(raw)}
+        item.setdefault("routine_key", name)
+        result.append(item)
+    return result
+
+
+def _normalise_anchor_context(value: str | dict[str, Any] | None) -> str:
+    if isinstance(value, dict):
+        return " ".join(
+            f"{key}={item}"
+            for key, item in sorted(value.items())
+            if isinstance(item, (str, int, float)) and str(item).strip()
+        ).strip()
+    return str(value or "").strip()
