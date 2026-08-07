@@ -44,11 +44,14 @@ function _renderPathExposure() {
   const root = document.getElementById('tools-path-exposure');
   if (!root || !_toolsControl) return;
   const categories = _toolExposureCategories();
-  const pathLabels = {path_a: 'Path A (预探针)', path_c: 'Path C (tool loop)'};
+  const pathLabels = {
+    path_a: t('tools.path_a', 'Path A (预探针)'),
+    path_c: t('tools.path_c', 'Path C (工具循环)'),
+  };
   root.innerHTML = ['path_a', 'path_c'].map(path => {
     const selected = new Set(_toolsControl.path_exposure?.[path]?.categories || []);
     const checks = categories.map(category => `<label class="checkbox-row" style="margin:2px 10px 2px 0"><input type="checkbox" data-tool-path-category="${path}" data-tool-category="${escapeHtml(category)}" ${selected.has(category) ? 'checked' : ''}><span><code>${escapeHtml(category)}</code></span></label>`).join('');
-    return `<div style="padding:10px 0;border-top:1px solid var(--border)"><strong>${pathLabels[path]}</strong><div style="display:flex;flex-wrap:wrap;margin-top:6px">${checks || '<span style="color:var(--muted);font-size:12px">没有可配置的工具类别</span>'}</div></div>`;
+    return `<div style="padding:10px 0;border-top:1px solid var(--border)"><strong>${pathLabels[path]}</strong><div style="display:flex;flex-wrap:wrap;margin-top:6px">${checks || `<span style="color:var(--muted);font-size:12px">${escapeHtml(t('tools.no_categories', '没有可配置的工具类别'))}</span>`}</div></div>`;
   }).join('');
 }
 
@@ -94,8 +97,8 @@ function _renderToolsPage() {
     ? t('tools.mcp_status_enabled', 'MCP 全局状态：已启用（只读）')
     : t('tools.mcp_status_disabled', 'MCP 全局状态：未启用（只读）');
   if (intifaceStatus) intifaceStatus.textContent = _toolsControl.intiface_opt_in
-    ? 'Intiface 硬件能力：已 opt-in（仍受 owner、danger-mode 与硬件安全闸保护）'
-    : 'Intiface 硬件能力：冻结（默认关闭；四个 toy_* 工具不会进入聊天、autonomy 或 Self Capability）';
+    ? t('tools.intiface_enabled', 'Intiface 硬件能力：已启用（仍受所有者、危险模式与硬件安全闸保护）')
+    : t('tools.intiface_frozen', 'Intiface 硬件能力：冻结（默认关闭；toy_* 工具不会进入聊天、自主唤醒或自主管理能力）');
   _toolsPresetButtons();
   _renderPathExposure();
   _renderToolsRegistry();

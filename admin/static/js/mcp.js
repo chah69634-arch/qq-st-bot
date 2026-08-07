@@ -56,12 +56,14 @@ function _mcpSuggestion(tool) {
 }
 
 function _mcpEffectBadge(suggestion, policyStatus = '') {
-  const effect = suggestion.effect || '待确认';
-  const source = suggestion.source === 'name_description' ? '名称/描述建议' : suggestion.source || '待确认';
-  const risk = suggestion.high_risk ? ' 高风险' : '';
+  const effect = suggestion.effect || t('mcp.status.pending', '待确认');
+  const source = suggestion.source === 'name_description'
+    ? t('mcp.suggestion.name_description', '名称/描述建议')
+    : suggestion.source || t('mcp.status.pending', '待确认');
+  const risk = suggestion.high_risk ? ` ${t('mcp.status.high_risk', '高风险')}` : '';
   const pending = policyStatus && policyStatus !== 'confirmed' && policyStatus !== 'legacy_allowed'
-    ? ' 待确认' : '';
-  return `<small style="display:block;color:${suggestion.high_risk ? 'var(--danger)' : 'var(--muted)'}">建议 ${escapeHtml(effect)} · ${escapeHtml(source)}${risk}${pending}</small>`;
+    ? ` ${t('mcp.status.pending', '待确认')}` : '';
+  return `<small style="display:block;color:${suggestion.high_risk ? 'var(--danger)' : 'var(--muted)'}">${escapeHtml(t('mcp.suggestion.summary', '建议 {effect} · {source}{risk}{pending}', {effect, source, risk, pending}))}</small>`;
 }
 
 function _mcpMetadataSummary(tool) {
@@ -87,13 +89,13 @@ async function loadMcpPage() {
   const serversEl = document.getElementById('mcp-servers');
   if (!serversEl) return;
   renderKeyValueEditor('mcp-import-headers', {});
-  serversEl.innerHTML = '<div class="loading">加载中…</div>';
+  serversEl.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
   try {
     const data = await api('GET', '/settings/mcp');
     document.getElementById('mcp-enabled').checked = !!data.enabled;
     serversEl.innerHTML = (data.servers || []).length
       ? (data.servers || []).map(_renderMcpServer).join('')
-      : '<div class="empty">尚未配置 MCP server。先填写 URL 并测试连接。</div>';
+      : `<div class="empty">${escapeHtml(t('mcp.empty_servers', '尚未配置 MCP server。先填写 URL 并测试连接。'))}</div>`;
     document.querySelectorAll('[data-i18n="mcp.policy.help"]').forEach(element => {
       element.textContent = t('mcp.policy.help_v2', 'Mode guide: unrestricted is an administrator-selected unrestricted execution mode.');
     });
@@ -398,14 +400,16 @@ function _renderMcpServer(server) {
   const tools = runtime.tools || [];
   const allow = new Set(server.allow_tools || []);
   const exposedCount = (server.tool_states || []).filter(tool => tool.session_exposed).length;
-  const status = runtime.connected ? '<span class="badge badge-success">已连接</span>'
-    : runtime.last_init_ok === false ? '<span class="badge badge-danger">连接失败</span>'
-    : '<span class="badge badge-warn">未连接</span>';
+  const status = runtime.connected
+    ? `<span class="badge badge-success">${escapeHtml(t('mcp.status.connected', '已连接'))}</span>`
+    : runtime.last_init_ok === false
+      ? `<span class="badge badge-danger">${escapeHtml(t('mcp.status.connection_failed', '连接失败'))}</span>`
+      : `<span class="badge badge-warn">${escapeHtml(t('mcp.status.disconnected', '未连接'))}</span>`;
   const initError = runtime.last_init_error ? `<div style="color:var(--danger);font-size:12px;margin-top:6px">${escapeHtml(runtime.last_init_error)}</div>` : '';
   const grouped = Object.entries((tools || []).reduce((out, tool) => {
     const prefix = String(tool.name || '').split('_')[0] || '其他'; (out[prefix] ||= []).push(tool); return out;
-  }, {})).map(([prefix, entries]) => `<div style="margin-top:9px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong>${entries.map(tool => `<label class="checkbox-row" style="margin-top:5px"><input type="checkbox" data-mcp-server="${escapeHtml(server.name)}" value="${escapeHtml(tool.name)}" ${allow.has(tool.name) ? 'checked' : ''}><span><code>${escapeHtml(tool.name)}</code>${_mcpPolicyControl(server, tool, allow.has(tool.name))}${_mcpMetadataControl(server, tool)}<small id="mcp-call-${escapeHtml(server.name)}-${escapeHtml(tool.name)}" style="display:block;color:var(--muted)">调用记录加载中…</small></span></label>`).join('')}</div>`).join('');
-  const exposureWarn = exposedCount > 20 ? `<p style="font-size:12px;color:var(--danger);margin:8px 0">当前会暴露 ${exposedCount} 个工具，超过单次暴露 ≤20 的安全红线；请收窄白名单或 domain selector。</p>` : '';
+  }, {})).map(([prefix, entries]) => `<div style="margin-top:9px"><strong style="font-size:12px;color:var(--muted)">${escapeHtml(prefix)}</strong>${entries.map(tool => `<label class="checkbox-row" style="margin-top:5px"><input type="checkbox" data-mcp-server="${escapeHtml(server.name)}" value="${escapeHtml(tool.name)}" ${allow.has(tool.name) ? 'checked' : ''}><span><code>${escapeHtml(tool.name)}</code>${_mcpPolicyControl(server, tool, allow.has(tool.name))}${_mcpMetadataControl(server, tool)}<small id="mcp-call-${escapeHtml(server.name)}-${escapeHtml(tool.name)}" style="display:block;color:var(--muted)">${escapeHtml(t('mcp.calls.loading', '调用记录加载中…'))}</small></span></label>`).join('')}</div>`).join('');
+  const exposureWarn = exposedCount > 20 ? `<p style="font-size:12px;color:var(--danger);margin:8px 0">${escapeHtml(t('mcp.exposure_warning', '当前会暴露 {count} 个工具，超过单次暴露 ≤20 的安全红线；请收窄白名单或 domain selector。', {count: exposedCount}))}</p>` : '';
   const actionArgs = escapeHtml(JSON.stringify([server.name]));
   const collapsed = !_mcpExpandedServers.has(server.name);
   const collapseArgs = escapeHtml(JSON.stringify([server.name]));
@@ -418,7 +422,7 @@ function _renderMcpServer(server) {
     const editArgs = escapeHtml(JSON.stringify([server.name, preset.name]));
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><code>${escapeHtml(preset.name)}</code><span style="font-size:12px;color:var(--muted)">${preset.tools.length} ${escapeHtml(t('mcp.preset.tools', '个工具'))}</span><button class="btn btn-ghost btn-sm" data-action="editMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.edit', '修改'))}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.delete', '删除'))}</button></div>`;
   }).join('');
-  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>启用</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · timeout ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">headers：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类不授予权限，执行和确认由本地 policy 控制。'))}</p>${exposureWarn}${grouped || '<div class="empty">尚未发现工具；可切换启用状态以重连。</div>'}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
+  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>${escapeHtml(t('common.enable', '启用'))}</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · ${escapeHtml(t('mcp.timeout', '超时'))} ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.headers', '请求头'))}：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类不授予权限，执行和确认由本地 policy 控制。'))}</p>${exposureWarn}${grouped || `<div class="empty">${escapeHtml(t('mcp.no_discovered_tools', '尚未发现工具；可切换启用状态以重连。'))}</div>`}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
 }
 
 function toggleMcpServerCollapsed(name) {
@@ -526,8 +530,10 @@ async function _loadMcpRecentCalls(servers) {
     try {
       const data = await getMcpRecentCalls(`mcp__${server.name}__${tool.name}`, 1);
       const entry = (data.entries || [])[0];
-      target.textContent = entry ? `最近调用：${entry.ok ? '成功' : '失败'} · ${entry.duration_ms}ms` : '暂无调用记录';
-    } catch (_) { target.textContent = '调用记录不可用'; }
+      target.textContent = entry
+        ? t('mcp.calls.recent', '最近调用：{status} · {duration}ms', {status: t(entry.ok ? 'mcp.calls.success' : 'mcp.calls.failed', entry.ok ? '成功' : '失败'), duration: entry.duration_ms})
+        : t('mcp.calls.empty', '暂无调用记录');
+    } catch (_) { target.textContent = t('mcp.calls.unavailable', '调用记录不可用'); }
   })));
 }
 
@@ -536,7 +542,7 @@ async function getMcpRecentCalls(caller, limit = 1) {
 }
 
 async function saveMcpEnabled() {
-  try { await api('PATCH', '/settings/mcp', { enabled: document.getElementById('mcp-enabled').checked }); toast('MCP 总开关已热同步', 'ok'); loadMcpPage(); }
+  try { await api('PATCH', '/settings/mcp', { enabled: document.getElementById('mcp-enabled').checked }); toast(t('mcp.enabled_saved', 'MCP 总开关已热同步'), 'ok'); loadMcpPage(); }
   catch (e) { toast(e.message, 'err'); }
 }
 

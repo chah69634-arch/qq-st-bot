@@ -11,12 +11,16 @@ window._charName = '叶瑄';  // fallback; overwritten after login by _initCharN
 window.addEventListener('admin-language-changed', () => {
   const activePage = document.querySelector('.page.active');
   const appVisible = document.getElementById('app').style.display !== 'none';
-  if (activePage && appVisible) goto(activePage.id.replace(/^page-/, ''));
+  if (activePage && appVisible) {
+    // Fragments contain their language-specific fallback markup. Reload the
+    // active one so both static controls and API-backed views are rebuilt.
+    goto(activePage.id.replace(/^page-/, ''), {reloadFragment: true});
+  }
 });
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'tool-exposure-paths-2';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-i18n-completeness-1';
 
 function getRememberedPage() {
   try {
@@ -80,9 +84,15 @@ function bindPageActions(scope) {
   });
 }
 
-async function loadPageFragment(page) {
+async function loadPageFragment(page, {reload = false} = {}) {
   const container = document.getElementById('page-' + page);
-  if (!container || container.dataset.pageLoaded === 'true') return container;
+  if (!container) return container;
+  if (reload) {
+    _pageFragmentLoads.delete(page);
+    delete container.dataset.pageLoaded;
+    container.replaceChildren();
+  }
+  if (container.dataset.pageLoaded === 'true') return container;
   if (!_pageFragmentLoads.has(page)) {
     const request = fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`)
       .then(response => {
@@ -148,7 +158,7 @@ function initMobileSidebar() {
 }
 
 
-async function goto(page) {
+async function goto(page, {reloadFragment = false} = {}) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
   const pageElement = document.getElementById('page-' + page);
@@ -160,7 +170,7 @@ async function goto(page) {
   document.querySelector(`nav a[data-page="${page}"]`)?.classList.add('active');
 
   try {
-    await loadPageFragment(page);
+    await loadPageFragment(page, {reload: reloadFragment});
   } catch (_error) {
     return;
   }

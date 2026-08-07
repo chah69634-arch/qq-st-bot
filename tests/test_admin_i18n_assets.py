@@ -73,9 +73,12 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=admin-ui-runtime-audit-1">' in index
-    assert '<script src="/static/i18n.js?v=admin-ui-runtime-audit-1"></script>' in index
-    assert '<script src="/static/js/observability.js?v=admin-ui-runtime-audit-1"></script>' in index
+    assert '<link rel="stylesheet" href="/static/style.css?v=admin-ui-capability-entrances-2">' in index
+    assert '<script src="/static/i18n.js?v=admin-i18n-completeness-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=admin-i18n-completeness-1"></script>' in index
+    assert '<script src="/static/js/mcp.js?v=admin-i18n-completeness-1"></script>' in index
+    assert '<script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>' in index
+    assert '<script src="/static/js/integrations.js?v=admin-i18n-completeness-1"></script>' in index
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
     assert "presence.admin.language" in runtime
     assert "localStorage.setItem(STORAGE_KEY, language)" in runtime
@@ -117,7 +120,6 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     for key in (
         "status.title",
         "status.feature_switches",
-        "status.registered_tools",
         "status.proxy.title",
         "status.context.title",
         "status.llm.title",
@@ -240,6 +242,48 @@ def test_every_static_visible_chinese_string_is_localized_or_authored_content():
     )
 
     assert missing == [], "\n".join(value.encode("unicode_escape").decode("ascii") for value in missing)
+
+
+def test_every_page_fragment_has_complete_i18n_coverage_in_both_languages():
+    """Keep lazy fragments from silently restoring a previous-language label."""
+    from fastapi.testclient import TestClient
+
+    from admin.admin_server import app
+
+    runtime = I18N.read_text(encoding="utf-8")
+    dictionaries = {
+        "zh-CN": _dictionary_keys(runtime, "zh-CN"),
+        "en": _dictionary_keys(runtime, "en"),
+    }
+    assert dictionaries["zh-CN"] == dictionaries["en"]
+
+    client = TestClient(app)
+    translated_values = _chinese_dictionary_values(runtime)
+    allowed_authored_values = {"叶瑄", "中文"}
+    attribute_pattern = re.compile(r'data-i18n(?:-(?:placeholder|aria-label))?="([^"]+)"')
+
+    for fragment in sorted(PAGES.glob("*.html")):
+        response = client.get(f"/static/pages/{fragment.name}")
+        assert response.status_code == 200, fragment.name
+        assert response.text.strip(), fragment.name
+
+        keys = attribute_pattern.findall(response.text)
+        missing_keys = {
+            language: sorted(set(keys) - dictionary)
+            for language, dictionary in dictionaries.items()
+        }
+        assert not missing_keys["zh-CN"], f"{fragment.name}: {missing_keys['zh-CN']}"
+        assert not missing_keys["en"], f"{fragment.name}: {missing_keys['en']}"
+
+        parser = _VisibleChineseParser()
+        parser.feed(response.text)
+        untranslated = {
+            re.sub(r"\s+", " ", value).strip()
+            for value in parser.values
+            if re.sub(r"\s+", " ", value).strip()
+            not in translated_values | allowed_authored_values
+        }
+        assert not untranslated, f"{fragment.name}: {sorted(untranslated)}"
 
 
 def test_legacy_bridge_localizes_dynamic_dom_and_protects_raw_content():
