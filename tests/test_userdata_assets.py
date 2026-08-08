@@ -74,6 +74,40 @@ def test_listing_sticker_packs_does_not_require_a_pack_filter(sandbox):
     assert row["scope"] == {"pack": "warm_pack", "emotion": "happy"}
 
 
+def test_category_contract_groups_upload_fields_and_never_exposes_paths():
+    from core import userdata_assets
+
+    contract = {item["id"]: item for item in userdata_assets.category_contract()}
+
+    assert set(contract) == {
+        "sticker", "sticker_pack", "reference_audio", "gpt_model", "sovits_model", "live2d", "model3d",
+    }
+    assert contract["sticker"]["group"] == "stickers"
+    assert contract["sticker"]["upload_fields"] == ["logical_id", "file", "emotion"]
+    assert contract["sticker_pack"]["upload_fields"] == ["char_id", "pack", "emotion", "logical_id", "file"]
+    assert contract["reference_audio"]["group"] == "voice"
+    assert contract["live2d"]["group"] == "models"
+    assert contract["live2d"]["desktop_available"] is False
+    assert ".zip" in contract["live2d"]["extensions"]
+    assert all("path" not in key for item in contract.values() for key in item)
+
+
+def test_legacy_asset_is_read_only_in_impact_and_delete(sandbox, monkeypatch):
+    from core import userdata_assets
+
+    legacy_root = sandbox._base / "legacy-stickers"
+    monkeypatch.setattr(sandbox, "legacy_stickers_dir", lambda: legacy_root)
+    legacy_file = legacy_root / "happy" / "legacy-wave.png"
+    legacy_file.parent.mkdir(parents=True)
+    legacy_file.write_bytes(b"png")
+
+    impact = userdata_assets.deletion_impact(category="sticker", logical_id="legacy-wave")
+    assert impact["can_delete"] is False
+    with pytest.raises(PermissionError, match="read-only"):
+        userdata_assets.delete_asset(category="sticker", logical_id="legacy-wave", emotion="happy")
+    assert legacy_file.exists()
+
+
 def test_tts_preview_passes_selected_character_to_real_synthesis(monkeypatch):
     from admin.routers.settings_misc import TtsTestRequest, test_tts_config
     from core.output import voice_adapter

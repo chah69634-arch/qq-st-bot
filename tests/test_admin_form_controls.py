@@ -61,8 +61,9 @@ def test_setup_and_character_anniversary_editors_consume_shared_helper():
         assert "_characterAnniversaryRow" not in page_source
 
     index = (STATIC / "index.html").read_text(encoding="utf-8")
-    for script in ("setup.js", "character.js", "user-data.js"):
+    for script in ("setup.js", "character.js"):
         assert f'/static/js/{script}?v=brief-159-form-controls-anniversary-1' in index
+    assert '/static/js/user-data.js?v=brief-162-userdata-assets-1' in index
 
 
 def test_anniversary_fragments_keep_their_page_containers_and_accessible_dynamic_fields():

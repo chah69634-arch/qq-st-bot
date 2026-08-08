@@ -30,19 +30,21 @@ class AssetSpec:
     label: str
     extensions: frozenset[str]
     scope: str
+    group: str
+    upload_fields: tuple[str, ...]
     desktop_available: bool = True
 
 
 ASSET_SPECS: dict[str, AssetSpec] = {
-    "reference_audio": AssetSpec("reference_audio", "参考音频", frozenset({".wav", ".mp3", ".flac", ".ogg"}), "character"),
-    "gpt_model": AssetSpec("gpt_model", "GPT 模型", frozenset({".ckpt", ".pt", ".pth", ".safetensors"}), "character"),
-    "sovits_model": AssetSpec("sovits_model", "SoVITS 模型", frozenset({".pth", ".ckpt", ".safetensors"}), "character"),
-    "sticker": AssetSpec("sticker", "通用表情包", frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"}), "global"),
-    "sticker_pack": AssetSpec("sticker_pack", "角色表情包", frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"}), "character"),
+    "reference_audio": AssetSpec("reference_audio", "参考音频", frozenset({".wav", ".mp3", ".flac", ".ogg"}), "character", "voice", ("char_id", "logical_id", "file")),
+    "gpt_model": AssetSpec("gpt_model", "GPT 模型", frozenset({".ckpt", ".pt", ".pth", ".safetensors"}), "character", "voice", ("char_id", "logical_id", "file")),
+    "sovits_model": AssetSpec("sovits_model", "SoVITS 模型", frozenset({".pth", ".ckpt", ".safetensors"}), "character", "voice", ("char_id", "logical_id", "file")),
+    "sticker": AssetSpec("sticker", "通用表情包", frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"}), "global", "stickers", ("logical_id", "file", "emotion")),
+    "sticker_pack": AssetSpec("sticker_pack", "角色表情包", frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"}), "character", "stickers", ("char_id", "pack", "emotion", "logical_id", "file")),
     # These are intentionally backend-only in this brief.  The status field is
     # exposed so the UI cannot mistake an upload for desktop availability.
-    "live2d": AssetSpec("live2d", "Live2D 模型包", frozenset({".zip"}), "character", False),
-    "model3d": AssetSpec("model3d", "3D 模型包", frozenset({".zip"}), "character", False),
+    "live2d": AssetSpec("live2d", "Live2D 模型包", frozenset({".zip"}), "character", "models", ("char_id", "logical_id", "file"), False),
+    "model3d": AssetSpec("model3d", "3D 模型包", frozenset({".zip"}), "character", "models", ("char_id", "logical_id", "file"), False),
 }
 
 
@@ -156,6 +158,56 @@ def _is_valid_package(path: Path, category: str) -> tuple[bool, str]:
         return False, "invalid_package"
 
 
+def _same_logical_asset(reference: object, logical_id: str) -> bool:
+    value = Path(str(reference or "")).name
+    return value == logical_id or Path(value).stem == logical_id
+
+
+def _configured_tts_bindings(logical_id: str) -> list[dict[str, str]]:
+    """Return non-sensitive binding references without returning configured paths."""
+    try:
+        from core.config_loader import get_config
+
+        tts = get_config().get("tts", {})
+        if not isinstance(tts, dict):
+            return []
+    except Exception:
+        return []
+
+    bindings: list[dict[str, str]] = []
+    fields = ("ref_audio", "gpt_model_path", "sovits_model_path")
+    for field in fields:
+        if _same_logical_asset(tts.get(field), logical_id):
+            bindings.append({"type": "tts_global", "id": "global", "field": field})
+    presets = tts.get("presets") or {}
+    if isinstance(presets, dict):
+        for preset_name, preset in presets.items():
+            if not isinstance(preset, dict):
+                continue
+            for field in fields:
+                if _same_logical_asset(preset.get(field), logical_id):
+                    bindings.append({"type": "tts_preset", "id": str(preset_name), "field": field})
+    return bindings
+
+
+def category_contract() -> list[dict]:
+    """Expose the upload/display contract without exposing any filesystem path."""
+    return [
+        {
+            "id": spec.category,
+            "label": spec.label,
+            "group": spec.group,
+            "scope": spec.scope,
+            "desktop_available": spec.desktop_available,
+            "extensions": sorted(spec.extensions),
+            "accept": ",".join(sorted(spec.extensions)),
+            "max_bytes": MAX_PACKAGE_BYTES if spec.category in {"live2d", "model3d"} else MAX_FILE_BYTES,
+            "upload_fields": list(spec.upload_fields),
+        }
+        for spec in ASSET_SPECS.values()
+    ]
+
+
 def list_assets(*, category: str | None = None, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
     if category is not None and category not in ASSET_SPECS:
         raise ValueError("unsupported asset category")
@@ -191,6 +243,7 @@ def list_assets(*, category: str | None = None, char_id: str = DEFAULT_CHAR_ID) 
                     "valid": path.suffix.lower() in spec.extensions,
                     "availability": "available" if source == "user" and spec.desktop_available else ("legacy_read_only" if source == "legacy" else "partial"),
                     "desktop_available": bool(spec.desktop_available and source == "user"),
+                    "bindings": _configured_tts_bindings(logical_id) if cat in {"reference_audio", "gpt_model", "sovits_model"} else [],
                 })
     return sorted(rows, key=lambda row: (row["category"], row["logical_id"]))
 
@@ -255,23 +308,17 @@ def deletion_impact(*, category: str, logical_id: str, char_id: str = DEFAULT_CH
         row for row in list_assets(category=category, char_id=char_id)
         if row["logical_id"] == logical_id and (not expected_scope or row.get("scope") == expected_scope)
     ]
-    bindings = []
-    if category in {"reference_audio", "gpt_model", "sovits_model"}:
-        from core.config_loader import get_config
-        cfg = get_config().get("tts", {})
-        for preset_name, preset in (cfg.get("presets") or {}).items():
-            if not isinstance(preset, dict):
-                continue
-            for key in ("ref_audio", "gpt_model_path", "sovits_model_path"):
-                if Path(str(preset.get(key) or "")).name == logical_id or Path(str(preset.get(key) or "")).stem == logical_id:
-                    bindings.append({"type": "tts_preset", "id": str(preset_name), "field": key})
-    return {"logical_id": logical_id, "category": category, "assets": rows, "bindings": bindings, "can_delete": not any(row.get("source") == "user" for row in rows) or not bindings}
+    bindings = _configured_tts_bindings(logical_id) if category in {"reference_audio", "gpt_model", "sovits_model"} else []
+    has_user_asset = any(row.get("source") == "user" for row in rows)
+    return {"logical_id": logical_id, "category": category, "assets": rows, "bindings": bindings, "can_delete": has_user_asset and not bindings}
 
 
 def delete_asset(*, category: str, logical_id: str, char_id: str = DEFAULT_CHAR_ID,
                  emotion: str = "", pack: str = "") -> dict:
     impact = deletion_impact(category=category, logical_id=logical_id, char_id=char_id,
                              emotion=emotion, pack=pack)
+    if not any(row.get("source") == "user" for row in impact["assets"]):
+        raise PermissionError("asset is read-only")
     if impact["bindings"]:
         raise PermissionError("asset is bound")
     root, _ = _category_root(category, char_id=char_id, emotion=emotion, pack=pack)

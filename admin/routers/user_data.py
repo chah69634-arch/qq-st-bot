@@ -25,15 +25,7 @@ async def list_user_assets(category: Optional[str] = None, char_id: str = DEFAUL
     try:
         return {
             "assets": userdata_assets.list_assets(category=category, char_id=char_id),
-            "categories": [
-                {
-                    "id": spec.category,
-                    "label": spec.label,
-                    "scope": spec.scope,
-                    "desktop_available": spec.desktop_available,
-                }
-                for spec in userdata_assets.ASSET_SPECS.values()
-            ],
+            "categories": userdata_assets.category_contract(),
         }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -385,6 +385,58 @@ textarea { resize: vertical; min-height: 72px; }
 .empty { text-align: center; padding: 40px; color: var(--muted); }
 .loading { color: var(--muted); font-style: italic; font-size: 13px; padding: 12px 0; }
 
+/* ── User data asset inventory (Brief 162) ── */
+.user-data-toolbar .admin-toolbar { align-items: end; }
+.user-data-toolbar .field { flex: 1 1 260px; max-width: 420px; }
+.user-data-groups { display: flex; flex-direction: column; gap: 26px; }
+.user-data-group { min-width: 0; }
+.user-data-group-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.user-data-group-head h2 { font-size: 17px; }
+.user-data-group-head p { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 4px; }
+.user-data-category-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.user-data-category { min-width: 0; margin-bottom: 0; }
+.user-data-category-summary { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 4px; overflow-wrap: anywhere; }
+.user-data-category .card-header { align-items: flex-start; }
+.user-data-asset-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.user-data-asset { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: rgba(15, 17, 23, .42); }
+.user-data-asset-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.user-data-asset-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.user-data-asset-title strong { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.user-data-file { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.user-data-asset-actions { flex: 0 0 auto; }
+.user-data-readonly-note { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.user-data-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.user-data-asset-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin-top: 11px; }
+.user-data-asset-meta div { min-width: 0; }
+.user-data-asset-meta dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.user-data-asset-meta dd { color: var(--text); font-size: 11px; line-height: 1.45; margin-top: 2px; overflow-wrap: anywhere; }
+.user-data-subgroup { margin-top: 14px; }
+.user-data-subgroup:first-child { margin-top: 0; }
+.user-data-subgroup-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: var(--muted); font-size: 12px; }
+.user-data-empty { padding: 22px 12px; border: 1px dashed var(--border); border-radius: var(--radius); }
+.user-data-upload { margin-top: 22px; }
+.user-data-upload-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.user-data-upload-grid small { color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.user-data-upload-note { margin-bottom: 0; }
+.user-data-advanced { margin-top: 22px; }
+.user-data-advanced summary { cursor: pointer; color: var(--text); font-weight: 600; }
+.user-data-advanced .tbl-wrap { margin-top: 12px; }
+.user-data-advanced .badge { white-space: nowrap; }
+
+@media (max-width: 767px) {
+  .user-data-category-grid { grid-template-columns: 1fr; }
+  .user-data-asset-meta { grid-template-columns: 1fr; }
+  .user-data-group-head { align-items: stretch; flex-direction: column; }
+  .user-data-group-head > .badge { align-self: flex-start; }
+  .user-data-toolbar .admin-toolbar { align-items: stretch; }
+  .user-data-toolbar .field { max-width: none; }
+}
+
+@media (max-width: 380px) {
+  .user-data-asset-head { flex-direction: column; }
+  .user-data-asset-actions { align-self: flex-start; }
+}
+
 /* ── Runtime signal observability ── */
 .observe-toolbar { display: flex; justify-content: flex-end; margin: -10px 0 12px; }
 .runtime-signals-content { min-height: 80px; }

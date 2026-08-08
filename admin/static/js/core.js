@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-161-tools-mcp-ux-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-162-userdata-assets-1';
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
