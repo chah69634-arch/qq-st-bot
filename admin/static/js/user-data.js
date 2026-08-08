@@ -36,7 +36,7 @@ async function loadUserDataPage() {
           <td>${escapeHtml(asset.desktop_available ? 'available' : asset.availability || 'partial')}</td>
           <td>${Number(asset.size || 0).toLocaleString()}</td>
           <td>${new Date(Number(asset.updated_at || 0) * 1000).toLocaleString()}</td>
-          <td><button class="btn btn-ghost btn-sm" data-action="deleteUserDataAsset" data-action-args='${JSON.stringify([asset.category, asset.logical_id])}'>${ui('delete', 'Delete')}</button></td>
+          <td><button class="btn btn-ghost btn-sm" data-action="deleteUserDataAsset" data-action-args='${JSON.stringify([asset.category, asset.logical_id, asset.scope || {}])}'>${ui('delete', 'Delete')}</button></td>
         </tr>`;
       }
       html += '</tbody></table></div>';
@@ -71,18 +71,27 @@ async function loadUserDataPage() {
     form.append('file', file, file.name);
     const uploadCharId = document.getElementById('user-data-upload-char').value.trim();
     if (uploadCharId) form.append('char_id', uploadCharId);
+    const uploadCategory = document.getElementById('user-data-upload-category').value;
     const extra = document.getElementById('user-data-upload-extra').value.trim();
-    if (extra) form.append('emotion', extra);
+    if (uploadCategory === 'sticker_pack') {
+      const [pack, emotion] = extra.split('/', 2).map(value => value.trim());
+      if (pack) form.append('pack', pack);
+      if (emotion) form.append('emotion', emotion);
+    } else if (extra) {
+      form.append('emotion', extra);
+    }
     const resp = await fetch(BASE + '/user-data/assets', { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}` }, body: form });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
     await render();
   };
-  window.deleteUserDataAsset = async (category, logicalId) => {
-    const impact = await api('GET', `/user-data/assets/${encodeURIComponent(category)}/${encodeURIComponent(logicalId)}/impact`);
+  window.deleteUserDataAsset = async (category, logicalId, scope = {}) => {
+    const scopeQuery = new URLSearchParams(scope).toString();
+    const impact = await api('GET', `/user-data/assets/${encodeURIComponent(category)}/${encodeURIComponent(logicalId)}/impact${scopeQuery ? `?${scopeQuery}` : ''}`);
     if (!confirm(ui('delete_confirm', 'Delete {logicalId}?\nBindings: {bindings}', {logicalId, bindings: JSON.stringify(impact.bindings || [])}))) return;
     const deleteBody = {};
     const deleteCharId = document.getElementById('user-data-char')?.value.trim();
     if (deleteCharId) deleteBody.char_id = deleteCharId;
+    Object.assign(deleteBody, scope);
     await api('DELETE', `/user-data/assets/${encodeURIComponent(category)}/${encodeURIComponent(logicalId)}`, deleteBody);
     await render();
   };

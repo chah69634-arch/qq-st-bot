@@ -54,6 +54,26 @@ def test_live2d_upload_is_backend_only_partial(sandbox):
     assert row["desktop_available"] is False
 
 
+def test_listing_sticker_packs_does_not_require_a_pack_filter(sandbox):
+    from core import userdata_assets
+
+    userdata_assets.store_upload(
+        category="sticker_pack",
+        logical_id="wave",
+        filename="wave.png",
+        content=b"png",
+        pack="warm_pack",
+        emotion="happy",
+        replace=True,
+    )
+
+    row = next(
+        item for item in userdata_assets.list_assets()
+        if item["category"] == "sticker_pack" and item["logical_id"] == "wave"
+    )
+    assert row["scope"] == {"pack": "warm_pack", "emotion": "happy"}
+
+
 def test_tts_preview_passes_selected_character_to_real_synthesis(monkeypatch):
     from admin.routers.settings_misc import TtsTestRequest, test_tts_config
     from core.output import voice_adapter

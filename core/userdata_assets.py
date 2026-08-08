@@ -106,6 +106,26 @@ def _iter_files(root: Path | None) -> Iterable[Path]:
     return (p for p in root.rglob("*") if p.is_file() and not p.is_symlink())
 
 
+def _listing_roots(category: str, *, char_id: str) -> tuple[tuple[Path, str], ...]:
+    """Return broad, read-only roots for a category's asset inventory."""
+    paths = _paths()
+    if category == "sticker":
+        return ((paths.user_stickers_dir(), "user"), (paths.legacy_stickers_dir(), "legacy"))
+    if category == "sticker_pack":
+        return ((paths.sticker_packs_root(), "user"),)
+    user_root, legacy_root = _category_root(category, char_id=char_id)
+    return ((user_root, "user"), (legacy_root, "legacy"))
+
+
+def _asset_scope(category: str, relative: str) -> dict[str, str]:
+    parts = PurePosixPath(relative).parts[:-1]
+    if category == "sticker" and parts:
+        return {"emotion": parts[0]}
+    if category == "sticker_pack" and len(parts) >= 2:
+        return {"pack": parts[0], "emotion": parts[1]}
+    return {}
+
+
 def _is_valid_package(path: Path, category: str) -> tuple[bool, str]:
     if category not in {"live2d", "model3d"}:
         return True, "supported"
@@ -143,9 +163,8 @@ def list_assets(*, category: str | None = None, char_id: str = DEFAULT_CHAR_ID) 
     rows: list[dict] = []
     for cat in categories:
         spec = ASSET_SPECS[cat]
-        user_root, legacy_root = _category_root(cat, char_id=char_id)
-        seen: set[str] = set()
-        roots = ((user_root, "user"), (legacy_root, "legacy"))
+        seen: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
+        roots = _listing_roots(cat, char_id=char_id)
         for root, source in roots:
             for path in _iter_files(root):
                 try:
@@ -153,9 +172,11 @@ def list_assets(*, category: str | None = None, char_id: str = DEFAULT_CHAR_ID) 
                 except ValueError:
                     continue
                 logical_id = Path(rel).stem
-                if logical_id in seen:
+                scope = _asset_scope(cat, rel)
+                identity = (logical_id, tuple(sorted(scope.items())))
+                if identity in seen:
                     continue
-                seen.add(logical_id)
+                seen.add(identity)
                 stat = path.stat()
                 rows.append({
                     "logical_id": logical_id,
@@ -163,6 +184,7 @@ def list_assets(*, category: str | None = None, char_id: str = DEFAULT_CHAR_ID) 
                     "category": cat,
                     "label": spec.label,
                     "char_id": char_id if spec.scope == "character" else None,
+                    "scope": scope,
                     "source": source,
                     "size": stat.st_size,
                     "updated_at": stat.st_mtime,
@@ -221,11 +243,18 @@ def store_upload(*, category: str, logical_id: str, filename: str, content: byte
     ) | {"sha256": hashlib.sha256(content).hexdigest()}
 
 
-def deletion_impact(*, category: str, logical_id: str, char_id: str = DEFAULT_CHAR_ID) -> dict:
+def deletion_impact(*, category: str, logical_id: str, char_id: str = DEFAULT_CHAR_ID,
+                    emotion: str = "", pack: str = "") -> dict:
     if category not in ASSET_SPECS:
         raise ValueError("unsupported asset category")
     logical_id = validate_id(logical_id)
-    rows = [row for row in list_assets(category=category, char_id=char_id) if row["logical_id"] == logical_id]
+    expected_scope = {
+        key: value for key, value in {"emotion": emotion, "pack": pack}.items() if value
+    }
+    rows = [
+        row for row in list_assets(category=category, char_id=char_id)
+        if row["logical_id"] == logical_id and (not expected_scope or row.get("scope") == expected_scope)
+    ]
     bindings = []
     if category in {"reference_audio", "gpt_model", "sovits_model"}:
         from core.config_loader import get_config
@@ -239,11 +268,13 @@ def deletion_impact(*, category: str, logical_id: str, char_id: str = DEFAULT_CH
     return {"logical_id": logical_id, "category": category, "assets": rows, "bindings": bindings, "can_delete": not any(row.get("source") == "user" for row in rows) or not bindings}
 
 
-def delete_asset(*, category: str, logical_id: str, char_id: str = DEFAULT_CHAR_ID) -> dict:
-    impact = deletion_impact(category=category, logical_id=logical_id, char_id=char_id)
+def delete_asset(*, category: str, logical_id: str, char_id: str = DEFAULT_CHAR_ID,
+                 emotion: str = "", pack: str = "") -> dict:
+    impact = deletion_impact(category=category, logical_id=logical_id, char_id=char_id,
+                             emotion=emotion, pack=pack)
     if impact["bindings"]:
         raise PermissionError("asset is bound")
-    root, _ = _category_root(category, char_id=char_id)
+    root, _ = _category_root(category, char_id=char_id, emotion=emotion, pack=pack)
     candidates = [p for p in _iter_files(root) if p.stem == logical_id]
     if not candidates:
         raise FileNotFoundError(logical_id)

@@ -15,6 +15,8 @@ router = APIRouter()
 
 class DeleteAssetRequest(BaseModel):
     char_id: str = DEFAULT_CHAR_ID
+    emotion: str = ""
+    pack: str = ""
 
 
 @router.get("/user-data/assets", summary="列出私有 authored 资产")
@@ -69,9 +71,11 @@ async def upload_user_asset(
 
 @router.get("/user-data/assets/{category}/{logical_id}/impact", summary="读取资产删除影响")
 async def asset_delete_impact(category: str, logical_id: str, char_id: str = DEFAULT_CHAR_ID,
+                              emotion: str = "", pack: str = "",
                               auth=Depends(require_scopes("persona"))):
     try:
-        return userdata_assets.deletion_impact(category=category, logical_id=logical_id, char_id=char_id)
+        return userdata_assets.deletion_impact(category=category, logical_id=logical_id, char_id=char_id,
+                                               emotion=emotion, pack=pack)
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -85,10 +89,13 @@ async def delete_user_asset(category: str, logical_id: str, body: DeleteAssetReq
             category=category,
             logical_id=logical_id,
             char_id=body.char_id,
+            emotion=body.emotion,
+            pack=body.pack,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=409, detail={"code": "asset_bound", "message": str(exc),
-                                                     "impact": userdata_assets.deletion_impact(category=category, logical_id=logical_id, char_id=body.char_id)}) from exc
+                                                     "impact": userdata_assets.deletion_impact(category=category, logical_id=logical_id, char_id=body.char_id,
+                                                                                                 emotion=body.emotion, pack=body.pack)}) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="asset not found") from exc
     except (ValueError, KeyError) as exc:
