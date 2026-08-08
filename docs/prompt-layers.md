@@ -65,6 +65,10 @@
 | `12_time_hint` | 时间提示（`<时间提示>距上一条消息已过去约X</时间提示>`） | gap ≥ 10 分钟 | `core/presence.py` → `get_gap_from_history()` + `format_gap_text()` |
 | `12_user_message` | 用户当前消息 | always | 用户输入 |
 
+Dream scenario 的 `DS_scenario` 属于梦境专用 prompt 组装链，不进入现实侧上述层表。其当前阶段块以
+`【本轮必须遵循】` 前缀提升注意力，用口语说明戏剧任务、入场压力、禁止事项和完成信号；隐藏的
+`<scenario_control>` 也使用 `进展/命中/越界` 短句，不再把 JSON 字段模板直接注入模型。
+
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >
 > 层 10.5（Brief 27）：`tool_dispatcher.execute()` 每次 return（origin 闸门拒绝除外）都调 `action_trace.record()` 落一条精简痕迹（`data/runtime/memory/{char_id}/{uid}/action_trace.json`，环形上限 30 条）。`result_digest` 只消费 `ToolResult.safe_summary`，`peek_screen_content` 特判只留 title_hint。**当轮去重**：本轮已有 `tool_result` 且其工具名与痕迹最新一条相同时跳过该条，避免层10/10.5 重复同一件事。不进 `_drop_priority` 裁剪链（够小且时效性强），全层预算截断 400 字。`action_trace.enabled: false` 时零行为变化。可选 `event_log_echo` 配置项：`status=ok` 时经 `fixation_pipeline.capture_turn(trigger_name="action_trace")` 回流一条到 event_log（**不得**直接调用底层写入函数，见 `tests/test_r6b_reality_scrub_contract.py` C2 契约）；回流文案刻意不整行包在中文括号里，否则会被 `scrub_reality_output_text` 当整行动作旁白丢弃。

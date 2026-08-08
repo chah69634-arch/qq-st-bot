@@ -78,7 +78,7 @@
 
 1. ✅ **CI grep 门禁** — 已落地 `tests/test_r3_scope_lint.py`（R3-CI，2026-06-10）：core/ 不得新增 `char_id="yexuan"` 函数默认参数或裸 `data/` 路径构造；现有违规文件列入 allowlist（含原因注释）。`tests/test_r3_memory_scope_cleanup_contract.py`（R3-cleanup，2026-06-11）追踪 allowlist 清理进度并守卫 admin/ 不引入新违规。
 
-2. ✅ **路径构造门禁** — 已落地 `tests/test_r3_scope_lint.py`（R3-CI，2026-06-10）：覆盖 `Path("data/...")` / `f"data/...` / `"data/" +` 三种模式；`core/data_paths.py`（路径权威）和 `core/dream/scenario_loader.py`（静态 authored-content）列入 allowlist。
+2. ✅ **路径构造门禁** — 已落地 `tests/test_r3_scope_lint.py`（R3-CI，2026-06-10）：覆盖 `Path("data/...")` / `f"data/...` / `"data/" +` 三种模式；Dream scenario loader 已改走 userdata-first `DataPaths` 分层，不再需要裸 `data/` 路径豁免。
 
 3. ✅ **`main.py._reply_with_tool_result` reader bypass** — 已修复（P1-0A）：优先使用 `frozen_scope.character_id`（N1 scope freeze），无 frozen_scope 时 fallback 到 `_active_character_id`；两条路径均显式传 char_id。
 

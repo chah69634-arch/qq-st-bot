@@ -62,11 +62,13 @@ def test_create_then_list_and_get(sandbox):
         assert result == {"ok": True, "id": "crud_demo"}
 
         listed = _run(list_dream_scenarios())
-        assert listed["scenarios"] == [{"id": "crud_demo", "title": "CRUD Demo"}]
+        assert listed["scenarios"] == [{"id": "crud_demo", "title": "CRUD Demo", "source": "user"}]
 
         detail = _run(get_dream_scenario("crud_demo"))
         assert detail["id"] == "crud_demo"
         assert "CRUD Demo" in detail["yaml"]
+        assert detail["document"]["title"] == "CRUD Demo"
+        assert detail["source"] == "user"
 
     on_disk = sandbox.dream_scenarios_dir() / "crud_demo.yaml"
     assert on_disk.exists()
@@ -199,3 +201,62 @@ def test_delete_then_get_404(sandbox):
         with pytest.raises(HTTPException) as exc:
             _run(get_dream_scenario(script_id))
     assert exc.value.status_code == 404
+
+
+def test_structured_document_round_trip(sandbox):
+    from admin.routers.dream import create_dream_scenario, get_dream_scenario
+
+    document = {
+        "id": "json_editor",
+        "title": "JSON Editor",
+        "stages": [{
+            "id": "opening",
+            "name": "Opening",
+            "dramatic_task": "Begin the conflict",
+            "entry_pressure": "The door closes",
+            "exit_signs": ["A choice is made"],
+            "not_yet_allowed": ["No instant escape"],
+            "drift_pressure": {"after_turns": 3, "instruction": "Raise the stakes"},
+        }],
+    }
+    with _as(_UID):
+        _run(create_dream_scenario({"id": "json_editor", "document": document}))
+        detail = _run(get_dream_scenario("json_editor"))
+
+    assert detail["document"] == document
+    assert "drift_pressure:" in detail["yaml"]
+
+
+def test_legacy_scenario_is_read_only_and_update_creates_userdata_override(sandbox, tmp_path, monkeypatch):
+    from admin.routers.dream import (
+        delete_dream_scenario,
+        get_dream_scenario,
+        list_dream_scenarios,
+        update_dream_scenario,
+    )
+
+    user_dir = tmp_path / "userdata" / "characters" / "dream" / "scenarios"
+    legacy_dir = tmp_path / "data" / "dream" / "scenarios"
+    legacy_dir.mkdir(parents=True)
+    legacy_path = legacy_dir / "legacy_demo.yaml"
+    legacy_path.write_text(_VALID_YAML.replace("crud_demo", "legacy_demo"), encoding="utf-8")
+    monkeypatch.setattr(sandbox, "dream_scenario_read_dirs", lambda: (user_dir, legacy_dir))
+    monkeypatch.setattr(sandbox, "dream_scenario_write_path", lambda script_id: user_dir / f"{script_id}.yaml")
+
+    with _as(_UID):
+        listed = _run(list_dream_scenarios())
+        assert listed["scenarios"] == [{"id": "legacy_demo", "title": "CRUD Demo", "source": "legacy"}]
+        detail = _run(get_dream_scenario("legacy_demo"))
+        assert detail["source"] == "legacy"
+
+        with pytest.raises(HTTPException) as exc:
+            _run(delete_dream_scenario("legacy_demo"))
+        assert exc.value.status_code == 409
+
+        updated = dict(detail["document"])
+        updated["title"] = "User Override"
+        result = _run(update_dream_scenario("legacy_demo", {"document": updated}))
+        assert result["source"] == "user"
+
+    assert user_dir.joinpath("legacy_demo.yaml").exists()
+    assert "CRUD Demo" in legacy_path.read_text(encoding="utf-8")

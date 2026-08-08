@@ -962,17 +962,35 @@ async def put_dream_preset(world: str, body: dict, _auth=Depends(require_scopes(
 
 
 # ── scenario 剧本 CRUD ────────────────────────────────────────────────────────
-# 存储沿用 data/dream/scenarios/{id}.yaml；路径走 get_paths().dream_scenarios_dir()
-# （不硬拼），schema 校验复用 core.dream.scenario_loader._validate_script —— 与
+# 新写入走 userdata/characters/dream/scenarios/{id}.yaml；历史
+# data/dream/scenarios 只读回退。schema 校验复用 scenario_loader._validate_script —— 与
 # dream_turn 实际加载剧本时用的是同一份 schema，不是另起一套校验规则。
 _SAFE_SCRIPT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
-def _scenario_path(script_id: str) -> Path:
-    from core.sandbox import get_paths
+def _validate_scenario_id(script_id: str) -> str:
     if not _SAFE_SCRIPT_ID_RE.match(script_id):
         raise HTTPException(status_code=422, detail=f"剧本 id 不合法: {script_id!r}")
-    return get_paths().dream_scenarios_dir() / f"{script_id}.yaml"
+    return script_id
+
+
+def _scenario_write_path(script_id: str) -> Path:
+    from core.sandbox import get_paths
+    return get_paths().dream_scenario_write_path(_validate_scenario_id(script_id))
+
+
+def _scenario_read_path(script_id: str) -> tuple[Path, str] | None:
+    from core.sandbox import get_paths
+    safe_id = _validate_scenario_id(script_id)
+    primary, fallback = get_paths().dream_scenario_read_dirs()
+    primary_path = primary / f"{safe_id}.yaml"
+    if primary_path.exists():
+        return primary_path, "user"
+    if fallback is not None:
+        fallback_path = fallback / f"{safe_id}.yaml"
+        if fallback_path.exists():
+            return fallback_path, "legacy"
+    return None
 
 
 def _scenario_active(script_id: str) -> bool:
@@ -1015,78 +1033,116 @@ def _parse_and_validate_scenario_yaml(script_id: str, yaml_text: str) -> dict:
     return data
 
 
+def _scenario_document_and_yaml(script_id: str, body: dict) -> tuple[dict, str]:
+    import yaml as _yaml
+
+    document = body.get("document")
+    if document is not None:
+        if not isinstance(document, dict):
+            raise HTTPException(status_code=422, detail="document 必须是 JSON object")
+        data = dict(document)
+        if data.get("id") and data["id"] != script_id:
+            raise HTTPException(status_code=422, detail="document.id 与剧本 id 不一致")
+        data["id"] = script_id
+        from core.dream.scenario_loader import _validate_script
+        try:
+            _validate_script(data)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"剧本 schema 校验失败: {exc}")
+        return data, _yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+
+    yaml_text = body.get("yaml") or ""
+    return _parse_and_validate_scenario_yaml(script_id, yaml_text), yaml_text
+
+
 @router.get("/dream/scenarios", summary="列出剧本")
 async def list_dream_scenarios(_auth=Depends(require_scopes("activity"))):
     from core.sandbox import get_paths
     import yaml as _yaml
 
-    d = get_paths().dream_scenarios_dir()
-    if not d.exists():
-        return {"scenarios": []}
-
-    items = []
-    for p in sorted(d.glob("*.yaml")):
-        script_id = p.stem
-        title = script_id
-        try:
-            data = _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-            if isinstance(data, dict) and data.get("title"):
-                title = data["title"]
-        except Exception:
-            pass
-        items.append({"id": script_id, "title": title})
-    return {"scenarios": items}
+    primary, fallback = get_paths().dream_scenario_read_dirs()
+    merged: dict[str, dict] = {}
+    for directory, source in ((primary, "user"), (fallback, "legacy")):
+        if directory is None or not directory.exists():
+            continue
+        for p in sorted(directory.glob("*.yaml")):
+            script_id = p.stem
+            if script_id in merged:
+                continue
+            title = script_id
+            try:
+                data = _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+                if isinstance(data, dict) and data.get("title"):
+                    title = data["title"]
+            except Exception:
+                pass
+            merged[script_id] = {"id": script_id, "title": title, "source": source}
+    return {"scenarios": [merged[key] for key in sorted(merged)]}
 
 
 @router.get("/dream/scenarios/{script_id}", summary="读取剧本 YAML 原文")
 async def get_dream_scenario(script_id: str, _auth=Depends(require_scopes("activity"))):
-    p = _scenario_path(script_id)
-    if not p.exists():
+    resolved = _scenario_read_path(script_id)
+    if resolved is None:
         raise HTTPException(status_code=404, detail=f"剧本 {script_id} 不存在")
-    return {"id": script_id, "yaml": p.read_text(encoding="utf-8")}
+    p, source = resolved
+    yaml_text = p.read_text(encoding="utf-8")
+    document = _parse_and_validate_scenario_yaml(script_id, yaml_text)
+    return {"id": script_id, "yaml": yaml_text, "document": document, "source": source}
 
 
 @router.post("/dream/scenarios", summary="新建剧本")
 async def create_dream_scenario(body: dict, _auth=Depends(require_scopes("activity"))):
     script_id = (body.get("id") or "").strip()
-    yaml_text = body.get("yaml") or ""
     if not script_id:
         raise HTTPException(status_code=422, detail="id 不能为空")
-    p = _scenario_path(script_id)
-    if p.exists():
+    if _scenario_read_path(script_id) is not None:
         raise HTTPException(status_code=409, detail=f"剧本 {script_id} 已存在")
-
-    _parse_and_validate_scenario_yaml(script_id, yaml_text)
+    _, yaml_text = _scenario_document_and_yaml(script_id, body)
+    p = _scenario_write_path(script_id)
 
     from core.safe_write import safe_write_text
     p.parent.mkdir(parents=True, exist_ok=True)
+    _log_dream_write(kind="dream_scenario", read_path=p, canonical=p, source="new")
     safe_write_text(p, yaml_text)
     return {"ok": True, "id": script_id}
 
 
 @router.put("/dream/scenarios/{script_id}", summary="修改剧本")
-async def update_dream_scenario(script_id: str, body: dict, _auth=Depends(require_scopes("activity"))):
-    p = _scenario_path(script_id)
-    if not p.exists():
+async def update_dream_scenario(
+    script_id: str, body: dict, _auth=Depends(require_scopes("activity"))
+):
+    resolved = _scenario_read_path(script_id)
+    if resolved is None:
         raise HTTPException(status_code=404, detail=f"剧本 {script_id} 不存在")
     if _scenario_active(script_id):
         raise HTTPException(status_code=409, detail="剧本正在被进行中的梦引用，梦醒后再编辑")
 
-    yaml_text = body.get("yaml") or ""
-    _parse_and_validate_scenario_yaml(script_id, yaml_text)
+    _, yaml_text = _scenario_document_and_yaml(script_id, body)
+    p = _scenario_write_path(script_id)
 
     from core.safe_write import safe_write_text
+    p.parent.mkdir(parents=True, exist_ok=True)
+    _log_dream_write(
+        kind="dream_scenario",
+        read_path=resolved[0],
+        canonical=p,
+        source=resolved[1],
+    )
     safe_write_text(p, yaml_text)
-    return {"ok": True, "id": script_id}
+    return {"ok": True, "id": script_id, "source": "user"}
 
 
 @router.delete("/dream/scenarios/{script_id}", summary="删除剧本")
 async def delete_dream_scenario(script_id: str, _auth=Depends(require_scopes("activity"))):
-    p = _scenario_path(script_id)
-    if not p.exists():
+    resolved = _scenario_read_path(script_id)
+    if resolved is None:
         raise HTTPException(status_code=404, detail=f"剧本 {script_id} 不存在")
     if _scenario_active(script_id):
         raise HTTPException(status_code=409, detail="剧本正在被进行中的梦引用，梦醒后再删除")
 
+    p, source = resolved
+    if source != "user":
+        raise HTTPException(status_code=409, detail="旧路径剧本为只读兼容来源；编辑后会写入 userdata 覆盖副本")
     p.unlink()
     return {"ok": True, "deleted": script_id}

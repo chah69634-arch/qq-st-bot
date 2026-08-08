@@ -1,9 +1,10 @@
 """
 Scenario script loader.
 
-Scripts live in data/dream/scenarios/{script_id}.yaml.
-These are authored content (not per-user data), loaded from a fixed path.
-_SCRIPTS_BASE can be monkeypatched in tests.
+Scripts are private authored content. Canonical writes live in
+userdata/characters/dream/scenarios/{script_id}.yaml; the historical
+data/dream/scenarios root remains a read-only fallback.
+_SCRIPTS_BASE can still be monkeypatched in focused tests.
 
 Minimal schema (v0):
   id:    str
@@ -23,8 +24,22 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_SCRIPTS_BASE = Path("data/dream/scenarios")
+_SCRIPTS_BASE: Path | None = None
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def _script_path(script_id: str) -> Path:
+    if _SCRIPTS_BASE is not None:
+        return _SCRIPTS_BASE / f"{script_id}.yaml"
+    from core.sandbox import get_paths
+
+    primary, fallback = get_paths().dream_scenario_read_dirs()
+    candidate = primary / f"{script_id}.yaml"
+    if candidate.exists():
+        return candidate
+    if fallback is not None:
+        return fallback / f"{script_id}.yaml"
+    return candidate
 
 
 def load_script(script_id: str) -> dict[str, Any]:
@@ -34,7 +49,7 @@ def load_script(script_id: str) -> dict[str, Any]:
     """
     if not _SAFE_ID_RE.match(script_id):
         raise ValueError(f"invalid script_id: {script_id!r}")
-    path = _SCRIPTS_BASE / f"{script_id}.yaml"
+    path = _script_path(script_id)
     if not path.exists():
         raise FileNotFoundError(f"scenario script not found: {path}")
     try:

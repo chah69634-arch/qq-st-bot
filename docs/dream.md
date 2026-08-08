@@ -7,7 +7,7 @@
 | canonical writable authored root | `userdata/characters/dream/worlds/` 与 `userdata/characters/dream/presets/` | `core/data_paths.py` 的 `user_dream_worlds_dir()` / `user_dream_presets_dir()`；新用户 authored 内容写这里 |
 | public/default seed | `defaults/dream_worlds/_default/` | tracked release seed；只用于播种，不是用户运行时写入目录 |
 | legacy read fallback | `characters/dream_worlds/` 与 `characters/dream_presets/` | `DataPaths.dream_worlds_dir()` / `dream_presets_dir()` 的兼容读取；不得作为推荐写入路径 |
-| scenario authored content | `data/dream/scenarios/{script_id}.yaml` | `DataPaths.dream_scenarios_dir()` 与 `admin/routers/dream.py` CRUD 的当前剧本路径；独立于 world/preset authored root |
+| scenario authored content | `userdata/characters/dream/scenarios/{script_id}.yaml` | canonical write；旧 `data/dream/scenarios/` 只读回退，userdata 同 ID 胜出 |
 | runtime Dream state/archive/impression | `data/runtime/dreams/{char_id}/` 下的 `tmp/`, `archive/`, `summaries/`, `impressions/`, `state/`, `settings/`；群聊为 `data/runtime/dreams/_stage/{group_id}/` | `core/dream/*` 与 `core/data_paths.py`；runtime 文件不是 authored source |
 
 物理路径只用于 backend 实现和运维；客户端应依赖 Dream endpoint，而不是读取这些文件。旧 `characters/` / `content/characters` 只保留在 compatibility fallback 语义中。
@@ -189,7 +189,7 @@
 - `drift_pressure`（v0.5）：剧本 stage 可选字段；`after_turns: int` + `instruction: str`；
   当 `stage_turns >= after_turns` 时注入 DS 层"漂移压力 / Drift Pressure"块；
   只注入当前 stage，后续 stage 的 drift_pressure 不泄漏
-- 剧本文件：`data/dream/scenarios/{script_id}.yaml`，authored content，不走 sandbox
+- 剧本文件：`userdata/characters/dream/scenarios/{script_id}.yaml`；旧 `data/dream/scenarios/` 只读回退；测试写入仍走 sandbox
 - `prison_demo.yaml`：三阶段示例剧本（arrival / negotiation / fracture），arrival + negotiation 各含 drift_pressure
 - **Progress Signal Skeleton（v0.6）**：软门控观察信号骨架
   - `ScenarioCore` 新增三字段（frozen dataclass）：
@@ -197,7 +197,9 @@
     - `last_matched_exit_signs: list[str]` — 本轮命中的出口标志语义短句
     - `last_blocked_events: list[str]` — 用户尝试的 not_yet_allowed 短句
   - `ScenarioCore.with_progress_signal(signal, matched, blocked)` — 返回新冻结实例
-  - DS 层追加 `<scenario_control>` 输出协议：要求 LLM 在每轮回复末尾附加隐藏控制块；
+  - DS 层以 `【本轮必须遵循】` 开头，用自然口语描述当前阶段、压力与限制；不再向 LLM 展示 JSON 字段模板。
+    每轮回复末尾仍附加会被系统剥离的 `<scenario_control>` 简短备注（`进展/命中/越界`）；
+    解析器继续兼容历史 JSON 控制块，避免进行中的旧会话失效。
     当前 stage.exit_signs 作为 matched_exit_signs 的合法引用列表注入（仅当前 stage）
   - `_extract_scenario_control(reply)` → `(visible_reply, parsed_control | None)`：
     strip 控制块（不论合法与否）；非法/缺失时返回 `None`，fail-soft 不崩溃
@@ -388,10 +390,10 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 | `GET/POST/PUT/DELETE /dream/worlds/{world}/lorebook[/…]` | ✅ 已有 | 世界书条目 CRUD |
 | `GET/PUT /dream/worlds/{world}/preset` | ✅ 已有 | 该世界的破限预设 Markdown |
 | `GET /dream/scenarios` | ✅ Brief 96 §2 | 列出剧本（`id` + `title`） |
-| `GET /dream/scenarios/{id}` | ✅ Brief 96 §2 | 读取剧本 YAML 原文 |
-| `POST /dream/scenarios` | ✅ Brief 96 §2 | 新建剧本；schema 校验复用 `scenario_loader._validate_script`（与 `dream_turn` 实际加载同一份规则） |
-| `PUT /dream/scenarios/{id}` | ✅ Brief 96 §2 | 修改剧本；正被进行中的梦引用时拒绝（`scenario_core.script_id` 命中 + DREAM_ACTIVE/CLOSING/EXIT_REQUESTED） |
-| `DELETE /dream/scenarios/{id}` | ✅ Brief 96 §2 | 删除剧本；同上引用保护 |
+| `GET /dream/scenarios/{id}` | ✅ | 返回兼容 YAML 原文、结构化 `document` 与 user/legacy 来源 |
+| `POST /dream/scenarios` | ✅ | 接受兼容 `yaml` 或结构化 `document`；schema 校验复用 `scenario_loader._validate_script`；新写入 userdata |
+| `PUT /dream/scenarios/{id}` | ✅ | 修改或 copy-on-write 覆盖 legacy 剧本；正被进行中的梦引用时拒绝 |
+| `DELETE /dream/scenarios/{id}` | ✅ | 只删除 userdata 副本；legacy-only 拒绝删除；进行中引用同样拒绝 |
 
 **世界文件夹保留名与保护（Brief 96 §1）**：`_default`（兜底骨架源）与
 `reality_derived`（内建世界之一，`world_loader._FALLBACK_WORLD`）不可新建/改名/删除
@@ -414,7 +416,7 @@ fresh clone / release 不依赖旧 compatibility root；新建操作从 tracked 
 `DreamPrefsPane`「世界」标签页独立负责，两处刻意不联动）：
 - **sandbox**：世界选择下拉 + 新建/重命名/删除按钮（接 `POST/PUT rename/DELETE
   /dream/worlds`）+ 世界书条目 + 破限预设文本，行为对既有 sandbox 创作零回归。
-- **scenario**：剧本列表 + 新建/编辑/删除（接 `/dream/scenarios` CRUD）；编辑器 v0.1
+- **scenario**：结构化阶段编辑器 + JSON 导入/导出（接 `/dream/scenarios` CRUD）；字段覆盖标题、阶段任务、入场压力、完成信号、禁止事项与可选 drift pressure
   是「表单化关键字段（ID / 标题，仅用于快速生成骨架模板）+ 原始 YAML 文本区」双栏，
   不做完整可视化编排，保存时以 YAML 文本为最终内容。
 - **mirror**：无创作物的只读说明（mirror 的倾向材料由 User Hidden State 快照自动

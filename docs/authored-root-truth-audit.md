@@ -258,7 +258,12 @@ Registry 对 preset 是目录级 first-match，中文 stem 还需 `_DREAM_PRESET
 
 ### 4.5 Dream scenario
 
-scenario 不属于四个 root。当前 canonical 路径是 `data/dream/scenarios/{id}.yaml`：admin CRUD 通过 `DataPaths.dream_scenarios_dir()`，`core/dream/scenario_loader.py` 仍有等价裸 `Path("data/dream/scenarios")`。无 userdata/defaults/characters/content fallback；缺失或 schema 错误 fail-loud。它是另一个尚未完全收口的路径族，不应通过本单删除四 root 解决。
+scenario 已收口到 userdata-first authored 分层：
+
+1. `userdata/characters/dream/scenarios/{id}.yaml`：canonical write/read；
+2. `data/dream/scenarios/{id}.yaml`：历史只读 fallback。
+
+同 ID 时 userdata 胜出；admin 编辑 legacy-only 剧本会在 userdata 创建覆盖副本，绝不改写旧文件。legacy-only 剧本不可直接删除。`scenario_loader` 与 admin CRUD 共用 `DataPaths.dream_scenario_read_dirs()`，缺失或 schema 错误仍 fail-loud。
 
 ### 4.6 Avatar
 

@@ -126,13 +126,10 @@ def test_no_new_char_id_yexuan_defaults():
 
 # core/data_paths.py constructs Path("data") as the sandbox root — this is
 # the one place that legitimately does so (it IS the path authority).
-# core/dream/scenario_loader.py uses Path("data/dream/scenarios") for static
-# authored-content (not per-user data) — EXISTING VIOLATION, to migrate.
 DATA_PATH_ALLOWLIST: frozenset[str] = frozenset({
     "core/data_paths.py",                          # canonical path authority — by design
 
     # existing violations / to migrate
-    "core/dream/scenario_loader.py",               # static authored-content path, not per-user
     "core/paths.py",                               # unused future taxonomy planning module
     "core/tool_dispatcher.py",                     # configured external desktop legacy IPC root
 })

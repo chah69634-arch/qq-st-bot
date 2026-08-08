@@ -663,7 +663,7 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
         if not stage:
             logger.warning("[dream_prompt] DS stage %r not found in script %r", stage_id, script_id)
             return ""
-        parts: list[str] = []
+        parts: list[str] = ["【本轮必须遵循】"]
         if scenario_core.get("ending_state") == "completed":
             parts.append("【剧本状态：所有阶段已完成 — Scenario Completed】")
         parts.append(f"剧本：{script.get('title', script_id)}")
@@ -691,45 +691,35 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
                 parts.append("张力导演：收紧节奏，推进冲突或靠近。")
             elif rank.get(current, 0) > rank.get(target, 0):
                 parts.append("张力导演：放缓，给彼此喘息，退半步。")
-        # ── v0.6: scenario_control output protocol ────────────────────────────
-        # Instructs LLM to append a hidden control block after every reply.
-        # System reads and strips the block; user never sees it.
+        # Hidden turn note: use plain language so the roleplay instruction stays
+        # readable. The system strips this note before the user sees the reply.
         exit_signs = stage.get("exit_signs") or []
         protocol_lines: list[str] = [
             "---",
-            "内部控制输出协议（系统读取，不对用户解释）：",
-            "在回复末尾附加以下控制块，原文输出标签，不要对用户解释：",
+            "写完这一轮的自然回复后，再在末尾留一段给系统看的简短备注。不要向用户解释这段备注：",
             '<scenario_control>',
-            '{',
-            '  "progress_signal": "not_close",',
-            '  "matched_exit_signs": [],',
-            '  "blocked_events": []',
-            '}',
+            '进展：未接近',
+            '命中：无',
+            '越界：无',
             '</scenario_control>',
             "",
-            "字段说明：",
-            "progress_signal 取值：",
-            "  not_close — 本轮未靠近任何出口标志",
-            "  approaching — 本轮正在靠近出口，但尚未满足",
-            "  satisfied — 本轮已满足至少一个出口标志",
+            "“进展”只写：未接近、正在接近、已经满足。",
+            "如果这一轮还没有靠近阶段完成条件，就写“未接近”；正在靠近但还没做到，写“正在接近”；已经做到至少一项，写“已经满足”。",
         ]
         if exit_signs:
             signs_block = "\n".join(f"  · {s}" for s in exit_signs)
             protocol_lines += [
                 "",
-                "matched_exit_signs：只允许引用以下出口标志中的语义短句，不得自行创造：",
+                "“命中”只可照抄下面实际做到的完成信号；没有就写“无”：",
                 signs_block,
             ]
         else:
-            protocol_lines.append("matched_exit_signs：本阶段无出口标志，始终为空列表。")
+            protocol_lines.append("本阶段没有完成信号，“命中”始终写“无”。")
         protocol_lines += [
             "",
-            "blocked_events：若用户尝试了本阶段不允许的事件，记录对应短句；否则为空列表。",
+            "“越界”写用户本轮实际尝试的禁止事项；没有就写“无”。多项之间用中文分号隔开。",
             "",
-            "约束（不可违反）：",
-            "· 不允许输出后续阶段内容",
-            "· 不允许自行宣布进入下一阶段",
-            "· 不允许自行改变 current_stage_id",
+            "这一轮不要提前透露后续阶段，也不要自行宣布进入下一阶段；阶段切换由系统判断。",
         ]
         parts.append("\n".join(protocol_lines))
         return "\n\n".join(parts)

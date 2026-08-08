@@ -48,6 +48,15 @@ def _default_sandbox_guard(tmp_path, monkeypatch):
     monkeypatch.setattr(_sandbox, "_instance", guard_paths)
 
 
+@pytest.fixture(autouse=True)
+def _dream_scenario_examples(monkeypatch):
+    """Use tracked, neutral scenario fixtures instead of private data/ content."""
+    import core.dream.scenario_loader as scenario_loader
+
+    fixture_dir = _ROOT / "tests" / "fixtures" / "dream_scenarios"
+    monkeypatch.setattr(scenario_loader, "_SCRIPTS_BASE", fixture_dir)
+
+
 @pytest.fixture
 def real_dream_worlds(monkeypatch):
     """让 core.dream 的 world/hud_label/scene_label/symbolic loader 读取仓库里真实的

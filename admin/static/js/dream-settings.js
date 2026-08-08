@@ -19,8 +19,8 @@ function onDreamAuthoringModeChange() {
   const mode = document.getElementById('dream-authoring-mode-select').value;
   _dreamAuthoringMode = mode;
   document.getElementById('dream-authoring-sandbox').style.display = mode === 'sandbox' ? '' : 'none';
-  document.getElementById('dream-authoring-scenario').style.display = mode === 'scenario' ? '' : 'none';
-  document.getElementById('dream-authoring-mirror').style.display = mode === 'mirror' ? '' : 'none';
+  document.getElementById('dream-authoring-scenario').style.display = mode === 'scenario' ? 'block' : 'none';
+  document.getElementById('dream-authoring-mirror').style.display = mode === 'mirror' ? 'block' : 'none';
   if (mode === 'scenario') loadDreamScenarios();
 }
 
@@ -314,75 +314,126 @@ async function loadDreamScenarios() {
     _dreamScenarios = d.scenarios || [];
     renderDreamScenarios();
   } catch(e) {
-    el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+    el.innerHTML = `<div class="empty">${escapeHtml(t('dream.scenario.list_failed', '加载失败：{error}', {error: e.message}))}</div>`;
   }
 }
 
 function renderDreamScenarios() {
   const el = document.getElementById('dream-scenario-list');
   if (!_dreamScenarios.length) {
-    el.innerHTML = '<div class="empty">暂无剧本</div>';
+    el.innerHTML = `<div class="empty">${escapeHtml(t('dream.scenario.empty', '暂无剧本'))}</div>`;
     return;
   }
   const rows = _dreamScenarios.map(s => `<tr>
     <td style="font-size:12px;color:var(--accent)">${escapeHtml(s.id)}</td>
     <td style="font-size:12px">${escapeHtml(s.title)}</td>
+    <td><span class="badge">${escapeHtml(t(`dream.scenario.source_${s.source || 'user'}`, s.source === 'legacy' ? '旧路径只读' : '用户数据'))}</span></td>
     <td style="text-align:center;white-space:nowrap">
-      <button class="btn btn-ghost btn-sm" onclick="openDreamScenarioEditor('${escapeHtml(s.id)}')">编辑</button>
-      <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteDreamScenario('${escapeHtml(s.id)}')">删除</button>
+      <button class="btn btn-ghost btn-sm" data-action="openDreamScenarioEditor" data-action-args='${escapeHtml(JSON.stringify([s.id]))}'>${escapeHtml(t('common.edit', '编辑'))}</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:4px" data-action="deleteDreamScenario" data-action-args='${escapeHtml(JSON.stringify([s.id]))}' ${s.source === 'legacy' ? 'disabled' : ''}>${escapeHtml(t('common.delete', '删除'))}</button>
     </td>
   </tr>`).join('');
   el.innerHTML = `<div class="tbl-wrap"><table>
-    <thead><tr><th>ID</th><th>标题</th><th style="width:140px">操作</th></tr></thead>
+    <thead><tr><th>ID</th><th>${escapeHtml(t('dream.scenario.title_label', '标题'))}</th><th>${escapeHtml(t('dream.scenario.source', '来源'))}</th><th style="width:140px">${escapeHtml(t('common.actions', '操作'))}</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+  bindPageActions(el);
 }
 
-function _dreamScenarioSkeletonYaml(id, title) {
-  return `id: ${id}
-title: ${title}
-stages:
-  - id: stage_1
-    name: 阶段一
-    dramatic_task: 描述这一阶段角色要完成的戏剧任务
-    entry_pressure: 描述进入这一阶段时的压力/驱动
-    exit_signs: []
-    not_yet_allowed: []
-`;
+function _emptyDreamScenarioStage(index = 1) {
+  return {
+    id: `stage_${index}`,
+    name: t('dream.scenario.default_stage_name', '阶段 {index}', {index}),
+    dramatic_task: '',
+    entry_pressure: '',
+    exit_signs: [],
+    not_yet_allowed: [],
+  };
 }
 
-function fillDreamScenarioSkeleton() {
+function _scenarioLines(value) {
+  return Array.isArray(value) ? value.join('\n') : '';
+}
+
+function _renderDreamScenarioStages(stages) {
+  const root = document.getElementById('ds-stages');
+  const values = stages?.length ? stages : [_emptyDreamScenarioStage(1)];
+  root.innerHTML = values.map((stage, index) => {
+    const drift = stage.drift_pressure || {};
+    return `<section class="dream-scenario-stage" data-scenario-stage>
+      <div class="card-header"><h4>${escapeHtml(t('dream.scenario.stage_number', '阶段 {index}', {index: index + 1}))}</h4><button type="button" class="btn btn-danger btn-sm" data-action="removeDreamScenarioStage" data-action-args='[${index}]'>${escapeHtml(t('dream.scenario.remove_stage', '移除阶段'))}</button></div>
+      <div class="form-row"><label class="field"><span>${escapeHtml(t('dream.scenario.stage_id', '阶段 ID'))}</span><input type="text" data-stage-id value="${escapeHtml(stage.id || '')}"></label><label class="field"><span>${escapeHtml(t('dream.scenario.stage_name', '阶段名称'))}</span><input type="text" data-stage-name value="${escapeHtml(stage.name || '')}"></label></div>
+      <label class="field"><span>${escapeHtml(t('dream.scenario.dramatic_task', '戏剧任务'))}</span><textarea data-stage-dramatic-task>${escapeHtml(stage.dramatic_task || '')}</textarea></label>
+      <label class="field"><span>${escapeHtml(t('dream.scenario.entry_pressure', '入场压力 / 开场驱动'))}</span><textarea data-stage-entry-pressure>${escapeHtml(stage.entry_pressure || '')}</textarea></label>
+      <div class="form-row"><label class="field"><span>${escapeHtml(t('dream.scenario.exit_signs', '阶段完成信号（每行一条）'))}</span><textarea data-stage-exit-signs>${escapeHtml(_scenarioLines(stage.exit_signs))}</textarea></label><label class="field"><span>${escapeHtml(t('dream.scenario.not_yet_allowed', '当前阶段禁止事项（每行一条）'))}</span><textarea data-stage-not-yet-allowed>${escapeHtml(_scenarioLines(stage.not_yet_allowed))}</textarea></label></div>
+      <details><summary>${escapeHtml(t('dream.scenario.drift_title', '可选：停滞后加压'))}</summary><div class="form-row"><label class="field"><span>${escapeHtml(t('dream.scenario.drift_after_turns', '连续多少轮后触发'))}</span><input type="number" min="1" data-stage-drift-turns value="${escapeHtml(drift.after_turns ?? '')}"></label><label class="field"><span>${escapeHtml(t('dream.scenario.drift_instruction', '加压指令'))}</span><textarea data-stage-drift-instruction>${escapeHtml(drift.instruction || '')}</textarea></label></div></details>
+    </section>`;
+  }).join('');
+  bindPageActions(root);
+}
+
+function _scenarioListValue(element) {
+  return element.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+}
+
+function _readDreamScenarioDocument() {
   const id = document.getElementById('ds-id').value.trim();
-  if (!id) { toast('请先填写剧本 ID', 'warn'); return; }
-  const title = document.getElementById('ds-title').value.trim() || id;
-  const yamlEl = document.getElementById('ds-yaml');
-  if (yamlEl.value.trim() && !confirm('已有 YAML 内容，确认覆盖为骨架模板？')) return;
-  yamlEl.value = _dreamScenarioSkeletonYaml(id, title);
+  const title = document.getElementById('ds-title').value.trim();
+  const stages = [...document.querySelectorAll('[data-scenario-stage]')].map(stage => {
+    const result = {
+      id: stage.querySelector('[data-stage-id]').value.trim(),
+      name: stage.querySelector('[data-stage-name]').value.trim(),
+      dramatic_task: stage.querySelector('[data-stage-dramatic-task]').value.trim(),
+      entry_pressure: stage.querySelector('[data-stage-entry-pressure]').value.trim(),
+      exit_signs: _scenarioListValue(stage.querySelector('[data-stage-exit-signs]')),
+      not_yet_allowed: _scenarioListValue(stage.querySelector('[data-stage-not-yet-allowed]')),
+    };
+    const turns = stage.querySelector('[data-stage-drift-turns]').value.trim();
+    const instruction = stage.querySelector('[data-stage-drift-instruction]').value.trim();
+    if (turns || instruction) result.drift_pressure = {after_turns: Number(turns), instruction};
+    return result;
+  });
+  return {id, title, stages};
+}
+
+function addDreamScenarioStage() {
+  const scenario = _readDreamScenarioDocument();
+  scenario.stages.push(_emptyDreamScenarioStage(scenario.stages.length + 1));
+  _renderDreamScenarioStages(scenario.stages);
+}
+
+function removeDreamScenarioStage(index) {
+  const scenario = _readDreamScenarioDocument();
+  if (scenario.stages.length <= 1) return toast(t('dream.scenario.one_stage_required', '剧本至少需要一个阶段'), 'warn');
+  scenario.stages.splice(Number(index), 1);
+  _renderDreamScenarioStages(scenario.stages);
 }
 
 async function openDreamScenarioEditor(id) {
   _dreamScenarioEditingId = id;
-  document.getElementById('dream-scenario-editor-card').style.display = '';
+  document.getElementById('dream-scenario-editor-card').style.display = 'block';
   const idInput = document.getElementById('ds-id');
   if (id) {
-    document.getElementById('dream-scenario-editor-title').textContent = `编辑剧本 · ${id}`;
+    document.getElementById('dream-scenario-editor-title').textContent = t('dream.scenario.edit_title', '编辑剧本 · {id}', {id});
     idInput.value = id;
     idInput.disabled = true;
     document.getElementById('ds-title').value = '';
-    document.getElementById('ds-yaml').value = '加载中…';
+    _renderDreamScenarioStages([_emptyDreamScenarioStage(1)]);
     try {
       const d = await api('GET', `/dream/scenarios/${encodeURIComponent(id)}`);
-      document.getElementById('ds-yaml').value = d.yaml || '';
+      const scenario = d.document || {};
+      document.getElementById('ds-title').value = scenario.title || '';
+      _renderDreamScenarioStages(scenario.stages || []);
     } catch(e) {
-      toast('读取失败: ' + e.message, 'err');
-      document.getElementById('ds-yaml').value = '';
+      toast(t('dream.scenario.load_failed', '读取失败: {error}', {error: e.message}), 'err');
     }
   } else {
-    document.getElementById('dream-scenario-editor-title').textContent = '新建剧本';
+    document.getElementById('dream-scenario-editor-title').textContent = t('dream.scenario.new_title', '新建剧本');
     idInput.value = '';
     idInput.disabled = false;
     document.getElementById('ds-title').value = '';
-    document.getElementById('ds-yaml').value = '';
+    document.getElementById('ds-json-file').value = '';
+    _renderDreamScenarioStages([_emptyDreamScenarioStage(1)]);
   }
 }
 
@@ -392,31 +443,62 @@ function closeDreamScenarioEditor() {
 }
 
 async function saveDreamScenario() {
-  const id = document.getElementById('ds-id').value.trim();
-  const yaml = document.getElementById('ds-yaml').value;
-  if (!id) { toast('ID 不能为空', 'err'); return; }
-  if (!yaml.trim()) { toast('YAML 内容不能为空', 'err'); return; }
+  const documentValue = _readDreamScenarioDocument();
+  const id = documentValue.id;
+  if (!id) { toast(t('dream.scenario.id_required', 'ID 不能为空'), 'err'); return; }
+  if (!documentValue.title) { toast(t('dream.scenario.title_required', '标题不能为空'), 'err'); return; }
   try {
     if (_dreamScenarioEditingId) {
-      await api('PUT', `/dream/scenarios/${encodeURIComponent(_dreamScenarioEditingId)}`, { yaml });
-      toast('剧本已保存', 'ok');
+      await api('PUT', `/dream/scenarios/${encodeURIComponent(_dreamScenarioEditingId)}`, { document: documentValue });
+      toast(t('dream.scenario.saved', '剧本已保存'), 'ok');
     } else {
-      await api('POST', '/dream/scenarios', { id, yaml });
-      toast('剧本已新建', 'ok');
+      await api('POST', '/dream/scenarios', { id, document: documentValue });
+      toast(t('dream.scenario.created', '剧本已新建'), 'ok');
     }
     closeDreamScenarioEditor();
     loadDreamScenarios();
-  } catch(e) { toast('保存失败: ' + e.message, 'err'); }
+  } catch(e) { toast(t('dream.scenario.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
+}
+
+async function importDreamScenarioJson() {
+  const file = document.getElementById('ds-json-file').files?.[0];
+  if (!file) return toast(t('dream.scenario.choose_json', '请先选择 JSON 文件'), 'warn');
+  try {
+    const scenario = JSON.parse(await file.text());
+    if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) throw new Error(t('dream.scenario.json_object_required', '顶层必须是 JSON object'));
+    const importedId = String(scenario.id || '').trim();
+    if (_dreamScenarioEditingId && importedId && importedId !== _dreamScenarioEditingId) {
+      throw new Error(t('dream.scenario.import_id_mismatch', '导入 JSON 的 id 必须与当前剧本一致'));
+    }
+    if (!_dreamScenarioEditingId) document.getElementById('ds-id').value = importedId;
+    document.getElementById('ds-title').value = String(scenario.title || '').trim();
+    _renderDreamScenarioStages(Array.isArray(scenario.stages) ? scenario.stages : []);
+    toast(t('dream.scenario.imported', 'JSON 已导入，请检查后保存'), 'ok');
+  } catch (error) {
+    toast(t('dream.scenario.import_failed', 'JSON 导入失败: {error}', {error: error.message}), 'err');
+  }
+}
+
+function exportDreamScenarioJson() {
+  const scenario = _readDreamScenarioDocument();
+  if (!scenario.id) return toast(t('dream.scenario.id_required', 'ID 不能为空'), 'warn');
+  const blob = new Blob([`${JSON.stringify(scenario, null, 2)}\n`], {type: 'application/json;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${scenario.id}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 async function deleteDreamScenario(id) {
-  if (!confirm(`确认删除剧本「${id}」？此操作不可撤销。`)) return;
+  if (!confirm(t('dream.scenario.delete_confirm', '确认删除剧本“{id}”？此操作不可撤销。', {id}))) return;
   try {
     await api('DELETE', `/dream/scenarios/${encodeURIComponent(id)}`);
-    toast('剧本已删除', 'ok');
+    toast(t('dream.scenario.deleted', '剧本已删除'), 'ok');
     if (_dreamScenarioEditingId === id) closeDreamScenarioEditor();
     loadDreamScenarios();
-  } catch(e) { toast('删除失败: ' + e.message, 'err'); }
+  } catch(e) { toast(t('dream.scenario.delete_failed', '删除失败: {error}', {error: e.message}), 'err'); }
 }
 
 // ══════════════════════════════════════════════════════════

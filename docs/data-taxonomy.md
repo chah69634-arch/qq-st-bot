@@ -132,10 +132,15 @@ userdata/
     │   ├── letter_samples/
     │   └── knowledge/
     ├── reality/{avatars,lorebooks,jailbreaks}/
-    └── dream/{worlds,presets}/
+    └── dream/{worlds,presets,scenarios}/
 ```
 
 访问必须经 `DataPaths` 或 `AssetRegistry`。读取优先 `userdata/`，再读发行内置的 `bundled/`，仅在旧安装目录仍存在且前两层缺失时回退到 `assets/stickers/`、`characters/` 和 `content/characters/`。新建角色、梦境世界及其他可写资产只写 `userdata/`。
+
+Dream scenario 剧本使用单独的 userdata-first 分层：新写入走
+`userdata/characters/dream/scenarios/{id}.yaml`，历史
+`data/dream/scenarios/{id}.yaml` 只作只读回退。同 ID 时 userdata 胜出；编辑 legacy-only
+剧本会创建 userdata 覆盖副本，不会改写或删除旧文件。
 
 `bundled/` 是随发行替换的只读公共资产根：`characters/default/` 放默认卡和配套静态资产，`seeds/reality/` 与 `seeds/dream/worlds/_default/` 放播种源，`templates/` 放角色卡与明信片模板，`examples/` 放格式示例。它不属于用户 authored 内容，也不属于 `data/` 运行时状态。
 

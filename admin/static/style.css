@@ -227,6 +227,17 @@ label.field { min-width: 0; }
 .form-row.col-1 { grid-template-columns: 1fr; }
 label.field { display: flex; flex-direction: column; gap: 5px; }
 label.field span { font-size: 12px; color: var(--muted); }
+.dream-scenario-toolbar { align-items: flex-end; margin: 12px 0; }
+.dream-scenario-import { min-width: 240px; }
+.dream-scenario-stages-header { margin-top: 16px; }
+.dream-scenario-stage {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  margin: 12px 0; padding: 14px;
+}
+.dream-scenario-stage h4 { font-size: 14px; }
+.dream-scenario-stage > .field { margin-bottom: 12px; }
+.dream-scenario-stage details { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.dream-scenario-stage details summary { color: var(--muted); cursor: pointer; font-size: 12px; margin-bottom: 10px; }
 :is(
   input:not([type]),
   input[type="text"],

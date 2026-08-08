@@ -20,10 +20,10 @@ userdata/
     │   ├── letter_samples/
     │   └── knowledge/
     ├── reality/
-    └── dream/{worlds,presets}/
+    └── dream/{worlds,presets,scenarios}/
 ```
 
-其中贴纸、角色卡、角色 authored 配置、现实素材和梦境世界/预设均不进 Git；丢失后只能从外部备份
+其中贴纸、角色卡、角色 authored 配置、现实素材和梦境世界/预设/剧本均不进 Git；丢失后只能从外部备份
 恢复。不要把仓库内的 `defaults/`、`examples/` 或公开默认角色/梦世界模板误当作私人唯一副本。
 
 ## 二、同样应备份的本机配置
@@ -54,7 +54,7 @@ userdata/
 ## 四、迁移与旧目录
 
 读取时，`DataPaths` / `AssetRegistry` 会优先使用 `userdata/`；仅为旧安装保留
-`assets/stickers/`、`characters/`、`content/characters/` 等历史位置的只读 fallback。确认
+`assets/stickers/`、`characters/`、`content/characters/`、`data/dream/scenarios/` 等历史位置的只读 fallback。确认
 `userdata/` 已包含所需资产并完成备份前，不要删除旧目录。新建或修改用户 authored 资产应落在
 `userdata/`，不要重新把私有内容写回旧根目录。
 

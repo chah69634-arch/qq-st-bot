@@ -176,6 +176,9 @@ REGISTRY: dict[str, PathMeta] = {
     "user_dream_presets_dir":     PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
     "dream_preset_write_path":    PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
     "legacy_dream_presets_dir":   PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
+    "user_dream_scenarios_dir":   PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
+    "dream_scenario_write_path":  PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
+    "legacy_dream_scenarios_dir": PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
     # activity_pool.yaml 私人手写活动池；target: userdata/characters/authored/{char_id}/activity_pool.yaml
     "activity_pool":          PathMeta("authored",  "character_inner", "per_char",      "ignore-but-authored"),
     # author_notes_pool: 私人，不可重建；target: userdata/characters/authored/{char_id}/author_notes.json
@@ -286,8 +289,9 @@ REGISTRY: dict[str, PathMeta] = {
     "dream_world_read_dirs":  PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
     "dream_presets_dir":      PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
     "dream_preset_read_dirs": PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
-    # data/dream/scenarios/{id}.yaml —— authored 剧本内容，同样是私人手写、不可重建
+    # userdata/characters/dream/scenarios/{id}.yaml canonical；data/dream/scenarios 只读回退
     "dream_scenarios_dir":    PathMeta("authored",  "dream",           "global",        "ignore-but-authored"),
+    "dream_scenario_read_dirs": PathMeta("authored", "dream",          "global",        "ignore-but-authored"),
     # defaults/dream_worlds/_default/ —— 随仓库发布的 tracked 中性模板源（Brief 96 §1），
     # 与上面几个不同：这个真的进 git，供新建世界骨架 + fresh 安装兜底复制
     "default_dream_world_template_dir": PathMeta("canonical", "dream", "global",        "track"),

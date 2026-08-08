@@ -1,0 +1,35 @@
+id: prison_demo
+title: 监狱相遇测试剧本
+stages:
+  - id: arrival
+    name: 初次相遇
+    dramatic_task: 囚犯与看守第一次真实地交谈。
+    entry_pressure: 铁门在身后关上，脚步声停在门外。
+    exit_signs:
+      - 双方有了第一次真实的对话
+      - 她说出了自己的名字
+    not_yet_allowed:
+      - 立即交换秘密
+    drift_pressure:
+      after_turns: 6
+      instruction: 巡视时间将近，用更直接的问题推动对话。
+  - id: negotiation
+    name: 秘密交换
+    dramatic_task: 两人试探彼此愿意承担的风险。
+    entry_pressure: 今天他比平时晚了，走廊异常安静。
+    exit_signs:
+      - 她接受了他带来的东西
+      - 两人之间有了不能被人看见的默契
+    not_yet_allowed:
+      - 立刻宣布逃脱成功
+    drift_pressure:
+      after_turns: 4
+      instruction: 巡视组正在靠近，必须作出选择。
+  - id: fracture
+    name: 裂缝
+    dramatic_task: 让既有信任接受一次明确考验。
+    entry_pressure: 他刚刚替她撒了谎，代价已经出现。
+    exit_signs:
+      - 他承认他知道自己在做什么
+    not_yet_allowed:
+      - 抹去此前的选择

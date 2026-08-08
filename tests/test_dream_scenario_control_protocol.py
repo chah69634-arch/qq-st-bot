@@ -68,10 +68,11 @@ def test_scenario_prompt_contains_control_protocol():
     system = dump_dream_prompt(messages)
 
     assert "scenario_control" in system
-    assert "progress_signal" in system
-    assert "not_close" in system
-    assert "approaching" in system
-    assert "satisfied" in system
+    assert "【本轮必须遵循】" in system
+    assert "进展：未接近" in system
+    assert "正在接近" in system
+    assert "已经满足" in system
+    assert '"progress_signal"' not in system
     # Current stage exit_signs listed as reference
     assert "双方有了第一次真实的对话" in system
     assert "她说出了自己的名字" in system
@@ -117,6 +118,28 @@ def test_extract_scenario_control_valid():
     assert ctrl["progress_signal"] == "approaching"
     assert ctrl["matched_exit_signs"] == ["双方有了第一次真实的对话"]
     assert ctrl["blocked_events"] == []
+
+
+def test_extract_scenario_control_natural_note():
+    """The conversational control note is parsed without exposing JSON fields."""
+    from core.dream.dream_pipeline import _extract_scenario_control
+
+    raw = (
+        "Companion看着她，等她继续。\n"
+        "<scenario_control>\n"
+        "进展：正在接近\n"
+        "命中：双方有了第一次真实的对话；她说出了自己的名字\n"
+        "越界：无\n"
+        "</scenario_control>"
+    )
+    visible, ctrl = _extract_scenario_control(raw)
+
+    assert visible == "Companion看着她，等她继续。"
+    assert ctrl == {
+        "progress_signal": "approaching",
+        "matched_exit_signs": ["双方有了第一次真实的对话", "她说出了自己的名字"],
+        "blocked_events": [],
+    }
 
 
 # ── Test 4: last_progress_signal correctly saved to state via dream_turn ──────

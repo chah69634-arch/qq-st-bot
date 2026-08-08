@@ -78,42 +78,44 @@
       <div id="dream-authoring-scenario" class="admin-inline-056">
         <div class="card">
           <div class="card-header">
-            <h3>剧本列表</h3>
+            <h3 data-i18n="dream.scenario.list_title">剧本列表</h3>
             <div class="admin-inline-037">
-              <button class="btn btn-ghost btn-sm" data-action="loadDreamScenarios">刷新</button>
-              <button class="btn btn-primary btn-sm" data-action="openDreamScenarioEditor" data-action-args='[null]'>＋ 新建剧本</button>
+              <button class="btn btn-ghost btn-sm" data-action="loadDreamScenarios" data-i18n="common.refresh">刷新</button>
+              <button class="btn btn-primary btn-sm" data-action="openDreamScenarioEditor" data-action-args='[null]' data-i18n="dream.scenario.create">＋ 新建剧本</button>
             </div>
           </div>
-          <div id="dream-scenario-list"><div class="loading">加载中…</div></div>
+          <p class="admin-source-hint" data-i18n="dream.scenario.storage_hint">新建和编辑写入 userdata/characters/dream/scenarios；旧 data/dream/scenarios 仅作只读兼容来源。</p>
+          <div id="dream-scenario-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
         </div>
 
         <div class="card admin-inline-056" id="dream-scenario-editor-card">
           <div class="card-header">
-            <h3 id="dream-scenario-editor-title">新建剧本</h3>
+            <h3 id="dream-scenario-editor-title" data-i18n="dream.scenario.new_title">新建剧本</h3>
             <div class="admin-inline-037">
-              <button class="btn btn-ghost btn-sm" data-action="closeDreamScenarioEditor">取消</button>
-              <button class="btn btn-primary btn-sm" data-action="saveDreamScenario">保存</button>
+              <button class="btn btn-ghost btn-sm" data-action="closeDreamScenarioEditor" data-i18n="common.cancel">取消</button>
+              <button class="btn btn-primary btn-sm" data-action="saveDreamScenario" data-i18n="common.save">保存</button>
             </div>
           </div>
-          <div class="admin-inline-086">
-            v0.1 表单化关键字段 + 原始 YAML 双栏：ID / 标题只是快速入口，最终以右侧 YAML 为准，保存直接写 YAML 文本。
+          <div class="admin-inline-086" data-i18n="dream.scenario.editor_hint">
+            使用结构化表单创作阶段；保存时由后端生成 YAML。JSON 导入/导出用于备份和交换，不暴露本机路径。
           </div>
-          <div class="admin-inline-034">
-            <div class="admin-inline-069">
-              <label class="field">
-                <span>剧本 ID（对应 data/dream/scenarios/{id}.yaml）</span>
-                <input type="text" id="ds-id" placeholder="例如 prison_demo">
-              </label>
-              <label class="field">
-                <span>标题（title）</span>
-                <input type="text" id="ds-title" placeholder="剧本标题">
-              </label>
-              <button class="btn btn-ghost btn-sm admin-inline-003" data-action="fillDreamScenarioSkeleton">生成骨架模板</button>
-            </div>
-            <div class="admin-inline-071">
-              <textarea id="ds-yaml" placeholder="剧本 YAML 原文…" class="admin-inline-193"></textarea>
-            </div>
+          <div class="admin-toolbar dream-scenario-toolbar">
+            <label class="field dream-scenario-import"><span data-i18n="dream.scenario.import_file">导入 JSON</span><input type="file" id="ds-json-file" accept="application/json,.json"></label>
+            <button class="btn btn-ghost btn-sm" data-action="importDreamScenarioJson" data-i18n="dream.scenario.import">导入所选 JSON</button>
+            <button class="btn btn-ghost btn-sm" data-action="exportDreamScenarioJson" data-i18n="dream.scenario.export">导出 JSON</button>
           </div>
+          <div class="form-row">
+            <label class="field">
+              <span data-i18n="dream.scenario.id_label">剧本 ID</span>
+              <input type="text" id="ds-id" placeholder="prison_demo" data-i18n-placeholder="dream.scenario.id_placeholder">
+            </label>
+            <label class="field">
+              <span data-i18n="dream.scenario.title_label">标题</span>
+              <input type="text" id="ds-title" placeholder="剧本标题" data-i18n-placeholder="dream.scenario.title_placeholder">
+            </label>
+          </div>
+          <div class="card-header dream-scenario-stages-header"><h3 data-i18n="dream.scenario.stages">阶段</h3><button class="btn btn-ghost btn-sm" data-action="addDreamScenarioStage" data-i18n="dream.scenario.add_stage">＋ 添加阶段</button></div>
+          <div id="ds-stages"></div>
         </div>
       </div>
 

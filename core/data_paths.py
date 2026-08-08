@@ -343,6 +343,21 @@ class DataPaths:
     def legacy_dream_presets_dir(self) -> Path:
         return Path("characters") / "dream_presets"
 
+    def user_dream_scenarios_dir(self) -> Path:
+        """Canonical private authored root for Dream scenario scripts."""
+        return self.userdata_root() / "characters" / "dream" / "scenarios"
+
+    def dream_scenario_write_path(self, script_id: str) -> Path:
+        """Canonical writer target for one Dream scenario script."""
+        safe_id = _safe_authored_component(script_id)
+        if self.mode == "test":
+            return self._base / "dream" / "scenarios" / f"{safe_id}.yaml"
+        return self.user_dream_scenarios_dir() / f"{safe_id}.yaml"
+
+    def legacy_dream_scenarios_dir(self) -> Path:
+        """Historical authored root retained as a read-only fallback."""
+        return Path("data") / "dream" / "scenarios"
+
     # ── 桌宠端轮询文件（方案A：前缀同步到 config.yaml 的 data_prefix 字段）──────
     def channel_queue(self) -> Path:
         return self._p("runtime", "channel_queue.json")
@@ -742,18 +757,16 @@ class DataPaths:
         return self.user_dream_presets_dir(), fallback
 
     def dream_scenarios_dir(self) -> Path:
-        """data/dream/scenarios/ 目录（authored content，剧本 YAML，不走 data/ 沙盒偏移）。
-
-        core/dream/scenario_loader.py 仍用旧的裸 Path("data/dream/scenarios")
-        读取（tests/test_r3_scope_lint.py 里记为已知待迁移违规，未随本次改动
-        一并迁移，避免影响一批不挂 sandbox fixture、直接读真实
-        data/dream/scenarios/prison_demo.yaml 的既有测试）；本 accessor 供
-        Brief 96 新增的 scenario CRUD 端点使用，生产模式落盘路径与
-        scenario_loader 一致。
-        """
+        """Backward-compatible alias for the canonical scenario write root."""
         if self.mode == "test":
             return self._base / "dream" / "scenarios"
-        return Path("data") / "dream" / "scenarios"
+        return self.user_dream_scenarios_dir()
+
+    def dream_scenario_read_dirs(self) -> tuple[Path, Path | None]:
+        """Layered scenario roots: userdata first, historical data/ fallback."""
+        if self.mode == "test":
+            return self._base / "dream" / "scenarios", None
+        return self.user_dream_scenarios_dir(), self.legacy_dream_scenarios_dir()
 
     def default_dream_world_template_dir(self) -> Path:
         """Read-only packaged Dream world seed, with legacy fallback."""

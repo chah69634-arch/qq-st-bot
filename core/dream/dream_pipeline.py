@@ -42,6 +42,11 @@ _SCENARIO_CONTROL_RE = re.compile(
     re.DOTALL,
 )
 _VALID_PROGRESS_SIGNALS: frozenset[str] = frozenset({"not_close", "approaching", "satisfied"})
+_NATURAL_PROGRESS_SIGNALS = {
+    "未接近": "not_close",
+    "正在接近": "approaching",
+    "已经满足": "satisfied",
+}
 
 def _bucket_for_scenario(value: float) -> str:
     return ("low", "rising", "high", "critical")[int(max(0, min(3, value * 4)))]
@@ -68,11 +73,31 @@ def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
     # Strip the block from visible reply regardless of validity
     visible = (reply[: match.start()] + reply[match.end() :]).strip()
 
+    raw_control = match.group(1).strip()
     try:
-        data = json.loads(match.group(1))
+        data = json.loads(raw_control)
     except (json.JSONDecodeError, ValueError):
-        logger.debug("[dream_pipeline] scenario_control JSON parse failed")
-        return visible, None
+        lines = {}
+        for line in raw_control.splitlines():
+            if "：" in line:
+                key, value = line.split("：", 1)
+                lines[key.strip()] = value.strip()
+        signal = _NATURAL_PROGRESS_SIGNALS.get(lines.get("进展", ""))
+        if signal is None:
+            logger.debug("[dream_pipeline] scenario_control natural parse failed")
+            return visible, None
+
+        def _items(key: str) -> list[str]:
+            value = lines.get(key, "")
+            if not value or value == "无":
+                return []
+            return [item.strip() for item in re.split(r"[；;]", value) if item.strip()]
+
+        return visible, {
+            "progress_signal": signal,
+            "matched_exit_signs": _items("命中"),
+            "blocked_events": _items("越界"),
+        }
 
     if not isinstance(data, dict):
         return visible, None
