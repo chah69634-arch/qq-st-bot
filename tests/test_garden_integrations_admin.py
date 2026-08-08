@@ -121,17 +121,42 @@ def test_status_route_requires_auth_and_returns_only_redacted_fields(sandbox, mo
     assert "token" not in garden and "cursor" not in garden and "message" not in garden
 
 
-def test_admin_page_template_and_actions_never_embed_secrets():
+def test_admin_page_is_a_frozen_compatibility_deep_link():
     root = Path(__file__).parent.parent
     page = (root / "admin/static/pages/integrations.html").read_text(encoding="utf-8")
     script = (root / "admin/static/js/integrations.js").read_text(encoding="utf-8")
     index = (root / "admin/static/index.html").read_text(encoding="utf-8")
+    core = (root / "admin/static/js/core.js").read_text(encoding="utf-8")
 
-    assert 'data-page="integrations"' in index
     assert 'id="page-integrations" data-page-fragment="integrations"' in index
-    assert "/integrations/garden/test-wake" in script
-    assert "manual_test" in page
-    assert "GARDEN_MACHINE_TOKEN" in script
-    assert "<请在本地填写>" in script
-    assert "PRESENCE_INTEGRATION_TOKEN" in script
-    assert "GARDEN_MACHINE_TOKEN = \"emt_" not in page + script
+    nav = index.split("<nav", 1)[1].split("</nav>", 1)[0]
+    assert 'data-page="integrations"' not in nav
+    assert 'data-action-args=\'["integrations"]\'' not in index
+    assert "integrations:" not in core
+    assert page.count('class="card"') == 1
+    assert 'data-i18n="integrations.freeze.badge"' in page
+    assert 'data-i18n="integrations.freeze.reason"' in page
+    assert 'data-i18n="integrations.freeze.warning"' in page
+    assert 'data-i18n="integrations.freeze.compatibility"' in page
+    for forbidden in (
+        "/integrations/garden/status",
+        "/integrations/garden/test-wake",
+        "manual_test",
+        "GARDEN_MACHINE_TOKEN",
+        "PRESENCE_INTEGRATION_TOKEN",
+        "data-action=",
+    ):
+        assert forbidden not in page + script
+
+
+def test_frozen_garden_page_has_complete_bilingual_copy():
+    root = Path(__file__).parent.parent
+    runtime = (root / "admin/static/i18n.js").read_text(encoding="utf-8")
+    for key in (
+        "integrations.title",
+        "integrations.freeze.badge",
+        "integrations.freeze.reason",
+        "integrations.freeze.warning",
+        "integrations.freeze.compatibility",
+    ):
+        assert runtime.count(f"'{key}'") == 2
