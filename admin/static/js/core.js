@@ -20,10 +20,12 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-162-userdata-assets-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-163-status-config-ux-1';
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
+  'runtime-config': {related: ['status', 'scheduler', 'model-routing']},
+  'tts-config': {related: ['status', 'character', 'user-data']},
   character: {related: ['lorebook', 'tools']},
   lorebook: {related: ['character']},
   'dream-settings': {related: ['character']},
@@ -226,6 +228,8 @@ async function goto(page, {reloadFragment = false} = {}) {
 
   const loaders = {
     setup:           loadSetupPage,
+    'runtime-config': loadRuntimeConfig,
+    'tts-config':     loadTtsConfig,
     status:          loadStatus,
     users:           () => { loadUsers(); loadBlacklist(); },
     logs:            loadLogs,
@@ -369,14 +373,35 @@ function renderKeyValueEditor(id, values = {}, options = {}) {
   const rows = entries.length ? entries : [['', '']];
   const labels = options.labels || {};
   const heading = options.labels
-    ? `<div class="form-row" style="margin-bottom:3px;font-size:11px;color:var(--muted)"><span>${escapeHtml(labels.key || 'Name')}</span><span>${escapeHtml(labels.value || 'Value')}</span><span>${escapeHtml(labels.type || 'Type')}</span><span></span></div>`
+    ? `<div class="form-row kv-header"><span>${escapeHtml(labels.key || 'Name')}</span><span>${escapeHtml(labels.value || 'Value')}</span><span>${escapeHtml(labels.type || 'Type')}</span><span></span></div>`
     : '';
   root.innerHTML = heading + rows.map(([key, value]) => _renderKeyValueRow(key, value, options)).join('');
   root.querySelectorAll('[data-kv-row]').forEach((row, index) => {
     const value = entries[index]?.[1];
     const type = typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'string';
     row.querySelector('[data-kv-type]').value = type;
+    _syncKeyValueRowType(row);
   });
+  root.querySelectorAll('[data-kv-type]').forEach(select => {
+    select.addEventListener('change', () => _syncKeyValueRowType(select.closest('[data-kv-row]')));
+  });
+}
+
+function _syncKeyValueRowType(row) {
+  if (!row) return;
+  const type = row.querySelector('[data-kv-type]')?.value;
+  const text = row.querySelector('[data-kv-value]');
+  const boolean = row.querySelector('[data-kv-boolean]');
+  if (!text || !boolean) return;
+  if (type === 'boolean') {
+    if (/^(true|false)$/i.test(text.value.trim())) boolean.value = text.value.trim().toLowerCase();
+    text.hidden = true;
+    boolean.hidden = false;
+  } else {
+    if (text.hidden) text.value = boolean.value;
+    text.hidden = false;
+    boolean.hidden = true;
+  }
 }
 
 function _renderKeyValueRow(key = '', value = '', options = {}) {
@@ -384,6 +409,7 @@ function _renderKeyValueRow(key = '', value = '', options = {}) {
   return `<div class="form-row" data-kv-row>
     <input type="text" data-kv-key aria-label="${escapeHtml(labels.key || 'Name')}" placeholder="${escapeHtml(options.keyPlaceholder || 'key')}" value="${escapeHtml(String(key))}">
     <input type="text" data-kv-value aria-label="${escapeHtml(labels.value || 'Value')}" placeholder="${escapeHtml(options.valuePlaceholder || 'value')}" value="${escapeHtml(value == null ? '' : String(value))}">
+    <select data-kv-boolean aria-label="${escapeHtml(labels.value || 'Value')} boolean"><option value="true">true</option><option value="false">false</option></select>
     <select data-kv-type aria-label="${escapeHtml(labels.type || 'Type')}"><option value="string">text</option><option value="number">number</option><option value="boolean">true/false</option></select>
     <button type="button" class="btn btn-ghost btn-sm" data-action="removeKeyValueRow">Remove</button>
   </div>`;
@@ -394,6 +420,8 @@ function addKeyValueRow(id, options = undefined) {
   if (!root) return;
   const rowOptions = options || root._kvOptions || {};
   root.insertAdjacentHTML('beforeend', _renderKeyValueRow('', '', rowOptions));
+  _syncKeyValueRowType(root.querySelector('[data-kv-row]:last-of-type'));
+  root.querySelector('[data-kv-row]:last-of-type [data-kv-type]')?.addEventListener('change', event => _syncKeyValueRowType(event.target.closest('[data-kv-row]')));
   bindPageActions(root);
 }
 
@@ -416,8 +444,7 @@ function readKeyValueEditor(id) {
       if (!Number.isFinite(value)) throw new Error(`${key} must be a number`);
       result[key] = value;
     } else if (type === 'boolean') {
-      if (!/^(true|false)$/i.test(raw.trim())) throw new Error(`${key} must be true or false`);
-      result[key] = raw.trim().toLowerCase() === 'true';
+      result[key] = row.querySelector('[data-kv-boolean]').value === 'true';
     } else result[key] = raw;
   });
   return result;

@@ -1,264 +1,74 @@
+<h1 class="page-title" data-i18n="status.title">系统状态</h1>
+<p class="admin-source-hint" data-i18n="static.status.source_hint">本页只读展示当前运行实例的摘要；配置来源、生效方式和最近刷新结果会一并标明。</p>
 
-      <h1 class="page-title" data-i18n="status.title">系统状态</h1>
-      <p class="admin-source-hint">配置来源：本页展示运行时总闸与 legacy 参数；保存后影响后续请求。</p>
-      <div class="stat-row" id="stat-row">
-        <div class="stat"><div class="val" id="s-users">…</div><div class="lbl" data-i18n="status.known_users">已知用户</div></div>
-      </div>
+<div class="stat-row" id="stat-row">
+  <div class="stat"><div class="val" id="s-users">…</div><div class="lbl" data-i18n="status.known_users">已知用户</div></div>
+  <div class="stat"><div class="val" id="s-runtime-state">…</div><div class="lbl" data-i18n="status.runtime_state">运行状态</div></div>
+  <div class="stat"><div class="val" id="s-active-sessions">…</div><div class="lbl" data-i18n="status.active_sessions">活动会话</div></div>
+</div>
 
-      <div class="card" id="data-safety-card">
-        <div class="card-header"><h3>Data isolation</h3></div>
-        <div class="form-row">
-          <div class="field"><span>Data mode</span><code id="s-data-mode" class="badge">-</code></div>
-          <div class="field"><span>Test session</span><code id="s-test-session">-</code></div>
-          <div class="field"><span>Data root</span><code id="s-data-root">-</code></div>
-        </div>
-        <div class="field"><span>Quarantined test users</span><code id="s-test-users">-</code></div>
-      </div>
+<div class="card status-summary-card" id="data-safety-card">
+  <div class="card-header">
+    <h3 data-i18n="status.data_environment.title">当前数据环境</h3>
+    <button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button>
+  </div>
+  <p class="admin-inline-087" data-i18n="status.data_environment.description">只读确认当前使用正式数据还是测试沙箱，帮助避免测试数据污染正式数据。</p>
+  <div class="status-summary-grid">
+    <div class="status-summary-item"><span data-i18n="status.data_environment.mode">模式</span><strong id="s-data-mode" class="badge">-</strong><small data-i18n="status.data_environment.source">来源：运行时数据路径</small></div>
+    <div class="status-summary-item"><span data-i18n="status.data_environment.session">测试会话</span><strong id="s-test-session">-</strong><small data-i18n="status.data_environment.effective">生效：当前进程隔离范围</small></div>
+    <div class="status-summary-item"><span data-i18n="status.data_environment.location">数据位置</span><strong id="s-data-root">-</strong><small data-i18n="status.data_environment.location_note">仅显示逻辑位置，不显示本机绝对路径</small></div>
+    <div class="status-summary-item"><span data-i18n="status.data_environment.quarantined">隔离测试用户</span><strong id="s-test-users">-</strong><small data-i18n="status.data_environment.quarantined_note">只显示数量；测试身份不会计入正式用户数</small></div>
+  </div>
+</div>
 
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.quick_actions">快捷操作</h3></div>
-        <div class="admin-inline-030">
-          <button class="btn btn-ghost" data-action="reloadConfig" data-i18n="status.reload_all">⚡ 热重载全部配置</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.feature_switches">功能开关</h3><button class="btn btn-ghost btn-sm" data-action="loadFeatureFlags" data-i18n="common.refresh">刷新</button></div>
-        <div id="feature-flags-grid" class="admin-inline-055"><div class="loading" data-i18n="common.loading">加载中…</div></div>
-        <button class="btn btn-primary btn-sm admin-inline-135" data-action="saveFeatureFlags" data-i18n="status.save_reload">Save and reload</button>
-      </div>
+<div class="status-summary-grid status-summary-grid-wide">
+  <div class="card status-summary-card" id="status-model-card">
+    <div class="card-header">
+      <h3 data-i18n="status.model.title">模型与路由</h3>
+      <button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button>
+    </div>
+    <div class="status-summary-item"><span data-i18n="status.model.current">当前聊天模型</span><strong id="s-model-current">-</strong><small id="s-model-source" data-i18n="status.model.source">来源：当前生效路由</small></div>
+    <div class="status-summary-item"><span data-i18n="status.model.routing">活动路由</span><strong id="s-model-routing">-</strong><small id="s-model-effective" data-i18n="status.model.effective">生效：后续请求；不代表上游服务已连通</small></div>
+    <div class="status-summary-footer"><span id="s-model-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["model-routing"]' data-i18n="status.open_model_config">打开模型路由</button></div>
+  </div>
 
-      <!-- 代理配置（只读镜像） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.proxy.title">代理配置</h3><button class="btn btn-primary btn-sm" data-action="saveProxy" data-i18n="common.save">保存</button>
-          <button class="btn btn-ghost btn-sm" data-action="loadProxy" data-i18n="common.refresh">刷新</button>
-        </div>
-        <p data-i18n="status.proxy.hint" class="admin-inline-087">保存后热重载；仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
-        <div class="admin-inline-022">
-          <label class="checkbox-row admin-inline-117">
-            <input type="checkbox" id="proxy-enabled" class="admin-inline-202">
-            <span data-i18n="status.proxy.enable">启用代理</span>
-          </label>
-          <span id="proxy-status-badge" class="badge badge-danger" data-i18n="common.disabled">未启用</span>
-        </div>
-        <div class="form-row admin-inline-156">
-          <label class="field">
-            <span data-i18n="status.proxy.http">HTTP 代理地址</span>
-            <input type="text" id="proxy-http" placeholder="http://127.0.0.1:7897">
-          </label>
-          <label class="field">
-            <span data-i18n="status.proxy.https">HTTPS 代理地址</span>
-            <input type="text" id="proxy-https" placeholder="http://127.0.0.1:7897">
-          </label>
-        </div>
-      </div>
+  <div class="card status-summary-card" id="status-tts-card">
+    <div class="card-header">
+      <h3 data-i18n="status.tts.summary_title">TTS 状态</h3>
+      <button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button>
+    </div>
+    <div class="status-summary-item"><span data-i18n="status.tts.enabled_summary">总开关 / Provider</span><strong id="s-tts-enabled">-</strong><small id="s-tts-provider">-</small></div>
+    <div class="status-summary-item"><span data-i18n="status.tts.binding_summary">角色绑定 / 全局回退</span><strong id="s-tts-binding">-</strong><small id="s-tts-resources">-</small></div>
+    <div class="status-summary-item"><span data-i18n="status.tts.provider_summary">Provider 与资源</span><strong id="s-tts-provider-ready">-</strong><small id="s-tts-last-result">-</small></div>
+    <div class="status-summary-footer"><span id="s-tts-refresh-state" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["tts-config"]' data-i18n="status.tts.open_config">打开 TTS 配置</button></div>
+  </div>
+</div>
 
-      <!-- 上下文轮数（只读镜像） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.context.title">上下文长度</h3><button class="btn btn-primary btn-sm" data-action="saveContextConfig" data-i18n="common.save">保存</button>
-          <button class="btn btn-ghost btn-sm" data-action="loadContextConfig" data-i18n="common.refresh">刷新</button>
-        </div>
-        <p data-i18n="status.context.hint" class="admin-inline-087">保存后热重载，影响后续新请求使用的上下文窗口。</p>
-        <div class="admin-inline-153">
-          <label class="field admin-inline-127">
-            <span data-i18n="status.context.max_rounds">最大轮数（每轮 = 一问一答）</span>
-            <div class="admin-inline-023">
-              <input type="range" id="ctx-slider" min="5" max="50" value="20" class="admin-inline-062">
-              <span id="ctx-val" class="admin-inline-173">20</span>
-              <span data-i18n="status.context.rounds" class="admin-inline-082">轮</span>
-            </div>
-          </label>
-        </div>
-      </div>
+<div class="status-summary-grid status-summary-grid-wide">
+  <div class="card status-summary-card" id="status-proxy-card">
+    <div class="card-header"><h3 data-i18n="status.proxy.title">代理摘要</h3><button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button></div>
+    <div class="status-summary-item"><span data-i18n="status.proxy.enable">状态</span><strong id="s-proxy-status">-</strong><small data-i18n="status.proxy.source">来源：全局代理配置</small></div>
+    <div class="status-summary-item"><span data-i18n="status.proxy.effective">生效范围</span><strong id="s-proxy-scope">-</strong><small data-i18n="status.proxy.health_note">仅表示配置生效，不表示外部目标可达</small></div>
+    <div class="status-summary-footer"><span id="s-proxy-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["runtime-config"]' data-i18n="status.open_runtime_config">打开运行配置</button></div>
+  </div>
 
-      <!-- LLM 生成参数（只读镜像） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.llm.title">LLM 生成参数</h3><button class="btn btn-primary btn-sm" data-action="saveLlmParams" data-i18n="common.save">保存</button>
-          <button class="btn btn-ghost btn-sm" data-action="loadLlmParams" data-i18n="common.refresh">刷新</button>
-        </div>
-        <p data-i18n="status.llm.hint" class="admin-inline-087">legacy 参数可在此热更新；启用多模型后优先在「模型路由」编辑 preset 参数。</p>
-        <div class="admin-inline-053">
-          <div>
-            <div class="admin-inline-015">
-              <span class="admin-inline-106">max_tokens</span>
-              <span id="llm-max-tokens-val" class="admin-inline-010">1500</span>
-            </div>
-            <input type="range" id="llm-max-tokens" min="200" max="4000" step="100" value="1500" class="admin-inline-189">
-            <div data-i18n="status.llm.max_tokens" class="admin-inline-078">单次回复最大 token 数</div>
-          </div>
-          <div class="admin-inline-016">
-            <div class="admin-inline-084">
-              <span data-i18n="status.llm.recommended">推荐范围：</span><br>
-              <span data-i18n="status.llm.immersive">💬 沉浸对话 &nbsp;500–800</span><br>
-              <span data-i18n="status.llm.roleplay">🎭 角色扮演 &nbsp;1500–3000</span>
-            </div>
-          </div>
-          <div>
-            <div class="admin-inline-015">
-              <span class="admin-inline-106">temperature</span>
-              <span id="llm-temp-val" class="admin-inline-010">0.70</span>
-            </div>
-            <input type="range" id="llm-temperature" min="0.0" max="2.0" step="0.05" value="0.7" class="admin-inline-189">
-            <div data-i18n="status.llm.temperature" class="admin-inline-078">值越高回复越随机，越低越保守</div>
-          </div>
-          <div>
-            <div class="admin-inline-015">
-              <span class="admin-inline-106">top_p</span>
-              <span id="llm-topp-val" class="admin-inline-010">0.90</span>
-            </div>
-            <input type="range" id="llm-top-p" min="0.0" max="1.0" step="0.05" value="0.9" class="admin-inline-189">
-            <div data-i18n="status.llm.top_p" class="admin-inline-078">核采样概率，配合 temperature 控制多样性</div>
-          </div>
-          <div>
-            <div class="admin-inline-015">
-              <span class="admin-inline-106">frequency_penalty</span>
-              <span id="llm-fp-val" class="admin-inline-010">0.00</span>
-            </div>
-            <input type="range" id="llm-frequency-penalty" min="0.0" max="2.0" step="0.05" value="0.0" class="admin-inline-189">
-            <div data-i18n="status.llm.frequency_penalty" class="admin-inline-078">惩罚重复词，值越高越不容易重复用词</div>
-          </div>
-          <div></div>
-        </div>
-      </div>
+  <div class="card status-summary-card" id="status-relay-card">
+    <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒摘要</h3><button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button></div>
+    <div class="status-summary-item"><span data-i18n="status.relay.summary_status">配置状态</span><strong id="s-relay-status">-</strong><small data-i18n="status.relay.source">来源：全局 relay 设置</small></div>
+    <div class="status-summary-item"><span data-i18n="status.relay.summary_scope">生效范围</span><strong id="s-relay-scope">-</strong><small data-i18n="status.relay.health_note">仅表示本地配置状态，不承诺中继服务健康</small></div>
+    <div class="status-summary-footer"><span id="s-relay-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["runtime-config"]' data-i18n="status.open_runtime_config">打开运行配置</button></div>
+  </div>
 
-      <!-- 屏幕内容查看设置 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.screen.title">屏幕内容查看</h3>
-          <button class="btn btn-ghost btn-sm" data-action="loadScreenPeekSettings" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div class="admin-inline-024">
-          <label class="checkbox-row admin-inline-117">
-            <input type="checkbox" id="sp-enabled" class="admin-inline-202">
-            <span data-i18n="status.vision.enable">启用</span>
-          </label>
-          <label class="field admin-inline-168">
-            <span data-i18n="status.screen.cooldown">冷却分钟数</span>
-            <input type="number" id="sp-cooldown" min="5" max="240" value="30">
-          </label>
-          <button class="btn btn-primary btn-sm" data-action="saveScreenPeekSettings" data-i18n="common.save">保存</button>
-        </div>
-      </div>
+  <div class="card status-summary-card" id="status-scheduler-card">
+    <div class="card-header"><h3 data-i18n="status.scheduler.title">调度器与通道</h3><button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button></div>
+    <div class="status-summary-item"><span data-i18n="status.scheduler.status">调度器</span><strong id="s-scheduler-status">-</strong><small data-i18n="status.scheduler.source">来源：调度器状态与功能开关</small></div>
+    <div class="status-summary-item"><span data-i18n="status.scheduler.channels">通道总闸</span><strong id="s-channel-status">-</strong><small data-i18n="status.scheduler.effective">生效：后续触发；需要重启的项会单独标注</small></div>
+    <div class="status-summary-footer"><span id="s-scheduler-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["scheduler"]' data-i18n="status.open_scheduler">打开调度器</button></div>
+  </div>
+</div>
 
-      <!-- 危险模式（手机自动化 / 桌面-系统类工具总闸） -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.dangermode.title">危险模式</h3>
-          <button class="btn btn-ghost btn-sm" data-action="loadMetaMode" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div class="admin-inline-025">
-          <div id="metamode-status" class="admin-inline-113">—</div>
-          <label class="field admin-inline-168">
-            <span data-i18n="status.dangermode.ttl">持续分钟数</span>
-            <input type="number" id="metamode-ttl" min="5" max="1440" value="120">
-          </label>
-          <button class="btn btn-primary btn-sm" id="metamode-toggle-btn" data-action="toggleMetaMode" data-i18n="status.dangermode.enter">切换到危险模式</button>
-        </div>
-        <div data-i18n="status.dangermode.help" class="admin-inline-085">
-          手机自动化（phone_control）、桌面/系统类工具只在危险模式下才会真的执行，安全模式下会拒绝并提示。危险模式到期后自动回落安全模式。
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" data-action="loadRelaySettings" data-i18n="common.refresh">刷新</button></div>
-        <p class="admin-source-hint">配置来源：全局 relay 设置；只影响中继唤醒通道，不改变调度器本地触发。</p>
-        <div class="form-row admin-inline-158"><label class="field"><span>Base URL</span><input type="text" id="relay-base-url"></label><label class="field"><span>Topic</span><input type="text" id="relay-topic"></label></div>
-        <label class="field admin-inline-158"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
-        <button class="btn btn-primary btn-sm" data-action="saveRelaySettings" data-i18n="common.save">保存</button>
-      </div>
-      <!-- TTS 配置 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.tts.title">TTS 配置</h3>
-          <button class="btn btn-ghost btn-sm" data-action="loadTtsConfig" data-i18n="common.refresh">刷新</button>
-        </div>
-        <p class="admin-source-hint">配置来源：全局 TTS 配置；角色卡的 TTS 预设可在角色页覆盖。桌面语音条仅影响客户端展示。</p>
-        <div class="form-row admin-inline-156">
-          <label class="field"><span data-i18n="status.tts.character">角色作用域</span><select id="tts-char-select" onchange="loadTtsConfig()"><option value="" data-i18n="status.tts.global">全局默认</option></select></label>
-          <label class="field"><span data-i18n="status.tts.binding">当前绑定</span><input type="text" id="tts-character-binding" readonly></label>
-        </div>
-        <div class="admin-inline-021">
-          <label class="checkbox-row admin-inline-117">
-            <input type="checkbox" id="tts-enabled" class="admin-inline-202">
-            <span data-i18n="status.vision.enable">启用</span>
-          </label>
-          <label class="checkbox-row admin-inline-117">
-            <input type="checkbox" id="tts-emotion-enabled" class="admin-inline-202"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row admin-inline-117"><input type="checkbox" id="tts-desktop-enabled" class="admin-inline-202"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
-        </div>
-        <div class="form-row admin-inline-156">
-          <label class="field"><span data-i18n="status.tts.provider">TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv" data-i18n="status.tts.provider_gsv">GPT-SoVITS / GSV</option><option value="openai_compatible" data-i18n="status.tts.provider_openai_compatible">OpenAI-compatible (自建/云端，POST /audio/speech)</option></select></label>
-          <label class="field"><span data-i18n="status.tts.provider_status">Provider status</span><input type="text" id="tts-provider-status" readonly></label>
-        </div>
-        <label class="field admin-inline-156"><span data-i18n="status.tts.provider_params">Additional provider parameters</span><div id="tts-provider-params"></div></label><button type="button" class="btn btn-ghost btn-sm" data-action="addTtsProviderParam" data-i18n="status.tts.add_param">Add parameter</button>
-        <div class="form-row admin-inline-156">
-          <label class="field">
-            <span data-i18n="status.tts.api_url">API URL</span>
-            <input type="text" id="tts-api-url" placeholder="http://127.0.0.1:9880">
-          </label>
-          <label class="field">
-            <span data-i18n="status.tts.ref_audio">参考音频路径</span>
-            <select id="tts-ref-audio"><option value="" data-i18n="status.tts.unselected">未选择</option></select>
-          </label>
-        </div>
-        <div class="form-row admin-inline-156">
-          <label class="field"><span data-i18n="status.tts.gpt_model">GPT 模型路径</span><select id="tts-gpt-model-path"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
-          <label class="field"><span data-i18n="status.tts.sovits_model">SoVITS 模型路径</span><select id="tts-sovits-model-path"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
-        </div>
-        <div class="form-row col-1 admin-inline-156">
-          <label class="field">
-            <span data-i18n="status.tts.ref_text">参考文本</span>
-            <input type="text" id="tts-prompt-text" placeholder="参考音频对应文本" data-i18n-placeholder="status.tts.ref_placeholder">
-          </label>
-        </div>
-        <label class="field admin-inline-152">
-          <span><span data-i18n="status.tts.speed">语速</span> <span id="tts-speed-val" class="admin-inline-009">1.00</span></span>
-          <input type="range" id="tts-speed" min="0.5" max="2.0" step="0.05" value="1.0"
-            oninput="document.getElementById('tts-speed-val').textContent = parseFloat(this.value).toFixed(2)" class="admin-inline-189">
-        </label>
-        <button class="btn btn-primary btn-sm" data-action="saveTtsConfig" data-i18n="common.save">保存</button>
-        <button class="btn btn-ghost btn-sm" data-action="testTtsConfig" data-i18n="status.tts.test">试听当前 Provider</button>
-        <button class="btn btn-ghost btn-sm" data-action="loadTtsCallLog" data-i18n="status.tts.call_log">最近合成记录</button>
-        <pre id="tts-call-log" class="admin-inline-157"></pre>
-      </div>
-
-      <!-- 表情包 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="status.sticker.title">表情包</h3>
-          <button class="btn btn-ghost btn-sm" data-action="loadStickerConfig" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div class="form-row admin-inline-154">
-          <label class="checkbox-row admin-inline-118">
-            <input type="checkbox" id="sticker-enabled" class="admin-inline-202">
-            <span data-i18n="status.sticker.enable">启用</span>
-          </label>
-          <label class="field">
-            <span data-i18n="status.sticker.trigger_prob">触发概率（0–1）</span>
-            <input type="number" id="sticker-trigger-prob" min="0" max="1" step="0.01" value="0.06">
-          </label>
-        </div>
-        <button class="btn btn-primary btn-sm" data-action="saveStickerConfig" data-i18n="common.save">保存</button>
-      </div>
-
-      <!-- 用户称谓 -->
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="status.pronoun.title">用户称谓</h3></div>
-        <div class="admin-inline-020">
-          <label class="field admin-inline-068">
-            <span data-i18n="status.pronoun.user">用户</span>
-            <select id="pn-uid-select" onchange="loadUserPronoun()"></select>
-          </label>
-          <label class="field admin-inline-167">
-            <span data-i18n="status.pronoun.value">称谓</span>
-            <select id="pn-value">
-              <option value="她" data-i18n="status.pronoun.she">她</option>
-              <option value="他" data-i18n="status.pronoun.he">他</option>
-              <option value="TA" data-i18n="status.pronoun.they">TA</option>
-              <option value="它" data-i18n="status.pronoun.it">它</option>
-            </select>
-          </label>
-          <button class="btn btn-primary btn-sm admin-inline-138" data-action="saveUserPronoun" data-i18n="common.save">保存</button>
-        </div>
-      </div>
+<div class="card status-summary-card" id="status-attention-card">
+  <div class="card-header"><h3 data-i18n="status.attention.title">最近错误与待关注</h3><button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button></div>
+  <div class="status-summary-item"><span data-i18n="status.attention.recent_errors">错误日志</span><strong id="s-recent-errors">-</strong><small id="s-recent-errors-detail" data-i18n="status.attention.errors_note">只读摘要；需要详细排查时打开错误日志</small></div>
+  <div class="status-summary-footer"><span id="s-attention-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["logs"]' data-i18n="status.open_logs">打开错误日志</button></div>
+</div>

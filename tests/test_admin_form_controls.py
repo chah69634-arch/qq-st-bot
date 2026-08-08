@@ -62,7 +62,7 @@ def test_setup_and_character_anniversary_editors_consume_shared_helper():
 
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     for script in ("setup.js", "character.js"):
-        assert f'/static/js/{script}?v=brief-159-form-controls-anniversary-1' in index
+        assert f'/static/js/{script}?v=brief-163-status-config-ux-1' in index
     assert '/static/js/user-data.js?v=brief-162-userdata-assets-1' in index
 
 

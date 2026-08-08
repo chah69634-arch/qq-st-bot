@@ -24,7 +24,10 @@ function _renderTtsResourceSelect(id, rows, current) {
     options.push(`<option value="${escapeHtml(row.logical_id)}">${escapeHtml(row.name || row.logical_id)} · ${escapeHtml(row.source || '')}</option>`);
   }
   if (current && !(rows || []).some(row => row.logical_id === current || row.name === current)) {
-    options.push(`<option value="${escapeHtml(current)}">${escapeHtml(current)} · 外部/不可验证</option>`);
+    const legacyLabel = /[\\/]|^[A-Za-z]:/.test(String(current))
+      ? t('status.tts.legacy_resource_redacted', '旧版外部资源（路径已隐藏）')
+      : `${escapeHtml(current)} · ${escapeHtml(t('status.tts.unverified_resource', '外部/不可验证'))}`;
+    options.push(`<option value="${escapeHtml(current)}">${legacyLabel}</option>`);
   }
   select.innerHTML = options.join('');
   select.value = current || '';
@@ -32,12 +35,14 @@ function _renderTtsResourceSelect(id, rows, current) {
 
 function _renderTtsProvider(provider) {
   const params = _ttsProviderParamsByProvider[provider] || {};
-  renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'prompt_text', 'speed'] });
+  renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_key', 'api_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'prompt_text', 'speed'] });
   document.getElementById('tts-api-url').value = params.api_url || '';
   document.getElementById('tts-ref-audio').value = params.ref_audio || '';
   document.getElementById('tts-gpt-model-path').value = params.gpt_model_path || '';
   document.getElementById('tts-sovits-model-path').value = params.sovits_model_path || '';
   document.getElementById('tts-prompt-text').value = params.prompt_text || '';
+  const keyEl = document.getElementById('tts-provider-api-key');
+  if (keyEl) keyEl.value = '';
   const speed = parseFloat(params.speed) || 1.0;
   document.getElementById('tts-speed').value = speed;
   document.getElementById('tts-speed-val').textContent = speed.toFixed(2);
@@ -55,7 +60,6 @@ function onTtsProviderChange() {
 }
 
 async function loadTtsConfig() {
-  loadRelaySettings();
   try {
     await _loadTtsCharacters();
     const charId = document.getElementById('tts-char-select')?.value || '';
@@ -69,9 +73,15 @@ async function loadTtsConfig() {
     _ttsLoadedProvider = d.provider || 'gsv';
     _renderTtsProvider(_ttsLoadedProvider);
     const s = d.provider_status || {};
-    document.getElementById('tts-provider-status').value = s.ready
+    const providerStatus = s.ready
       ? t('status.tts.ready', 'ready')
       : (s.reason || t('status.tts.not_ready', 'not ready'));
+    const providerStatusEl = document.getElementById('tts-provider-status');
+    if (providerStatusEl) {
+      if ('value' in providerStatusEl) providerStatusEl.value = providerStatus;
+      else providerStatusEl.textContent = providerStatus;
+      providerStatusEl.className = `badge ${s.ready ? 'badge-success' : 'badge-danger'}`;
+    }
     const binding = d.character_binding;
     const bindingEl = document.getElementById('tts-character-binding');
     if (bindingEl) bindingEl.value = binding ? `${binding.name || binding.char_id} · ${binding.tts_preset || t('status.tts.global', '全局默认')} · ${binding.preset_exists ? 'ok' : 'fallback'}` : t('status.tts.global', '全局默认');
@@ -80,6 +90,13 @@ async function loadTtsConfig() {
     _renderTtsResourceSelect('tts-ref-audio', options.reference_audio, params.ref_audio || d.ref_audio || '');
     _renderTtsResourceSelect('tts-gpt-model-path', options.gpt_model, params.gpt_model_path || '');
     _renderTtsResourceSelect('tts-sovits-model-path', options.sovits_model, params.sovits_model_path || '');
+    if (document.getElementById('tts-emotion-tiers')) {
+      renderKeyValueEditor('tts-emotion-tiers', d.emotions || {}, {labels: {
+        key: t('tts_config.emotion_key', '情绪'),
+        value: t('tts_config.emotion_value', '参数'),
+        type: t('common.type', '类型'),
+      }});
+    }
   } catch (e) { toast(t('status.tts.load_error', '读取 TTS 配置失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveTtsConfig() {
@@ -98,6 +115,13 @@ async function saveTtsConfig() {
   providerParams.sovits_model_path = document.getElementById('tts-sovits-model-path').value.trim();
   providerParams.prompt_text = document.getElementById('tts-prompt-text').value.trim();
   providerParams.speed = parseFloat(document.getElementById('tts-speed').value);
+  const providerApiKey = document.getElementById('tts-provider-api-key')?.value.trim();
+  if (providerApiKey) providerParams.api_key = providerApiKey;
+  let emotions = {};
+  if (document.getElementById('tts-emotion-tiers')) {
+    try { emotions = readKeyValueEditor('tts-emotion-tiers'); }
+    catch (e) { toast(e.message, 'err'); return; }
+  }
   const body = {
     enabled: document.getElementById('tts-enabled').checked,
     emotion_enabled: document.getElementById('tts-emotion-enabled').checked,
@@ -106,6 +130,7 @@ async function saveTtsConfig() {
     ref_audio: document.getElementById('tts-ref-audio').value.trim(),
     prompt_text: document.getElementById('tts-prompt-text').value.trim(),
     speed: parseFloat(document.getElementById('tts-speed').value),
+    emotions,
     provider,
     provider_params: providerParams,
   };

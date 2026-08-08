@@ -16,9 +16,11 @@
 - admin 专用配置：`/model-presets/*`、`/proxy`、`/tts-config`、`/sticker-config`、`/scheduler/config`、`/settings/relay`、`/settings/mcp`。routing profile 也包含 `sensor_judge`：它是后台裁决专用 category，应映射到稳定的轻量 `chat_completions` preset；缺失时兼容回退 `intent → chat`。该 category 固定使用短 timeout、零 SDK retry 与进程内断路器，未在桌面设置页单独暴露。preset 的 `api_protocol` 由管理面和 `PUT /model-presets/presets/{name}` 管理，取值为 `chat_completions`（默认）或 `responses`；它独立于 `provider_kind` 与 `tool_call_mode`，保存后热重载，不会静默切换 API。`POST /model-presets/presets/{name}/rename` 会原子重命名 preset 并更新所有 routing profile 引用，随后热重载。
 - LLM/model preset/vision/proxy 热重载会等待旧 AsyncOpenAI/httpx client 关闭后再返回；关闭失败
   fail-open 记 warning，旧实例已从 registry 摘除，新请求只会按新配置惰性建 client。
-- admin 功能开关白名单：`GET/PUT /settings/feature-flags`。只接受 `settings_feature_flags.FLAGS` 中已有运行时消费者的布尔字段，不接受密钥、路径、额度或任意 YAML。每项返回 `apply_mode` / `restart_required`，PUT 返回 `reload_status` 和本次确实改变且需要重启的字段。`qq.enabled` 只在 `main.py` 启动阶段注册通道、回调和监听任务，因此明确为 `restart_required`，不得显示成热生效；`mail` 及其余逐次读配置的功能仍是 `hot_reload`。`private_exchange.enabled` 与 `qq`/`mail` 两个通道总开关均走这条白名单；desktop/mobile/device 通道没有独立 enabled 字段，是否可用只取决于对应 token 是否配置且未停用。
+- admin 功能开关白名单：`GET/PUT /settings/feature-flags`。只接受 `settings_feature_flags.FLAGS` 中已有运行时消费者的布尔字段，不接受密钥、路径、额度或任意 YAML。每项返回 `apply_mode` / `restart_required`，PUT 返回 `reload_status` 和本次确实改变且需要重启的字段。`qq.enabled` 只在 `main.py` 启动阶段注册通道、回调和监听任务，因此明确为 `restart_required`，不得显示成热生效；`mail` 及其余逐次读配置的功能仍是 `hot_reload`。`private_exchange.enabled` 与 `qq`/`mail` 两个通道总开关均走这条白名单；desktop/mobile/device 通道没有独立 enabled 字段，是否可用只取决于对应 token 是否配置且未停用。管理面编辑入口为「高级设置 → 运行配置」；「系统状态」只读展示通道摘要，不再承载保存控件。
 - admin 配置中心（Brief 93 §1，管理面板「配置」页，`GET/PUT /settings/base-model`、`GET/PUT /settings/embedding`、`GET /settings/setup-status`）：`/settings/base-model` 透明兼容 `model_presets` 主聊天 preset 与旧版 `llm:` 块，由 `_resolve_base_chat_preset_name()` 判定写入目标，不引入第三套真值来源；`/settings/embedding` 读写 `embedding:` 块（缺失时向量召回 fail-open 降级为关键词路径，不算必填）；`/settings/setup-status` 的 `needs_setup` 驱动面板首次登录自动跳转与顶部红色横幅，判定标准是 base_url/api_key/model 三者均非空且不是 `config.example.yaml` 里 `YOUR_`/`YOUR-` 前缀的占位符。
 - 密钥本快捷入口（Brief 93 §2，`GET /system/secrets-book`、`POST /system/secrets-book/open`）：仅当请求方 `request.client.host` 是 `127.0.0.1`/`::1`/`localhost` 时可用，用系统默认程序打开 `secrets.local.yaml`；非本机请求悬浮按钮隐藏、`open` 端点直接 403。
+
+管理面状态与配置入口（Brief 163）：「系统状态」仅读取 `/status`、`/model-presets`、`/tts-config`、`/proxy`、`/settings/relay`、`/scheduler/status`、`/settings/feature-flags` 和有限错误摘要，展示当前值、配置来源、生效范围、刷新结果及明确的外部健康边界。编辑入口分流到「高级设置 → 运行配置」「高级设置 → TTS 配置」「模型路由」和「调度器」；编辑页的布尔、枚举、数值控件分别使用 checkbox/select/range，并标注 hot reload、immediate 或 restart-required。数据环境只展示 formal/test、脱敏的测试会话标签、逻辑数据位置和隔离测试用户数量，不展示本机绝对路径或用户 ID。
 - 401 人话化（Brief 93 §6）：`admin/auth.py` 的 401 响应体 `detail` 从纯字符串改为 `{"message", "hint"}`；`/ws/desktop`、`/ws/device` 鉴权失败的 WS close 附带同语义的 `reason`（受 RFC 6455 123 字节上限约束，文案比 HTTP hint 精简）。桌面端 Brief 34 直接透传 `detail.hint` 显示。
 
 模型从 legacy 迁移时调用 `POST /model-presets/bootstrap`，它把现有 `llm` 连接持久化为 `legacy` preset 和 `default` routing profile；之后客户端只切 routing profile，不需要重新录入 API key/base URL。
@@ -161,3 +163,23 @@ carry the selected character ID through the same `resolve_tts_config()` path as
 real synthesis. Character preset binding remains owned by the existing
 character asset-binding endpoint, so role inspection cannot overwrite global
 TTS configuration.
+
+## Brief 163 Admin status and configuration UX
+
+「系统状态」是只读摘要页：`/status` supplies runtime/data-environment basics;
+`/model-presets`, `/proxy`, `/settings/relay`, `/scheduler/status`,
+`/settings/feature-flags`, `/tts-config`, and the bounded error-log query supply
+the remaining summaries. Each card shows its current value, source, effective
+scope, refresh result, and a conservative note when configuration does not prove
+external health. Editing is routed to 「高级设置 → 运行配置」, 「高级设置 →
+TTS 配置」, Model Routing, or Scheduler.
+
+The runtime configuration page uses boolean controls for boolean flags, selects
+for enums, and bounded numeric/range controls with units. It keeps the endpoint's
+apply mode visible, including `restart_required` for `qq.enabled`. The TTS page
+keeps character scope, named-preset binding, global fallback, logical authored
+resource selectors, provider parameters, emotion tiers, preview, and call logs in
+one independent editor. Provider keys are write-only; advanced key/value rows are
+folded and boolean values use a selector rather than free text. Resource labels
+are logical and redacted, with no local physical-path input. Preview success is
+reported as synthesis success only, never as client playback or provider health.

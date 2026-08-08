@@ -1,33 +1,150 @@
-async function loadStatus() {
-  loadFeatureFlags();
-  try {
-    const d = await api('GET', '/status');
-    const mode = document.getElementById('s-data-mode');
-    const session = document.getElementById('s-test-session');
-    const root = document.getElementById('s-data-root');
-    const testUsers = document.getElementById('s-test-users');
-    if (mode) {
-      mode.textContent = d.data_mode || 'unknown';
-      mode.dataset.mode = d.data_mode || '';
-      mode.className = `badge ${d.data_mode === 'test' ? 'badge-warn' : 'badge-success'}`;
-    }
-    if (session) session.textContent = d.test_session_id || '(none)';
-    if (root) root.textContent = d.data_root || '(unknown)';
-    if (testUsers) testUsers.textContent = (d.test_user_ids || []).join(', ') || '(none)';
-    document.getElementById('s-users').textContent    = d.known_user_count ?? '—';
-  } catch(e) {
-    toast(t('status.error.load', '获取状态失败: {error}', {error: e.message}), 'err');
+function _statusSet(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value == null || value === '' ? '—' : String(value);
+}
+
+function _statusOutcome(id, ok, detail = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = ok
+    ? t('status.refresh_ok', '已刷新')
+    : t('status.refresh_error', '读取失败：{error}', {error: detail});
+  el.className = `status-result ${ok ? 'status-result-ok' : 'status-result-error'}`;
+}
+
+function _statusLogicalLocation(mode, sessionId) {
+  if (mode === 'test') return sessionId ? t('status.data_environment.location_test', '测试沙箱（当前会话）') : t('status.data_environment.location_test_unknown', '测试沙箱');
+  if (mode === 'formal') return t('status.data_environment.location_formal', '正式数据区');
+  return t('status.data_environment.location_unknown', '数据位置未知');
+}
+
+function _statusSessionLabel(mode, sessionId) {
+  if (mode !== 'test') return t('status.data_environment.none', '无');
+  if (!sessionId) return t('status.data_environment.session_unknown', '测试会话（未提供 ID）');
+  const safe = String(sessionId).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 8);
+  return safe ? `${t('status.data_environment.session_id', 'ID')} ${safe}…` : t('status.data_environment.session_active', '测试会话已启用');
+}
+
+function _statusReadiness(ready, okLabel, notReadyLabel) {
+  return ready ? t(okLabel, '已就绪') : t(notReadyLabel, '未就绪');
+}
+
+async function _loadStatusRuntime() {
+  const d = await api('GET', '/status');
+  const mode = d.data_mode || 'unknown';
+  const modeEl = document.getElementById('s-data-mode');
+  if (modeEl) {
+    modeEl.textContent = mode === 'test'
+      ? t('status.data_environment.test', '测试沙箱')
+      : mode === 'formal' ? t('status.data_environment.formal', '正式数据') : mode;
+    modeEl.dataset.mode = mode;
+    modeEl.className = `badge ${mode === 'test' ? 'badge-warn' : mode === 'formal' ? 'badge-success' : ''}`;
   }
-  loadProxy();
-  loadContextConfig();
-  loadLlmParams();
-  loadScreenPeekSettings();
-  loadMetaMode();
-  loadTtsConfig();
-  loadStickerConfig();
-  _ensurePronounUidOptions().then(() => {
-    if (document.getElementById('pn-uid-select').value) loadUserPronoun();
+  _statusSet('s-test-session', _statusSessionLabel(mode, d.test_session_id));
+  _statusSet('s-data-root', _statusLogicalLocation(mode, d.test_session_id));
+  const testCount = Array.isArray(d.test_user_ids) ? d.test_user_ids.length : 0;
+  _statusSet('s-test-users', testCount ? t('status.data_environment.quarantined_count', '{count} 个（已隔离）', {count: testCount}) : t('status.data_environment.none', '无'));
+  _statusSet('s-users', d.known_user_count);
+  _statusSet('s-runtime-state', d.status === 'running' ? t('status.running', '运行中') : (d.status || '—'));
+  _statusSet('s-active-sessions', d.active_session_count ?? 0);
+  return d;
+}
+
+async function _loadStatusModel() {
+  const d = await api('GET', '/model-presets');
+  const summary = {};
+  const profile = d.routing_profiles?.[d.active_routing] || {};
+  const chatPreset = profile.chat || d.active_chat_preset || summary.llm_model || '—';
+  _statusSet('s-model-current', chatPreset);
+  _statusSet('s-model-routing', d.active_routing || 'default');
+  _statusSet('s-model-source', t('status.model.source_value', '来源：模型路由 / 当前 chat preset'));
+  _statusSet('s-model-result', t('status.read_only_effective', '已读取；未执行外部连通性测试'));
+}
+
+async function _loadStatusTts() {
+  const [characters, config, calls] = await Promise.all([
+    api('GET', '/characters').catch(() => ({})),
+    api('GET', '/tts-config'),
+    api('GET', '/observability/api-calls?caller=tts&limit=1').catch(() => ({entries: []})),
+  ]);
+  const activeId = characters.active_id && characters.active_id !== 'default' ? characters.active_id : '';
+  const resolved = activeId ? await api('GET', `/tts-config?char_id=${encodeURIComponent(activeId)}`).catch(() => config) : config;
+  const providerStatus = resolved.provider_status || config.provider_status || {};
+  const options = resolved.resource_options || config.resource_options || {};
+  const resourceCount = ['reference_audio', 'gpt_model', 'sovits_model'].reduce((sum, key) => sum + ((options[key] || []).length ? 1 : 0), 0);
+  const binding = resolved.character_binding;
+  _statusSet('s-tts-enabled', `${resolved.enabled ? t('common.enabled', '已启用') : t('common.disabled', '未启用')} · ${resolved.provider || '—'}`);
+  _statusSet('s-tts-provider', t('status.tts.source_value', '来源：TTS 配置；角色绑定可覆盖 provider 参数'));
+  _statusSet('s-tts-binding', binding?.tts_preset ? binding.tts_preset : t('status.tts.global', '全局默认'));
+  _statusSet('s-tts-resources', t('status.tts.resources_count', '已发现 {count}/3 类逻辑资源', {count: resourceCount}));
+  _statusSet('s-tts-provider-ready', _statusReadiness(providerStatus.ready, 'status.tts.ready', 'status.tts.not_ready'));
+  _statusSet('s-tts-last-result', calls.entries?.[0]
+    ? (calls.entries[0].ok ? t('status.tts.last_success', '最近合成：成功') : t('status.tts.last_failed', '最近合成：失败'))
+    : t('status.tts.no_last_result', '暂无合成记录'));
+  _statusSet('s-tts-refresh-state', t('status.read_only_effective', '已读取；就绪不等于外部服务健康'));
+}
+
+async function _loadStatusProxy() {
+  const d = await api('GET', '/proxy');
+  _statusSet('s-proxy-status', d.enabled ? t('common.enabled', '已启用') : t('common.disabled', '未启用'));
+  _statusSet('s-proxy-scope', t('status.proxy.scope_value', '后端出站请求'));
+  _statusSet('s-proxy-result', t('status.read_only_effective', '已读取；未探测外部目标'));
+}
+
+async function _loadStatusRelay() {
+  const d = await api('GET', '/settings/relay');
+  const configured = Boolean(d.relay_base_url || d.relay_topic || d.relay_token);
+  _statusSet('s-relay-status', configured ? t('status.relay.configured_short', '已配置') : t('status.relay.unconfigured', '未配置'));
+  _statusSet('s-relay-scope', t('status.relay.scope_value', '仅中继唤醒'));
+  _statusSet('s-relay-result', t('status.read_only_effective', '已读取；未承诺中继服务健康'));
+}
+
+async function _loadStatusScheduler() {
+  const [scheduler, flags] = await Promise.all([
+    api('GET', '/scheduler/status'),
+    api('GET', '/settings/feature-flags'),
+  ]);
+  _statusSet('s-scheduler-status', scheduler.enabled ? t('status.scheduler.enabled', '已启用') : t('status.scheduler.disabled', '未启用'));
+  const channelFlags = ['qq', 'mail'].map(name => flags.flags?.[name]).filter(Boolean);
+  const enabled = channelFlags.filter(item => item.enabled).length;
+  _statusSet('s-channel-status', t('status.scheduler.channel_count', '{count} 个通道已启用', {count: enabled}));
+  _statusSet('s-scheduler-result', t('status.read_only_effective', '已读取；逐项生效方式见配置页'));
+}
+
+async function _loadStatusAttention() {
+  const d = await api('GET', '/logs?lines=20');
+  const lines = String(d.logs || '').split(/\r?\n/).filter(Boolean);
+  _statusSet('s-recent-errors', lines.length ? t('status.attention.has_errors', '{count} 行最近日志', {count: lines.length}) : t('status.attention.none', '暂无最近错误'));
+  _statusSet('s-recent-errors-detail', lines.length ? t('status.attention.open_detail', '请打开错误日志查看详情') : t('status.attention.no_error_detail', '最近刷新未发现错误日志'));
+  _statusSet('s-attention-result', t('status.read_only_effective', '已读取'));
+}
+
+async function loadStatus() {
+  const jobs = [
+    ['runtime', _loadStatusRuntime()],
+    ['model', _loadStatusModel()],
+    ['tts', _loadStatusTts()],
+    ['proxy', _loadStatusProxy()],
+    ['relay', _loadStatusRelay()],
+    ['scheduler', _loadStatusScheduler()],
+    ['attention', _loadStatusAttention()],
+  ];
+  const results = await Promise.allSettled(jobs.map(([, job]) => job));
+  const ids = ['runtime', 'model', 'tts', 'proxy', 'relay', 'scheduler', 'attention'];
+  const outcomeIds = {
+    model: 's-model-result',
+    tts: 's-tts-refresh-state',
+    proxy: 's-proxy-result',
+    relay: 's-relay-result',
+    scheduler: 's-scheduler-result',
+    attention: 's-attention-result',
+  };
+  results.forEach((result, index) => {
+    const id = ids[index];
+    if (outcomeIds[id]) _statusOutcome(outcomeIds[id], result.status === 'fulfilled', result.reason?.message || 'unknown');
   });
+  const failed = results.find(result => result.status === 'rejected');
+  if (failed) console.warn('[admin] status summary partial failure', failed.reason);
 }
 
 async function reloadConfig() {

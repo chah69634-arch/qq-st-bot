@@ -73,9 +73,9 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=brief-162-userdata-assets-1">' in index
-    assert '<script src="/static/i18n.js?v=brief-162-userdata-assets-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=brief-162-userdata-assets-1"></script>' in index
+    assert '<link rel="stylesheet" href="/static/style.css?v=brief-163-status-config-ux-1">' in index
+    assert '<script src="/static/i18n.js?v=brief-163-status-config-ux-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=brief-163-status-config-ux-1"></script>' in index
     assert '<script src="/static/js/overview.js?v=admin-existence-userdata-tts-i18n-2"></script>' in index
     assert '<script src="/static/js/mcp.js?v=brief-161-tools-mcp-ux-1"></script>' in index
     assert '<script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>' in index
@@ -117,25 +117,39 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
     status = read_admin_page("status")
+    runtime_config = read_admin_page("runtime-config")
+    tts_config = read_admin_page("tts-config")
     routing = read_admin_page("model-routing")
 
     for key in (
         "status.title",
+        "status.data_environment.title",
+        "status.model.title",
+        "status.tts.summary_title",
+        "status.attention.title",
+    ):
+        assert f'data-i18n="{key}"' in status
+
+    for key in (
         "status.feature_switches",
         "status.proxy.title",
         "status.context.title",
         "status.llm.title",
         "status.screen.title",
         "status.relay.title",
-        "status.tts.title",
-        "status.tts.provider",
-        "status.tts.provider_openai_compatible",
-        "status.tts.provider_status",
-        "status.tts.provider_params",
-        "status.tts.api_url",
+        "status.sticker.title",
         "status.pronoun.title",
     ):
-        assert f'data-i18n="{key}"' in status
+        assert f'data-i18n="{key}"' in runtime_config
+
+    for key in (
+        "tts_config.title",
+        "status.tts.provider",
+        "status.tts.provider_openai_compatible",
+        "status.tts.provider_params",
+        "status.tts.api_url",
+    ):
+        assert f'data-i18n="{key}"' in tts_config
 
     for key in ("status.vision.title", "status.phone_vision.title"):
         assert f'data-i18n="{key}"' in routing

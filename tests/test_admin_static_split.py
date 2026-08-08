@@ -27,7 +27,7 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     fragments = sorted(PAGES.glob("*.html"))
 
-    assert len(fragments) == 40
+    assert len(fragments) == 42
     for fragment in fragments:
         page = fragment.stem
         assert f'id="page-{page}" data-page-fragment="{page}"' in index

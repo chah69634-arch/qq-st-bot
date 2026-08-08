@@ -1,0 +1,50 @@
+<h1 class="page-title" data-i18n="tts_config.title">TTS 配置</h1>
+<p class="admin-source-hint" data-i18n="tts_config.source_hint">配置 TTS provider、角色范围和逻辑 authored 资源。试听成功只代表本次合成返回音频，不代表桌面端或手机端已经播放。</p>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="tts_config.scope_title">作用域与开关</h3><button class="btn btn-ghost btn-sm" data-action="loadTtsConfig" data-i18n="common.refresh">刷新</button></div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="status.tts.character">角色作用域</span><select id="tts-char-select" onchange="loadTtsConfig()"><option value="" data-i18n="status.tts.global">全局默认</option></select></label>
+    <label class="field"><span data-i18n="status.tts.binding">当前绑定</span><input type="text" id="tts-character-binding" readonly></label>
+  </div>
+  <div class="form-row config-switch-row">
+    <label class="checkbox-row config-switch"><input type="checkbox" id="tts-enabled" class="admin-inline-202"><span data-i18n="tts_config.enabled">TTS 总开关</span></label>
+    <label class="checkbox-row config-switch"><input type="checkbox" id="tts-emotion-enabled" class="admin-inline-202"><span data-i18n="status.tts.emotion">情绪分档</span></label>
+    <label class="checkbox-row config-switch"><input type="checkbox" id="tts-desktop-enabled" class="admin-inline-202"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
+  </div>
+  <div class="config-item-meta"><span data-i18n="tts_config.scope_source">来源：全局 TTS 配置；角色卡可绑定命名 preset</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="tts_config.provider_title">Provider 与资源</h3><span id="tts-provider-status" class="badge" data-i18n="status.tts.not_ready">未就绪</span></div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="status.tts.provider">TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv" data-i18n="status.tts.provider_gsv">GPT-SoVITS / GSV</option><option value="openai_compatible" data-i18n="status.tts.provider_openai_compatible">OpenAI-compatible（自建/云端，POST /audio/speech）</option></select></label>
+    <label class="field"><span data-i18n="status.tts.api_url">API URL</span><input type="url" id="tts-api-url" placeholder="http://tts.example:9880"></label>
+  </div>
+  <p class="admin-inline-087" data-i18n="tts_config.resource_hint">资源选择器只显示 authored 资源的逻辑名称和来源，不提供本机物理路径输入。</p>
+  <div class="form-row">
+    <label class="field"><span data-i18n="status.tts.ref_audio">参考音频资源</span><select id="tts-ref-audio"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
+    <label class="field"><span data-i18n="status.tts.gpt_model">GPT 模型资源</span><select id="tts-gpt-model-path"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
+    <label class="field"><span data-i18n="status.tts.sovits_model">SoVITS 模型资源</span><select id="tts-sovits-model-path"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
+  </div>
+  <label class="field"><span data-i18n="status.tts.ref_text">参考文本</span><input type="text" id="tts-prompt-text" placeholder="参考音频对应文本" data-i18n-placeholder="status.tts.ref_placeholder"></label>
+  <label class="field config-range-field"><span data-i18n="status.tts.speed">语速</span><span class="config-range-value"><output id="tts-speed-val">1.00</output></span><input type="range" id="tts-speed" min="0.5" max="2" step="0.05" value="1" class="admin-inline-189" oninput="document.getElementById('tts-speed-val').textContent = parseFloat(this.value).toFixed(2)"></label>
+  <div class="config-item-meta"><span data-i18n="tts_config.resource_source">来源：用户私有 authored 资产 / 当前 provider</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
+</div>
+
+<details class="card tts-advanced" id="tts-advanced-panel">
+  <summary data-i18n="tts_config.advanced_title">高级 Provider 参数</summary>
+  <p class="admin-inline-087" data-i18n="tts_config.advanced_hint">高级项保持折叠；字段类型由控件约束。密钥只写入，不从服务端回显，也不会进入普通摘要。</p>
+  <label class="field"><span data-i18n="tts_config.api_key">Provider API Key（只写入）</span><input type="password" id="tts-provider-api-key" autocomplete="new-password" placeholder="留空则保留已有值" data-i18n-placeholder="setup.secret.keep"></label>
+  <label class="field"><span data-i18n="status.tts.provider_params">其他 Provider 参数</span><div id="tts-provider-params"></div></label>
+  <button type="button" class="btn btn-ghost btn-sm" data-action="addTtsProviderParam" data-i18n="status.tts.add_param">新增参数</button>
+  <label class="field"><span data-i18n="tts_config.emotion_tiers">情绪分档参数</span><div id="tts-emotion-tiers"></div></label>
+</details>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="tts_config.verify_title">试听与调用记录</h3><button class="btn btn-ghost btn-sm" data-action="loadTtsCallLog" data-i18n="status.tts.call_log">最近合成记录</button></div>
+  <p class="admin-inline-087" data-i18n="tts_config.verify_hint">试听调用真实 provider；结果只说明合成请求返回情况，不承诺任何客户端播放链路。</p>
+  <button class="btn btn-primary btn-sm" data-action="saveTtsConfig" data-i18n="common.save">保存</button>
+  <button class="btn btn-ghost btn-sm" data-action="testTtsConfig" data-i18n="status.tts.test">试听当前 Provider</button>
+  <pre id="tts-call-log" class="admin-inline-157"></pre>
+</div>

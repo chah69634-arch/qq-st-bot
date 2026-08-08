@@ -269,11 +269,11 @@ async function _loadSetupOptional() {
       <div class="setup-optional-model-summary">
         <div class="setup-optional-summary-row">
           <span>TTS: ${tts ? (tts.enabled ? `<span class="badge badge-success">${enabled}</span>` : `<span class="badge">${disabled}</span>`) : `<span class="badge">${unknown}</span>`}</span>
-          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["status"]'>${escapeHtml(t('setup.go_status', '前往系统状态页设置'))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["tts-config"]'>${escapeHtml(t('setup.go_tts', '前往 TTS 配置'))}</button>
         </div>
         <div class="setup-optional-summary-row">
           <span>Vision: ${vision ? (vision.enabled ? `<span class="badge badge-success">${escapeHtml(t('setup.vision_enabled', '已启用（{model}）', {model: vision.model || t('setup.no_model', '未填模型')}))}</span>` : `<span class="badge">${disabled}</span>`) : `<span class="badge">${unknown}</span>`}</span>
-          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["status"]'>${escapeHtml(t('setup.go_status', '前往系统状态页设置'))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["model-routing"]'>${escapeHtml(t('setup.go_vision', '前往视觉模型配置'))}</button>
         </div>
         <div class="setup-optional-summary-row">
           <span>${escapeHtml(t('setup.probe_helper', 'probe 小模型'))} → <code class="setup-optional-mono-code">${escapeHtml(resolve('probe'))}</code>　${escapeHtml(t('setup.summary_helper', 'summary 小模型'))} → <code class="setup-optional-mono-code">${escapeHtml(resolve('summary'))}</code></span>

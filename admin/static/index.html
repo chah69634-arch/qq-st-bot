@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>His Presence 管理面板</title>
-<link rel="stylesheet" href="/static/style.css?v=brief-162-userdata-assets-1">
+<link rel="stylesheet" href="/static/style.css?v=brief-163-status-config-ux-1">
 </head>
 <body>
 
@@ -119,6 +119,8 @@
     <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["advanced"]'><span class="nav-caret" id="caret-advanced">▾</span><span data-i18n="nav.group.advanced">高级设置</span></div>
     <div class="nav-group" id="navgroup-advanced">
       <a data-page="model-routing" data-action="goto" data-action-args='["model-routing"]'><span class="icon">🔀</span><span data-i18n="nav.model_routing">模型路由</span></a>
+      <a data-page="runtime-config" data-action="goto" data-action-args='["runtime-config"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime_config">运行配置</span></a>
+      <a data-page="tts-config" data-action="goto" data-action-args='["tts-config"]'><span class="icon">🔊</span><span data-i18n="nav.tts_config">TTS 配置</span></a>
     </div>
 
     <div class="nav-bottom">
@@ -139,6 +141,8 @@
     <!-- ── 配置中心（Brief 93 §1） ── -->
     <div class="page active" id="page-overview" data-page-fragment="overview"></div>
     <div class="page" id="page-setup" data-page-fragment="setup"></div>
+    <div class="page" id="page-runtime-config" data-page-fragment="runtime-config"></div>
+    <div class="page" id="page-tts-config" data-page-fragment="tts-config"></div>
 
     <!-- ── MCP 管理（Brief 110） ── -->
     <div class="page" id="page-mcp" data-page-fragment="mcp"></div>
@@ -585,17 +589,18 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=brief-162-userdata-assets-1"></script>
-<script src="/static/js/core.js?v=brief-162-userdata-assets-1"></script>
+<script src="/static/i18n.js?v=brief-163-status-config-ux-1"></script>
+<script src="/static/js/core.js?v=brief-163-status-config-ux-1"></script>
 <script src="/static/js/overview.js?v=admin-existence-userdata-tts-i18n-2"></script>
-<script src="/static/js/setup.js?v=brief-159-form-controls-anniversary-1"></script>
+<script src="/static/js/setup.js?v=brief-163-status-config-ux-1"></script>
 <script src="/static/js/mcp.js?v=brief-161-tools-mcp-ux-1"></script>
 <script src="/static/js/tools.js?v=brief-161-tools-mcp-ux-1"></script>
-<script src="/static/js/status-users.js?v=admin-ui-data-isolation-1"></script>
+<script src="/static/js/status-users.js?v=brief-163-status-config-ux-1"></script>
+<script src="/static/js/runtime-config.js?v=brief-163-status-config-ux-1"></script>
 <script src="/static/js/lorebook.js"></script>
 <script src="/static/js/settings.js?v=admin-ui-capability-entrances-2"></script>
 <script src="/static/js/relationship.js"></script>
-<script src="/static/js/character.js?v=brief-159-form-controls-anniversary-1"></script>
+<script src="/static/js/character.js?v=brief-163-status-config-ux-1"></script>
 <script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>
 <script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>
 <script src="/static/js/observability.js?v=admin-existence-userdata-tts-i18n-2"></script>
