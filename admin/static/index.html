@@ -66,6 +66,7 @@
       <a data-page="lorebook" data-action="goto" data-action-args='["lorebook"]'><span class="icon">🌍</span><span data-i18n="nav.lorebook">现实设定</span></a>
       <a data-page="dream-settings" data-action="goto" data-action-args='["dream-settings"]'><span class="icon">🌙</span><span data-i18n="nav.dream_settings">梦境设定</span></a>
       <a data-page="relationship-facts" data-action="goto" data-action-args='["relationship-facts"]'><span class="icon">📌</span><span data-i18n="nav.relationship_facts">关系事实</span></a>
+      <a data-page="user-data" data-action="goto" data-action-args='["user-data"]'><span class="icon">📦</span><span data-i18n="nav.user_data">用户数据</span></a>
     </div>
 
     <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["proactive"]'><span class="nav-caret" id="caret-proactive">▾</span><span data-i18n="nav.group.proactive">主动行为</span></div>
@@ -92,14 +93,14 @@
       <a data-page="users" data-action="goto" data-action-args='["users"]'><span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
     </div>
 
-    <div class="nav-group-header nav-group-readonly" data-action="toggleNavGroup" data-action-args='["memory"]'><span class="nav-caret" id="caret-memory">▾</span><span data-i18n="nav.group.memory_growth">记忆与成长</span></div>
-    <div class="nav-group nav-group-readonly" id="navgroup-memory">
-      <a data-page="observe-mood" data-action="goto" data-action-args='["observe-mood"]'><span class="icon">🌸</span><span data-i18n="nav.mood">情绪·花园</span></a>
-      <a data-page="observe-dream" data-action="goto" data-action-args='["observe-dream"]'><span class="icon">🌙</span><span data-i18n="nav.dream_state">梦境状态</span></a>
-      <a data-page="observe-memory" data-action="goto" data-action-args='["observe-memory"]'><span class="icon">🧠</span><span data-i18n="nav.memory">记忆探查</span></a>
-      <a data-page="observe-hidden" data-action="goto" data-action-args='["observe-hidden"]'><span class="icon">🔬</span><span data-i18n="nav.hidden_state">隐性状态</span></a>
-      <a data-page="observe-growth" data-action="goto" data-action-args='["observe-growth"]'><span class="icon">🌱</span><span data-i18n="nav.growth">成长</span></a>
+    <div class="nav-group-header nav-group-readonly" data-action="toggleNavGroup" data-action-args='["existence"]'><span class="nav-caret" id="caret-existence">▾</span><span data-i18n="nav.group.existence">存在</span></div>
+    <div class="nav-group nav-group-readonly" id="navgroup-existence">
+      <a data-page="observe-existence" data-action="goto" data-action-args='["observe-existence"]'><span class="icon">✨</span><span data-i18n="nav.existence_overview">存在总览</span></a>
       <a data-page="observe-memory-summary" data-action="goto" data-action-args='["observe-memory-summary"]'><span class="icon">📚</span><span data-i18n="nav.memory_summary">记忆摘要</span></a>
+      <a data-page="observe-growth" data-action="goto" data-action-args='["observe-growth"]'><span class="icon">🌱</span><span data-i18n="nav.growth">成长</span></a>
+      <a data-page="observe-visual" data-action="goto" data-action-args='["observe-visual"]'><span class="icon">👁️</span><span data-i18n="nav.visual">视觉</span></a>
+      <a data-page="observe-spend" data-action="goto" data-action-args='["observe-spend"]'><span class="icon">💰</span><span data-i18n="nav.spend">支出</span></a>
+      <a data-page="observe-group-arbiter" data-action="goto" data-action-args='["observe-group-arbiter"]'><span class="icon">⚖️</span><span data-i18n="nav.group_arbiter">群聊仲裁</span></a>
       <a data-page="observe-provenance" data-action="goto" data-action-args='["observe-provenance"]'><span class="icon">🧾</span><span data-i18n="nav.provenance">印象溯源</span></a>
       <a data-page="observe-vector" data-action="goto" data-action-args='["observe-vector"]'><span class="icon">🧬</span><span data-i18n="nav.vector_store">向量库</span></a>
     </div>
@@ -109,13 +110,7 @@
       <a data-page="observe-prompt"  data-action="goto" data-action-args='["observe-prompt"]'> <span class="icon">🗂️</span><span data-i18n="nav.prompt_layers">Prompt 层检视</span></a>
       <a data-page="observe-tools"   data-action="goto" data-action-args='["observe-tools"]'>  <span class="icon">🛠️</span><span data-i18n="nav.tool_observability">工具观测</span></a>
       <a data-page="observe-dream-prompt" data-action="goto" data-action-args='["observe-dream-prompt"]'><span class="icon">💭</span><span data-i18n="nav.dream_prompt">梦境 Prompt</span></a>
-      <a data-page="observe-trigger-catalog" data-action="goto" data-action-args='["observe-trigger-catalog"]'><span class="icon">📡</span><span data-i18n="nav.trigger_catalog">触发器目录</span></a>
-      <a data-page="observe-api-contract" data-action="goto" data-action-args='["observe-api-contract"]'><span class="icon">🔗</span><span data-i18n="nav.api_contract">API 契约检查</span></a>
-      <a data-page="observe-runtime-signals" data-action="goto" data-action-args='["observe-runtime-signals"]'><span class="icon">📶</span><span data-i18n="nav.runtime_signals">运行信号</span></a>
-      <a data-page="observe-visual" data-action="goto" data-action-args='["observe-visual"]'><span class="icon">👁️</span><span data-i18n="nav.visual">视觉</span></a>
-      <a data-page="observe-spend" data-action="goto" data-action-args='["observe-spend"]'><span class="icon">💰</span><span data-i18n="nav.spend">支出</span></a>
-      <a data-page="observe-group-arbiter" data-action="goto" data-action-args='["observe-group-arbiter"]'><span class="icon">⚖️</span><span data-i18n="nav.group_arbiter">群聊仲裁</span></a>
-      <a data-page="observe-resource-completeness" data-action="goto" data-action-args='["observe-resource-completeness"]'><span class="icon">🩺</span><span data-i18n="nav.resource_completeness">资源完整性</span></a>
+      <a data-page="observe-system-diagnosis" data-action="goto" data-action-args='["observe-system-diagnosis"]'><span class="icon">🩺</span><span data-i18n="nav.system_diagnosis">系统诊断</span></a>
       <a data-page="observe-char-permissions" data-action="goto" data-action-args='["observe-char-permissions"]'><span class="icon">🔐</span><span data-i18n="nav.char_permissions">角色权限</span></a>
       <a data-page="observe-chatlog" data-action="goto" data-action-args='["observe-chatlog"]'><span class="icon">💬</span><span data-i18n="nav.chat_log">聊天日志</span></a>
       <a data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime">运行时内部态</span></a>
@@ -353,6 +348,7 @@
 
     <!-- ── 观测：梦境状态 ── -->
     <div class="page" id="page-observe-dream" data-page-fragment="observe-dream"></div>
+    <div class="page" id="page-observe-existence" data-page-fragment="observe-existence"></div>
 
     <!-- ── 观测：记忆探查 ── -->
     <div class="page" id="page-observe-memory" data-page-fragment="observe-memory"></div>
@@ -388,6 +384,8 @@
     <!-- ── 梦境 Prompt 检视 ── -->
     <div class="page" id="page-observe-dream-prompt" data-page-fragment="observe-dream-prompt"></div>
 
+    <div class="page" id="page-observe-system-diagnosis" data-page-fragment="observe-system-diagnosis"></div>
+
     <!-- ── 触发器目录 ── -->
     <div class="page" id="page-observe-trigger-catalog" data-page-fragment="observe-trigger-catalog"></div>
 
@@ -400,6 +398,8 @@
     <!-- ── 运行信号：高频日志的只读聚合 ── -->
     <div class="page" id="page-observe-runtime-signals" data-page-fragment="observe-runtime-signals"></div>
     <div class="page" id="page-observe-autonomy" data-page-fragment="observe-autonomy"></div>
+
+    <div class="page" id="page-user-data" data-page-fragment="user-data"></div>
 
     <!-- ── 角色权限 ── -->
     <div class="page" id="page-observe-char-permissions" data-page-fragment="observe-char-permissions"></div>
@@ -586,9 +586,9 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=admin-global-effective-state-overview-1"></script>
-<script src="/static/js/core.js?v=admin-global-effective-state-overview-1"></script>
-<script src="/static/js/overview.js?v=admin-global-effective-state-overview-1"></script>
+<script src="/static/i18n.js?v=admin-existence-userdata-tts-i18n-2"></script>
+<script src="/static/js/core.js?v=admin-existence-userdata-tts-i18n-2"></script>
+<script src="/static/js/overview.js?v=admin-existence-userdata-tts-i18n-2"></script>
 <script src="/static/js/setup.js?v=admin-ui-structured-fields-1"></script>
 <script src="/static/js/mcp.js?v=admin-i18n-completeness-1"></script>
 <script src="/static/js/tools.js?v=admin-i18n-completeness-1"></script>
@@ -596,10 +596,11 @@
 <script src="/static/js/lorebook.js"></script>
 <script src="/static/js/settings.js?v=admin-ui-capability-entrances-2"></script>
 <script src="/static/js/relationship.js"></script>
-<script src="/static/js/character.js?v=admin-ui-capability-entrances-2"></script>
+<script src="/static/js/character.js?v=admin-existence-userdata-tts-i18n-2"></script>
 <script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>
 <script src="/static/js/integrations.js?v=admin-i18n-completeness-1"></script>
-<script src="/static/js/observability.js?v=effective-state-1"></script>
+<script src="/static/js/observability.js?v=admin-existence-userdata-tts-i18n-2"></script>
+<script src="/static/js/user-data.js?v=admin-existence-userdata-tts-i18n-2"></script>
 <script src="/static/js/dream-settings.js"></script>
 <script src="/static/js/provenance-vector.js"></script>
 </body>

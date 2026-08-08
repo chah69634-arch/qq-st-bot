@@ -24,6 +24,7 @@
       'nav.group.channels': '通道与设备',
       'nav.group.security': '安全与账户',
       'nav.group.memory_growth': '记忆与成长',
+      'nav.group.existence': '存在',
       'nav.group.advanced': '高级设置',
       'nav.group.creation': '🎨 创作',
       'nav.character': '角色卡',
@@ -36,6 +37,7 @@
       'nav.scheduler': '调度器',
       'nav.integrations': 'Garden 论坛唤醒',
       'nav.users': '用户管理',
+      'nav.user_data': '用户数据',
       'nav.logs': '错误日志',
       'nav.auth_tokens': 'Token',
       'nav.model_routing': '模型路由',
@@ -55,6 +57,7 @@
       'nav.spend': '支出',
       'nav.group_arbiter': '群聊仲裁',
       'nav.memory_summary': '记忆摘要',
+      'nav.existence_overview': '存在总览',
       'nav.prompt_layers': 'Prompt 层检视',
       'nav.probe': '探针观测',
       'nav.tool_observability': '工具观测',
@@ -66,6 +69,7 @@
       'nav.api_contract': 'API 契约检查',
       'nav.char_permissions': '角色权限',
       'nav.runtime_signals': '运行信号',
+      'nav.system_diagnosis': '系统诊断',
       'nav.autonomy': '唤醒状态',
       'nav.logout': '退出登录',
       'overview.title': '控制中心',
@@ -93,6 +97,50 @@
       'overview.effective.title': '全局生效状态',
       'overview.effective.description': '同时查看默认值、配置值、运行时生效值、来源、阻断原因和编辑入口。',
       'overview.effective.empty': '当前没有可用的生效状态数据。',
+      'existence.title': '存在总览',
+      'existence.subtitle': '把当前角色持续存在相关的状态放在一起看。',
+      'existence.mood.title': '情绪与花园',
+      'existence.mood.description': '查看当前情绪、花园状态与异常提示。',
+      'existence.dream.title': '梦境状态',
+      'existence.dream.description': '查看现实 / 梦境 / 挽留 / 冷却等状态。',
+      'existence.memory.title': '记忆',
+      'existence.memory.description': '查看层级摘要、来源隔离和召回可用性。',
+      'existence.growth.title': '成长',
+      'existence.growth.description': '查看近期练习、兴趣和作品摘要。',
+      'existence.visual.title': '视觉',
+      'existence.visual.description': '查看视觉资源与观测结果。',
+      'existence.spend.title': '支出',
+      'existence.spend.description': '查看台账与消耗情况。',
+      'system_diagnosis.title': '系统诊断',
+      'system_diagnosis.subtitle': '把资源、运行、主动链路和契约放在一页看。',
+      'system_diagnosis.contract_note': '桌面兼容性是源码静态契约检查，不是在线通道测试。',
+      'user_data.title': '用户数据',
+      'user_data.subtitle': '查看、上传和删除私有 authored 资产。',
+      'user_data.loading': '加载中…',
+      'user_data.category': '类别',
+      'user_data.all': '全部',
+      'user_data.partial': '桌面端尚不可用',
+      'user_data.character': '角色',
+      'user_data.refresh': '刷新',
+      'user_data.logical_id': '逻辑 ID',
+      'user_data.source': '来源',
+      'user_data.status': '状态',
+      'user_data.size': '大小',
+      'user_data.updated_at': '更新时间',
+      'user_data.delete': '删除',
+      'user_data.file': '文件',
+      'user_data.scope_extra': '情绪 / pack',
+      'user_data.upload': '上传',
+      'user_data.load_failed': '加载失败：{error}',
+      'user_data.choose_file': '请选择文件。',
+      'user_data.delete_confirm': '删除 {logicalId}？\n绑定：{bindings}',
+      'user_data.category.reference_audio': '参考音频',
+      'user_data.category.gpt_model': 'GPT 模型',
+      'user_data.category.sovits_model': 'SoVITS 模型',
+      'user_data.category.sticker': '通用表情包',
+      'user_data.category.sticker_pack': '角色表情包',
+      'user_data.category.live2d': 'Live2D 模型包',
+      'user_data.category.model3d': '3D 模型包',
       'overview.effective.error': '读取生效状态失败：{error}',
       'overview.table.feature': '功能',
       'overview.table.default': '默认值',
@@ -1474,6 +1522,11 @@
       'status.relay.title': '中继唤醒',
       'status.relay.token': 'Token（留空保留已有值）',
       'status.tts.title': 'TTS 配置',
+      'status.tts.character': '角色作用域',
+      'status.tts.binding': '当前绑定',
+      'status.tts.global': '全局默认',
+      'status.tts.unselected': '未选择',
+      'status.tts.role_binding_managed': '角色 TTS 绑定由角色页的命名预设管理，避免覆盖全局配置。',
       'status.tts.provider': 'TTS Provider',
       'status.tts.provider_gsv': 'GPT-SoVITS / GSV',
       'status.tts.provider_openai_compatible': 'OpenAI-compatible（自建/云端，POST /audio/speech）',
@@ -1632,6 +1685,7 @@
       'nav.group.channels': 'Channels and devices',
       'nav.group.security': 'Security and accounts',
       'nav.group.memory_growth': 'Memory and growth',
+      'nav.group.existence': 'Existence',
       'nav.group.advanced': 'Advanced settings',
       'nav.group.creation': '🎨 Creation',
       'nav.character': 'Characters',
@@ -1644,6 +1698,7 @@
       'nav.scheduler': 'Scheduler',
       'nav.integrations': 'Garden Forum Wake',
       'nav.users': 'Users',
+      'nav.user_data': 'User Data',
       'nav.logs': 'Error Logs',
       'nav.auth_tokens': 'Tokens',
       'nav.model_routing': 'Model Routing',
@@ -1663,6 +1718,7 @@
       'nav.spend': 'Spending',
       'nav.group_arbiter': 'Group Arbiter',
       'nav.memory_summary': 'Memory Summary',
+      'nav.existence_overview': 'Existence Overview',
       'nav.prompt_layers': 'Prompt Layers',
       'nav.probe': 'Probe Inspector',
       'nav.tool_observability': 'Tool Observability',
@@ -1674,6 +1730,7 @@
       'nav.api_contract': 'API Contract Check',
       'nav.char_permissions': 'Character Permissions',
       'nav.runtime_signals': 'Runtime Signals',
+      'nav.system_diagnosis': 'System Diagnosis',
       'nav.autonomy': 'Wake-up State',
       'nav.logout': 'Sign out',
       'overview.title': 'Control center',
@@ -1701,6 +1758,50 @@
       'overview.effective.title': 'Global effective state',
       'overview.effective.description': 'See defaults, configured values, runtime values, sources, blockers, and edit destinations together.',
       'overview.effective.empty': 'No effective-state data is available.',
+      'existence.title': 'Existence Overview',
+      'existence.subtitle': 'See the current role continuity state in one place.',
+      'existence.mood.title': 'Mood & Garden',
+      'existence.mood.description': 'Inspect the current mood, garden state, and warnings.',
+      'existence.dream.title': 'Dream State',
+      'existence.dream.description': 'Inspect reality, dream, hold, and cooldown state.',
+      'existence.memory.title': 'Memory',
+      'existence.memory.description': 'Inspect layer summaries, source isolation, and recall availability.',
+      'existence.growth.title': 'Growth',
+      'existence.growth.description': 'Inspect recent practice, interests, and work summaries.',
+      'existence.visual.title': 'Visual',
+      'existence.visual.description': 'Inspect visual resources and observations.',
+      'existence.spend.title': 'Spend',
+      'existence.spend.description': 'Inspect the ledger and usage.',
+      'system_diagnosis.title': 'System Diagnosis',
+      'system_diagnosis.subtitle': 'See resources, runtime signals, trigger chain, and contracts together.',
+      'system_diagnosis.contract_note': 'Desktop compatibility is a source-level static contract check, not a live channel test.',
+      'user_data.title': 'User Data',
+      'user_data.subtitle': 'Inspect, upload, and delete private authored assets.',
+      'user_data.loading': 'Loading...',
+      'user_data.category': 'Category',
+      'user_data.all': 'All',
+      'user_data.partial': 'Desktop unavailable',
+      'user_data.character': 'Character',
+      'user_data.refresh': 'Refresh',
+      'user_data.logical_id': 'Logical ID',
+      'user_data.source': 'Source',
+      'user_data.status': 'Status',
+      'user_data.size': 'Size',
+      'user_data.updated_at': 'Updated',
+      'user_data.delete': 'Delete',
+      'user_data.file': 'File',
+      'user_data.scope_extra': 'Emotion / pack',
+      'user_data.upload': 'Upload',
+      'user_data.load_failed': 'Load failed: {error}',
+      'user_data.choose_file': 'Choose a file first.',
+      'user_data.delete_confirm': 'Delete {logicalId}?\nBindings: {bindings}',
+      'user_data.category.reference_audio': 'Reference audio',
+      'user_data.category.gpt_model': 'GPT model',
+      'user_data.category.sovits_model': 'SoVITS model',
+      'user_data.category.sticker': 'Shared stickers',
+      'user_data.category.sticker_pack': 'Character sticker pack',
+      'user_data.category.live2d': 'Live2D package',
+      'user_data.category.model3d': '3D package',
       'overview.effective.error': 'Unable to read effective state: {error}',
       'overview.table.feature': 'Feature',
       'overview.table.default': 'Default',
@@ -3082,6 +3183,11 @@
       'status.relay.title': 'Relay Wake',
       'status.relay.token': 'Token (leave blank to keep the existing value)',
       'status.tts.title': 'TTS Configuration',
+      'status.tts.character': 'Character scope',
+      'status.tts.binding': 'Current binding',
+      'status.tts.global': 'Global default',
+      'status.tts.unselected': 'Not selected',
+      'status.tts.role_binding_managed': 'Role TTS bindings are managed by named presets on the character page.',
       'status.tts.provider': 'TTS Provider',
       'status.tts.provider_gsv': 'GPT-SoVITS / GSV',
       'status.tts.provider_openai_compatible': 'OpenAI-compatible (self-hosted/cloud, POST /audio/speech)',
@@ -3228,7 +3334,9 @@
   const originalText = new WeakMap();
   const originalAttributes = new WeakMap();
   const legacyExact = new Map();
+  const legacyEnglishExact = new Map();
   const legacyPatterns = [];
+  const legacyEnglishPatterns = [];
   const legacyFragments = [];
 
   function escapeRegExp(value) {
@@ -3243,6 +3351,7 @@
       return;
     }
     legacyExact.set(chinese.trim(), english);
+    legacyEnglishExact.set(english.trim(), chinese);
     const names = [];
     let cursor = 0;
     let source = '';
@@ -3256,11 +3365,25 @@
     if (names.length) {
       source += escapeRegExp(chinese.slice(cursor));
       const literalLength = chinese.replace(/\{[a-zA-Z0-9_]+\}/g, '').length;
-      legacyPatterns.push({regex: new RegExp(`^${source}$`, 's'), names, english, literalLength});
+      legacyPatterns.push({regex: new RegExp(`^${source}$`, 's'), names, english, chinese, literalLength});
+      // Keep a reverse matcher for nodes inserted while English is active.
+      let englishSource = '';
+      let englishCursor = 0;
+      const englishNames = [];
+      const englishMatcher = /\{([a-zA-Z0-9_]+)\}/g;
+      let englishMatch;
+      while ((englishMatch = englishMatcher.exec(english)) !== null) {
+        englishSource += escapeRegExp(english.slice(englishCursor, englishMatch.index)) + '(.*?)';
+        englishNames.push(englishMatch[1]);
+        englishCursor = englishMatch.index + englishMatch[0].length;
+      }
+      englishSource += escapeRegExp(english.slice(englishCursor));
+      legacyEnglishPatterns.push({regex: new RegExp(`^${englishSource}$`, 's'), names: englishNames, chinese, literalLength});
     }
   });
 
   legacyPatterns.sort((a, b) => b.literalLength - a.literalLength || a.names.length - b.names.length);
+  legacyEnglishPatterns.sort((a, b) => b.literalLength - a.literalLength || a.names.length - b.names.length);
   legacyFragments.sort((a, b) => b[0].length - a[0].length);
 
   function translateUiText(value, allowFragments=false) {
@@ -3287,6 +3410,25 @@
     return raw;
   }
 
+  function canonicalChinese(value) {
+    const raw = String(value == null ? '' : value);
+    if (/[\u3400-\u9fff]/.test(raw)) return raw;
+    const leading = raw.match(/^\s*/)?.[0] || '';
+    const trailing = raw.match(/\s*$/)?.[0] || '';
+    const end = raw.length - trailing.length;
+    const core = raw.slice(leading.length, end > leading.length ? end : raw.length);
+    const exact = legacyEnglishExact.get(core);
+    if (exact != null) return `${leading}${exact}${trailing}`;
+    for (const item of legacyEnglishPatterns) {
+      const match = item.regex.exec(core);
+      if (!match) continue;
+      const params = {};
+      item.names.forEach((name, index) => { params[name] = match[index + 1]; });
+      return `${leading}${format(item.chinese, params)}${trailing}`;
+    }
+    return raw;
+  }
+
   function legacyExcluded(element) {
     return !element || !!element.closest(
       'script, style, code, pre, .log-box, .i18n-raw, #chat-messages, [data-i18n], [data-i18n-skip]'
@@ -3295,8 +3437,8 @@
 
   function applyLegacyTextNode(node) {
     const parent = node.parentElement;
-    if (!parent || legacyExcluded(parent) || !/[\u3400-\u9fff]/.test(node.nodeValue || '')) return;
-    if (!originalText.has(node)) originalText.set(node, node.nodeValue);
+    if (!parent || legacyExcluded(parent)) return;
+    if (!originalText.has(node)) originalText.set(node, canonicalChinese(node.nodeValue));
     const original = originalText.get(node);
     const translated = currentLanguage === DEFAULT_LANGUAGE ? original : translateUiText(original);
     if (node.nodeValue !== translated) node.nodeValue = translated;
@@ -3310,7 +3452,7 @@
     const saved = originalAttributes.get(element) || {};
     ['placeholder', 'title', 'aria-label'].forEach(attribute => {
       if (!element.hasAttribute(attribute) || element.hasAttribute(`data-i18n-${attribute}`)) return;
-      if (!Object.prototype.hasOwnProperty.call(saved, attribute)) saved[attribute] = element.getAttribute(attribute);
+      if (!Object.prototype.hasOwnProperty.call(saved, attribute)) saved[attribute] = canonicalChinese(element.getAttribute(attribute));
       const original = saved[attribute];
       element.setAttribute(attribute, currentLanguage === DEFAULT_LANGUAGE ? original : translateUiText(original));
     });

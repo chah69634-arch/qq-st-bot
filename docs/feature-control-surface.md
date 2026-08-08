@@ -151,3 +151,13 @@ Configured MCP tools may expose a safe `setting.mcp.server:<name>.policy:<tool>`
 control for ordinary `read`/`write` policy and confirmation flags. Existing
 `actuate`, `emergency`, and `unrestricted` policies are marked high risk and
 cannot be changed by the agent.
+
+## Brief 158 TTS resource selection
+
+The admin TTS status card queries `/tts-config?char_id=<logical-id>` and
+`/tts-resources`. Responses expose the character's named-preset resolution and
+logical authored voice resources without local filesystem paths. Preview calls
+carry the selected character ID through the same `resolve_tts_config()` path as
+real synthesis. Character preset binding remains owned by the existing
+character asset-binding endpoint, so role inspection cannot overwrite global
+TTS configuration.

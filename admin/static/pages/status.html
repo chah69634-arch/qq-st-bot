@@ -175,6 +175,10 @@
           <button class="btn btn-ghost btn-sm" data-action="loadTtsConfig" data-i18n="common.refresh">刷新</button>
         </div>
         <p class="admin-source-hint">配置来源：全局 TTS 配置；角色卡的 TTS 预设可在角色页覆盖。桌面语音条仅影响客户端展示。</p>
+        <div class="form-row admin-inline-156">
+          <label class="field"><span data-i18n="status.tts.character">角色作用域</span><select id="tts-char-select" onchange="loadTtsConfig()"><option value="" data-i18n="status.tts.global">全局默认</option></select></label>
+          <label class="field"><span data-i18n="status.tts.binding">当前绑定</span><input id="tts-character-binding" readonly></label>
+        </div>
         <div class="admin-inline-021">
           <label class="checkbox-row admin-inline-117">
             <input type="checkbox" id="tts-enabled" class="admin-inline-202">
@@ -195,12 +199,12 @@
           </label>
           <label class="field">
             <span data-i18n="status.tts.ref_audio">参考音频路径</span>
-            <input type="text" id="tts-ref-audio" placeholder="ref.wav">
+            <select id="tts-ref-audio"><option value="" data-i18n="status.tts.unselected">未选择</option></select>
           </label>
         </div>
         <div class="form-row admin-inline-156">
-          <label class="field"><span data-i18n="status.tts.gpt_model">GPT 模型路径</span><input type="text" id="tts-gpt-model-path" placeholder="example.ckpt"></label>
-          <label class="field"><span data-i18n="status.tts.sovits_model">SoVITS 模型路径</span><input type="text" id="tts-sovits-model-path" placeholder="example.pth"></label>
+          <label class="field"><span data-i18n="status.tts.gpt_model">GPT 模型路径</span><select id="tts-gpt-model-path"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
+          <label class="field"><span data-i18n="status.tts.sovits_model">SoVITS 模型路径</span><select id="tts-sovits-model-path"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
         </div>
         <div class="form-row col-1 admin-inline-156">
           <label class="field">

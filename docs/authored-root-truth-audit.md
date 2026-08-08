@@ -426,3 +426,11 @@ admin create-character:
 ## 10. 本次审计提交
 
 实际 commit hash 由 Git 在提交时生成，并在本次任务交付结果中报告。该 commit 只包含本文件，不包含审计前已经存在的未提交变化。
+
+## Brief 158 update
+
+TTS reference audio and model packages now use canonical `userdata` character
+voice directories through `DataPaths`. The admin API returns only logical IDs,
+source provenance, and bounded metadata; it does not expose local filesystem
+paths. Live2D and 3D package uploads are stored and validated server-side but
+remain explicitly `partial` until a desktop consumer contract is implemented.

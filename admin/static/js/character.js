@@ -1,6 +1,35 @@
 let _ttsProviderParamsByProvider = {};
 let _ttsLoadedProvider = 'gsv';
 
+async function _loadTtsCharacters() {
+  const select = document.getElementById('tts-char-select');
+  if (!select || select.dataset.loaded === 'true') return;
+  try {
+    const data = await api('GET', '/characters');
+    for (const char of (data.characters || [])) {
+      const option = document.createElement('option');
+      option.value = char.id || '';
+      option.textContent = char.label || char.id || '';
+      select.appendChild(option);
+    }
+    select.dataset.loaded = 'true';
+  } catch (_error) { /* keep global-only mode */ }
+}
+
+function _renderTtsResourceSelect(id, rows, current) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  const options = ['<option value="">未选择</option>'];
+  for (const row of (rows || [])) {
+    options.push(`<option value="${escapeHtml(row.logical_id)}">${escapeHtml(row.name || row.logical_id)} · ${escapeHtml(row.source || '')}</option>`);
+  }
+  if (current && !(rows || []).some(row => row.logical_id === current || row.name === current)) {
+    options.push(`<option value="${escapeHtml(current)}">${escapeHtml(current)} · 外部/不可验证</option>`);
+  }
+  select.innerHTML = options.join('');
+  select.value = current || '';
+}
+
 function _renderTtsProvider(provider) {
   const params = _ttsProviderParamsByProvider[provider] || {};
   renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'prompt_text', 'speed'] });
@@ -28,7 +57,9 @@ function onTtsProviderChange() {
 async function loadTtsConfig() {
   loadRelaySettings();
   try {
-    const d = await api('GET', '/tts-config');
+    await _loadTtsCharacters();
+    const charId = document.getElementById('tts-char-select')?.value || '';
+    const d = await api('GET', `/tts-config${charId ? `?char_id=${encodeURIComponent(charId)}` : ''}`);
     document.getElementById('tts-enabled').checked = !!d.enabled;
     document.getElementById('tts-emotion-enabled').checked = !!d.emotion_enabled;
     document.getElementById('tts-desktop-enabled').checked = !!d.desktop_enabled;
@@ -41,9 +72,21 @@ async function loadTtsConfig() {
     document.getElementById('tts-provider-status').value = s.ready
       ? t('status.tts.ready', 'ready')
       : (s.reason || t('status.tts.not_ready', 'not ready'));
+    const binding = d.character_binding;
+    const bindingEl = document.getElementById('tts-character-binding');
+    if (bindingEl) bindingEl.value = binding ? `${binding.name || binding.char_id} · ${binding.tts_preset || t('status.tts.global', '全局默认')} · ${binding.preset_exists ? 'ok' : 'fallback'}` : t('status.tts.global', '全局默认');
+    const options = d.resource_options || {};
+    const params = d.provider_params || {};
+    _renderTtsResourceSelect('tts-ref-audio', options.reference_audio, params.ref_audio || d.ref_audio || '');
+    _renderTtsResourceSelect('tts-gpt-model-path', options.gpt_model, params.gpt_model_path || '');
+    _renderTtsResourceSelect('tts-sovits-model-path', options.sovits_model, params.sovits_model_path || '');
   } catch (e) { toast(t('status.tts.load_error', '读取 TTS 配置失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveTtsConfig() {
+  if (document.getElementById('tts-char-select')?.value) {
+    toast(t('status.tts.role_binding_managed', 'Role TTS bindings are managed by named presets on the character page.'), 'err');
+    return;
+  }
   let providerParams;
   try { providerParams = readKeyValueEditor('tts-provider-params'); }
   catch (e) { toast(e.message, 'err'); return; }
@@ -96,7 +139,7 @@ async function saveStickerConfig() {
 }
 async function testTtsConfig() {
   try {
-    const d = await api('POST', '/tts-config/test', { text: t('status.tts.test_text', '这是一段 TTS 配置试听。'), emotion: 'neutral' });
+    const d = await api('POST', '/tts-config/test', { text: t('status.tts.test_text', '这是一段 TTS 配置试听。'), emotion: 'neutral', char_id: document.getElementById('tts-char-select')?.value || null });
     const audio = new Audio(`data:${d.mime};base64,${d.audio_b64}`);
     await audio.play();
     toast(t('status.tts.test_success', '试听成功 ({provider})', { provider: d.provider }), 'ok');

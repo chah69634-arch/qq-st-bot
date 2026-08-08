@@ -74,9 +74,9 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     runtime = I18N.read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="/static/style.css?v=admin-global-effective-state-overview-1">' in index
-    assert '<script src="/static/i18n.js?v=admin-global-effective-state-overview-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=admin-global-effective-state-overview-1"></script>' in index
-    assert '<script src="/static/js/overview.js?v=admin-global-effective-state-overview-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=admin-existence-userdata-tts-i18n-2"></script>' in index
+    assert '<script src="/static/js/core.js?v=admin-existence-userdata-tts-i18n-2"></script>' in index
+    assert '<script src="/static/js/overview.js?v=admin-existence-userdata-tts-i18n-2"></script>' in index
     assert '<script src="/static/js/mcp.js?v=admin-i18n-completeness-1"></script>' in index
     assert '<script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>' in index
     assert '<script src="/static/js/integrations.js?v=admin-i18n-completeness-1"></script>' in index
@@ -108,7 +108,7 @@ def test_all_navigation_links_use_semantic_i18n_keys():
     assert 'id="admin-language-select"' in index
     assert 'id="auth-language-select"' in index
     assert index.count("data-language-select") == 2
-    assert 'data-action-args=\'["memory"]\'' in index
+    assert 'data-action-args=\'["existence"]\'' in index
     assert 'data-action-args=\'["advanced"]\'' in index
     assert 'data-page="observe-probe"' not in index
 

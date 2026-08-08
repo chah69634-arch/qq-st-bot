@@ -72,3 +72,13 @@ userdata/
 2. 变更配置或密钥后更新受保护的配置备份。
 3. 需要长期连续性时，按用户/角色选择性备份 §三中的运行积累。
 4. 迁移或清理旧目录前，先完成第 1 步并验证主路径可被程序读取。
+
+## Brief 158 authored assets
+
+Back up `userdata/characters/authored/{char_id}/voice/` together with
+`userdata/assets/stickers/` and `userdata/assets/stickers_packs/`. Voice
+records are selectable through the admin panel by logical ID; external or
+legacy paths remain read-only and are not silently deleted. Backend-managed
+Live2D/3D packages are private authored data too, but their current desktop
+availability is intentionally `partial` until the cross-repository consumer
+contract is delivered.

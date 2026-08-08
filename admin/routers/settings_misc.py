@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from admin.auth import require_scopes
 from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
+from core.data_paths import DEFAULT_CHAR_ID
 
 router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
@@ -82,6 +83,7 @@ class TtsConfigUpdate(BaseModel):
 class TtsTestRequest(BaseModel):
     text: str = "这是一段 TTS 配置试听。"
     emotion: str = "neutral"
+    char_id: Optional[str] = None
 
 
 class StickerConfigUpdate(BaseModel):
@@ -123,9 +125,10 @@ async def update_sticker_config(body: StickerConfigUpdate, auth=Depends(require_
 
 
 @router.get("/tts-config", summary="获取 TTS 配置")
-async def get_tts_config(auth=Depends(require_scopes("admin"))):
+async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_scopes("admin"))):
     cfg = get_config().get("tts", {})
-    from core.output.voice_adapter import get_provider_status, get_safe_provider_params
+    from core.output.voice_adapter import get_provider_status, get_safe_provider_params, resolve_tts_config
+    resolved_cfg = resolve_tts_config(char_id) if char_id else cfg
     provider_blocks = cfg.get("providers") if isinstance(cfg.get("providers"), dict) else {}
     safe_provider_blocks = {
         str(name): {key: value for key, value in dict(params or {}).items() if key != "api_key"}
@@ -135,20 +138,58 @@ async def get_tts_config(auth=Depends(require_scopes("admin"))):
     return {
         "enabled":         cfg.get("enabled",         False),
         "desktop_enabled": cfg.get("desktop_enabled", False),
-        "api_url":         cfg.get("api_url",         "http://127.0.0.1:9880"),
-        "ref_audio":       cfg.get("ref_audio",       ""),
-        "prompt_text":     cfg.get("prompt_text",     ""),
-        "speed":           float(cfg.get("speed",     1.0)),
-        "emotion_enabled": cfg.get("emotion_enabled", False),
-        "emotions":        cfg.get("emotions",        {}),
-        "provider":        get_provider_status(cfg)["provider"],
-        "provider_params": get_safe_provider_params(cfg),
+        "api_url":         resolved_cfg.get("api_url",         "http://127.0.0.1:9880"),
+        "ref_audio":       resolved_cfg.get("ref_audio",       ""),
+        "prompt_text":     resolved_cfg.get("prompt_text",     ""),
+        "speed":           float(resolved_cfg.get("speed",     1.0)),
+        "emotion_enabled": resolved_cfg.get("emotion_enabled", False),
+        "emotions":        resolved_cfg.get("emotions",        {}),
+        "provider":        get_provider_status(resolved_cfg)["provider"],
+        "provider_params": get_safe_provider_params(resolved_cfg),
         "provider_params_by_provider": safe_provider_blocks,
-        "provider_status": get_provider_status(cfg),
+        "provider_status": get_provider_status(resolved_cfg),
+        "char_id": char_id,
+        "character_binding": _tts_character_binding(char_id) if char_id else None,
+        "resource_options": _tts_resource_options(char_id or DEFAULT_CHAR_ID),
         "available_providers": [
             {"id": "gsv", "label": "GPT-SoVITS / GSV", "active": True},
             {"id": "openai_compatible", "label": "OpenAI-compatible / cloud", "active": False},
         ],
+    }
+
+
+def _tts_resource_options(char_id: str) -> dict:
+    from core.userdata_assets import list_assets
+    return {
+        "reference_audio": list_assets(category="reference_audio", char_id=char_id),
+        "gpt_model": list_assets(category="gpt_model", char_id=char_id),
+        "sovits_model": list_assets(category="sovits_model", char_id=char_id),
+    }
+
+
+def _tts_character_binding(char_id: str) -> dict | None:
+    try:
+        from core import character_loader
+        char = character_loader.load(char_id)
+        ext = getattr(char, "presence_ext", {}) or {}
+        preset = ext.get("tts_preset") or None
+        presets = get_config().get("tts", {}).get("presets", {})
+        return {
+            "char_id": char_id,
+            "name": getattr(char, "name", char_id),
+            "tts_preset": preset,
+            "preset_exists": bool(preset and isinstance(presets, dict) and preset in presets),
+        }
+    except Exception:
+        return None
+
+
+@router.get("/tts-resources", summary="列出 TTS 可选择的 authored 资源")
+async def get_tts_resources(char_id: str = DEFAULT_CHAR_ID, auth=Depends(require_scopes("persona"))):
+    return {
+        "char_id": char_id,
+        "resources": _tts_resource_options(char_id),
+        "character": _tts_character_binding(char_id),
     }
 
 
@@ -216,11 +257,11 @@ async def test_tts_config(body: TtsTestRequest, auth=Depends(require_scopes("adm
         raise HTTPException(status_code=422, detail="text 不能为空")
     if len(text) > 500:
         raise HTTPException(status_code=422, detail="试听文本不能超过 500 字")
-    from core.output.voice_adapter import get_provider_status, synthesize
-    status = get_provider_status()
+    from core.output.voice_adapter import get_provider_status, synthesize, resolve_tts_config
+    status = get_provider_status(resolve_tts_config(body.char_id))
     if not status["ready"]:
         raise HTTPException(status_code=409, detail=status["reason"])
-    audio = await synthesize(text, body.emotion)
+    audio = await synthesize(text, body.emotion, char_id=body.char_id)
     if not audio:
         raise HTTPException(status_code=502, detail="TTS 未返回音频；请查看最近合成记录")
     return {"audio_b64": base64.b64encode(audio).decode("ascii"), "mime": "audio/wav", "provider": status["provider"]}
@@ -233,6 +274,7 @@ class DesktopTtsUpdate(BaseModel):
 class DesktopTtsSynthesize(BaseModel):
     text: str
     emotion: str = "neutral"
+    char_id: Optional[str] = None
     # Old desktop clients omit this. New clients should name their playback
     # surface so the contract can evolve without desktop-only assumptions.
     scene: Literal["chat", "dream", "video_call", "desktop_pet", "mobile"] = "desktop_pet"
@@ -270,7 +312,7 @@ async def synthesize_desktop_tts(body: DesktopTtsSynthesize, auth=Depends(requir
         raise HTTPException(status_code=422, detail="text 不能为空")
     if len(text) > 4000:
         raise HTTPException(status_code=422, detail="单条语音文本不能超过 4000 字")
-    audio = await synthesize(text, body.emotion)
+    audio = await synthesize(text, body.emotion, char_id=body.char_id)
     if not audio:
         raise HTTPException(status_code=502, detail="TTS 未返回音频，请检查 API 与参考音频配置")
     return {"audio_b64": base64.b64encode(audio).decode("ascii"), "mime": "audio/wav"}

@@ -1800,3 +1800,50 @@ async function testCharPermissionLink(link) {
 // ══════════════════════════════════════════════════════════
 //  梦境设定页（dream-settings）
 // ══════════════════════════════════════════════════════════
+
+async function loadSystemDiagnosis() {
+  const el = document.getElementById('system-diagnosis-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const [resource, runtime, trigger, contract] = await Promise.all([
+      api('GET', '/observability/resource-completeness'),
+      api('GET', '/observability/runtime-signals'),
+      api('GET', '/observe/trigger-catalog'),
+      api('GET', '/observability/api-contract-check'),
+    ]);
+
+    const summary = resource.summary || {};
+    const runtimeSummary = runtime.summary || {};
+    const proposers = trigger.proposers || [];
+    const broken = new Set(contract.broken || []);
+
+    let html = '<div class="diagnosis-band">';
+    html += `<span class="badge badge-success">资源 ${Number(summary.ok || 0)}</span>`;
+    html += `<span class="badge badge-warn">关注 ${Number(runtimeSummary.attention || 0)}</span>`;
+    html += `<span class="badge badge-success">触发器 ${proposers.length}</span>`;
+    html += `<span class="badge ${broken.size ? 'badge-warn' : 'badge-success'}">契约漂移 ${broken.size}</span>`;
+    html += '</div>';
+
+    html += '<div class="card tbl-wrap"><table><thead><tr>';
+    html += '<th>检查层级</th><th>项目</th><th>状态</th><th>说明</th></tr></thead><tbody>';
+    for (const row of resource.checks || []) {
+      html += `<tr><td>静态资源</td><td>${escapeHtml(row.label || '')}</td><td>${escapeHtml(row.status || '')}</td><td>${escapeHtml(row.detail || '')}</td></tr>`;
+    }
+    for (const row of (runtime.signals || []).slice(0, 8)) {
+      const detail = `${Number(row.count || 0)} events; ${Number(row.unique_contexts || 0)} contexts`;
+      html += `<tr><td>当前进程</td><td>${escapeHtml(row.code || '')}</td><td>${escapeHtml(row.status || '')}</td><td>${escapeHtml(detail)}</td></tr>`;
+    }
+    for (const entry of proposers.slice(0, 8)) {
+      const sampleCount = (entry.trigger_names || []).filter(name => trigger.samples?.[name] != null).length;
+      html += `<tr><td>调度链路</td><td>${escapeHtml(entry.name || '')}</td><td>${escapeHtml((entry.trigger_names || []).join(', '))}</td><td>${sampleCount} samples observed</td></tr>`;
+    }
+    for (const [type, sources] of Object.entries(contract.backend_producible || {})) {
+      html += `<tr><td>跨仓源码契约</td><td><code>${escapeHtml(type)}</code></td><td>${broken.has(type) ? '漂移' : '一致'}</td><td>${escapeHtml((sources || []).join(', '))}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}

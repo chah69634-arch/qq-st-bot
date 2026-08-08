@@ -206,6 +206,32 @@ class DataPaths:
     def sticker_pack_dir(self, pack_name: str) -> Path:
         return self.sticker_packs_root() / pack_name
 
+    def user_character_voice_dir(self, *, char_id: str) -> Path:
+        """Canonical authored voice assets for one character.
+
+        This is a writer target.  Consumers that support legacy installations
+        should use ``character_voice_dirs`` and keep the effective source in
+        their own metadata rather than exposing a filesystem path.
+        """
+        return self.user_authored_character_dir(char_id=char_id) / "voice"
+
+    def legacy_character_voice_dir(self, *, char_id: str) -> Path:
+        return self.legacy_authored_character_dir(char_id=char_id) / "voice"
+
+    def character_voice_dirs(self, *, char_id: str) -> tuple[Path, Path]:
+        return (
+            self.user_character_voice_dir(char_id=char_id),
+            self.legacy_character_voice_dir(char_id=char_id),
+        )
+
+    def user_live2d_root(self) -> Path:
+        """Canonical authored Live2D package root (backend-only in v1)."""
+        return self.userdata_root() / "assets" / "live2d"
+
+    def user_model3d_root(self) -> Path:
+        """Canonical authored 3D package root (backend-only in v1)."""
+        return self.userdata_root() / "assets" / "model3d"
+
     def user_character_cards_dir(self) -> Path:
         return self.userdata_root() / "characters" / "cards"
 

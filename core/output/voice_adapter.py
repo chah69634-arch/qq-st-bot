@@ -50,10 +50,18 @@ _GSV_DEFAULT_SEGMENT_MAX_CHARS = 42
 _GSV_DEFAULT_SEGMENT_PAUSE_SECONDS = 0.25
 
 
-def _resolve_audio_path(path: str) -> str:
+def _resolve_audio_path(path: str, *, char_id: str | None = None) -> str:
     """Resolve ref_audio path: anchor relative paths, then fall back to same-stem variants."""
     if not path:
         return path
+    if char_id:
+        try:
+            from core.userdata_assets import resolve_asset_path
+            logical = resolve_asset_path(category="reference_audio", logical_id=str(path), char_id=char_id)
+            if logical is not None:
+                return str(logical)
+        except Exception:
+            pass
     p = Path(path) if Path(path).is_absolute() else _PROJECT_ROOT / path
     if p.exists():
         return str(p)
@@ -71,7 +79,7 @@ def _resolve_audio_path(path: str) -> str:
     return str(p)
 
 
-def _resolve_gsv_model_path(path: str) -> str:
+def _resolve_gsv_model_path(path: str, *, char_id: str | None = None, category: str = "gpt_model") -> str:
     """Resolve a local model path when it belongs to this project.
 
     GPT-SoVITS also accepts its own registered model IDs, so an unknown relative
@@ -80,12 +88,20 @@ def _resolve_gsv_model_path(path: str) -> str:
     raw = str(path or "").strip()
     if not raw:
         return raw
+    if char_id:
+        try:
+            from core.userdata_assets import resolve_asset_path
+            logical = resolve_asset_path(category=category, logical_id=raw, char_id=char_id)
+            if logical is not None:
+                return str(logical)
+        except Exception:
+            pass
     candidate = Path(raw) if Path(raw).is_absolute() else _PROJECT_ROOT / raw
     return str(candidate) if candidate.is_file() else raw
 
 
-def _gsv_model_target(cfg: dict, key: str, fallback_key: str, default: str) -> str:
-    return _resolve_gsv_model_path(str(cfg.get(key) or cfg.get(fallback_key) or default))
+def _gsv_model_target(cfg: dict, key: str, fallback_key: str, default: str, *, char_id: str | None = None, category: str = "gpt_model") -> str:
+    return _resolve_gsv_model_path(str(cfg.get(key) or cfg.get(fallback_key) or default), char_id=char_id, category=category)
 
 
 def _active_provider_name(cfg: dict) -> str:
@@ -390,6 +406,7 @@ class TtsProvider(Protocol):
 class GsvProvider:
     async def synthesize(self, text: str, emotion: str, cfg: dict) -> bytes | None:
         api_url = str(cfg.get("api_url") or "http://127.0.0.1:9880").rstrip("/")
+        char_id = str(cfg.get("_presence_char_id") or "") or None
         if cfg.get("emotion_enabled", False):
             emotions = cfg.get("emotions", {})
             ecfg = emotions.get(emotion) or emotions.get("neutral") or {}
@@ -400,13 +417,13 @@ class GsvProvider:
             ref_audio = str(cfg.get("ref_audio", "")).strip()
             prompt_txt = str(cfg.get("prompt_text", "")).strip()
             speed = float(cfg.get("speed", 1.0))
-        ref_audio = _resolve_audio_path(ref_audio)
+        ref_audio = _resolve_audio_path(ref_audio, char_id=char_id)
         if not ref_audio:
             logger.warning("[voice_adapter] GSV ref_audio is not configured")
             return None
 
-        gpt_model = _gsv_model_target(cfg, "gpt_model_path", "gpt_model_fallback", _DEFAULT_GPT_MODEL)
-        sovits_model = _gsv_model_target(cfg, "sovits_model_path", "sovits_model_fallback", _DEFAULT_SOVITS_MODEL)
+        gpt_model = _gsv_model_target(cfg, "gpt_model_path", "gpt_model_fallback", _DEFAULT_GPT_MODEL, char_id=char_id, category="gpt_model")
+        sovits_model = _gsv_model_target(cfg, "sovits_model_path", "sovits_model_fallback", _DEFAULT_SOVITS_MODEL, char_id=char_id, category="sovits_model")
         segments = split_gsv_segments(text, cfg)
         if not segments:
             logger.warning("[voice_adapter] no speakable GSV text remains after sanitization")
@@ -595,6 +612,9 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
     """
     text = clean_tts_text(text)
     provider, provider_cfg = get_provider_config(resolve_tts_config(char_id))
+    if char_id:
+        provider_cfg = dict(provider_cfg)
+        provider_cfg["_presence_char_id"] = char_id
     started_at = time.perf_counter()
     if not text:
         from core.api_call_log import append

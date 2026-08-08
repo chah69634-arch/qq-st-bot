@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-global-effective-state-overview-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-existence-userdata-tts-i18n-2';
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
@@ -241,6 +241,7 @@ async function goto(page, {reloadFragment = false} = {}) {
     'dream-settings': loadDreamSettings,
     scheduler:       loadScheduler,
     integrations:    loadGardenIntegrations,
+    'observe-existence': () => {},
     'observe-mood':    loadObserveMood,
     'observe-dream':   loadObserveDream,
     'observe-memory':  () => {},
@@ -261,8 +262,10 @@ async function goto(page, {reloadFragment = false} = {}) {
     'observe-resource-completeness': () => loadResourceCompleteness(),
     'observe-api-contract':          () => loadApiContractCheck(),
     'observe-runtime-signals':       () => loadRuntimeSignals(),
+    'observe-system-diagnosis':       loadSystemDiagnosis,
     'observe-autonomy':              loadObserveAutonomy,
     'observe-char-permissions':      () => initObserveCharacters('obs-charperm-char', loadCharPermissions),
+    'user-data':                     loadUserDataPage,
   };
   if (page !== 'scheduler') _stopWatchStatusPoller();
   if (loaders[page]) loaders[page]();

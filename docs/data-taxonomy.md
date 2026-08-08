@@ -249,3 +249,16 @@ authored 静态内容另有 new-primary / old-fallback，但由 accessor 自己�
 - `python scripts/audit_test_data_root.py --json` is read-only by default. `--archive-known` moves only classified test UID directories to `data/_archive/test_data/`; unknown directories are never removed.
 - Admin `/status` exposes `data_mode`, `test_session_id`, and quarantined test UIDs. Normal `/users/` enumeration filters those test UIDs.
 5. 更新本文和对应专题文档。
+
+## Authored asset management (Brief 158)
+
+`userdata/` remains the only writer target for private voice assets and
+backend-managed model packages. `DataPaths.user_character_voice_dir()`,
+`user_live2d_root()` and `user_model3d_root()` are registered in
+`core/data_registry.py`. The admin asset service returns logical IDs and source
+metadata only; it never returns local absolute paths. Legacy voice/sticker
+directories are read-only fallbacks.
+
+Live2D and 3D uploads are deliberately reported as `partial`/backend-only until
+the desktop repository exposes an authenticated list/download or install
+contract. An upload is not evidence that the desktop renderer can load it.
