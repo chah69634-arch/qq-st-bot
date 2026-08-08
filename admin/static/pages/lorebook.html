@@ -40,15 +40,15 @@
         <div class="modal-box">
           <h3 id="jb-modal-title">新增破限条目</h3>
           <label>标题</label>
-          <input id="jb-title" class="input" placeholder="条目标题">
+          <input type="text" id="jb-title" placeholder="条目标题">
           <label class="admin-inline-140">层级</label>
-          <select id="jb-layer" class="input">
+          <select id="jb-layer">
             <option value="0">层0（身份设定）</option>
             <option value="2">层2（背景补充）</option>
             <option value="11">层11（表达规则，权重最高）</option>
           </select>
           <label class="admin-inline-140">内容</label>
-          <textarea id="jb-content" class="input" rows="6" placeholder="注入的prompt内容"></textarea>
+          <textarea id="jb-content" rows="6" placeholder="注入的prompt内容"></textarea>
           <label class="admin-inline-140">
             <input type="checkbox" id="jb-enabled" checked> 启用此条目
           </label>

@@ -23,7 +23,7 @@ async function loadUserDataPage() {
         html += `<option value="${escapeHtml(cat.id)}" ${cat.id === category ? 'selected' : ''}>${escapeHtml(categoryLabel(cat.id))}${cat.desktop_available ? '' : ` · ${ui('partial', 'partial')}`}</option>`;
       }
       html += '</select></label>';
-      html += `<label class="field"><span>${ui('character', 'Character')}</span><input id="user-data-char" value="${escapeHtml(charId || '')}" placeholder="&lt;char_id&gt;"></label>`;
+      html += `<label class="field"><span>${ui('character', 'Character')}</span><input type="text" id="user-data-char" value="${escapeHtml(charId || '')}" placeholder="&lt;char_id&gt;"></label>`;
       html += `<div class="field"><span>&nbsp;</span><button class="btn btn-ghost btn-sm" data-action="reloadUserData">${ui('refresh', 'Refresh')}</button></div>`;
       html += '</div></div>';
 
@@ -45,11 +45,11 @@ async function loadUserDataPage() {
       html += `<label class="field"><span>${ui('category', 'Category')}</span><select id="user-data-upload-category">`;
       for (const cat of categories) html += `<option value="${escapeHtml(cat.id)}">${escapeHtml(categoryLabel(cat.id))}</option>`;
       html += '</select></label>';
-      html += `<label class="field"><span>${ui('logical_id', 'Logical ID')}</span><input id="user-data-upload-id"></label>`;
+      html += `<label class="field"><span>${ui('logical_id', 'Logical ID')}</span><input type="text" id="user-data-upload-id"></label>`;
       html += `<label class="field"><span>${ui('file', 'File')}</span><input type="file" id="user-data-upload-file"></label>`;
       html += '</div><div class="form-row">';
-      html += `<label class="field"><span>${ui('character', 'Character')}</span><input id="user-data-upload-char" value="${escapeHtml(charId || '')}"></label>`;
-      html += `<label class="field"><span>${ui('scope_extra', 'Emotion / pack')}</span><input id="user-data-upload-extra" placeholder="neutral / pack"></label>`;
+      html += `<label class="field"><span>${ui('character', 'Character')}</span><input type="text" id="user-data-upload-char" value="${escapeHtml(charId || '')}"></label>`;
+      html += `<label class="field"><span>${ui('scope_extra', 'Emotion / pack')}</span><input type="text" id="user-data-upload-extra" placeholder="neutral / pack"></label>`;
       html += `<div class="field"><span>&nbsp;</span><button class="btn btn-primary btn-sm" data-action="uploadUserDataAsset">${ui('upload', 'Upload')}</button></div>`;
       html += '</div></div>';
 

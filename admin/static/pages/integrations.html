@@ -1,39 +1,11 @@
-<h1 class="page-title" data-i18n="integrations.title">外部唤醒</h1>
-
-<div class="card">
+<section class="card" aria-labelledby="garden-freeze-title">
   <div class="card-header">
-    <h3>Garden 论坛</h3>
-    <button class="btn btn-ghost btn-sm" data-action="loadGardenIntegrations" data-i18n="common.refresh">刷新</button>
+    <div>
+      <span class="badge badge-warn" data-i18n="integrations.freeze.badge">当前已冻结</span>
+      <h1 id="garden-freeze-title" class="page-title" data-i18n="integrations.title">Garden 论坛唤醒</h1>
+    </div>
   </div>
-  <p class="admin-inline-144" data-i18n="integrations.bridge.description">
-    Garden 的 SSE 中继是独立的邻居进程；PresenceKit 不会自动安装或启动它。这里仅显示脱敏的
-    PresenceKit 接收与调度状态，不显示 token、外部事件 ID、正文、游标或原始请求。
-  </p>
-  <div id="gi-status"><div class="loading" data-i18n="common.loading">加载中…</div></div>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="integrations.template.title">配置模板</h3></div>
-  <p class="admin-inline-144" data-i18n="integrations.template.description">
-    Garden 机器 token 只应写入上游中继的受保护环境。下方不会显示任何真实 token；
-    Presence 集成 token 只在创建或轮换时通过 Token 页面显示一次。
-  </p>
-  <label class="field">
-    <span data-i18n="integrations.template.repo_path">PresenceKit 仓库路径（可选，仅用于生成本机命令）</span>
-    <input id="gi-repo-path" type="text" placeholder="&lt;PRESENCE_REPO&gt;" data-action="refreshGardenTemplate">
-  </label>
-  <textarea id="gi-template" rows="13" readonly spellcheck="false" class="admin-inline-133"></textarea>
-  <div class="admin-inline-041">
-    <button class="btn btn-ghost btn-sm" data-action="copyGardenTemplate" data-i18n="integrations.template.copy">复制模板</button>
-    <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["auth-tokens"]' data-i18n="integrations.template.manage_token">管理集成 token</button>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="integrations.test.title">测试唤醒</h3></div>
-  <p class="admin-inline-144">
-    <span data-i18n="integrations.test.description_prefix">将提交一条</span> <code>manual_test</code> <span data-i18n="integrations.test.description_suffix">Garden hint 到正式入口。它不会立即调用模型，仍由现有 scheduler、owner active、DND、Dream Guard、预算与 cooldown 决定后续处理。</span>
-  </p>
-  <button id="gi-test-button" class="btn btn-primary" data-action="sendGardenTestWake" data-i18n="integrations.test.send">发送测试唤醒</button>
-  <div id="gi-test-result" class="admin-inline-133"></div>
-</div>
+  <p data-i18n="integrations.freeze.reason">Garden 论坛唤醒管理面当前已冻结，上游协议正在调整。</p>
+  <p data-i18n="integrations.freeze.warning">当前版本不建议用于配置、测试或判断 Garden 唤醒状态。</p>
+  <p data-i18n="integrations.freeze.compatibility">PresenceKit 后端兼容性仍予保留；协议稳定后，后续工单会恢复对应管理入口。</p>
+</section>

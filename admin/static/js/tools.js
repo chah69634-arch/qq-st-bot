@@ -1,6 +1,6 @@
 let _toolsControl = null;
 let _toolsTargetModel = '';
-const _KNOWN_TOOL_CATEGORIES = ['info', 'desktop', 'memory', 'system', 'fs', 'phone_control', 'mcp'];
+const _KNOWN_TOOL_CATEGORIES = ['info', 'desktop', 'memory', 'system', 'fs', 'phone_control', 'self_management', 'mcp'];
 
 function _toolCurrentPreset() {
   return _toolsControl?.model_bindings?.[_toolsTargetModel] || '';
@@ -40,6 +40,17 @@ function _toolExposureCategories() {
   return [...categories].filter(Boolean).sort();
 }
 
+function _toolCategoryLabel(category) {
+  const label = t(`tools.category.${category}`, category);
+  return `${label} \`${category}\``;
+}
+
+function _toolUiDescription(tool) {
+  // This is presentation-only. The canonical description in the registered
+  // schema remains untouched and is still sent to the model/tool loop.
+  return t(`tools.description.${tool.name}`, tool.description || '');
+}
+
 function _renderPathExposure() {
   const root = document.getElementById('tools-path-exposure');
   if (!root || !_toolsControl) return;
@@ -50,7 +61,7 @@ function _renderPathExposure() {
   };
   root.innerHTML = ['path_a', 'path_c'].map(path => {
     const selected = new Set(_toolsControl.path_exposure?.[path]?.categories || []);
-    const checks = categories.map(category => `<label class="checkbox-row" style="margin:2px 10px 2px 0"><input type="checkbox" data-tool-path-category="${path}" data-tool-category="${escapeHtml(category)}" ${selected.has(category) ? 'checked' : ''}><span><code>${escapeHtml(category)}</code></span></label>`).join('');
+    const checks = categories.map(category => `<label class="checkbox-row" style="margin:2px 10px 2px 0"><input type="checkbox" data-tool-path-category="${path}" data-tool-category="${escapeHtml(category)}" ${selected.has(category) ? 'checked' : ''}><span>${escapeHtml(_toolCategoryLabel(category))}</span></label>`).join('');
     return `<div style="padding:10px 0;border-top:1px solid var(--border)"><strong>${pathLabels[path]}</strong><div style="display:flex;flex-wrap:wrap;margin-top:6px">${checks || `<span style="color:var(--muted);font-size:12px">${escapeHtml(t('tools.no_categories', '没有可配置的工具类别'))}</span>`}</div></div>`;
   }).join('');
 }
@@ -63,9 +74,9 @@ function _renderToolsRegistry() {
   const exposed = new Set(preset ? preset.tools : (_toolsControl.global_default_tools || []));
   const rows = (_toolsControl.tools || []).map(tool => {
     const frozen = tool.frozen === true;
-    const execution = `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} ${frozen ? 'disabled' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(frozen ? '冻结（需 Intiface opt-in）' : t('tools.execution_enabled', '全局执行'))}</span></label>`;
-    const exposure = frozen ? '<span style="color:var(--muted)">冻结</span>' : `<label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label>`;
-    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(tool.description || '')}</div></td><td>${escapeHtml(tool.category)}</td><td>${execution}</td><td>${exposure}</td></tr>`;
+    const execution = `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} ${frozen ? 'disabled' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(frozen ? t('tools.frozen_execution', '冻结（需 Intiface opt-in）') : t('tools.execution_enabled', '全局执行'))}</span></label>`;
+    const exposure = frozen ? `<span style="color:var(--muted)">${escapeHtml(t('tools.frozen', '冻结'))}</span>` : `<label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label>`;
+    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(_toolUiDescription(tool))}</div></td><td>${escapeHtml(_toolCategoryLabel(tool.category))}</td><td>${execution}</td><td>${exposure}</td></tr>`;
   }).join('');
   root.innerHTML = rows ? `<div class="tbl-wrap"><table><thead><tr><th>${escapeHtml(t('tools.name', '工具'))}</th><th>${escapeHtml(t('tools.category', '分类'))}</th><th>${escapeHtml(t('tools.execution', '执行'))}</th><th>${escapeHtml(t('tools.exposure', '模型暴露'))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${escapeHtml(t('tools.empty', '没有已注册工具'))}</div>`;
   const count = document.getElementById('tools-exposure-count');
@@ -161,7 +172,7 @@ async function savePathExposure() {
   }
   try {
     _toolsControl = await api('PUT', '/settings/tools', { exposure });
-    toast('Path A/Path C 工具类别已保存，QQ、desktop、mobile 使用相同 Path A 设置。', 'ok');
+    toast(t('tools.path_saved', 'Path A/Path C categories saved; QQ, desktop, and mobile share the same Path A settings.'), 'ok');
     _renderToolsPage();
   } catch (error) { toast(error.message, 'err'); }
 }

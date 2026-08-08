@@ -486,11 +486,18 @@ async function saveCharacter() {
   } catch(e) { toast('保存失败：' + e.message, 'err'); }
 }
 
-function _characterAnniversaryRow(value = {}) { return `<div class="form-row" data-character-anniversary><input data-key placeholder="key" value="${escapeHtml(value.key || '')}"><input data-month type="number" min="1" max="12" placeholder="month" value="${escapeHtml(value.month ?? '')}"><input data-day type="number" min="1" max="31" placeholder="day" value="${escapeHtml(value.day ?? '')}"><input data-year-start type="number" placeholder="year start" value="${escapeHtml(value.year_start ?? '')}"><input data-prompt-zero placeholder="prompt (first year)" value="${escapeHtml(value.prompt_zero || '')}"><input data-prompt-years placeholder="prompt (later years)" value="${escapeHtml(value.prompt_years || '')}"><button type="button" class="btn btn-ghost btn-sm" data-action="removeCharacterAnniversary">Remove</button></div>`; }
-function _renderCharacterAnniversaries(values) { const root=document.getElementById('char-anniversaries'); root.innerHTML=(values.length?values:[{}]).map(_characterAnniversaryRow).join(''); bindPageActions(root); }
-function addCharacterAnniversary() { const root=document.getElementById('char-anniversaries'); root.insertAdjacentHTML('beforeend',_characterAnniversaryRow()); bindPageActions(root); }
-function removeCharacterAnniversary(button) { button.closest('[data-character-anniversary]')?.remove(); }
-function _readCharacterAnniversaries() { const result=[]; for(const row of document.querySelectorAll('[data-character-anniversary]')) { const key=row.querySelector('[data-key]').value.trim(),month=Number(row.querySelector('[data-month]').value),day=Number(row.querySelector('[data-day]').value),year_start=row.querySelector('[data-year-start]').value,prompt_zero=row.querySelector('[data-prompt-zero]').value.trim(),prompt_years=row.querySelector('[data-prompt-years]').value.trim(); if(!key&&!month&&!day&&!year_start&&!prompt_zero&&!prompt_years)continue; if(!key||!Number.isInteger(month)||!Number.isInteger(day)){toast('Each anniversary needs key, month, and day.','err');return null;} result.push({...{key,month,day},...(year_start?{year_start:Number(year_start)}:{}),...(prompt_zero?{prompt_zero}:{}),...(prompt_years?{prompt_years}:{})}); } return result; }
+function _renderCharacterAnniversaries(values) {
+  renderAnniversaryEditor(document.getElementById('char-anniversaries'), values, {removeAction: 'removeCharacterAnniversary'});
+}
+function addCharacterAnniversary() {
+  addAnniversaryEditorRow(document.getElementById('char-anniversaries'), {removeAction: 'removeCharacterAnniversary'});
+}
+function removeCharacterAnniversary(button) { removeAnniversaryEditorRow(button); }
+function _readCharacterAnniversaries() {
+  return readAnniversaryEditor(document.getElementById('char-anniversaries'), {
+    onValidationError: () => toast('Each anniversary needs key, month, and day.', 'err'),
+  });
+}
 
 async function setActiveCharacter() {
   const id = document.getElementById('char-select').value;

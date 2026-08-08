@@ -12,22 +12,23 @@
       <div class="card">
         <div class="card-header"><h3 data-i18n="mcp.import_title">从 URL 导入 MCP</h3></div>
         <div class="form-row">
-          <label class="field"><span>name</span><input id="mcp-import-name" type="text" placeholder="cedar_toy"></label>
-          <label class="field"><span>url</span><input id="mcp-import-url" type="text" placeholder="https://example.com/mcp"></label>
-          <label class="field"><span>transport</span><select id="mcp-import-transport"><option value="streamable-http">streamable-http</option><option value="sse">sse</option></select></label>
+          <label class="field"><span><span data-i18n="mcp.field.name">服务器名称</span> <code>name</code></span><input id="mcp-import-name" type="text" placeholder="cedar_toy"></label>
+          <label class="field"><span><span data-i18n="mcp.field.url">服务器 URL</span> <code>url</code></span><input id="mcp-import-url" type="text" placeholder="https://example.com/mcp"></label>
+          <label class="field"><span><span data-i18n="mcp.field.transport">传输方式</span> <code>transport</code></span><select id="mcp-import-transport"><option value="streamable-http">streamable-http</option><option value="sse">sse</option></select></label>
         </div>
-        <div class="form-row col-1"><label class="field"><span>Headers（可选）</span><div id="mcp-import-headers"></div></label></div><button type="button" class="btn btn-ghost btn-sm" data-action="addMcpHeader">Add header</button>
-        <div class="form-row"><label class="field"><span>tool_timeout_s</span><input id="mcp-import-timeout" type="number" min="1" max="660" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-use-proxy" type="checkbox"><span data-i18n="mcp.proxy_label">远程 MCP 使用全局代理</span></label></div>
+        <div class="form-row col-1"><label class="field"><span data-i18n="mcp.headers_label">请求头（可选）</span><div id="mcp-import-headers"></div></label></div><button type="button" class="btn btn-ghost btn-sm" data-action="addMcpHeader" data-i18n="mcp.add_header">添加请求头</button>
+        <div class="form-row"><label class="field"><span><span data-i18n="mcp.field.timeout">工具超时</span> <code>tool_timeout_s</code></span><input id="mcp-import-timeout" type="number" min="1" max="660" value="30"></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-enabled" type="checkbox" checked><span data-i18n="mcp.import_enabled">导入后启用此 server</span></label><label class="checkbox-row admin-inline-002"><input id="mcp-import-use-proxy" type="checkbox"><span data-i18n="mcp.proxy_label">远程 MCP 使用全局代理</span></label></div>
         <details class="admin-inline-041">
-          <summary data-i18n="mcp.metadata_mapping_title">可选分类映射</summary>
+          <summary data-i18n="mcp.metadata_mapping_title">高级：读取服务器工具分类</summary>
+          <p class="admin-inline-144" data-i18n="mcp.metadata.mapping_help">部分 server 会在 metadata 里声明领域。这里的映射只告诉 PresenceKit 如何读取这些字段；普通 MCP 或没有 schema 的 server 不需要配置。远端分类不会授予权限。</p>
           <div class="form-row">
-            <label class="field"><span>namespace</span><input id="mcp-import-metadata-namespace" type="text" placeholder="io.example/tool"></label>
-            <label class="field"><span>schema_versions</span><input id="mcp-import-metadata-versions" type="text" value="1" placeholder="1,2"></label>
+            <label class="field"><span><span data-i18n="mcp.metadata.namespace">命名空间</span> <code>namespace</code></span><input id="mcp-import-metadata-namespace" type="text" placeholder="io.example/tool"></label>
+            <label class="field"><span><span data-i18n="mcp.metadata.schema_versions">支持的 schema 版本</span> <code>schema_versions</code></span><input id="mcp-import-metadata-versions" type="text" value="1" placeholder="1, 2"></label>
           </div>
           <div class="form-row">
-            <label class="field"><span>schema_version_field</span><input id="mcp-import-metadata-version-field" type="text" value="schema_version"></label>
-            <label class="field"><span>domains_field</span><input id="mcp-import-metadata-domains-field" type="text" value="domains"></label>
-            <label class="field"><span>interaction_field</span><input id="mcp-import-metadata-interaction-field" type="text" value="interaction"></label>
+            <label class="field"><span><span data-i18n="mcp.metadata.schema_version_field">版本字段</span> <code>schema_version_field</code></span><input id="mcp-import-metadata-version-field" type="text" value="schema_version"></label>
+            <label class="field"><span><span data-i18n="mcp.metadata.domains_field">领域字段</span> <code>domains_field</code></span><input id="mcp-import-metadata-domains-field" type="text" value="domains"></label>
+            <label class="field"><span><span data-i18n="mcp.metadata.interaction_field">交互字段</span> <code>interaction_field</code></span><input id="mcp-import-metadata-interaction-field" type="text" value="interaction"></label>
           </div>
         </details>
         <p class="admin-inline-144" data-i18n="mcp.proxy_notice">localhost、.localhost 与 loopback 地址始终直连，不读取环境代理；远程 MCP 仅在勾选后使用全局 proxy 配置。</p>
@@ -42,19 +43,19 @@
           <label class="field"><span data-i18n="mcp.console.server">MCP Server</span><select id="mcp-console-server" data-action="changeMcpConsoleServer"></select></label>
           <label class="field"><span data-i18n="mcp.console.tool">Allowlisted Tool</span><select id="mcp-console-tool" data-action="changeMcpConsoleTool"></select></label>
         </div>
-        <div id="mcp-console-tool-info" class="admin-inline-133"></div>
-        <div class="form-row col-1"><label class="field"><span>Tool arguments</span><div id="mcp-console-arguments"></div></label></div><button type="button" class="btn btn-ghost btn-sm" data-action="addMcpConsoleArgument">Add argument</button>
-        <details class="admin-inline-041"><summary data-i18n="mcp.console.schema">参数摘要</summary><pre id="mcp-console-schema" class="log-view admin-inline-133"></pre></details>
+        <div id="mcp-console-tool-info" class="admin-inline-133 i18n-raw"></div>
+        <div class="form-row col-1"><label class="field"><span data-i18n="mcp.console.arguments">工具参数</span><div id="mcp-console-arguments"></div></label></div><button type="button" class="btn btn-ghost btn-sm" data-action="addMcpConsoleArgument" data-i18n="mcp.console.add_argument">添加参数</button>
+        <details class="admin-inline-041"><summary data-i18n="mcp.console.schema">参数摘要</summary><pre id="mcp-console-schema" class="log-view admin-inline-133 i18n-raw"></pre></details>
         <div class="admin-inline-041">
           <button class="btn btn-ghost" data-action="clearMcpConsole" data-i18n="mcp.console.clear">清除结果</button>
           <button class="btn btn-primary" id="mcp-console-invoke" data-action="invokeMcpConsole" data-i18n="mcp.console.invoke">调用工具</button>
         </div>
         <div id="mcp-console-confirmation" class="admin-inline-133" hidden>
-          <p id="mcp-console-confirm-message"></p>
+          <p id="mcp-console-confirm-message" class="i18n-raw"></p>
           <button class="btn btn-danger btn-sm" data-action="confirmMcpConsole" data-i18n="mcp.console.confirm">确认执行</button>
           <button class="btn btn-ghost btn-sm" data-action="clearMcpConsole" data-i18n="common.cancel">取消</button>
         </div>
-        <pre id="mcp-console-result" class="log-view admin-inline-133"></pre>
+        <pre id="mcp-console-result" class="log-view admin-inline-133 i18n-raw"></pre>
       </div>
       <div class="card">
         <div class="card-header"><h3 data-i18n="mcp.llm_debug.title">LLM 请求调试快照</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpDebugRequests" data-i18n="common.refresh">刷新</button></div>
@@ -64,5 +65,5 @@
           <button class="btn btn-primary btn-sm" data-action="saveMcpDebugRequests" data-i18n="mcp.llm_debug.save">保存调试设置</button>
           <button class="btn btn-danger btn-sm" data-action="clearMcpDebugRequests" data-i18n="mcp.llm_debug.clear">清理日志</button>
         </div>
-        <pre id="mcp-llm-debug-entries" class="log-view admin-inline-133"></pre>
+        <pre id="mcp-llm-debug-entries" class="log-view admin-inline-133 i18n-raw"></pre>
       </div>
