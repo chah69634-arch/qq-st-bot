@@ -87,6 +87,26 @@ def _archive_turns(dream_id: str, char_id: str) -> list[dict[str, Any]]:
         logger.warning("[postcard] archive read failed: %s", exc)
     return turns
 
+
+def _archive_has_parse_error(dream_id: str, char_id: str) -> bool:
+    """Return true for any malformed/non-object JSONL row.
+
+    Postcard generation may use the valid prefix for diagnostics, but a damaged
+    archive must never qualify for a generated artifact.
+    """
+    from core.sandbox import get_paths
+    path = get_paths().dreams_archive_dir(char_id=char_id) / f"dream_{dream_id}.jsonl"
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            value = json.loads(line)
+            if not isinstance(value, dict):
+                return True
+    except Exception:
+        return True
+    return False
+
 def _due_date(entries: list[dict[str, Any]], today: date) -> date:
     used = {str(item.get("scheduled_date")) for item in entries if not item.get("sent")}
     for _ in range(10):
@@ -125,7 +145,7 @@ async def generate_postcard(
         completion=completion,
         turns=turns,
         existing_entries=entries,
-        archive_readable=bool(turns),
+        archive_readable=bool(turns) and not _archive_has_parse_error(dream_id, char_id),
         legacy_inferred=inferred,
     )
     if not eligibility.eligible:

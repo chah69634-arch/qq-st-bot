@@ -255,6 +255,22 @@ authored 静态内容另有 new-primary / old-fallback，但由 accessor 自己�
 - Admin `/status` exposes `data_mode`, `test_session_id`, and quarantined test UIDs. Normal `/users/` enumeration filters those test UIDs.
 5. 更新本文和对应专题文档。
 
+## Dream replay and exit observability (Brief 164)
+
+| Root | Contents | Reality prompt/memory load | Reader |
+|---|---|---|---|
+| `data/runtime/dreams/{char_id}/archive/` | closed solo Dream JSONL | never | authorized `GET /dream/archive*` and user replay UI only |
+| `data/runtime/dreams/{char_id}/tmp/` | active Dream log | never | Dream pipeline only |
+| `data/runtime/dreams/{char_id}/summaries/` | scene-stripped afterglow summary metadata | never | exit wiring, postcard and safe operations metadata |
+| `data/runtime/dreams/{char_id}/postcards/` | postcard schedule and frozen letter | never | postcard sender and management-only safe status |
+| `data/runtime/dreams/{char_id}/exit_lifecycle.json` | text-free exit delivery lifecycle | never | scheduler/autonomy writer and `GET /dream/operations` |
+
+Archive is an explicit user-facing read exception for replay; it is not a
+memory source and must not be copied into episodic, mid-term, identity, mood,
+hidden state, or ordinary prompt layers. Operations projections omit postcard
+letter text, Dream turns, prompts, SMTP configuration, and local filesystem
+paths.
+
 ## Authored asset management (Brief 158)
 
 `userdata/` remains the only writer target for private voice assets and

@@ -1085,6 +1085,12 @@ curl -H "Authorization: Bearer <token>" \
 
 `dream_postcards` proposer 每日扫描梦境 archive 出站明信片的 schedule；到期未发送的条目复用 Gmail 链路投递。SMTP 失败只递增 attempts 并保留 last_error，后续 tick 持续重试，成功后才标记 sent。
 
+### dream_exit（Brief 164）
+
+`dream_exit` 只从 `REALITY_AFTERGLOW` 的单人 Dream 状态产生候选，必须经过 QUIET、DND、conversation gate、全局间隔与主动消息预算。候选使用有限 aging：等待时间增长后从 reactive 提升到 window-event，再到 must-not-miss；这只影响普通候选 winner，不绕过任何发送闸门。活跃窗口不强插，超过有效窗口写入 `expired`。
+
+每个 `dream_id` 的发送结果写入 `data/runtime/dreams/{char_id}/exit_lifecycle.json` 的脱敏行，管理面通过 `GET /dream/operations` 读取。发送成功后才写 `last_greeted_dream_id`；失败保留可重试记录。Shadow/gating/autonomy 之间只传递 `dream_id` 和固定事实，不传递梦境正文。
+
 ---
 
 ## 冷启动门控（Brief 97）

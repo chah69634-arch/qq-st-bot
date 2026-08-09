@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'dream-scenario-userdata-editor-2';
+const ADMIN_UI_FRAGMENT_VERSION = 'dream-operations-1';
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
@@ -258,6 +258,7 @@ async function goto(page, {reloadFragment = false} = {}) {
     'observe-prompt':  () => { loadObservePromptUidList(); loadPromptAblation(); loadOutputSegmentEnforce(); },
     'observe-tools':   () => loadObserveToolUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
+    'observe-dream-operations': loadObserveDreamOperations,
     'observe-trigger-catalog': () => loadTriggerCatalog(),
     'observe-vector':          () => loadVector(),
     'observe-provenance':      () => loadProvenance(),

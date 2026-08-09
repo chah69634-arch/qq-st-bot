@@ -26,7 +26,7 @@ import json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
@@ -82,6 +82,7 @@ async def dream_invariants_get(_auth=Depends(require_scopes("activity"))):
     return {"entries": entries}
 
 _SAFE_PRESET_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_SAFE_DREAM_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,160}$")
 
 
 def _owner_uid() -> str:
@@ -89,6 +90,169 @@ def _owner_uid() -> str:
     if not uid:
         raise HTTPException(status_code=503, detail="owner_id 未配置")
     return uid
+
+
+def _active_dream_char_id() -> str:
+    from core.pipeline_registry import get as _get_pipeline
+
+    pl = _get_pipeline()
+    return str((getattr(pl, "_active_character_id", None) if pl else None) or DEFAULT_CHAR_ID)
+
+
+def _validated_archive_char_id(char_id: str | None) -> str:
+    value = str(char_id or _active_dream_char_id()).strip()
+    if not _SAFE_DREAM_ID_RE.fullmatch(value):
+        raise HTTPException(status_code=422, detail="char_id 不合法")
+    return value
+
+
+def _validated_dream_id(dream_id: str) -> str:
+    value = str(dream_id or "").strip()
+    if not _SAFE_DREAM_ID_RE.fullmatch(value):
+        raise HTTPException(status_code=422, detail="dream_id 不合法")
+    return value
+
+
+def _read_archive_file(path: Path) -> tuple[list[dict], bool]:
+    turns: list[dict] = []
+    parse_error = False
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                value = json.loads(line)
+            except Exception:
+                parse_error = True
+                continue
+            if isinstance(value, dict):
+                turns.append(value)
+            else:
+                parse_error = True
+    except Exception:
+        return [], True
+    return turns, parse_error
+
+
+def _safe_summary(summary_path: Path) -> dict:
+    if not summary_path.is_file():
+        return {}
+    try:
+        value = json.loads(summary_path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _archive_metadata(dream_id: str, char_id: str, path: Path) -> dict:
+    turns, parse_error = _read_archive_file(path)
+    valid_turns = [
+        item for item in turns
+        if item.get("role") in {"user", "assistant"} and str(item.get("content") or "").strip()
+    ]
+    assistant_turns = sum(1 for item in valid_turns if item.get("role") == "assistant")
+    user_turns = sum(1 for item in valid_turns if item.get("role") == "user")
+    timestamps = []
+    for item in valid_turns:
+        try:
+            value = float(item.get("ts"))
+            if value > 0:
+                timestamps.append(value)
+        except (TypeError, ValueError):
+            pass
+    summary = _safe_summary(get_paths().dreams_summaries_dir(char_id=char_id) / f"dream_{dream_id}.summary.json")
+    try:
+        fallback_mtime = path.stat().st_mtime
+    except OSError:
+        fallback_mtime = None
+    return {
+        "dream_id": dream_id,
+        "char_id": char_id,
+        "started_at": min(timestamps) if timestamps else fallback_mtime,
+        "ended_at": max(timestamps) if timestamps else fallback_mtime,
+        "valid_turns": len(valid_turns),
+        "valid_user_turns": user_turns,
+        "valid_assistant_turns": assistant_turns,
+        "dream_mode": str(summary.get("dream_mode") or "unknown"),
+        "world_name": str(summary.get("world_id") or "unknown")[:80],
+        "exit_mechanism": str(summary.get("exit_mechanism") or "unknown"),
+        "exit_initiator": str(summary.get("exit_initiator") or "unknown"),
+        "completion": str(summary.get("completion") or "unknown"),
+        "exit_reason": str(summary.get("exit_reason") or "unknown"),
+        "summary_present": bool(summary),
+        "summary_created_at": summary.get("created_at"),
+        "summary_title": str(summary.get("title") or "")[:120],
+        "summary_preview": str(summary.get("summary") or "")[:240],
+        "archive_parse_error": parse_error,
+    }
+
+
+def _archive_path(dream_id: str, char_id: str) -> Path:
+    return get_paths().dreams_archive_dir(char_id=char_id) / f"dream_{dream_id}.jsonl"
+
+
+@router.get("/dream/archive", summary="分页读取单人梦境 archive 元数据（只读）")
+async def dream_archive_list(
+    offset: int = Query(default=0, ge=0, le=10000),
+    limit: int = Query(default=20, ge=1, le=100),
+    char_id: str | None = Query(default=None),
+    _auth=Depends(require_scopes("activity")),
+):
+    """List archived solo Dream sessions without reading current_dream/tmp."""
+    selected_char = _validated_archive_char_id(char_id)
+    archive_dir = get_paths().dreams_archive_dir(char_id=selected_char)
+    files = []
+    if archive_dir.is_dir():
+        for path in archive_dir.glob("dream_*.jsonl"):
+            stem = path.name[len("dream_"):-len(".jsonl")]
+            if _SAFE_DREAM_ID_RE.fullmatch(stem):
+                files.append((path, stem))
+    items = [_archive_metadata(dream_id, selected_char, path) for path, dream_id in files]
+    items.sort(key=lambda item: float(item.get("ended_at") or 0), reverse=True)
+    page = items[offset:offset + limit]
+    return {
+        "char_id": selected_char,
+        "items": page,
+        "offset": offset,
+        "limit": limit,
+        "total": len(items),
+        "has_more": offset + limit < len(items),
+    }
+
+
+@router.get("/dream/archive/{dream_id}", summary="读取单场梦境逐回合 archive（只读回放）")
+async def dream_archive_detail(
+    dream_id: str,
+    char_id: str | None = Query(default=None),
+    _auth=Depends(require_scopes("activity")),
+):
+    selected_id = _validated_dream_id(dream_id)
+    selected_char = _validated_archive_char_id(char_id)
+    path = _archive_path(selected_id, selected_char)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="dream archive 不存在")
+    turns, parse_error = _read_archive_file(path)
+    if parse_error and not turns:
+        raise HTTPException(status_code=422, detail="dream archive 无法读取")
+    messages = []
+    for item in turns:
+        role = item.get("role")
+        content = str(item.get("content") or "")
+        if role not in {"user", "assistant"} or not content:
+            continue
+        ts = item.get("ts")
+        try:
+            ts = float(ts)
+        except (TypeError, ValueError):
+            ts = None
+        messages.append({"role": role, "content": content, "ts": ts})
+    return {
+        "dream_id": selected_id,
+        "char_id": selected_char,
+        "metadata": _archive_metadata(selected_id, selected_char, path),
+        "messages": messages,
+        "partial_read": parse_error,
+    }
 
 
 @router.post("/dream/enter", summary="进入梦境")
@@ -454,15 +618,14 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
     archive endpoint added for the desktop reader.
     """
     uid = _owner_uid()
-    from core.pipeline_registry import get as _get_pipeline
     from core.dream.dream_state import read_state
     from core.dream.exit_observability import list_records
     from core.sandbox import get_paths as _get_paths
 
-    pl = _get_pipeline()
-    char_id = (getattr(pl, "_active_character_id", None) if pl else None) or DEFAULT_CHAR_ID
+    char_id = _active_dream_char_id()
     state = read_state(uid)
     lifecycle = list_records(char_id=char_id, limit=50)
+    archive_page = await dream_archive_list(offset=0, limit=20, char_id=char_id)
 
     schedule: list[dict] = []
     schedule_path = _get_paths().dreams_postcards_dir(char_id=char_id) / "schedule.json"
@@ -496,7 +659,7 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
 
     summary: dict = {"present": False, "created_at": None, "dream_id": None}
     last_dream_id = str(state.get("last_dream_id") or "")
-    if last_dream_id:
+    if _SAFE_DREAM_ID_RE.fullmatch(last_dream_id):
         summary_path = _get_paths().dreams_summaries_dir(char_id=char_id) / f"dream_{last_dream_id}.summary.json"
         try:
             data = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {}
@@ -519,6 +682,13 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
                 "last_archive_ok", "last_exited_at",
             )
         },
+        "consistency": {
+            "last_dream_id_present": bool(last_dream_id),
+            "last_greeted_matches_last_dream": bool(
+                state.get("last_greeted_dream_id") in (None, "", last_dream_id)
+            ),
+        },
+        "archives": archive_page["items"],
         "exit_lifecycle": lifecycle,
         "postcards": schedule,
         "afterglow": afterglow,

@@ -1,6 +1,7 @@
 """Dream postcard generation and delivery contracts."""
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, patch
 from datetime import date
 from pathlib import Path
@@ -88,6 +89,31 @@ async def test_short_hard_exit_is_rejected_as_interrupted():
             "d",
             "hard_exit",
             completion="interrupted",
+            exit_metadata={"dream_mode": "sandbox"},
+        )
+    chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_corrupt_archive_does_not_generate_from_valid_prefix(sandbox):
+    from core.dream import postcard
+
+    path = sandbox.dreams_archive_dir(char_id="dreamer") / "dream_corrupt.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join([*(json.dumps(turn) for turn in _turns()), "not-json"]) + "\n",
+        encoding="utf-8",
+    )
+    with (
+        patch.object(postcard, "_load_schedule", return_value=[]),
+        patch("core.llm_client.chat", new=AsyncMock()) as chat,
+    ):
+        await postcard.generate_postcard(
+            "u",
+            "corrupt",
+            "soft_exit",
+            char_id="dreamer",
+            completion="complete",
             exit_metadata={"dream_mode": "sandbox"},
         )
     chat.assert_not_awaited()

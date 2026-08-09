@@ -567,6 +567,16 @@ import（它只传递预加载文本给 prompt，不读 dream 数据）。
 证明扫描逻辑确实能命中，不是对空集的无效断言。
 任何 path 重构触碰上述文件时，此测试即为门控。
 
+## Brief 164：退出观测与用户回放（当前）
+
+单人 Dream 的归档仍是 `data/runtime/dreams/{char_id}/archive/` 下的 JSONL；`tmp/` 和当前梦日志不属于回放范围。退出时保留兼容的 `last_exit_type` / summary `exit_type`，同时写入 `exit_mechanism`、`exit_initiator`、`completion` 和固定 `exit_reason`。`hard_exit` 只表示强制出口，不再单独决定梦是否完整。
+
+角色接受退出使用 Dream control JSON 合同；控制字段在进入 archive、客户端回复和后续 prompt 前剥离。缺失或非法控制字段只记录 `control_missing` / `control_invalid` 观测，不依据自然语言猜测关梦。`POST /dream/exit` 与 `/stop` 继续是无条件、立即、幂等的逃生通道。
+
+`GET /dream/archive` 只返回已归档单人梦的安全元数据并支持分页；`GET /dream/archive/{dream_id}` 只返回授权用户回放所需的 `role/content/ts`。两个端点均通过 `get_paths()` 解析，验证 `char_id` / `dream_id`，不读取 `tmp/current_dream*`，也不把 archive 接入 Reality memory 或 prompt。
+
+退出后的 Reality 主动感想写入独立的文本无关 lifecycle ledger，状态为 `waiting_afterglow`、`ready`、`blocked`、`sent` 或 `expired`。`blocked` 原因只使用 `not_quiet`、`dnd`、`global_gap`、`budget`、`higher_priority_winner`、`afterglow_not_ready`、`send_failed`；它仍受 Dream Guard、DND、conversation gate、正常预算和安静状态约束。桌面回放只在主聊天 Sidebar 内显示归档，不写当前会话、不触发 WS、TTS 或 pipeline。
+
 ### FUTURE（允许扩展，未做，留 seam）
 - 世界专属身体语义
 - mid-dream world drift（梦中切世界）
