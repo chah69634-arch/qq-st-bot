@@ -65,6 +65,62 @@ def test_normalize_filters_and_deduplicates_current_stage_whitelists():
     assert result["unknown_blocked_event_count"] == 1
 
 
+def test_v2_control_maps_current_stage_ids_and_discards_unknown_ids():
+    from core.dream.dream_pipeline import _adjudicate_scenario_progress, _normalize_scenario_control
+
+    stage = {
+        "exit_signs": ["first action", "second action"],
+        "not_yet_allowed": ["secret reveal"],
+    }
+    normalized = _normalize_scenario_control(
+        {
+            "control_version": 2,
+            "hit": ["E2", "E99", "E2"],
+            "blocked": ["B1", "B9"],
+        },
+        stage,
+    )
+
+    assert normalized["status"] == "valid"
+    assert normalized["control_version"] == 2
+    assert normalized["matched_exit_ids"] == ["E2"]
+    assert normalized["blocked_ids"] == ["B1"]
+    assert normalized["matched_exit_signs"] == ["E2"]
+    assert normalized["blocked_events"] == ["B1"]
+    assert normalized["unknown_exit_sign_count"] == 1
+    assert normalized["unknown_blocked_event_count"] == 1
+    decision = _adjudicate_scenario_progress(
+        normalized,
+        current_stage=stage,
+        next_stage={"id": "next"},
+        ending_state=None,
+        scenario_arc_mode="linear",
+        current_bucket="low",
+    )
+    assert decision["disposition"] == "advanced"
+    assert decision["advance_to"] == "next"
+
+
+def test_v2_control_without_current_stage_hit_cannot_advance():
+    from core.dream.dream_pipeline import _adjudicate_scenario_progress, _normalize_scenario_control
+
+    normalized = _normalize_scenario_control(
+        {"control_version": 2, "hit": ["E99"], "blocked": []},
+        {"exit_signs": ["current"]},
+    )
+    decision = _adjudicate_scenario_progress(
+        normalized,
+        current_stage={"exit_signs": ["current"]},
+        next_stage={"id": "next"},
+        ending_state=None,
+        scenario_arc_mode="linear",
+        current_bucket="low",
+    )
+    assert normalized["progress_signal"] == "not_close"
+    assert decision["disposition"] == "no_progress"
+    assert decision["advance_to"] is None
+
+
 def test_next_stage_is_not_a_parser_or_adjudication_instruction():
     from core.dream.dream_pipeline import (
         _adjudicate_scenario_progress,

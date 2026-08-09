@@ -46,6 +46,10 @@ class ScenarioCore:
     last_progress_signal: str | None = None
     last_matched_exit_signs: list[str] = field(default_factory=list)
     last_blocked_events: list[str] = field(default_factory=list)
+    last_matched_exit_ids: list[str] = field(default_factory=list)
+    last_blocked_ids: list[str] = field(default_factory=list)
+    last_control_status: str | None = None
+    last_control_version: int | None = None
     satisfied_streak: int = 0
     last_valid_exit_sign_count: int = 0
     last_unknown_exit_sign_count: int = 0
@@ -66,6 +70,10 @@ class ScenarioCore:
             "last_progress_signal": self.last_progress_signal,
             "last_matched_exit_signs": list(self.last_matched_exit_signs),
             "last_blocked_events": list(self.last_blocked_events),
+            "last_matched_exit_ids": list(self.last_matched_exit_ids),
+            "last_blocked_ids": list(self.last_blocked_ids),
+            "last_control_status": self.last_control_status,
+            "last_control_version": self.last_control_version,
             "satisfied_streak": self.satisfied_streak,
             "last_valid_exit_sign_count": self.last_valid_exit_sign_count,
             "last_unknown_exit_sign_count": self.last_unknown_exit_sign_count,
@@ -88,6 +96,14 @@ class ScenarioCore:
             last_progress_signal=data.get("last_progress_signal"),
             last_matched_exit_signs=list(data.get("last_matched_exit_signs") or []),
             last_blocked_events=list(data.get("last_blocked_events") or []),
+            last_matched_exit_ids=list(data.get("last_matched_exit_ids") or []),
+            last_blocked_ids=list(data.get("last_blocked_ids") or []),
+            last_control_status=data.get("last_control_status"),
+            last_control_version=(
+                int(data["last_control_version"])
+                if data.get("last_control_version") is not None
+                else None
+            ),
             satisfied_streak=int(data.get("satisfied_streak", 0)),
             last_valid_exit_sign_count=int(data.get("last_valid_exit_sign_count", 0)),
             last_unknown_exit_sign_count=int(data.get("last_unknown_exit_sign_count", 0)),
@@ -144,6 +160,8 @@ class ScenarioCore:
             last_progress_signal=None,
             last_matched_exit_signs=[],
             last_blocked_events=[],
+            last_matched_exit_ids=[],
+            last_blocked_ids=[],
             satisfied_streak=0,
             last_valid_exit_sign_count=0,
             last_unknown_exit_sign_count=0,

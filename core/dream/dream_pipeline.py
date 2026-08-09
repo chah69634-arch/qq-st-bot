@@ -47,6 +47,7 @@ _NATURAL_PROGRESS_SIGNALS = {
     "正在接近": "approaching",
     "已经满足": "satisfied",
 }
+_SCENARIO_CONTROL_V2 = 2
 
 def _bucket_for_scenario(value: float) -> str:
     return ("low", "rising", "high", "critical")[int(max(0, min(3, value * 4)))]
@@ -95,6 +96,7 @@ def _parse_scenario_control(reply: str) -> tuple[str, dict | None, str]:
             return [item.strip() for item in re.split(r"[；;]", value) if item.strip()]
 
         return visible, {
+            "control_version": 1,
             "progress_signal": signal,
             "matched_exit_signs": _items("命中"),
             "blocked_events": _items("越界"),
@@ -102,6 +104,24 @@ def _parse_scenario_control(reply: str) -> tuple[str, dict | None, str]:
 
     if not isinstance(data, dict):
         return visible, None, "invalid"
+
+    # v2 is the only format taught by the current Scenario prompt. It reports
+    # short, current-stage IDs; the model cannot submit a stage/next-stage id.
+    if "hit" in data:
+        hit = data.get("hit")
+        blocked = data.get("blocked", [])
+        if (
+            not isinstance(hit, list)
+            or not isinstance(blocked, list)
+            or any(not isinstance(item, str) or not item.strip() for item in hit)
+            or any(not isinstance(item, str) or not item.strip() for item in blocked)
+        ):
+            return visible, None, "invalid"
+        return visible, {
+            "control_version": _SCENARIO_CONTROL_V2,
+            "hit": _dedupe_control_items(hit),
+            "blocked": _dedupe_control_items(blocked),
+        }, "valid"
 
     signal = data.get("progress_signal")
     if signal not in _VALID_PROGRESS_SIGNALS:
@@ -114,6 +134,7 @@ def _parse_scenario_control(reply: str) -> tuple[str, dict | None, str]:
         return visible, None, "invalid"
 
     return visible, {
+        "control_version": 1,
         "progress_signal": signal,
         "matched_exit_signs": [str(x) for x in matched_exit_signs],
         "blocked_events": [str(x) for x in blocked_events],
@@ -123,6 +144,8 @@ def _parse_scenario_control(reply: str) -> tuple[str, dict | None, str]:
 def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
     """Compatibility wrapper for callers/tests that only need the old pair."""
     visible, parsed, _status = _parse_scenario_control(reply)
+    if isinstance(parsed, dict) and parsed.get("control_version") == 1:
+        parsed = {key: value for key, value in parsed.items() if key != "control_version"}
     return visible, parsed
 
 
@@ -160,9 +183,12 @@ def _normalize_scenario_control(
             parse_status = "invalid"
         return {
             "status": parse_status,
+            "control_version": None,
             "progress_signal": None,
             "matched_exit_signs": [],
+            "matched_exit_ids": [],
             "blocked_events": [],
+            "blocked_ids": [],
             "valid_exit_sign_count": 0,
             "unknown_exit_sign_count": 0,
             "unknown_blocked_event_count": 0,
@@ -181,6 +207,35 @@ def _normalize_scenario_control(
         for item in (blocked_event_items if isinstance(blocked_event_items, list) else [])
         if str(item).strip()
     }
+
+    if parsed_control.get("control_version") == _SCENARIO_CONTROL_V2:
+        exit_id_map = {
+            f"E{index}": str(item).strip()
+            for index, item in enumerate(exit_sign_items if isinstance(exit_sign_items, list) else [], 1)
+            if isinstance(item, str) and item.strip()
+        }
+        blocked_id_map = {
+            f"B{index}": str(item).strip()
+            for index, item in enumerate(blocked_event_items if isinstance(blocked_event_items, list) else [], 1)
+            if isinstance(item, str) and item.strip()
+        }
+        raw_hit_ids = _dedupe_control_items(parsed_control.get("hit"))
+        raw_blocked_ids = _dedupe_control_items(parsed_control.get("blocked"))
+        valid_hit_ids = [item for item in raw_hit_ids if item in exit_id_map]
+        valid_blocked_ids = [item for item in raw_blocked_ids if item in blocked_id_map]
+        return {
+            "status": "valid",
+            "control_version": _SCENARIO_CONTROL_V2,
+            "progress_signal": "satisfied" if valid_hit_ids else "not_close",
+            "matched_exit_signs": valid_hit_ids,
+            "matched_exit_ids": valid_hit_ids,
+            "blocked_events": valid_blocked_ids,
+            "blocked_ids": valid_blocked_ids,
+            "valid_exit_sign_count": len(valid_hit_ids),
+            "unknown_exit_sign_count": len(raw_hit_ids) - len(valid_hit_ids),
+            "unknown_blocked_event_count": len(raw_blocked_ids) - len(valid_blocked_ids),
+        }
+
     raw_exit_signs = _dedupe_control_items(parsed_control.get("matched_exit_signs"))
     raw_blocked_events = _dedupe_control_items(parsed_control.get("blocked_events"))
     matched_exit_signs = [item for item in raw_exit_signs if item in allowed_exit_signs]
@@ -189,18 +244,32 @@ def _normalize_scenario_control(
     if signal not in _VALID_PROGRESS_SIGNALS:
         return {
             "status": "invalid",
+            "control_version": parsed_control.get("control_version", 1),
             "progress_signal": None,
             "matched_exit_signs": [],
+            "matched_exit_ids": [],
             "blocked_events": [],
+            "blocked_ids": [],
             "valid_exit_sign_count": 0,
             "unknown_exit_sign_count": 0,
             "unknown_blocked_event_count": 0,
         }
     return {
         "status": "valid",
+        "control_version": parsed_control.get("control_version", 1),
         "progress_signal": signal,
         "matched_exit_signs": matched_exit_signs,
+        "matched_exit_ids": [
+            f"E{index}"
+            for index, item in enumerate(exit_sign_items if isinstance(exit_sign_items, list) else [], 1)
+            if isinstance(item, str) and item.strip() and item.strip() in matched_exit_signs
+        ],
         "blocked_events": blocked_events,
+        "blocked_ids": [
+            f"B{index}"
+            for index, item in enumerate(blocked_event_items if isinstance(blocked_event_items, list) else [], 1)
+            if isinstance(item, str) and item.strip() and item.strip() in blocked_events
+        ],
         "valid_exit_sign_count": len(matched_exit_signs),
         "unknown_exit_sign_count": len(raw_exit_signs) - len(matched_exit_signs),
         "unknown_blocked_event_count": len(raw_blocked_events) - len(blocked_events),
@@ -222,6 +291,9 @@ def _adjudicate_scenario_progress(
         return {"advance_to": None, "disposition": "control_missing", "blocked_reason": None}
     if status != "valid":
         return {"advance_to": None, "disposition": "control_invalid", "blocked_reason": None}
+
+    if normalized.get("control_version") == _SCENARIO_CONTROL_V2 and not normalized.get("matched_exit_signs"):
+        return {"advance_to": None, "disposition": "no_progress", "blocked_reason": None}
 
     signal = normalized.get("progress_signal")
     if signal == "approaching":
@@ -572,6 +644,8 @@ async def dream_turn(
             )
 
         observation = {
+            "last_control_status": normalized.get("status"),
+            "last_control_version": normalized.get("control_version"),
             "last_valid_exit_sign_count": int(normalized.get("valid_exit_sign_count", 0)),
             "last_unknown_exit_sign_count": int(normalized.get("unknown_exit_sign_count", 0)),
             "last_unknown_blocked_event_count": int(normalized.get("unknown_blocked_event_count", 0)),
@@ -580,6 +654,8 @@ async def dream_turn(
             "advance_blocked_current_bucket": decision.get("blocked_current_bucket"),
             "advance_blocked_target_bucket": decision.get("blocked_target_bucket"),
         }
+        observation["last_matched_exit_ids"] = list(normalized.get("matched_exit_ids") or [])
+        observation["last_blocked_ids"] = list(normalized.get("blocked_ids") or [])
         if decision["disposition"] in {"advanced", "completed"}:
             next_stall_turns = 0
         elif decision["disposition"] == "approaching":

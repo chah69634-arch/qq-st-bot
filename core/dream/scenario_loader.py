@@ -102,7 +102,27 @@ def get_next_stage(script: dict[str, Any], current_stage_id: str) -> dict[str, A
     )
 
 
-def _validate_script(data: dict[str, Any]) -> None:
+def unprogressable_stage_ids(data: dict[str, Any]) -> list[str]:
+    """Return safe stage ids that have no completion signal.
+
+    Legacy authored scripts remain loadable; authoring endpoints use this
+    projection to reject new/edited scripts that could never progress.
+    """
+    result: list[str] = []
+    for stage in data.get("stages") or []:
+        if not isinstance(stage, dict):
+            continue
+        stage_id = stage.get("id")
+        exit_signs = stage.get("exit_signs")
+        if isinstance(stage_id, str) and (
+            not isinstance(exit_signs, list)
+            or not any(isinstance(item, str) and item.strip() for item in exit_signs)
+        ):
+            result.append(stage_id)
+    return result
+
+
+def _validate_script(data: dict[str, Any], *, require_progressable: bool = False) -> None:
     script_id = data.get("id")
     if not script_id:
         raise ValueError("script missing 'id'")
@@ -126,6 +146,14 @@ def _validate_script(data: dict[str, Any]) -> None:
         if stage_id in stage_ids:
             raise ValueError(f"duplicate stage id: {stage_id!r}")
         stage_ids.add(stage_id)
+        for key in ("exit_signs", "not_yet_allowed"):
+            values = stage.get(key, [])
+            if values is None:
+                values = []
+            if not isinstance(values, list) or any(
+                not isinstance(item, str) or not item.strip() for item in values
+            ):
+                raise ValueError(f"stage[{i}].{key} must be a list of non-empty strings")
         dp = stage.get("drift_pressure")
         if dp is not None:
             if not isinstance(dp, dict):
@@ -176,3 +204,10 @@ def _validate_script(data: dict[str, Any]) -> None:
                     f"private_truths[{i}].disclosure[{stage_id!r}].allowed_hints "
                     "must be a list of non-empty strings"
                 )
+    if require_progressable:
+        blocked = unprogressable_stage_ids(data)
+        if blocked:
+            raise ValueError(
+                "stage(s) missing exit_signs and cannot progress: "
+                + ", ".join(blocked)
+            )

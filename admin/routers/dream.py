@@ -1327,7 +1327,12 @@ def _scenario_active(script_id: str) -> bool:
     return scenario_core.get("script_id") == script_id
 
 
-def _parse_and_validate_scenario_yaml(script_id: str | None, yaml_text: str) -> dict:
+def _parse_and_validate_scenario_yaml(
+    script_id: str | None,
+    yaml_text: str,
+    *,
+    require_progressable: bool = False,
+) -> dict:
     """解析 + 用剧本加载器的真实 schema 校验，失败返回具体字段错误而不是 500。"""
     import yaml as _yaml
     from core.dream.scenario_loader import _validate_script
@@ -1344,7 +1349,7 @@ def _parse_and_validate_scenario_yaml(script_id: str | None, yaml_text: str) -> 
             detail=f"YAML 内 id={data.get('id')!r} 与剧本 id={script_id!r} 不一致",
         )
     try:
-        _validate_script(data)
+        _validate_script(data, require_progressable=require_progressable)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"剧本 schema 校验失败: {e}")
     return data
@@ -1372,7 +1377,7 @@ def _scenario_document_and_yaml(script_id: str, body: dict) -> tuple[dict, str]:
         data["id"] = script_id
         from core.dream.scenario_loader import _validate_script
         try:
-            _validate_script(data)
+            _validate_script(data, require_progressable=True)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=f"剧本 schema 校验失败: {exc}")
         return data, _canonical_scenario_yaml(data)
@@ -1397,13 +1402,22 @@ async def list_dream_scenarios(_auth=Depends(require_scopes("activity"))):
             if script_id in merged:
                 continue
             title = script_id
+            data = {}
             try:
                 data = _yaml.safe_load(p.read_text(encoding="utf-8")) or {}
                 if isinstance(data, dict) and data.get("title"):
                     title = data["title"]
             except Exception:
                 pass
-            merged[script_id] = {"id": script_id, "title": title, "source": source}
+            from core.dream.scenario_loader import unprogressable_stage_ids
+            unprogressable = unprogressable_stage_ids(data) if isinstance(data, dict) else []
+            merged[script_id] = {
+                "id": script_id,
+                "title": title,
+                "source": source,
+                "progressable": not bool(unprogressable),
+                "unprogressable_stage_ids": unprogressable,
+            }
     return {"scenarios": [merged[key] for key in sorted(merged)]}
 
 
@@ -1424,7 +1438,7 @@ async def validate_dream_scenario(body: dict, _auth=Depends(require_scopes("acti
         script_id = str(requested_id).strip() if requested_id is not None else None
         if script_id == "":
             script_id = None
-        parsed = _parse_and_validate_scenario_yaml(script_id, yaml_text)
+        parsed = _parse_and_validate_scenario_yaml(script_id, yaml_text, require_progressable=True)
         canonical = _canonical_scenario_yaml(parsed)
     elif document is not None:
         if not isinstance(document, dict):
@@ -1446,8 +1460,17 @@ async def get_dream_scenario(script_id: str, _auth=Depends(require_scopes("activ
         raise HTTPException(status_code=404, detail=f"剧本 {script_id} 不存在")
     p, source = resolved
     document = _parse_and_validate_scenario_yaml(script_id, p.read_text(encoding="utf-8"))
+    from core.dream.scenario_loader import unprogressable_stage_ids
+    unprogressable = unprogressable_stage_ids(document)
     yaml_text = _canonical_scenario_yaml(document)
-    return {"id": script_id, "yaml": yaml_text, "document": document, "source": source}
+    return {
+        "id": script_id,
+        "yaml": yaml_text,
+        "document": document,
+        "source": source,
+        "progressable": not bool(unprogressable),
+        "unprogressable_stage_ids": unprogressable,
+    }
 
 
 @router.post("/dream/scenarios", summary="新建剧本")

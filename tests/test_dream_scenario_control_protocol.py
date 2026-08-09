@@ -69,13 +69,33 @@ def test_scenario_prompt_contains_control_protocol():
 
     assert "scenario_control" in system
     assert "【本轮必须遵循】" in system
-    assert "进展：未接近" in system
-    assert "正在接近" in system
-    assert "已经满足" in system
+    assert '<scenario_control>{"hit":["E1"],"blocked":[]}</scenario_control>' in system
+    assert "hit" in system
+    assert "blocked" in system
     assert '"progress_signal"' not in system
     # Current stage exit_signs listed as reference
     assert "双方有了第一次真实的对话" in system
     assert "她说出了自己的名字" in system
+
+
+def test_extract_scenario_control_v2_ids_and_ignores_next_stage():
+    """Current Scenario control uses safe current-stage ids only."""
+    from core.dream.dream_pipeline import _extract_scenario_control
+
+    raw = (
+        "Companion看着她。\n"
+        "<scenario_control>\n"
+        '{"hit":["E1","E99","E1"],"blocked":["B1"],"next_stage":"negotiation"}\n'
+        "</scenario_control>"
+    )
+    visible, ctrl = _extract_scenario_control(raw)
+
+    assert visible == "Companion看着她。"
+    assert ctrl == {
+        "control_version": 2,
+        "hit": ["E1", "E99"],
+        "blocked": ["B1"],
+    }
 
 
 # ── Test 2: Sandbox prompt does NOT contain scenario_control ──────────────────

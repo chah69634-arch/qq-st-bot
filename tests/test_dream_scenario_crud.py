@@ -29,6 +29,8 @@ stages:
     name: Stage One
     dramatic_task: task text
     entry_pressure: pressure text
+    exit_signs:
+      - a concrete action happens
 """
 
 
@@ -64,7 +66,13 @@ def test_create_then_list_and_get(sandbox):
         assert result == {"ok": True, "id": "crud_demo"}
 
         listed = _run(list_dream_scenarios())
-        assert listed["scenarios"] == [{"id": "crud_demo", "title": "CRUD Demo", "source": "user"}]
+        assert listed["scenarios"] == [{
+            "id": "crud_demo",
+            "title": "CRUD Demo",
+            "source": "user",
+            "progressable": True,
+            "unprogressable_stage_ids": [],
+        }]
 
         detail = _run(get_dream_scenario("crud_demo"))
         assert detail["id"] == "crud_demo"
@@ -240,7 +248,7 @@ def test_structured_document_round_trip(sandbox):
 def test_validate_yaml_draft_returns_canonical_document_without_writing(sandbox):
     from admin.routers.dream import validate_dream_scenario
 
-    yaml_text = """# editor comment\nid: draft_yaml\ntitle: 多行标题\nstages:\n  - id: opening\n    name: 开场\n    dramatic_task: |\n      第一行\n      第二行\n    entry_pressure: 入口压力\n"""
+    yaml_text = """# editor comment\nid: draft_yaml\ntitle: 多行标题\nstages:\n  - id: opening\n    name: 开场\n    dramatic_task: |\n      第一行\n      第二行\n    entry_pressure: 入口压力\n    exit_signs:\n      - 完成一个具体行动\n"""
     with _as(_UID):
         result = _run(validate_dream_scenario({"yaml": yaml_text}))
 
@@ -280,6 +288,43 @@ stages:
     assert "duplicate stage" in exc.value.detail.lower()
 
 
+def test_new_or_edited_scenario_must_have_completion_signals_but_legacy_is_marked(sandbox, tmp_path, monkeypatch):
+    from admin.routers.dream import create_dream_scenario, list_dream_scenarios
+
+    stuck = {
+        "id": "stuck_demo",
+        "title": "Stuck Demo",
+        "stages": [{
+            "id": "opening",
+            "name": "Opening",
+            "dramatic_task": "task",
+            "entry_pressure": "pressure",
+        }],
+    }
+    with _as(_UID):
+        with pytest.raises(HTTPException) as exc:
+            _run(create_dream_scenario({"id": "stuck_demo", "document": stuck}))
+    assert exc.value.status_code == 422
+    assert "cannot progress" in exc.value.detail
+
+    legacy_dir = tmp_path / "legacy-scenarios"
+    legacy_dir.mkdir()
+    legacy = dict(stuck)
+    legacy["id"] = "stuck_legacy"
+    import yaml
+    (legacy_dir / "stuck_legacy.yaml").write_text(yaml.safe_dump(legacy), encoding="utf-8")
+    monkeypatch.setattr(sandbox, "dream_scenario_read_dirs", lambda: (tmp_path / "user-scenarios", legacy_dir))
+    with _as(_UID):
+        listed = _run(list_dream_scenarios())
+    assert listed["scenarios"] == [{
+        "id": "stuck_legacy",
+        "title": "Stuck Demo",
+        "source": "legacy",
+        "progressable": False,
+        "unprogressable_stage_ids": ["opening"],
+    }]
+
+
 def test_legacy_scenario_is_read_only_and_update_creates_userdata_override(sandbox, tmp_path, monkeypatch):
     from admin.routers.dream import (
         delete_dream_scenario,
@@ -298,7 +343,13 @@ def test_legacy_scenario_is_read_only_and_update_creates_userdata_override(sandb
 
     with _as(_UID):
         listed = _run(list_dream_scenarios())
-        assert listed["scenarios"] == [{"id": "legacy_demo", "title": "CRUD Demo", "source": "legacy"}]
+        assert listed["scenarios"] == [{
+            "id": "legacy_demo",
+            "title": "CRUD Demo",
+            "source": "legacy",
+            "progressable": True,
+            "unprogressable_stage_ids": [],
+        }]
         detail = _run(get_dream_scenario("legacy_demo"))
         assert detail["source"] == "legacy"
 

@@ -898,35 +898,42 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
                 parts.append("张力导演：收紧节奏，推进冲突或靠近。")
             elif rank.get(current, 0) > rank.get(target, 0):
                 parts.append("张力导演：放缓，给彼此喘息，退半步。")
-        # Hidden turn note: use plain language so the roleplay instruction stays
-        # readable. The system strips this note before the user sees the reply.
-        exit_signs = stage.get("exit_signs") or []
+        # Hidden turn note: v2 uses short IDs only. The system strips this
+        # note before the user sees the reply; legacy parsers remain compatible.
+        exit_signs = [
+            str(item).strip()
+            for item in (stage.get("exit_signs") or [])
+            if isinstance(item, str) and item.strip()
+        ]
+        blocked_items = [
+            str(item).strip()
+            for item in (stage.get("not_yet_allowed") or [])
+            if isinstance(item, str) and item.strip()
+        ]
         protocol_lines: list[str] = [
             "---",
-            "写完这一轮的自然回复后，再在末尾留一段给系统看的简短备注。不要向用户解释这段备注：",
-            '<scenario_control>',
-            '进展：未接近',
-            '命中：无',
-            '越界：无',
-            '</scenario_control>',
-            "",
-            "“进展”只写：未接近、正在接近、已经满足。",
-            "如果这一轮还没有靠近阶段完成条件，就写“未接近”；正在靠近但还没做到，写“正在接近”；已经做到至少一项，写“已经满足”。",
+            "写完这一轮的自然回复后，再在末尾留一段给系统看的短 ID 备注。不要向用户解释这段备注：",
+            '<scenario_control>{"hit":["E1"],"blocked":[]}</scenario_control>',
+            "只使用当前阶段列出的 E* / B* 短 ID；不要提交 stage_id 或 next_stage。",
+            "hit 是必填数组：本轮没有完成信号就写 []；blocked 可省略，或写本轮实际触及的 B*。",
         ]
         if exit_signs:
-            signs_block = "\n".join(f"  · {s}" for s in exit_signs)
             protocol_lines += [
                 "",
-                "“命中”只可照抄下面实际做到的完成信号；没有就写“无”：",
-                signs_block,
+                "当前阶段完成信号（只回传实际完成的 E*）：",
+                "\n".join(f"  E{index} — {item}" for index, item in enumerate(exit_signs, 1)),
             ]
         else:
-            protocol_lines.append("本阶段没有完成信号，“命中”始终写“无”。")
+            protocol_lines.append("本阶段没有完成信号，hit 始终写 []。")
+        if blocked_items:
+            protocol_lines += [
+                "",
+                "当前阶段禁止事项（只回传本轮实际触及的 B*）：",
+                "\n".join(f"  B{index} — {item}" for index, item in enumerate(blocked_items, 1)),
+            ]
         protocol_lines += [
             "",
-            "“越界”写用户本轮实际尝试的禁止事项；没有就写“无”。多项之间用中文分号隔开。",
-            "",
-            "这一轮不要提前透露后续阶段，也不要自行宣布进入下一阶段；阶段切换由系统判断。",
+            "只写短 ID，不要照抄长文本；阶段切换由系统确定性判断。",
         ]
         parts.append("\n".join(protocol_lines))
         return "\n\n".join(parts)
