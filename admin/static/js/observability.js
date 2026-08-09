@@ -1385,6 +1385,10 @@ async function loadObserveDreamPrompt() {
     const s = d.snapshot;
     _obsDreamPromptCurrent = { snap: s, uid };
     const ts = s.captured_at ? s.captured_at.slice(0,19).replace('T',' ') : '';
+    const scenarioExcluded = (s.layers || [])
+      .filter(layer => !layer.injected && layer.note === 'scenario_profile')
+      .map(layer => layer.label)
+      .filter(Boolean);
 
     // ── 总览 ──
     const sceneTags = (s.scene_tags || []).map(t => `<code style="font-size:11px;background:#1d3a6e;color:#93c5fd;padding:1px 4px;border-radius:3px;margin-right:3px">${escapeHtml(t)}</code>`).join('') || '(无)';
@@ -1396,11 +1400,13 @@ async function loadObserveDreamPrompt() {
           <span><span style="color:var(--muted)">世界：</span><strong>${escapeHtml(s.world_id||'?')}</strong></span>
           <span><span style="color:var(--muted)">模式：</span><strong>${escapeHtml(s.lucid_mode||'?')}</strong></span>
           <span><span style="color:var(--muted)">dream_mode：</span><strong>${escapeHtml(s.dream_mode||'?')}</strong></span>
+          <span><span style="color:var(--muted)">${escapeHtml(t('observe.dream_prompt.profile', 'Prompt profile'))}：</span><strong>${escapeHtml(s.prompt_profile||'?')} / ${escapeHtml(s.prompt_profile_version||'?')}</strong></span>
           <span><span style="color:var(--muted)">历史轮数：</span><strong>${s.history_turns||0}</strong></span>
           <span><span style="color:var(--muted)">token 合计：</span><strong>${(s.total_tokens||0).toLocaleString()}</strong></span>
         </div>
         <div style="padding:4px 14px 10px;font-size:13px"><span style="color:var(--muted)">scene_tags：</span>${sceneTags}</div>
         ${ablated ? `<div style="padding:0 14px 10px;color:#a78bfa;font-size:12px">已消融层：${ablated}</div>` : ''}
+        ${scenarioExcluded.length ? `<div style="padding:0 14px 10px;color:var(--muted);font-size:12px">${escapeHtml(t('observe.dream_prompt.profile_excluded', 'Scenario excluded layers'))}：${scenarioExcluded.map(layer => `<code style="font-size:11px;margin-right:4px">${escapeHtml(layer)} · DISABLED/scenario_profile</code>`).join('')}</div>` : ''}
       </div>`;
 
     // ── 层列表 ──

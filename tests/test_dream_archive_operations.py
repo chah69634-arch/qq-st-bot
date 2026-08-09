@@ -112,6 +112,7 @@ def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
     from admin.routers.dream import dream_operations_get
     from core.dream.dream_state import write_state
     from core.dream.exit_observability import record
+    from core.dream.scenario_progress_audit import record as record_scenario_progress
 
     _write_jsonl(sandbox.dreams_archive_dir(char_id="dreamer") / "dream_ops_1.jsonl", [
         {"role": "assistant", "content": "dream prose", "ts": 100.0},
@@ -121,6 +122,17 @@ def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
     summary_path.write_text(json.dumps({"dream_id": "ops_1", "summary": "safe", "created_at": 101.0}), encoding="utf-8")
     write_state("owner", {"status": "REALITY_AFTERGLOW", "last_dream_id": "ops_1", "last_greeted_dream_id": None})
     record("owner", "ops_1", char_id="dreamer", lifecycle="blocked", reason_code="dnd")
+    record_scenario_progress(
+        "ops_1",
+        char_id="dreamer",
+        current_stage_id="opening",
+        control_status="valid",
+        control_version=2,
+        matched_exit_ids=["E1", "raw text"],
+        disposition="advanced",
+        from_stage_id="opening",
+        to_stage_id="next",
+    )
     schedule = sandbox.dreams_postcards_dir(char_id="dreamer") / "schedule.json"
     schedule.parent.mkdir(parents=True, exist_ok=True)
     schedule.write_text(json.dumps([{"dream_id": "ops_1", "letter_text": "postcard prose", "sent": False, "attempts": 1, "delivery_status": "smtp_failed", "last_error": "smtp_failed"}], ensure_ascii=False), encoding="utf-8")
@@ -135,3 +147,8 @@ def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
     assert result["exit_lifecycle"][0]["reason_code"] == "dnd"
     assert result["postcards"][0]["delivery_status"] == "smtp_failed"
     assert result["consistency"]["last_dream_id_present"] is True
+    assert result["scenario_progress"]["last"]["dream_id"] == "ops_1"
+    assert result["scenario_progress"]["last"]["matched_exit_ids"] == ["E1"]
+    assert result["scenario_progress"]["last"]["from_stage_id"] == "opening"
+    assert result["scenario_progress"]["last"]["to_stage_id"] == "next"
+    assert "raw text" not in encoded

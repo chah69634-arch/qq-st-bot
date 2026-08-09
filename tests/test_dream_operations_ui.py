@@ -10,7 +10,13 @@ def test_admin_dream_operations_static_wiring():
     core = (ROOT / "admin/static/js/core.js").read_text(encoding="utf-8")
     i18n = (ROOT / "admin/static/i18n.js").read_text(encoding="utf-8")
     assert "observe-dream-operations" in index
-    assert "dream-operations-1" in index
+    assert "dream-operations" in index
+    assert "brief-169-scenario-ops-1" in index
     assert "observe-dream-operations" in core
     assert "dream_ops.title" in i18n
+    assert "dream_ops.scenario_progress" in i18n
     assert "dream_ops.title" in (ROOT / "admin/static/pages/observe-dream-operations.html").read_text(encoding="utf-8")
+    page = (ROOT / "admin/static/pages/observe-dream-operations.html").read_text(encoding="utf-8")
+    script = (ROOT / "admin/static/js/dream-operations.js").read_text(encoding="utf-8")
+    assert "dream-ops-scenario-progress" in page
+    assert "scenario_progress" in script

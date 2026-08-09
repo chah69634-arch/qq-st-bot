@@ -574,6 +574,10 @@ class DataPaths:
         """Sanitized per-character lifecycle ledger for solo Dream after-exit talk."""
         return self._p("runtime", "dreams", char_id, "exit_lifecycle.json")
 
+    def dreams_scenario_progress_audit_path(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Bounded, text-free Scenario progression audit ledger."""
+        return self._p("runtime", "dreams", safe_user_id(char_id), "scenario_progress_audit.json")
+
     def dreams_invariants_dir(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "dreams", char_id, "invariants")
 

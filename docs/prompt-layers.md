@@ -65,9 +65,14 @@
 | `12_time_hint` | 时间提示（`<时间提示>距上一条消息已过去约X</时间提示>`） | gap ≥ 10 分钟 | `core/presence.py` → `get_gap_from_history()` + `format_gap_text()` |
 | `12_user_message` | 用户当前消息 | always | 用户输入 |
 
-Dream scenario 的 `DS_scenario` 属于梦境专用 prompt 组装链，不进入现实侧上述层表。其当前阶段块以
-`【本轮必须遵循】` 前缀提升注意力，用口语说明戏剧任务、入场压力、禁止事项和完成信号；隐藏的
-`<scenario_control>` 也使用 `进展/命中/越界` 短句，不再把 JSON 字段模板直接注入模型。
+Dream scenario 的 `DS_scenario` 属于梦境专用 prompt 组装链，不进入现实侧上述层表。Brief 169 的单人
+Scenario 使用 `scenario/v2` profile：D1S 只注入 Scenario 身份投影，D8S 是要求具体 say/do/env/feel
+行动的剧本导演；D2/D3/D4/D4.5/D5/D6/D7/DM/lorebook 均以 `DISABLED/scenario_profile` 留在
+inspector 目录但不进入最终 messages。其当前阶段块以 `【本轮必须遵循】` 前缀提升注意力，用口语说明
+戏剧任务、入场压力、禁止事项和完成信号；隐藏控制块只使用短 ID：
+`<scenario_control>{"hit":["E1"],"blocked":[]}</scenario_control>`。`hit` 必填、`blocked`
+可选，E/B 只对当前 stage 有效，未知或跨阶段 ID 不推进；旧 JSON 与自然文本仍兼容解析，但不再由新
+Prompt 教出。
 
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >

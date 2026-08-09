@@ -239,6 +239,19 @@
   - dream_turn 处理链：先 strip 控制块 → 可见回复送 dream log / 返回值 → 当前 stage 白名单归一化与
     裁决；若发生 stage transition 或 completed，**跳过** `increment_stage_turns()`（过渡轮属旧 stage，
     新 stage 从 `stage_turns=0` 开始）；否则正常 `increment_stage_turns()`。
+- **Scenario Prompt Profile / control v2（Brief 169）**：单人 Scenario 使用独立 `scenario/v2`
+  profile。D1S 只取 `presence_ext.dream_behavior.scenario_identity`，缺失时有界 fallback 到
+  `description + personality`；D2/D3/D4/D4.5/D5/D6/D7/DM/lorebook 不注入，D8S 只负责行动导演，
+  Reality Character 与 `core/prompt_builder.py` 链路不变。当前 DS 控制块只教：
+  `<scenario_control>{"hit":["E1"],"blocked":[]}</scenario_control>`；E/B ID 仅在当前 stage
+  有效，未知或跨阶段 ID 不推进，`next_stage` 不受理。旧 JSON 与“进展/命中/越界”文本仍可读，
+  但不再作为新 Prompt 合同。
+- 新建或编辑剧本时，每个 stage 都必须有非空 `exit_signs`；历史 YAML 仍可读，但列表与编辑器标记
+  `unprogressable`，不会自动迁移或重写。
+- 梦境运维会向 `get_paths().dreams_scenario_progress_audit_path()` 写入最多 200 条正文无关记录。
+  记录仅含 dream/stage 安全 ID、profile/version、控制状态、E/B 安全 ID、计数、固定 disposition、
+  转场和停滞状态，不含输入、回复、Prompt、剧本正文、exit_sign 原文或 private truth；写入失败
+  fail-open。`GET /dream/operations` 只返回该有界安全投影，覆盖当前及最近结束的 Scenario。
 - **Progress Signal Skeleton（v0.6，兼容说明）**：
   - `ScenarioCore.with_progress_signal(signal, matched, blocked)` 及旧 `satisfied_streak` 字段仍保留，
     以便旧状态与历史单测加载；它们不再决定新 pipeline 的阶段推进。

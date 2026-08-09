@@ -51,6 +51,41 @@
     }).join('')}</tbody></table>`;
   }
 
+  function _scenarioIds(value) {
+    return Array.isArray(value)
+      ? value.filter(item => /^[EB][1-9][0-9]{0,2}$/.test(String(item))).map(escapeHtml).join('、')
+      : '';
+  }
+
+  function _renderDreamOpsScenarioProgress(data) {
+    const host = document.getElementById('dream-ops-scenario-progress');
+    if (!host) return;
+    const progress = data.scenario_progress || {};
+    const last = progress.last;
+    if (!last) {
+      host.innerHTML = `<div class="empty">${escapeHtml(t('dream_ops.empty', 'No records'))}</div>`;
+      return;
+    }
+    const transition = last.from_stage_id && last.to_stage_id
+      ? `${escapeHtml(last.from_stage_id)} → ${escapeHtml(last.to_stage_id)}`
+      : t('dream_ops.scenario.no_transition', 'None');
+    const reason = _opsLabel('dream_ops.scenario.reason', last.disposition || last.reason || 'unknown');
+    const profile = `${escapeHtml(last.prompt_profile || 'scenario')} / ${escapeHtml(last.prompt_profile_version || 'v2')}`;
+    host.innerHTML = `<div class="page-context-source" style="padding:12px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 18px">
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.current_stage', 'Current stage'))}：</span><code>${escapeHtml(progress.current_stage_id || '—')}</code></span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.final_stage', 'Final stage'))}：</span><code>${escapeHtml(progress.final_stage_id || '—')}</code></span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.control', 'Control'))}：</span>${_opsBadge('dream_ops.scenario.control_status', last.control_status || 'unknown', last.control_status === 'valid' ? 'badge-success' : 'badge-warn')}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.profile', 'Profile'))}：</span><code>${profile}</code></span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.hit', 'Valid hit'))}：</span><code>${_scenarioIds(last.matched_exit_ids) || '—'}</code> (${Number(last.valid_exit_sign_count || 0)})</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.blocked', 'Blocked'))}：</span><code>${_scenarioIds(last.blocked_ids) || '—'}</code></span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.unknown', 'Unknown IDs'))}：</span>${Number(last.unknown_exit_sign_count || 0) + Number(last.unknown_blocked_event_count || 0)}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.reason_label', 'Reason'))}：</span>${reason}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.stall', 'Stall turns'))}：</span>${Number(last.stall_turns || 0)}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.recovery', 'Recovery'))}：</span>${last.recovery_pending ? escapeHtml(t('common.enabled', 'Enabled')) : escapeHtml(t('common.disabled', 'Disabled'))}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario.transition', 'Last transition'))}：</span><code>${transition}</code></span>
+    </div></div>`;
+  }
+
   function _renderDreamOpsLifecycle(items) {
     const host = document.getElementById('dream-ops-lifecycle');
     if (!items.length) {
@@ -85,12 +120,13 @@
       const data = await api('GET', '/dream/operations');
       _renderDreamOpsOverview(data);
       _renderDreamOpsArchives(data.archives || []);
+      _renderDreamOpsScenarioProgress(data);
       _renderDreamOpsLifecycle(data.exit_lifecycle || []);
       _renderDreamOpsPostcards(data.postcards || []);
     } catch (error) {
       const message = escapeHtml(t('dream_ops.load_failed', 'Failed to load: {error}', {error: error.message}));
       overview.innerHTML = `<div class="empty">${message}</div>`;
-      ['dream-ops-archives', 'dream-ops-lifecycle', 'dream-ops-postcards'].forEach(id => {
+      ['dream-ops-archives', 'dream-ops-scenario-progress', 'dream-ops-lifecycle', 'dream-ops-postcards'].forEach(id => {
         const host = document.getElementById(id);
         if (host) host.innerHTML = `<div class="empty">${message}</div>`;
       });

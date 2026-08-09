@@ -327,7 +327,8 @@ function renderDreamScenarios() {
   const rows = _dreamScenarios.map(s => `<tr>
     <td style="font-size:12px;color:var(--accent)">${escapeHtml(s.id)}</td>
     <td style="font-size:12px">${escapeHtml(s.title)}</td>
-    <td><span class="badge">${escapeHtml(t(`dream.scenario.source_${s.source || 'user'}`, s.source === 'legacy' ? '旧路径只读' : '用户数据'))}</span></td>
+    <td><span class="badge">${escapeHtml(t(`dream.scenario.source_${s.source || 'user'}`, s.source === 'legacy' ? '旧路径只读' : '用户数据'))}</span>
+      ${s.progressable === false ? `<span class="badge badge-warn" style="margin-left:4px">${escapeHtml(t('dream.scenario.unprogressable', '不可推进'))}${Array.isArray(s.unprogressable_stage_ids) && s.unprogressable_stage_ids.length ? ` · ${escapeHtml(s.unprogressable_stage_ids.join(', '))}` : ''}</span>` : ''}</td>
     <td style="text-align:center;white-space:nowrap">
       <button class="btn btn-ghost btn-sm" data-action="openDreamScenarioEditor" data-action-args='${escapeHtml(JSON.stringify([s.id]))}'>${escapeHtml(t('common.edit', '编辑'))}</button>
       <button class="btn btn-danger btn-sm" style="margin-left:4px" data-action="deleteDreamScenario" data-action-args='${escapeHtml(JSON.stringify([s.id]))}' ${s.source === 'legacy' ? 'disabled' : ''}>${escapeHtml(t('common.delete', '删除'))}</button>

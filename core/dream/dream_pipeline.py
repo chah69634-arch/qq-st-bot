@@ -583,6 +583,7 @@ async def dream_turn(
         from core.dream.scenario_loader import get_next_stage, get_stage, load_script
 
         sc = ScenarioCore.from_dict(state["scenario_core"])
+        _scenario_stage_before = sc.current_stage_id
         # _did_advance: True when stage transition or completion fires this turn.
         # The transitioning turn belongs to the OLD stage, so the NEW stage must
         # start at stage_turns=0 — we skip increment_stage_turns() on transition turns.
@@ -690,6 +691,30 @@ async def dream_turn(
         if not _did_advance:
             sc = sc.increment_stage_turns()
         state["scenario_core"] = sc.to_dict()
+        try:
+            from core.dream.scenario_progress_audit import record as _record_scenario_progress
+
+            _record_scenario_progress(
+                dream_id,
+                char_id=char_id,
+                turn_index=_dream_turn_index,
+                current_stage_id=sc.current_stage_id,
+                control_status=normalized.get("status"),
+                control_version=normalized.get("control_version"),
+                matched_exit_ids=normalized.get("matched_exit_ids"),
+                blocked_ids=normalized.get("blocked_ids"),
+                valid_exit_sign_count=normalized.get("valid_exit_sign_count", 0),
+                unknown_exit_sign_count=normalized.get("unknown_exit_sign_count", 0),
+                unknown_blocked_event_count=normalized.get("unknown_blocked_event_count", 0),
+                disposition=decision.get("disposition", "control_invalid"),
+                detail_reason=decision.get("blocked_reason") or "",
+                from_stage_id=_scenario_stage_before if decision.get("advance_to") else "",
+                to_stage_id=decision.get("advance_to") or "",
+                stall_turns=sc.stall_turns,
+                recovery_pending=sc.recovery_pending,
+            )
+        except Exception as _audit_exc:
+            logger.warning("[dream_pipeline] scenario progress audit failed: %s", _audit_exc)
     write_state(uid, state)
 
     # Transition to DREAM_CLOSING if soft exit was accepted

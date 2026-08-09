@@ -142,6 +142,12 @@ Dream scenario 剧本使用单独的 userdata-first 分层：新写入走
 `data/dream/scenarios/{id}.yaml` 只作只读回退。同 ID 时 userdata 胜出；编辑 legacy-only
 剧本会创建 userdata 覆盖副本，不会改写或删除旧文件。
 
+Scenario 运行时的进度审计是独立的正文无关台账：
+`data/runtime/dreams/{char_id}/scenario_progress_audit.json`。它由
+`DataPaths.dreams_scenario_progress_audit_path()` 定位、原子写入并限制为最近 200 条；只读运维投影
+可返回安全的 dream/stage ID、E/B ID、计数、固定 reason 和转场状态，不返回用户输入、角色回复、
+Prompt、剧本正文、exit_sign 原文或 private truth。Scenario 审计写失败不应阻断梦境 pipeline。
+
 `bundled/` 是随发行替换的只读公共资产根：`characters/default/` 放默认卡和配套静态资产，`seeds/reality/` 与 `seeds/dream/worlds/_default/` 放播种源，`templates/` 放角色卡与明信片模板，`examples/` 放格式示例。它不属于用户 authored 内容，也不属于 `data/` 运行时状态。
 
 ### Reality memory

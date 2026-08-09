@@ -592,6 +592,10 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
             "current_stage_id": _sc.get("current_stage_id"),
             "stage_turns": int(_sc.get("stage_turns") or 0),
             "last_progress_signal": _sc.get("last_progress_signal"),
+            "last_control_status": _sc.get("last_control_status"),
+            "last_control_version": _sc.get("last_control_version"),
+            "matched_exit_ids": list(_sc.get("last_matched_exit_ids") or []),
+            "blocked_ids": list(_sc.get("last_blocked_ids") or []),
             "valid_exit_sign_count": int(_sc.get("last_valid_exit_sign_count") or 0),
             "unknown_exit_sign_count": int(_sc.get("last_unknown_exit_sign_count") or 0),
             "unknown_blocked_event_count": int(_sc.get("last_unknown_blocked_event_count") or 0),
@@ -661,11 +665,29 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
     uid = _owner_uid()
     from core.dream.dream_state import read_state
     from core.dream.exit_observability import list_records
+    from core.dream.scenario_progress_audit import list_records as list_scenario_progress
     from core.sandbox import get_paths as _get_paths
 
     char_id = _active_dream_char_id()
     state = read_state(uid)
     lifecycle = list_records(char_id=char_id, limit=50)
+    scenario_dream_id = str(state.get("dream_id") or state.get("last_dream_id") or "")
+    scenario_progress_rows = list_scenario_progress(
+        char_id=char_id,
+        dream_id=scenario_dream_id or None,
+        limit=50,
+    )
+    scenario_last = scenario_progress_rows[0] if scenario_progress_rows else None
+    scenario_current = state.get("scenario_core") or {}
+    scenario_progress = {
+        "dream_id": scenario_dream_id or None,
+        "current_stage_id": scenario_current.get("current_stage_id") or (
+            scenario_last.get("current_stage_id") if scenario_last else None
+        ),
+        "final_stage_id": scenario_last.get("current_stage_id") if scenario_last else None,
+        "last": scenario_last,
+        "recent": scenario_progress_rows,
+    }
     archive_page = await dream_archive_list(offset=0, limit=20, char_id=char_id)
 
     schedule: list[dict] = []
@@ -731,6 +753,7 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         },
         "archives": archive_page["items"],
         "exit_lifecycle": lifecycle,
+        "scenario_progress": scenario_progress,
         "postcards": schedule,
         "afterglow": afterglow,
         "summary": summary,
