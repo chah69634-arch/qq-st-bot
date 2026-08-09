@@ -49,6 +49,13 @@ _NOT_CLOSE_REPLY = (
     '{"progress_signal": "not_close", "matched_exit_signs": [], "blocked_events": []}\n'
     "</scenario_control>"
 )
+_NEGOTIATION_NOT_CLOSE_REPLY = _NOT_CLOSE_REPLY
+_FRACTURE_SATISFIED_REPLY = (
+    "Companion沉默地看着她。\n"
+    "<scenario_control>\n"
+    '{"progress_signal": "satisfied", "matched_exit_signs": ["他承认他知道自己在做什么"], "blocked_events": []}\n'
+    "</scenario_control>"
+)
 _FAKE_MSGS = [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}]
 
 
@@ -96,7 +103,7 @@ def test_v071_normal_turn_increments_stage_turns(sandbox):
 
 
 def test_v071_first_satisfied_no_advance_increments_turns(sandbox):
-    """First satisfied turn: no stage advance; stage_turns goes to 1, streak goes to 1."""
+    """A single valid satisfied turn advances and starts the next stage at zero."""
     from core.dream.dream_pipeline import enter_dream
     from core.dream.dream_state import read_state
     from core.dream.dream_settings import save as save_settings
@@ -115,11 +122,9 @@ def test_v071_first_satisfied_no_advance_increments_turns(sandbox):
     _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
 
     sc = read_state(_UID).get("scenario_core", {})
-    assert sc.get("current_stage_id") == "arrival"
-    assert sc.get("satisfied_streak") == 1
-    assert sc.get("stage_turns") == 1, (
-        f"first satisfied: expected stage_turns=1, got {sc.get('stage_turns')}"
-    )
+    assert sc.get("current_stage_id") == "negotiation"
+    assert sc.get("satisfied_streak") == 0
+    assert sc.get("stage_turns") == 0
 
 
 def test_v071_second_satisfied_new_stage_starts_at_zero(sandbox):
@@ -143,21 +148,19 @@ def test_v071_second_satisfied_new_stage_starts_at_zero(sandbox):
     ):
         asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
 
-    # Turn 1: satisfied — streak=1, stage_turns=1, still at arrival
+    # Turn 1: satisfied — immediately advances to negotiation.
     _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
     sc_after_t1 = read_state(_UID).get("scenario_core", {})
-    assert sc_after_t1.get("current_stage_id") == "arrival"
-    assert sc_after_t1.get("satisfied_streak") == 1
+    assert sc_after_t1.get("current_stage_id") == "negotiation"
+    assert sc_after_t1.get("satisfied_streak") == 0
 
-    # Turn 2: satisfied — streak=2 → advance to negotiation; new stage_turns must be 0
+    # Turn 2: the old arrival sign is unknown in negotiation, so it cannot advance again.
     _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
     sc = read_state(_UID).get("scenario_core", {})
     assert sc.get("current_stage_id") == "negotiation", (
         f"expected negotiation, got {sc.get('current_stage_id')}"
     )
-    assert sc.get("stage_turns") == 0, (
-        f"new stage after transition must start at stage_turns=0, got {sc.get('stage_turns')}"
-    )
+    assert sc.get("stage_turns") == 1
     assert sc.get("satisfied_streak") == 0
 
 
@@ -178,15 +181,14 @@ def test_v071_first_turn_in_new_stage_increments_to_one(sandbox):
     ):
         asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
 
-    # Turns 1+2: trigger advance to negotiation (stage_turns=0 on arrival)
-    _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
+    # Turn 1: trigger advance to negotiation (stage_turns=0 on arrival)
     _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
     sc_at_new = read_state(_UID).get("scenario_core", {})
     assert sc_at_new.get("current_stage_id") == "negotiation"
     assert sc_at_new.get("stage_turns") == 0
 
-    # Turn 3: first genuine turn in new stage — must increment to 1
-    _run_dream_turn(_UID, fake_pipeline, _NOT_CLOSE_REPLY)
+    # Turn 2: first genuine turn in new stage — must increment to 1
+    _run_dream_turn(_UID, fake_pipeline, _NEGOTIATION_NOT_CLOSE_REPLY)
     sc = read_state(_UID).get("scenario_core", {})
     assert sc.get("current_stage_id") == "negotiation"
     assert sc.get("stage_turns") == 1, (
@@ -227,7 +229,7 @@ def test_v071_mark_completed_does_not_increment_stage_turns(sandbox):
     write_state(_UID, state)
 
     # Turn: 2nd satisfied on last stage → mark_completed, _did_advance=True → no increment
-    _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
+    _run_dream_turn(_UID, fake_pipeline, _FRACTURE_SATISFIED_REPLY)
     sc = read_state(_UID).get("scenario_core", {})
     assert sc.get("ending_state") == "completed", (
         f"expected completed, got {sc.get('ending_state')}"

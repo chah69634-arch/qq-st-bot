@@ -190,7 +190,11 @@ def test_dream_turn_saves_progress_signal(sandbox):
     assert result.get("error") is None
     sc = read_state(_UID).get("scenario_core", {})
     assert sc.get("last_progress_signal") == "satisfied"
-    assert sc.get("stage_turns") == 1
+    # Brief 166: the valid current-stage exit sign advances immediately; the
+    # transition turn belongs to the old stage, so the new stage starts at 0.
+    assert sc.get("stage_turns") == 0
+    assert sc.get("current_stage_id") == "negotiation"
+    assert sc.get("advance_disposition") == "advanced"
 
 
 # ── Test 5: matched_exit_signs correctly saved ────────────────────────────────

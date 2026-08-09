@@ -561,6 +561,17 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
         scenario_info = {
             "script_id": _sc.get("script_id"),
             "current_stage_id": _sc.get("current_stage_id"),
+            "stage_turns": int(_sc.get("stage_turns") or 0),
+            "last_progress_signal": _sc.get("last_progress_signal"),
+            "valid_exit_sign_count": int(_sc.get("last_valid_exit_sign_count") or 0),
+            "unknown_exit_sign_count": int(_sc.get("last_unknown_exit_sign_count") or 0),
+            "unknown_blocked_event_count": int(_sc.get("last_unknown_blocked_event_count") or 0),
+            "advance_disposition": _sc.get("advance_disposition"),
+            "advance_blocked_reason": _sc.get("advance_blocked_reason"),
+            "advance_blocked_current_bucket": _sc.get("advance_blocked_current_bucket"),
+            "advance_blocked_target_bucket": _sc.get("advance_blocked_target_bucket"),
+            "recovery_pending": bool(_sc.get("recovery_pending")),
+            "blocked_event_count": len(_sc.get("last_blocked_events") or []),
         }
 
     base = {

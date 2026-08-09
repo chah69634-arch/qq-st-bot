@@ -52,8 +52,9 @@ async def _run_two_satisfied_turns(sandbox, *, script_id: str, projected_tension
         result = await enter_dream(uid, char_id="yexuan", dream_mode="scenario", script_id=script_id)
     assert result["ok"] is True
 
-    response = ('reply\n<scenario_control>{"progress_signal":"satisfied",'
-                '"matched_exit_signs":[],"blocked_events":[]}</scenario_control>')
+    matched_exit = "用户回应了他的话" if script_id == "test_short" else "双方有了第一次真实的对话"
+    response = (f'reply\n<scenario_control>{{"progress_signal":"satisfied",'
+                f'"matched_exit_signs":["{matched_exit}"],"blocked_events":[]}}</scenario_control>')
     projection = {"d5_text": "", "yexuan_tension": projected_tension}
     with (
         patch("core.dream.dream_log.read_current", return_value=[]),

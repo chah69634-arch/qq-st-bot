@@ -162,6 +162,48 @@ def test_state_get_dream_active_returns_projected_body(sandbox):
     assert "heat_cap" not in result["body"]
 
 
+def test_state_get_scenario_exposes_safe_progress_observation_only(sandbox):
+    """Scenario state projection exposes counts/reason, never control free text."""
+    from core.dream.dream_state import write_state, DreamStatus
+    from admin.routers.dream import dream_state_get
+
+    uid = _UID + "_scenario_observation"
+    write_state(uid, {
+        "user_id": uid,
+        "status": DreamStatus.DREAM_ACTIVE.value,
+        "dream_mode": "scenario",
+        "dream_id": f"dream_{uid}",
+        "scenario_core": {
+            "script_id": "prison_demo",
+            "current_stage_id": "arrival",
+            "stage_turns": 4,
+            "last_progress_signal": "satisfied",
+            "last_matched_exit_signs": ["private completion text"],
+            "last_blocked_events": ["private blocked text"],
+            "last_valid_exit_sign_count": 0,
+            "last_unknown_exit_sign_count": 1,
+            "last_unknown_blocked_event_count": 1,
+            "advance_disposition": "satisfied_without_valid_exit_sign",
+            "advance_blocked_reason": "satisfied_without_valid_exit_sign",
+            "advance_blocked_current_bucket": "low",
+            "advance_blocked_target_bucket": "high",
+        },
+    })
+
+    with patch("admin.routers.dream._owner_uid", return_value=uid):
+        result = asyncio.run(dream_state_get())
+
+    scenario = result["scenario"]
+    assert scenario["current_stage_id"] == "arrival"
+    assert scenario["stage_turns"] == 4
+    assert scenario["advance_disposition"] == "satisfied_without_valid_exit_sign"
+    assert scenario["unknown_exit_sign_count"] == 1
+    assert scenario["unknown_blocked_event_count"] == 1
+    assert scenario["blocked_event_count"] == 1
+    assert "last_matched_exit_signs" not in scenario
+    assert "private completion text" not in str(scenario)
+
+
 def test_state_get_body_zero_when_no_body_state(sandbox):
     """DREAM_ACTIVE without body_state → body defaults to zeros, no error."""
     from core.dream.dream_state import write_state, DreamStatus

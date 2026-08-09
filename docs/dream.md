@@ -198,7 +198,8 @@
   只注入当前 stage，后续 stage 的 drift_pressure 不泄漏
 - 剧本文件：`userdata/characters/dream/scenarios/{script_id}.yaml`；旧 `data/dream/scenarios/` 只读回退；测试写入仍走 sandbox
 - `prison_demo.yaml`：三阶段示例剧本（arrival / negotiation / fracture），arrival + negotiation 各含 drift_pressure
-- **Progress Signal Skeleton（v0.6）**：软门控观察信号骨架
+- **Progress Signal / deterministic stage decision（Brief 166）**：主模型只提交本轮观察，Python
+  按当前 stage 白名单裁决，不扫描可见剧情关键词，也不接受模型的 `next_stage`。
   - `ScenarioCore` 新增三字段（frozen dataclass）：
     - `last_progress_signal: str | None` — `"not_close"` / `"approaching"` / `"satisfied"`
     - `last_matched_exit_signs: list[str]` — 本轮命中的出口标志语义短句
@@ -208,13 +209,28 @@
     每轮回复末尾仍附加会被系统剥离的 `<scenario_control>` 简短备注（`进展/命中/越界`）；
     解析器继续兼容历史 JSON 控制块，避免进行中的旧会话失效。
     当前 stage.exit_signs 作为 matched_exit_signs 的合法引用列表注入（仅当前 stage）
-  - `_extract_scenario_control(reply)` → `(visible_reply, parsed_control | None)`：
-    strip 控制块（不论合法与否）；非法/缺失时返回 `None`，fail-soft 不崩溃
-  - dream_turn 处理链：先 strip 控制块 → 可见回复送 dream log / 返回值 → 合法时
-    先 `with_progress_signal()`；若本轮发生 stage transition 或 completed，**跳过**
-    `increment_stage_turns()`（过渡轮属旧 stage，新 stage 从 `stage_turns=0` 开始）；
-    否则正常 `increment_stage_turns()`
-- **Stage Transition MVP（v0.7）**：连续 satisfied 两次 → 顺序推进下一 stage
+  - `_extract_scenario_control(reply)` 继续兼容历史调用；内部解析器另保留
+    `valid / missing / invalid` 状态，控制块缺失与非法都 fail-soft，不崩溃。
+  - `matched_exit_signs` 只保留当前 stage 的 `exit_signs`；`blocked_events` 只保留当前 stage 的
+    `not_yet_allowed`。重复项去重，未知项只记数量，不把自由文本写入 Scenario state。
+  - `satisfied` 只有在至少命中一个当前 stage 合法 `exit_sign` 时才是有效完成观察；一次合法命中即可
+    依 YAML 顺序推进，最后 stage 标记 `completed`。无合法命中固定记为
+    `satisfied_without_valid_exit_sign`，不推进。
+  - `approaching` / `not_close` / missing / invalid 分别记固定 disposition，不推进；旧
+    `satisfied_streak` 仅为反序列化兼容字段，新 pipeline 不再以连续两轮作为推进闸门。
+  - `scenario_arc_mode=arc` 未达到当前 stage 的粗粒度 `arc` 桶时固定记
+    `arc_target_not_reached`，并记录当前/目标桶；不暴露精确张力数值，不静默卡住。
+  - `/dream/state` 的 scenario projection 仅返回阶段、回合、计数、disposition 和粗粒度 reason/bucket，
+    不返回用户输入、角色回复或控制块自由文本。
+  - dream_turn 处理链：先 strip 控制块 → 可见回复送 dream log / 返回值 → 当前 stage 白名单归一化与
+    裁决；若发生 stage transition 或 completed，**跳过** `increment_stage_turns()`（过渡轮属旧 stage，
+    新 stage 从 `stage_turns=0` 开始）；否则正常 `increment_stage_turns()`。
+- **Progress Signal Skeleton（v0.6，兼容说明）**：
+  - `ScenarioCore.with_progress_signal(signal, matched, blocked)` 及旧 `satisfied_streak` 字段仍保留，
+    以便旧状态与历史单测加载；它们不再决定新 pipeline 的阶段推进。
+  - DS 层以 `【本轮必须遵循】` 开头，用自然口语描述当前阶段、压力与限制；不向 LLM 展示 JSON 字段模板，
+    末尾仍附加会被系统剥离的 `<scenario_control>` 简短备注（`进展/命中/越界`）。
+- **Stage Transition MVP（v0.7，旧兼容）**：
   - `ScenarioCore` 新增字段：`satisfied_streak: int = 0`（frozen dataclass）
     - `with_progress_signal("satisfied")` → streak +1；任何其他信号 → streak = 0
     - control block 缺失/非法 → `reset_satisfied_streak()` 归零（保守策略，防静默推进）
@@ -225,11 +241,7 @@
   - `ScenarioCore.reset_satisfied_streak()` — 控制块缺失时调用
   - `scenario_loader.get_next_stage(script, current_stage_id)` — 按 YAML 顺序取下一 stage；
     当前已是最后 stage 时返回 `None`；找不到 current_stage_id 时 raise ValueError（fail-loud）
-  - dream_turn 阶段推进逻辑（`satisfied_streak >= 2 且 ending_state != "completed"`）：
-    1. 加载 script，调 `get_next_stage`
-    2. 若有下一 stage → `advance_to_stage(next_stage.id)`
-    3. 若无（已是最后 stage）→ `mark_completed()`
-    4. 任何 transition 失败 → warning-only，不崩溃
+  - 旧进行中状态仍可读取；新推进规则见 Brief 166 上一节，不再等待 streak=2。
   - DS 层：`ending_state=="completed"` 时在层顶注入"【剧本状态：所有阶段已完成】"
   - 不做：分支、多结局、新裁判模型、潜意识读写、impression/afterglow 整合、
     Mirror anchors、dream_depth / dream_stability 共享 HUD、LLM 自行指定 next_stage

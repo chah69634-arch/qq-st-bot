@@ -17,10 +17,16 @@ Progress signal fields (v0.6 — observation skeleton):
 - last_matched_exit_signs: list[str]  — current-stage exit_signs referenced by LLM
 - last_blocked_events: list[str]      — not_yet_allowed items attempted by user
 
-Stage transition fields (v0.7 — sequential advance):
+Stage transition compatibility field (v0.7 — sequential advance):
 - satisfied_streak: int  — consecutive turns where progress_signal == "satisfied"
-  Resets to 0 on non-satisfied signal, on missing/invalid control block (conservative),
-  and on stage advance. When >= 2, triggers advance to next stage.
+  Kept so old in-progress state can be loaded. New pipeline decisions do not use it
+  as an advance gate.
+
+Decision observation fields (Brief 166):
+- last_valid_exit_sign_count / last_unknown_exit_sign_count
+- last_unknown_blocked_event_count
+- advance_disposition / advance_blocked_reason
+- advance_blocked_current_bucket / advance_blocked_target_bucket
 """
 from __future__ import annotations
 
@@ -40,6 +46,13 @@ class ScenarioCore:
     last_matched_exit_signs: list[str] = field(default_factory=list)
     last_blocked_events: list[str] = field(default_factory=list)
     satisfied_streak: int = 0
+    last_valid_exit_sign_count: int = 0
+    last_unknown_exit_sign_count: int = 0
+    last_unknown_blocked_event_count: int = 0
+    advance_disposition: str | None = None
+    advance_blocked_reason: str | None = None
+    advance_blocked_current_bucket: str | None = None
+    advance_blocked_target_bucket: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +64,13 @@ class ScenarioCore:
             "last_matched_exit_signs": list(self.last_matched_exit_signs),
             "last_blocked_events": list(self.last_blocked_events),
             "satisfied_streak": self.satisfied_streak,
+            "last_valid_exit_sign_count": self.last_valid_exit_sign_count,
+            "last_unknown_exit_sign_count": self.last_unknown_exit_sign_count,
+            "last_unknown_blocked_event_count": self.last_unknown_blocked_event_count,
+            "advance_disposition": self.advance_disposition,
+            "advance_blocked_reason": self.advance_blocked_reason,
+            "advance_blocked_current_bucket": self.advance_blocked_current_bucket,
+            "advance_blocked_target_bucket": self.advance_blocked_target_bucket,
         }
 
     @classmethod
@@ -64,6 +84,13 @@ class ScenarioCore:
             last_matched_exit_signs=list(data.get("last_matched_exit_signs") or []),
             last_blocked_events=list(data.get("last_blocked_events") or []),
             satisfied_streak=int(data.get("satisfied_streak", 0)),
+            last_valid_exit_sign_count=int(data.get("last_valid_exit_sign_count", 0)),
+            last_unknown_exit_sign_count=int(data.get("last_unknown_exit_sign_count", 0)),
+            last_unknown_blocked_event_count=int(data.get("last_unknown_blocked_event_count", 0)),
+            advance_disposition=data.get("advance_disposition"),
+            advance_blocked_reason=data.get("advance_blocked_reason"),
+            advance_blocked_current_bucket=data.get("advance_blocked_current_bucket"),
+            advance_blocked_target_bucket=data.get("advance_blocked_target_bucket"),
         )
 
     def increment_stage_turns(self) -> "ScenarioCore":
@@ -111,6 +138,12 @@ class ScenarioCore:
             last_matched_exit_signs=[],
             last_blocked_events=[],
             satisfied_streak=0,
+            last_valid_exit_sign_count=0,
+            last_unknown_exit_sign_count=0,
+            last_unknown_blocked_event_count=0,
+            advance_blocked_reason=None,
+            advance_blocked_current_bucket=None,
+            advance_blocked_target_bucket=None,
         )
 
     def mark_completed(self) -> "ScenarioCore":

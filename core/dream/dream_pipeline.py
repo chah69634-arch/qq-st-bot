@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import time
+from dataclasses import replace
 from typing import Any
 
 from core.data_paths import DEFAULT_CHAR_ID
@@ -55,19 +56,20 @@ def _scenario_bucket_rank(value: float) -> int:
     return {"low": 0, "rising": 1, "high": 2, "critical": 3}[_bucket_for_scenario(value)]
 
 
-def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
+def _parse_scenario_control(reply: str) -> tuple[str, dict | None, str]:
     """
     Strip <scenario_control>…</scenario_control> from the LLM reply and parse it.
 
-    Returns (visible_reply, parsed_control_or_None).
+    Returns (visible_reply, parsed_control_or_None, parse_status).
     - visible_reply always has the block removed (even when parse fails).
-    - parsed_control is None when block is absent, JSON-invalid, or has an
-      illegal progress_signal; caller must not update ScenarioCore in that case.
+    - parse_status is ``valid``, ``missing``, or ``invalid``.  The status is
+      kept separate from the parsed payload so the state observer can explain
+      why a turn did not advance.
     - Fail-soft: never raises.
     """
     match = _SCENARIO_CONTROL_RE.search(reply)
     if not match:
-        return reply, None
+        return reply, None, "missing"
 
     # Strip the block from visible reply regardless of validity
     visible = (reply[: match.start()] + reply[match.end() :]).strip()
@@ -84,7 +86,7 @@ def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
         signal = _NATURAL_PROGRESS_SIGNALS.get(lines.get("进展", ""))
         if signal is None:
             logger.debug("[dream_pipeline] scenario_control natural parse failed")
-            return visible, None
+            return visible, None, "invalid"
 
         def _items(key: str) -> list[str]:
             value = lines.get(key, "")
@@ -96,26 +98,169 @@ def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
             "progress_signal": signal,
             "matched_exit_signs": _items("命中"),
             "blocked_events": _items("越界"),
-        }
+        }, "valid"
 
     if not isinstance(data, dict):
-        return visible, None
+        return visible, None, "invalid"
 
     signal = data.get("progress_signal")
     if signal not in _VALID_PROGRESS_SIGNALS:
         logger.debug("[dream_pipeline] scenario_control invalid progress_signal=%r", signal)
-        return visible, None
-
+        return visible, None, "invalid"
+    # Keep the legacy JSON shape strict before whitelist normalization.
     matched_exit_signs = data.get("matched_exit_signs", [])
     blocked_events = data.get("blocked_events", [])
     if not isinstance(matched_exit_signs, list) or not isinstance(blocked_events, list):
-        return visible, None
+        return visible, None, "invalid"
 
     return visible, {
         "progress_signal": signal,
         "matched_exit_signs": [str(x) for x in matched_exit_signs],
         "blocked_events": [str(x) for x in blocked_events],
+    }, "valid"
+
+
+def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
+    """Compatibility wrapper for callers/tests that only need the old pair."""
+    visible, parsed, _status = _parse_scenario_control(reply)
+    return visible, parsed
+
+
+def _dedupe_control_items(items: Any) -> list[str]:
+    """Normalize a control list to stable, unique strings without free text."""
+    if not isinstance(items, list):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        value = str(item).strip()
+        if value and value not in seen:
+            result.append(value)
+            seen.add(value)
+    return result
+
+
+def _normalize_scenario_control(
+    parsed_control: dict | None,
+    current_stage: dict[str, Any] | None,
+    *,
+    parse_status: str = "valid",
+) -> dict[str, Any]:
+    """Filter a parsed observation against the current stage's two whitelists.
+
+    This is deliberately a pure, deterministic function.  It does not inspect
+    visible prose, natural-language keywords, later stages, or user data.
+    Unknown values are counted and discarded; their text never enters state or
+    the next prompt.
+    """
+    if parse_status not in {"valid", "missing", "invalid"}:
+        parse_status = "invalid"
+    if parse_status != "valid" or not isinstance(parsed_control, dict):
+        if parse_status == "valid":
+            parse_status = "invalid"
+        return {
+            "status": parse_status,
+            "progress_signal": None,
+            "matched_exit_signs": [],
+            "blocked_events": [],
+            "valid_exit_sign_count": 0,
+            "unknown_exit_sign_count": 0,
+            "unknown_blocked_event_count": 0,
+        }
+
+    stage = current_stage if isinstance(current_stage, dict) else {}
+    exit_sign_items = stage.get("exit_signs")
+    blocked_event_items = stage.get("not_yet_allowed")
+    allowed_exit_signs = {
+        str(item).strip()
+        for item in (exit_sign_items if isinstance(exit_sign_items, list) else [])
+        if str(item).strip()
     }
+    allowed_blocked_events = {
+        str(item).strip()
+        for item in (blocked_event_items if isinstance(blocked_event_items, list) else [])
+        if str(item).strip()
+    }
+    raw_exit_signs = _dedupe_control_items(parsed_control.get("matched_exit_signs"))
+    raw_blocked_events = _dedupe_control_items(parsed_control.get("blocked_events"))
+    matched_exit_signs = [item for item in raw_exit_signs if item in allowed_exit_signs]
+    blocked_events = [item for item in raw_blocked_events if item in allowed_blocked_events]
+    signal = parsed_control.get("progress_signal")
+    if signal not in _VALID_PROGRESS_SIGNALS:
+        return {
+            "status": "invalid",
+            "progress_signal": None,
+            "matched_exit_signs": [],
+            "blocked_events": [],
+            "valid_exit_sign_count": 0,
+            "unknown_exit_sign_count": 0,
+            "unknown_blocked_event_count": 0,
+        }
+    return {
+        "status": "valid",
+        "progress_signal": signal,
+        "matched_exit_signs": matched_exit_signs,
+        "blocked_events": blocked_events,
+        "valid_exit_sign_count": len(matched_exit_signs),
+        "unknown_exit_sign_count": len(raw_exit_signs) - len(matched_exit_signs),
+        "unknown_blocked_event_count": len(raw_blocked_events) - len(blocked_events),
+    }
+
+
+def _adjudicate_scenario_progress(
+    normalized: dict[str, Any],
+    *,
+    current_stage: dict[str, Any] | None,
+    next_stage: dict[str, Any] | None,
+    ending_state: str | None,
+    scenario_arc_mode: str,
+    current_bucket: str,
+) -> dict[str, Any]:
+    """Make the deterministic stage decision for one normalized observation."""
+    status = normalized.get("status")
+    if status == "missing":
+        return {"advance_to": None, "disposition": "control_missing", "blocked_reason": None}
+    if status != "valid":
+        return {"advance_to": None, "disposition": "control_invalid", "blocked_reason": None}
+
+    signal = normalized.get("progress_signal")
+    if signal == "approaching":
+        return {"advance_to": None, "disposition": "approaching", "blocked_reason": None}
+    if signal == "not_close":
+        return {"advance_to": None, "disposition": "not_close", "blocked_reason": None}
+    if signal != "satisfied":
+        return {"advance_to": None, "disposition": "control_invalid", "blocked_reason": None}
+    if not normalized.get("matched_exit_signs"):
+        return {
+            "advance_to": None,
+            "disposition": "satisfied_without_valid_exit_sign",
+            "blocked_reason": "satisfied_without_valid_exit_sign",
+        }
+    if ending_state == "completed":
+        return {"advance_to": None, "disposition": "completed", "blocked_reason": None}
+
+    stage = current_stage if isinstance(current_stage, dict) else {}
+    target = stage.get("arc")
+    rank = {"low": 0, "rising": 1, "high": 2, "critical": 3}
+    if (
+        scenario_arc_mode == "arc"
+        and target in rank
+        and rank.get(current_bucket, 0) < rank[target]
+    ):
+        return {
+            "advance_to": None,
+            "disposition": "arc_blocked",
+            "blocked_reason": "arc_target_not_reached",
+            "blocked_current_bucket": current_bucket,
+            "blocked_target_bucket": target,
+        }
+    if next_stage is not None and next_stage.get("id"):
+        return {
+            "advance_to": str(next_stage["id"]),
+            "disposition": "advanced",
+            "blocked_reason": None,
+        }
+    return {"advance_to": None, "disposition": "completed", "blocked_reason": None}
 
 
 def _state_char_id(state: dict, handler: str, uid: str = "", dream_id: str = "") -> str:
@@ -300,8 +445,9 @@ async def dream_turn(
     # parsed_control is None when block is absent or invalid (fail-soft).
     # visible reply (control block removed) is used for dream log + return value.
     parsed_control: dict | None = None
+    scenario_control_status = "missing"
     if state.get("dream_mode") == "scenario":
-        reply, parsed_control = _extract_scenario_control(reply)
+        reply, parsed_control, scenario_control_status = _parse_scenario_control(reply)
 
     # Detect soft exit acceptance only from the structured control contract.
     exit_accepted = is_exit_request and exit_control.decision == DREAM_CONTROL_ACCEPT
@@ -346,53 +492,96 @@ async def dream_turn(
     )
     from core.dream.dream_flow import generate_flow_entries, apply_flow_entries
     state = apply_flow_entries(state, generate_flow_entries(_prev_flow_state, state))
-    # Scenario progression update (v0.5 stage_turns + v0.6 progress signal + v0.7 stage transition)
+    # Scenario progression update (stage turns + deterministic Brief 166 decision)
     if state.get("dream_mode") == "scenario" and state.get("scenario_core"):
         from core.dream.scenario_core import ScenarioCore
+        from core.dream.scenario_loader import get_next_stage, get_stage, load_script
+
         sc = ScenarioCore.from_dict(state["scenario_core"])
         # _did_advance: True when stage transition or completion fires this turn.
         # The transitioning turn belongs to the OLD stage, so the NEW stage must
         # start at stage_turns=0 — we skip increment_stage_turns() on transition turns.
         _did_advance = False
-        if parsed_control is not None:
-            sc = sc.with_progress_signal(
-                parsed_control["progress_signal"],
-                parsed_control["matched_exit_signs"],
-                parsed_control["blocked_events"],
+        decision: dict[str, Any]
+        try:
+            script = load_script(sc.script_id)
+            current_stage = get_stage(script, sc.current_stage_id)
+            next_stage = get_next_stage(script, sc.current_stage_id)
+            normalized = _normalize_scenario_control(
+                parsed_control,
+                current_stage,
+                parse_status=scenario_control_status,
             )
-            # v0.7: advance stage on consecutive satisfied streak (>= 2), skip if already completed
-            if sc.satisfied_streak >= 2 and sc.ending_state != "completed":
-                from core.dream.scenario_loader import load_script, get_next_stage, get_stage
-                try:
-                    script = load_script(sc.script_id)
-                    next_stage = get_next_stage(script, sc.current_stage_id)
-                    # Arc mode holds advancement until the current stage's target
-                    # bucket is reached; scripts without arc retain linear behavior.
-                    target = (get_stage(script, sc.current_stage_id) or {}).get("arc")
-                    rank = {"low": 0, "rising": 1, "high": 2, "critical": 3}
-                    current_rank = _scenario_bucket_rank(current_yexuan_tension)
-                    if settings.get("scenario_arc_mode") == "arc" and target in rank and current_rank < rank[target]:
-                        pass
-                    elif next_stage is not None:
-                        sc = sc.advance_to_stage(next_stage["id"])
-                        _did_advance = True
-                        logger.info(
-                            "[dream_pipeline] stage advance uid=%s %s→%s",
-                            uid, sc.script_id, next_stage["id"],
-                        )
-                    else:
-                        sc = sc.mark_completed()
-                        _did_advance = True
-                        logger.info(
-                            "[dream_pipeline] scenario completed uid=%s script=%s",
-                            uid, sc.script_id,
-                        )
-                except Exception as _tr_exc:
-                    logger.warning("[dream_pipeline] stage transition failed: %s", _tr_exc)
+            decision = _adjudicate_scenario_progress(
+                normalized,
+                current_stage=current_stage,
+                next_stage=next_stage,
+                ending_state=sc.ending_state,
+                scenario_arc_mode=str(settings.get("scenario_arc_mode", "linear")),
+                current_bucket=_bucket_for_scenario(current_yexuan_tension),
+            )
+        except Exception as _tr_exc:
+            logger.warning("[dream_pipeline] scenario progress adjudication failed: %s", _tr_exc)
+            normalized = _normalize_scenario_control(
+                parsed_control,
+                None,
+                parse_status="invalid" if scenario_control_status == "valid" else scenario_control_status,
+            )
+            decision = {
+                "advance_to": None,
+                "disposition": "control_invalid",
+                "blocked_reason": "stage_lookup_failed",
+            }
+
+        if normalized["status"] == "valid":
+            sc = sc.with_progress_signal(
+                normalized["progress_signal"],
+                normalized["matched_exit_signs"],
+                normalized["blocked_events"],
+            )
+            # A model-reported satisfied without a current-stage hit is not a
+            # compatibility streak either; it must never become a latent gate.
+            if decision["disposition"] == "satisfied_without_valid_exit_sign":
+                sc = replace(sc, satisfied_streak=0)
         else:
-            # Missing/invalid control block: reset satisfied_streak (conservative — prevents
-            # silent stage promotion when LLM occasionally omits the control block)
-            sc = sc.reset_satisfied_streak()
+            sc = replace(
+                sc,
+                last_progress_signal=None,
+                last_matched_exit_signs=[],
+                last_blocked_events=[],
+                satisfied_streak=0,
+            )
+
+        observation = {
+            "last_valid_exit_sign_count": int(normalized.get("valid_exit_sign_count", 0)),
+            "last_unknown_exit_sign_count": int(normalized.get("unknown_exit_sign_count", 0)),
+            "last_unknown_blocked_event_count": int(normalized.get("unknown_blocked_event_count", 0)),
+            "advance_disposition": decision["disposition"],
+            "advance_blocked_reason": decision.get("blocked_reason"),
+            "advance_blocked_current_bucket": decision.get("blocked_current_bucket"),
+            "advance_blocked_target_bucket": decision.get("blocked_target_bucket"),
+        }
+        if decision.get("advance_to"):
+            prior_signal = sc.last_progress_signal
+            sc = sc.advance_to_stage(decision["advance_to"])
+            # Keep the just-adjudicated observation visible after the stage
+            # reset; recovery/stage-local state is still cleared by the method.
+            sc = replace(
+                sc,
+                last_progress_signal=prior_signal,
+                **observation,
+            )
+            _did_advance = True
+            logger.info(
+                "[dream_pipeline] stage advance uid=%s %s→%s",
+                uid, sc.script_id, decision["advance_to"],
+            )
+        elif decision["disposition"] == "completed" and sc.ending_state != "completed":
+            sc = replace(sc.mark_completed(), **observation)
+            _did_advance = True
+            logger.info("[dream_pipeline] scenario completed uid=%s script=%s", uid, sc.script_id)
+        else:
+            sc = replace(sc, **observation)
         if not _did_advance:
             sc = sc.increment_stage_turns()
         state["scenario_core"] = sc.to_dict()
