@@ -212,17 +212,32 @@ async def dream_wake(_auth=Depends(require_scopes("activity"))):
 
     # Not in an active dream → hard exit fallback (idempotent, safe)
     if status != DreamStatus.DREAM_ACTIVE.value:
-        await force_exit_dream(uid)
+        await force_exit_dream(
+            uid,
+            exit_mechanism="system_fallback",
+            exit_initiator="system",
+            exit_reason="system_fallback",
+        )
         return {"retained": False, "exited": True}
 
     # Already offered retention this dream → hard exit (no repeated nagging)
     if state.get("retention_offered_dream_id") == dream_id:
-        await force_exit_dream(uid)
+        await force_exit_dream(
+            uid,
+            exit_mechanism="system_fallback",
+            exit_initiator="system",
+            exit_reason="system_fallback",
+        )
         return {"retained": False, "exited": True}
 
     # Gate check: immersion + emotional threshold
     if not _should_retain(state):
-        await force_exit_dream(uid)
+        await force_exit_dream(
+            uid,
+            exit_mechanism="system_fallback",
+            exit_initiator="system",
+            exit_reason="system_fallback",
+        )
         return {"retained": False, "exited": True}
 
     # Transition to EXIT_REQUESTED and mark retention offered
@@ -236,7 +251,12 @@ async def dream_wake(_auth=Depends(require_scopes("activity"))):
     retention_text = await _generate_retention_line(uid, state)
     if not retention_text:
         logger.warning("[dream_wake] retention LLM failed uid=%s, falling back to hard exit", uid)
-        await force_exit_dream(uid)
+        await force_exit_dream(
+            uid,
+            exit_mechanism="system_fallback",
+            exit_initiator="system",
+            exit_reason="system_fallback",
+        )
         return {"retained": False, "exited": True}
 
     state = append_status_shift(state, "retained")
@@ -395,6 +415,11 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
         "scene_state": state.get("scene_state"),
         "symbolic_anchors": list(state.get("symbolic_anchors") or []),
         "flow_entries": list(state.get("flow_entries") or []),
+        "exit_observation": state.get("last_exit_observation"),
+        "last_exit_mechanism": state.get("last_exit_mechanism"),
+        "last_exit_initiator": state.get("last_exit_initiator"),
+        "last_completion": state.get("last_completion"),
+        "last_exit_reason": state.get("last_exit_reason"),
     }
 
     # Structured status projection for the desktop client (Brief 94 §2): replaces

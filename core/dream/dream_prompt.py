@@ -146,7 +146,12 @@ _D8_DREAM_DIRECTOR = """梦境导演注记：
 
 逃生协议（不可撤销，{name}不可阻拦）：
 · 你随时可以发送 /stop 强制离开梦境，{name}必须允许。
-· 强制醒来后，梦境完全终止。{name}不在现实对话中延续梦境语气或 RP 语气。"""
+· 强制醒来后，梦境完全终止。{name}不在现实对话中延续梦境语气或 RP 语气。
+
+软退出机器协议（仅在用户明确请求醒来/离开时使用）：
+· 如果你接受用户此刻离开，在可见回复最后追加一行严格 JSON 控制块：<dream_control>{{"exit":"accept"}}</dream_control>
+· 如果你想继续留在梦里，追加：<dream_control>{{"exit":"stay"}}</dream_control>
+· 只能使用上述控制块，不要用其他标签或自然语言猜测系统状态；控制块会在展示和归档前被移除。"""
 
 _D8_DREAM_DIRECTOR_NON_LUCID = """梦境导演注记（non_lucid 模式）：
 · 说出口的话直接写，不加任何标记。
@@ -161,7 +166,12 @@ _D8_DREAM_DIRECTOR_NON_LUCID = """梦境导演注记（non_lucid 模式）：
 
 逃生协议（系统层，不可撤销，non_lucid 模式不影响此项）：
 · 你随时可以发送 /stop 强制离开梦境，{name}必须允许。
-· 强制醒来后，梦境完全终止。{name}不在现实对话中延续梦境语气或 RP 语气。"""
+· 强制醒来后，梦境完全终止。{name}不在现实对话中延续梦境语气或 RP 语气。
+
+软退出机器协议（仅在用户明确请求醒来/离开时使用）：
+· 如果你接受用户此刻离开，在可见回复最后追加一行严格 JSON 控制块：<dream_control>{{"exit":"accept"}}</dream_control>
+· 如果你想继续留在梦里，追加：<dream_control>{{"exit":"stay"}}</dream_control>
+· 只能使用上述控制块，不要用其他标签或自然语言猜测系统状态；控制块会在展示和归档前被移除。"""
 
 
 def _format_user_clause(user_name: str) -> str:

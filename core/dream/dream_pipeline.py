@@ -26,7 +26,6 @@ from core.data_paths import DEFAULT_CHAR_ID
 logger = logging.getLogger(__name__)
 
 HARD_EXIT_KEYWORD = "/stop"
-_SOFT_EXIT_ACCEPT_MARKER = "[[EXIT_DREAM_ACCEPT]]"
 
 # ── Soft retention gate thresholds (adjustable module constants) ──────────────
 # Immersion proxy: minimum valid dream turns in current session
@@ -225,14 +224,16 @@ async def dream_turn(
 
     projection = project_body_for_yexuan(current_body, boundary_level, current_yexuan_tension)
 
-    # If user is requesting a soft exit, append accept-marker instruction
+    # If user is requesting a soft exit, append a redundant local-turn hint.
+    # The authoritative contract also lives in dream_prompt's D8 layer so the
+    # model sees it even when this message is transformed by a provider.
     is_exit_request = _looks_like_exit_request(user_msg)
     user_msg_for_llm = user_msg
     if is_exit_request:
         user_msg_for_llm = (
             f"{user_msg}\n\n"
-            f"[系统提示：若角色愿意放用户醒来，在回复末尾追加标记 {_SOFT_EXIT_ACCEPT_MARKER}，"
-            f"其他情况不追加]"
+            "[系统提示：若接受用户离开，请按 Dream prompt 中的严格 dream_control JSON 协议输出；"
+            "若不接受则输出 stay 控制块。不要用自然语言替代控制块。]"
         )
 
     from core.dream.dream_prompt import build_dream_prompt
@@ -279,6 +280,22 @@ async def dream_turn(
         except Exception as _dc_exc:
             logger.debug("[dream_pipeline] dream capture failed: %s", _dc_exc)
 
+    # Strip machine control blocks BEFORE anything else sees the reply.
+    # Neither visible prose nor legacy marker text can close a Dream.
+    from core.dream.exit_contract import (
+        CONTROL_ABSENT,
+        CONTROL_INVALID,
+        CONTROL_DECLINED,
+        DREAM_CONTROL_ACCEPT,
+        CONTROL_MISSING,
+        EXIT_REASON_CONTROL_INVALID,
+        EXIT_REASON_CONTROL_MISSING,
+        parse_dream_control,
+        public_control_observation,
+    )
+    exit_control = parse_dream_control(reply)
+    reply = exit_control.visible_reply
+
     # ── v0.6: strip scenario_control block BEFORE anything else sees the reply ─
     # parsed_control is None when block is absent or invalid (fail-soft).
     # visible reply (control block removed) is used for dream log + return value.
@@ -286,11 +303,27 @@ async def dream_turn(
     if state.get("dream_mode") == "scenario":
         reply, parsed_control = _extract_scenario_control(reply)
 
-    # Detect soft exit acceptance
-    exit_accepted = False
-    if is_exit_request and _SOFT_EXIT_ACCEPT_MARKER in reply:
-        reply = reply.replace(_SOFT_EXIT_ACCEPT_MARKER, "").strip()
-        exit_accepted = True
+    # Detect soft exit acceptance only from the structured control contract.
+    exit_accepted = is_exit_request and exit_control.decision == DREAM_CONTROL_ACCEPT
+    if is_exit_request and exit_control.status in {CONTROL_ABSENT, CONTROL_INVALID}:
+        state = read_state(uid)
+        observation_status = CONTROL_MISSING if exit_control.status == CONTROL_ABSENT else CONTROL_INVALID
+        observation_reason = (
+            EXIT_REASON_CONTROL_MISSING
+            if exit_control.status == CONTROL_ABSENT
+            else EXIT_REASON_CONTROL_INVALID
+        )
+        state["last_exit_observation"] = public_control_observation(
+            status=observation_status,
+            reason=observation_reason,
+            dream_id=dream_id,
+            ts=time.time(),
+        )
+        write_state(uid, state)
+        logger.warning(
+            "[dream_pipeline] exit control %s uid=%s dream_id=%s",
+            observation_status, uid, dream_id,
+        )
 
     # ── Body tracker: update body_state + yexuan_tension AFTER reply ─────────
     # Runs post-LLM so the character never sees raw numbers (by construction).
@@ -385,7 +418,13 @@ async def dream_turn(
     }
 
 
-async def force_exit_dream(uid: str) -> None:
+async def force_exit_dream(
+    uid: str,
+    *,
+    exit_mechanism: str = "user_hard_exit",
+    exit_initiator: str = "user",
+    exit_reason: str = "user_hard_exit",
+) -> None:
     """
     Hard exit chokepoint — unconditional, immediate, penetrates all state.
 
@@ -403,7 +442,14 @@ async def force_exit_dream(uid: str) -> None:
     write_state(uid, state)
 
     logger.info(f"[dream_pipeline] force_exit uid={uid} dream_id={dream_id}")
-    await _do_close_dream(uid, dream_id, exit_type="hard_exit")
+    await _do_close_dream(
+        uid,
+        dream_id,
+        exit_type="hard_exit",
+        exit_mechanism=exit_mechanism,
+        exit_initiator=exit_initiator,
+        exit_reason=exit_reason,
+    )
 
 
 async def enter_dream(
@@ -564,14 +610,29 @@ async def enter_dream(
     return {"ok": True, "dream_id": dream_id, "dream_mode": dream_mode}
 
 
-async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
+async def _do_close_dream(
+    uid: str,
+    dream_id: str,
+    exit_type: str,
+    *,
+    exit_mechanism: str | None = None,
+    exit_initiator: str | None = None,
+    exit_reason: str | None = None,
+) -> None:
     """Archive log, schedule summary generation, transition to REALITY_AFTERGLOW."""
     from core.dream.dream_state import (
         read_state, write_state, DreamStatus, clear_local_state,
         configured_forced_impression_rounds,
     )
-    from core.dream.dream_log import archive_current
+    from core.dream.dream_log import archive_current, read_current
     from core.dream.dream_hud import delete_hud_state
+    from core.dream.exit_contract import (
+        EXIT_INITIATOR_CHARACTER,
+        EXIT_INITIATOR_USER,
+        EXIT_MECHANISM_CHARACTER_ACCEPT,
+        EXIT_MECHANISM_USER_HARD_EXIT,
+        completion_for_exit,
+    )
 
     # Read char_id and dream_mode from dream_state before clearing volatile fields.
     # char_id is NOT in clear_local_state's key list, so it survives into REALITY_AFTERGLOW.
@@ -584,11 +645,52 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
     from core.dream.dream_flow import append_status_shift
     state = append_status_shift(state, "closing")
 
+    assistant_turns = 0
     if dream_id:
-        archive_current(uid, dream_id, char_id=char_id)
+        current_turns = read_current(uid, char_id=char_id)
+        assistant_turns = sum(1 for turn in current_turns if turn.get("role") == "assistant")
+
+    if exit_mechanism is None:
+        if exit_type == "soft":
+            exit_mechanism = EXIT_MECHANISM_CHARACTER_ACCEPT
+        else:
+            exit_mechanism = EXIT_MECHANISM_USER_HARD_EXIT
+    if exit_initiator is None:
+        exit_initiator = (
+            EXIT_INITIATOR_CHARACTER
+            if exit_mechanism == EXIT_MECHANISM_CHARACTER_ACCEPT
+            else EXIT_INITIATOR_USER
+        )
+    if exit_reason is None:
+        exit_reason = (
+            "character_accepted"
+            if exit_mechanism == EXIT_MECHANISM_CHARACTER_ACCEPT
+            else "user_hard_exit"
+        )
+    completion = completion_for_exit(exit_mechanism, assistant_turns)
+    archive_ok = True
+    if dream_id:
+        archive_ok = archive_current(uid, dream_id, char_id=char_id)
+
+    exit_metadata = {
+        "exit_mechanism": exit_mechanism,
+        "exit_initiator": exit_initiator,
+        "completion": completion,
+        "exit_reason": exit_reason,
+        "assistant_turns": assistant_turns,
+        "archive_ok": bool(archive_ok),
+    }
 
     asyncio.create_task(
-        _generate_summary_bg(uid, dream_id, exit_type, char_id=char_id, dream_mode=dream_mode, world_id=world_id)
+        _generate_summary_bg(
+            uid,
+            dream_id,
+            exit_type,
+            char_id=char_id,
+            dream_mode=dream_mode,
+            world_id=world_id,
+            exit_metadata=exit_metadata,
+        )
     )
 
     state = clear_local_state(state)  # clears body_state + emotional_tension + scene etc.
@@ -602,6 +704,12 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
     # an empty incoming dream_id clobber a previously-recorded one.
     state["last_dream_id"] = dream_id or state.get("last_dream_id", "")
     state["last_exit_type"] = exit_type
+    state["last_exit_mechanism"] = exit_mechanism
+    state["last_exit_initiator"] = exit_initiator
+    state["last_completion"] = completion
+    state["last_exit_reason"] = exit_reason
+    state["last_exit_assistant_turns"] = assistant_turns
+    state["last_archive_ok"] = bool(archive_ok)
     state["last_dream_mode"] = dream_mode
     state["last_exited_at"] = time.time()
     state["forced_impression_rounds_left"] = configured_forced_impression_rounds()
@@ -612,11 +720,24 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
 
 
 async def _generate_summary_bg(
-    uid: str, dream_id: str, exit_type: str, *, char_id: str, dream_mode: str = "sandbox", world_id: str = "unknown"
+    uid: str,
+    dream_id: str,
+    exit_type: str,
+    *,
+    char_id: str,
+    dream_mode: str = "sandbox",
+    world_id: str = "unknown",
+    exit_metadata: dict[str, Any] | None = None,
 ) -> None:
     try:
         from core.dream.dream_summary import generate_summary
-        await generate_summary(uid, dream_id, exit_type, char_id=char_id)
+        await generate_summary(
+            uid,
+            dream_id,
+            exit_type,
+            char_id=char_id,
+            exit_metadata=exit_metadata,
+        )
     except Exception as e:
         logger.error(f"[dream_pipeline] summary failed uid={uid}: {e}")
 
@@ -664,7 +785,14 @@ async def _generate_summary_bg(
             logger.warning(f"[dream_pipeline] invariant observation failed uid={uid}: {e}")
         try:
             from core.dream.postcard import generate_postcard
-            await generate_postcard(uid, dream_id, exit_type, char_id=char_id)
+            await generate_postcard(
+                uid,
+                dream_id,
+                exit_type,
+                char_id=char_id,
+                completion=(exit_metadata or {}).get("completion"),
+                exit_metadata=exit_metadata,
+            )
         except Exception as e:
             logger.warning(f"[dream_pipeline] postcard generation failed uid={uid}: {e}")
 

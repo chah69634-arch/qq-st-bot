@@ -37,7 +37,12 @@ _STRIP_SCENE_SYSTEM = """你是梦境情感分析器。
 
 
 async def generate_summary(
-    uid: str, dream_id: str, exit_type: str, *, char_id: str = DEFAULT_CHAR_ID
+    uid: str,
+    dream_id: str,
+    exit_type: str,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    exit_metadata: dict[str, Any] | None = None,
 ) -> None:
     """Generate and persist afterglow summary for a completed dream."""
     from core.sandbox import get_paths
@@ -68,6 +73,7 @@ async def generate_summary(
         "char_id": char_id,   # T-06 seam: afterglow integrator can scope by char
         "created_at": time.time(),
         "exit_type": exit_type,
+        **(exit_metadata or {}),
         "world_id": _frozen_world,
         # Core afterglow content
         "title": str(data.get("title", "")),
