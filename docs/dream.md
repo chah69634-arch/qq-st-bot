@@ -446,8 +446,9 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 | `GET/POST/PUT/DELETE /dream/worlds/{world}/lorebook[/…]` | ✅ 已有 | 世界书条目 CRUD |
 | `GET/PUT /dream/worlds/{world}/preset` | ✅ 已有 | 该世界的破限预设 Markdown |
 | `GET /dream/scenarios` | ✅ Brief 96 §2 | 列出剧本（`id` + `title`） |
-| `GET /dream/scenarios/{id}` | ✅ | 返回兼容 YAML 原文、结构化 `document` 与 user/legacy 来源 |
-| `POST /dream/scenarios` | ✅ | 接受兼容 `yaml` 或结构化 `document`；schema 校验复用 `scenario_loader._validate_script`；新写入 userdata |
+| `GET /dream/scenarios/{id}` | ✅ | 返回后端 canonical YAML、结构化 `document` 与 user/legacy 来源；legacy 注释不承诺保留 |
+| `POST /dream/scenarios/validate` | ✅ | 只校验并 canonical serialize `yaml` / `document`，不创建临时或真实剧本文件 |
+| `POST /dream/scenarios` | ✅ | 接受兼容 `yaml` 或结构化 `document`；schema 校验与 canonical serialize 复用 `scenario_loader._validate_script`；新写入 userdata |
 | `PUT /dream/scenarios/{id}` | ✅ | 修改或 copy-on-write 覆盖 legacy 剧本；正被进行中的梦引用时拒绝 |
 | `DELETE /dream/scenarios/{id}` | ✅ | 只删除 userdata 副本；legacy-only 拒绝删除；进行中引用同样拒绝 |
 
@@ -472,10 +473,10 @@ fresh clone / release 不依赖旧 compatibility root；新建操作从 tracked 
 `DreamPrefsPane`「世界」标签页独立负责，两处刻意不联动）：
 - **sandbox**：世界选择下拉 + 新建/重命名/删除按钮（接 `POST/PUT rename/DELETE
   /dream/worlds`）+ 世界书条目 + 破限预设文本，行为对既有 sandbox 创作零回归。
-- **scenario**：结构化阶段编辑器 + JSON 导入/导出（接 `/dream/scenarios` CRUD）；字段覆盖标题、
-  角色私密真相及逐阶段披露策略、阶段任务、入场压力、完成信号、禁止事项与可选 drift pressure
-  是「表单化关键字段（ID / 标题，仅用于快速生成骨架模板）+ 原始 YAML 文本区」双栏，
-  不做完整可视化编排，保存时以 YAML 文本为最终内容。
+- **scenario**：结构化阶段编辑器 + YAML/JSON 双格式导入导出（接 `/dream/scenarios` CRUD 与
+  `/dream/scenarios/validate`）；字段覆盖标题、角色私密真相及逐阶段披露策略、阶段任务、入场压力、
+  完成信号、禁止事项与可选 drift pressure。YAML 解析、schema 校验和 canonical serialize 只在后端完成；
+  导入只填充草稿，必须点击保存才写盘。表单 round-trip 会规范化 YAML 且不保留注释，不暴露本机路径。
 - **mirror**：无创作物的只读说明（mirror 的倾向材料由 User Hidden State 快照自动
   生成，全程只读不诊断），避免用户误以为功能缺失。
 

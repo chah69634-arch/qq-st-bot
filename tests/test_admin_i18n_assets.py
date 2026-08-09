@@ -75,11 +75,11 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="/static/style.css?v=scenario-private-truths-1">' in index
-    assert '<script src="/static/i18n.js?v=dream-prompt-ablation-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=dream-prompt-ablation-1"></script>' in index
-    assert '<script src="/static/js/dream-settings.js?v=scenario-private-truths-1"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'dream-prompt-ablation-1'" in core_js
-    assert '<script src="/static/js/observability.js?v=dream-prompt-ablation-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=brief-167-dream-yaml-ablation-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=brief-167-dream-yaml-ablation-1"></script>' in index
+    assert '<script src="/static/js/dream-settings.js?v=brief-167-dream-yaml-ablation-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-167-dream-yaml-ablation-1'" in core_js
+    assert '<script src="/static/js/observability.js?v=brief-167-dream-yaml-ablation-1"></script>' in index
     assert '<script src="/static/js/character.js?v=dream-character-behavior-1"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime
@@ -245,6 +245,17 @@ def test_chinese_and_english_dictionaries_have_identical_semantic_keys():
     assert chinese == english
     assert len(chinese) >= 900
     assert all(not re.search(r"[\u3400-\u9fff]", key) for key in chinese)
+
+
+def test_every_dream_ablation_layer_has_bilingual_semantic_key():
+    runtime = I18N.read_text(encoding="utf-8")
+    chinese = _dictionary_keys(runtime, "zh-CN")
+    english = _dictionary_keys(runtime, "en")
+    from core.dream.dream_prompt_ablation import KNOWN_LAYERS
+
+    expected = {f"observe.dream_prompt.layer.{layer}" for layer, _desc in KNOWN_LAYERS}
+    assert expected <= chinese
+    assert expected <= english
 
 
 def test_every_static_visible_chinese_string_is_localized_or_authored_content():

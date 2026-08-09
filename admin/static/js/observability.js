@@ -1463,15 +1463,25 @@ async function loadDreamPromptAblation() {
     const disabled = new Set(d.disabled_layers || []);
     el.innerHTML = _dreamPromptAblationKnownLayers.map(({layer, desc}) => {
       const protectedLayer = alwaysOn.has(layer);
+      const enabled = protectedLayer || !disabled.has(layer);
+      const localizedDesc = t(`observe.dream_prompt.layer.${layer}`, desc || layer);
+      const status = protectedLayer
+        ? t('observe.dream_prompt.layer_unablatable', '不可消融')
+        : enabled
+          ? t('observe.dream_prompt.layer_enabled', '已启用')
+          : t('observe.dream_prompt.layer_disabled', '已关闭');
       const historyWarning = layer === 'D9_dream_history'
-        ? `<span style="color:#ef4444;font-size:11px;margin-left:6px">${escapeHtml(t('observe.dream_prompt.history_warning', '关闭梦境历史将显著改变连续性'))}</span>`
+        ? `<span style="color:#ef4444;font-size:11px;margin-left:6px">${escapeHtml(t('observe.dream_prompt.history_warning', '关闭梦境历史将显著改变连续性；仅用于对照测试'))}</span>`
         : '';
       return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;${protectedLayer?'opacity:0.5':''}">
-        <input type="checkbox" class="obs-dream-ablation-toggle" data-layer="${escapeHtml(layer)}"
-          ${disabled.has(layer) && !protectedLayer ? 'checked' : ''} ${protectedLayer ? 'disabled' : ''}>
+        <input type="checkbox" class="obs-dream-ablation-toggle" data-layer="${escapeHtml(layer)}" data-ablatable="${protectedLayer ? 'false' : 'true'}"
+          ${enabled ? 'checked' : ''} ${protectedLayer ? 'disabled' : ''}
+          aria-label="${escapeHtml(t('observe.dream_prompt.enable_layer', '启用此层：{layer}', {layer}))}"
+          onchange="updateDreamPromptAblationState(this)">
+        <span style="font-size:11px;color:var(--text)">${escapeHtml(t('observe.dream_prompt.enable_label', '启用此层'))}</span>
         <code style="font-size:11px;background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(layer)}</code>
-        <span style="font-size:12px;color:var(--muted)">${escapeHtml(desc || '')}</span>
-        ${protectedLayer ? `<span style="font-size:11px;color:var(--muted)">${escapeHtml(t('dynamic.observe.not_ablatable', '（不可消融）'))}</span>` : ''}
+        <span style="flex:1;font-size:12px;color:var(--muted)">${escapeHtml(localizedDesc)}</span>
+        <span data-ablation-status style="font-size:11px;color:${protectedLayer ? 'var(--muted)' : enabled ? 'var(--success)' : '#ef4444'}">${escapeHtml(status)}</span>
         ${historyWarning}
       </label>`;
     }).join('');
@@ -1480,8 +1490,19 @@ async function loadDreamPromptAblation() {
   }
 }
 
+function updateDreamPromptAblationState(input) {
+  if (!input || input.disabled || input.dataset.ablatable === 'false') return;
+  const status = input.closest('label')?.querySelector('[data-ablation-status]');
+  if (!status) return;
+  status.textContent = input.checked
+    ? t('observe.dream_prompt.layer_enabled', '已启用')
+    : t('observe.dream_prompt.layer_disabled', '已关闭');
+  status.style.color = input.checked ? 'var(--success)' : '#ef4444';
+}
+
 async function saveDreamPromptAblation() {
-  const disabled_layers = Array.from(document.querySelectorAll('.obs-dream-ablation-toggle:checked'))
+  const disabled_layers = Array.from(document.querySelectorAll('.obs-dream-ablation-toggle'))
+    .filter(item => !item.checked && item.dataset.ablatable !== 'false')
     .map(item => item.dataset.layer);
   try {
     await api('PUT', '/dream-prompt-ablation', {disabled_layers});

@@ -878,8 +878,9 @@ tool loop 内通过"messages 中已存在该 `_layer` 则跳过"的判断确保�
 
 ### 前端
 
-管理面板「Prompt 层检视」页新增「层级开关（消融测试）」卡片：勾选即关闭对应层注入，`ALWAYS_ON` 灰
-置不可点，`9_history` 行内红字警示；「保存」调 `PUT /prompt-ablation`，成功 toast「已生效，下一轮
+管理面板「Prompt 层检视」页新增「层级开关（消融测试）」卡片：勾选表示「启用此层」，未勾选才表示
+关闭对应层注入；UI 保存适配器显式反转为 `disabled_layers`。每行显示「已启用 / 已关闭 / 不可消融」；
+`ALWAYS_ON` 灰置不可点，`9_history` 行内红字警示。保存调 `PUT /prompt-ablation`，成功 toast「已生效，下一轮
 对话起作用」。快照总览区 `ablated_layers` 非空时显示紫色徽标「已消融层：…」，与红色「被裁层」并列。
 
 ### Dream Prompt 独立消融
@@ -888,12 +889,17 @@ Dream 使用独立的 `core/dream/dream_prompt_ablation.py`，不复用 Reality 
 
 - 状态：`data/runtime/dream_prompt_layer_ablation.json`，缺失/损坏时 fail-open（全部启用）。
 - API：`GET/PUT /dream-prompt-ablation`（`admin` scope），下一轮 Dream turn 热生效。
-- 管理面：`梦境 Prompt` 检视页顶部逐层勾选；快照以 `ablated_layers` 和层级 `ABLATED` flag
-  展示实际过滤结果。
+- 管理面：`梦境 Prompt` 检视页顶部逐层以 layer ID 查本地化释义，未知层回落 API `desc`；勾选表示
+  「启用此层」，每行显示已启用 / 已关闭 / 不可消融，保存适配器显式反转为 `disabled_layers`。
+  快照以 `ablated_layers` 和层级 `ABLATED` flag 展示实际过滤结果。
 - 语义：所有 world/lore/snapshot/state 读取与剧本状态计算仍执行，只在 `build_dream_prompt()`
   完成组装后过滤最终发给模型的 system/history 内容。
 - 可消融：D0、D1、DG、D2-D8、DS、DM、Dream lorebook、D9 history。
 - 不可消融：`DX_exit_protocol`（独立承载 `/stop` 与软退出机器协议）、`D10_user_message`。
+
+Dream 消融只过滤最终 Prompt，不阻止 loader/state 计算；它是测试工具，不是永久玩法配置。释义的
+语义 key 为 `observe.dream_prompt.layer.{layer_id}`，中英文必须成对；未知层才使用 API 原始 `desc`
+作为 fallback。`D9_dream_history` 关闭后会明显改变连续性，仅用于对照测试。
 
 Reality `/prompt-ablation` 与 Dream `/dream-prompt-ablation` 完全分离，修改一侧不会影响另一侧。
 

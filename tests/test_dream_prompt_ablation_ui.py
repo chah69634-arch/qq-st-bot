@@ -14,3 +14,14 @@ def test_dream_prompt_inspector_exposes_ablation_controls():
     assert "api('PUT', '/dream-prompt-ablation'" in SOURCE
     assert "obs-dream-ablation-toggle" in SOURCE
     assert "s.ablated_layers" in SOURCE
+
+
+def test_dream_prompt_ablation_uses_positive_toggle_and_localized_layer_fallback():
+    assert "data-ablatable" in SOURCE
+    assert "filter(item => !item.checked" in SOURCE
+    assert "observe.dream_prompt.layer.${layer}" in SOURCE
+    assert "layer_enabled" in SOURCE
+    assert "layer_disabled" in SOURCE
+    assert "layer_unablatable" in SOURCE
+    assert "updateDreamPromptAblationState" in SOURCE
+    assert "data-ablation-status" in SOURCE

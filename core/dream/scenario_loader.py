@@ -103,8 +103,11 @@ def get_next_stage(script: dict[str, Any], current_stage_id: str) -> dict[str, A
 
 
 def _validate_script(data: dict[str, Any]) -> None:
-    if not data.get("id"):
+    script_id = data.get("id")
+    if not script_id:
         raise ValueError("script missing 'id'")
+    if not isinstance(script_id, str) or not _SAFE_ID_RE.fullmatch(script_id):
+        raise ValueError("script id is invalid")
     if not data.get("title"):
         raise ValueError("script missing 'title'")
     stages = data.get("stages")
@@ -118,8 +121,11 @@ def _validate_script(data: dict[str, Any]) -> None:
             if not stage.get(key):
                 raise ValueError(f"stage[{i}] missing '{key}'")
         stage_id = stage["id"]
-        if isinstance(stage_id, str):
-            stage_ids.add(stage_id)
+        if not isinstance(stage_id, str) or not _SAFE_ID_RE.fullmatch(stage_id):
+            raise ValueError(f"stage[{i}].id is invalid")
+        if stage_id in stage_ids:
+            raise ValueError(f"duplicate stage id: {stage_id!r}")
+        stage_ids.add(stage_id)
         dp = stage.get("drift_pressure")
         if dp is not None:
             if not isinstance(dp, dict):

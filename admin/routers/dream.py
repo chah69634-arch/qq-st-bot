@@ -1298,7 +1298,7 @@ def _scenario_active(script_id: str) -> bool:
     return scenario_core.get("script_id") == script_id
 
 
-def _parse_and_validate_scenario_yaml(script_id: str, yaml_text: str) -> dict:
+def _parse_and_validate_scenario_yaml(script_id: str | None, yaml_text: str) -> dict:
     """解析 + 用剧本加载器的真实 schema 校验，失败返回具体字段错误而不是 500。"""
     import yaml as _yaml
     from core.dream.scenario_loader import _validate_script
@@ -1309,12 +1309,11 @@ def _parse_and_validate_scenario_yaml(script_id: str, yaml_text: str) -> dict:
         raise HTTPException(status_code=422, detail=f"YAML 解析失败: {e}")
     if not isinstance(data, dict):
         raise HTTPException(status_code=422, detail="剧本必须是 YAML 映射（mapping），不能是列表或标量")
-    if data.get("id") and data["id"] != script_id:
+    if script_id is not None and data.get("id") != script_id:
         raise HTTPException(
             status_code=422,
-            detail=f"YAML 内 id={data['id']!r} 与剧本 id={script_id!r} 不一致",
+            detail=f"YAML 内 id={data.get('id')!r} 与剧本 id={script_id!r} 不一致",
         )
-    data.setdefault("id", script_id)
     try:
         _validate_script(data)
     except ValueError as e:
@@ -1322,9 +1321,18 @@ def _parse_and_validate_scenario_yaml(script_id: str, yaml_text: str) -> dict:
     return data
 
 
-def _scenario_document_and_yaml(script_id: str, body: dict) -> tuple[dict, str]:
+def _canonical_scenario_yaml(document: dict) -> str:
     import yaml as _yaml
 
+    return _yaml.safe_dump(
+        document,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    )
+
+
+def _scenario_document_and_yaml(script_id: str, body: dict) -> tuple[dict, str]:
     document = body.get("document")
     if document is not None:
         if not isinstance(document, dict):
@@ -1338,10 +1346,11 @@ def _scenario_document_and_yaml(script_id: str, body: dict) -> tuple[dict, str]:
             _validate_script(data)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=f"剧本 schema 校验失败: {exc}")
-        return data, _yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+        return data, _canonical_scenario_yaml(data)
 
     yaml_text = body.get("yaml") or ""
-    return _parse_and_validate_scenario_yaml(script_id, yaml_text), yaml_text
+    data = _parse_and_validate_scenario_yaml(script_id, yaml_text)
+    return data, _canonical_scenario_yaml(data)
 
 
 @router.get("/dream/scenarios", summary="列出剧本")
@@ -1369,14 +1378,46 @@ async def list_dream_scenarios(_auth=Depends(require_scopes("activity"))):
     return {"scenarios": [merged[key] for key in sorted(merged)]}
 
 
+@router.post("/dream/scenarios/validate", summary="校验并规范化剧本（不落盘）")
+async def validate_dream_scenario(body: dict, _auth=Depends(require_scopes("activity"))):
+    """Validate/serialize an authored draft without creating a real scenario file.
+
+    YAML is parsed here so the browser never needs a second YAML implementation.
+    The same endpoint also gives the editor a canonical export for unsaved drafts.
+    """
+    yaml_text = body.get("yaml")
+    document = body.get("document")
+    requested_id = body.get("id")
+
+    if yaml_text is not None:
+        if not isinstance(yaml_text, str) or not yaml_text.strip():
+            raise HTTPException(status_code=422, detail="yaml 不能为空")
+        script_id = str(requested_id).strip() if requested_id is not None else None
+        if script_id == "":
+            script_id = None
+        parsed = _parse_and_validate_scenario_yaml(script_id, yaml_text)
+        canonical = _canonical_scenario_yaml(parsed)
+    elif document is not None:
+        if not isinstance(document, dict):
+            raise HTTPException(status_code=422, detail="document 必须是 JSON object")
+        script_id = str(requested_id or document.get("id") or "").strip()
+        if not script_id:
+            raise HTTPException(status_code=422, detail="id 不能为空")
+        parsed, canonical = _scenario_document_and_yaml(script_id, {"document": document})
+    else:
+        raise HTTPException(status_code=422, detail="需要提供 yaml 或 document")
+
+    return {"ok": True, "id": parsed["id"], "document": parsed, "yaml": canonical}
+
+
 @router.get("/dream/scenarios/{script_id}", summary="读取剧本 YAML 原文")
 async def get_dream_scenario(script_id: str, _auth=Depends(require_scopes("activity"))):
     resolved = _scenario_read_path(script_id)
     if resolved is None:
         raise HTTPException(status_code=404, detail=f"剧本 {script_id} 不存在")
     p, source = resolved
-    yaml_text = p.read_text(encoding="utf-8")
-    document = _parse_and_validate_scenario_yaml(script_id, yaml_text)
+    document = _parse_and_validate_scenario_yaml(script_id, p.read_text(encoding="utf-8"))
+    yaml_text = _canonical_scenario_yaml(document)
     return {"id": script_id, "yaml": yaml_text, "document": document, "source": source}
 
 

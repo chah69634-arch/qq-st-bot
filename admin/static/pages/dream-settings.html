@@ -97,12 +97,14 @@
             </div>
           </div>
           <div class="admin-inline-086" data-i18n="dream.scenario.editor_hint">
-            使用结构化表单创作阶段；保存时由后端生成 YAML。JSON 导入/导出用于备份和交换，不暴露本机路径。
+            使用结构化表单创作阶段；YAML 是剧本权威格式，导入与导出由后端解析并规范化。载入表单后重新导出不会保留 YAML 注释。
           </div>
           <div class="admin-toolbar dream-scenario-toolbar">
-            <label class="field dream-scenario-import"><span data-i18n="dream.scenario.import_file">导入 JSON</span><input type="file" id="ds-json-file" accept="application/json,.json"></label>
-            <button class="btn btn-ghost btn-sm" data-action="importDreamScenarioJson" data-i18n="dream.scenario.import">导入所选 JSON</button>
-            <button class="btn btn-ghost btn-sm" data-action="exportDreamScenarioJson" data-i18n="dream.scenario.export">导出 JSON</button>
+            <label class="field dream-scenario-import"><span data-i18n="dream.scenario.import_file">导入剧本文件</span><input type="file" id="ds-json-file" accept=".yaml,.yml,.json,application/yaml,text/yaml,application/json" data-i18n-aria-label="dream.scenario.import_file" aria-label="导入剧本文件" onchange="onDreamScenarioFileChange(this)"></label>
+            <span id="ds-import-format" class="admin-source-hint" aria-live="polite" data-i18n="dream.scenario.import_format_none">未选择文件</span>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="importDreamScenarioJson" data-i18n="dream.scenario.import">载入到编辑器</button>
+            <button type="button" class="btn btn-primary btn-sm" data-action="exportDreamScenarioYaml" data-i18n="dream.scenario.export_yaml">导出 YAML</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="exportDreamScenarioJson" data-i18n="dream.scenario.export_json">导出 JSON</button>
           </div>
           <div class="form-row">
             <label class="field">

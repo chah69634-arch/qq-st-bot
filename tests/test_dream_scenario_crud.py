@@ -10,6 +10,8 @@ Covers:
   ⑥ YAML 内 id 与路径 id 不一致 → 422
   ⑦ PUT/DELETE 时若正在被进行中的梦引用该剧本 → 拒绝
   ⑧ DELETE 后 GET → 404
+  ⑨ validate 草稿 YAML → canonical serialize 且不落盘
+  ⑩ validate 编辑 ID mismatch / duplicate stage ID → 422
 """
 
 import asyncio
@@ -233,6 +235,49 @@ def test_structured_document_round_trip(sandbox):
     assert detail["document"] == document
     assert "drift_pressure:" in detail["yaml"]
     assert "private_truths:" in detail["yaml"]
+
+
+def test_validate_yaml_draft_returns_canonical_document_without_writing(sandbox):
+    from admin.routers.dream import validate_dream_scenario
+
+    yaml_text = """# editor comment\nid: draft_yaml\ntitle: 多行标题\nstages:\n  - id: opening\n    name: 开场\n    dramatic_task: |\n      第一行\n      第二行\n    entry_pressure: 入口压力\n"""
+    with _as(_UID):
+        result = _run(validate_dream_scenario({"yaml": yaml_text}))
+
+    assert result["ok"] is True
+    assert result["id"] == "draft_yaml"
+    assert result["document"]["stages"][0]["dramatic_task"] == "第一行\n第二行\n"
+    assert "# editor comment" not in result["yaml"]
+    assert "多行标题" in result["yaml"]
+    assert not list(sandbox.dream_scenario_read_dirs()[0].glob("*.yaml"))
+
+
+def test_validate_yaml_draft_rejects_current_id_mismatch_and_duplicate_stage(sandbox):
+    from admin.routers.dream import validate_dream_scenario
+
+    with _as(_UID):
+        with pytest.raises(HTTPException) as exc:
+            _run(validate_dream_scenario({"id": "current_id", "yaml": _VALID_YAML}))
+    assert exc.value.status_code == 422
+    assert "id" in exc.value.detail.lower()
+
+    duplicate = """id: duplicate_stage
+title: Duplicate Stage
+stages:
+  - id: s1
+    name: Stage One
+    dramatic_task: task one
+    entry_pressure: pressure one
+  - id: s1
+    name: Stage Two
+    dramatic_task: task two
+    entry_pressure: pressure two
+"""
+    with _as(_UID):
+        with pytest.raises(HTTPException) as exc:
+            _run(validate_dream_scenario({"yaml": duplicate}))
+    assert exc.value.status_code == 422
+    assert "duplicate stage" in exc.value.detail.lower()
 
 
 def test_legacy_scenario_is_read_only_and_update_creates_userdata_override(sandbox, tmp_path, monkeypatch):

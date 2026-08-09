@@ -489,6 +489,9 @@ function removeDreamScenarioPrivateTruth(index) {
 async function openDreamScenarioEditor(id) {
   _dreamScenarioEditingId = id;
   document.getElementById('dream-scenario-editor-card').style.display = 'block';
+  const fileInput = document.getElementById('ds-json-file');
+  fileInput.value = '';
+  onDreamScenarioFileChange(fileInput);
   const idInput = document.getElementById('ds-id');
   if (id) {
     document.getElementById('dream-scenario-editor-title').textContent = t('dream.scenario.edit_title', '编辑剧本 · {id}', {id});
@@ -512,11 +515,35 @@ async function openDreamScenarioEditor(id) {
     idInput.value = '';
     idInput.disabled = false;
     document.getElementById('ds-title').value = '';
-    document.getElementById('ds-json-file').value = '';
     const stages = [_emptyDreamScenarioStage(1)];
     _renderDreamScenarioStages(stages);
     _renderDreamScenarioPrivateTruths([], stages);
   }
+}
+
+function _dreamScenarioFileFormat(file) {
+  const name = String(file?.name || '').toLowerCase();
+  if (name.endsWith('.yaml') || name.endsWith('.yml')) return 'yaml';
+  if (name.endsWith('.json')) return 'json';
+  return '';
+}
+
+function onDreamScenarioFileChange(input) {
+  const formatEl = document.getElementById('ds-import-format');
+  if (!formatEl) return;
+  const format = _dreamScenarioFileFormat(input?.files?.[0]);
+  formatEl.textContent = format
+    ? t('dream.scenario.import_format', '检测到格式：{format}', {format: format.toUpperCase()})
+    : t('dream.scenario.import_format_none', '未选择文件');
+}
+
+function _applyDreamScenarioDocument(scenario) {
+  const documentValue = scenario || {};
+  if (!_dreamScenarioEditingId) document.getElementById('ds-id').value = String(documentValue.id || '').trim();
+  document.getElementById('ds-title').value = String(documentValue.title || '').trim();
+  const stages = Array.isArray(documentValue.stages) ? documentValue.stages : [];
+  _renderDreamScenarioStages(stages);
+  _renderDreamScenarioPrivateTruths(Array.isArray(documentValue.private_truths) ? documentValue.private_truths : [], stages);
 }
 
 function closeDreamScenarioEditor() {
@@ -544,35 +571,71 @@ async function saveDreamScenario() {
 
 async function importDreamScenarioJson() {
   const file = document.getElementById('ds-json-file').files?.[0];
-  if (!file) return toast(t('dream.scenario.choose_json', '请先选择 JSON 文件'), 'warn');
+  if (!file) return toast(t('dream.scenario.choose_file', '请先选择 YAML、YML 或 JSON 文件'), 'warn');
+  const format = _dreamScenarioFileFormat(file);
+  if (!format) return toast(t('dream.scenario.unsupported_file', '仅支持 .yaml、.yml 和 .json 文件'), 'warn');
   try {
-    const scenario = JSON.parse(await file.text());
-    if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) throw new Error(t('dream.scenario.json_object_required', '顶层必须是 JSON object'));
-    const importedId = String(scenario.id || '').trim();
-    if (_dreamScenarioEditingId && importedId && importedId !== _dreamScenarioEditingId) {
-      throw new Error(t('dream.scenario.import_id_mismatch', '导入 JSON 的 id 必须与当前剧本一致'));
+    const text = await file.text();
+    let scenario;
+    if (format === 'yaml') {
+      const payload = {yaml: text};
+      if (_dreamScenarioEditingId) payload.id = _dreamScenarioEditingId;
+      const result = await api('POST', '/dream/scenarios/validate', payload);
+      scenario = result.document;
+    } else {
+      scenario = JSON.parse(text);
+      if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) {
+        throw new Error(t('dream.scenario.json_object_required', '顶层必须是 JSON object'));
+      }
+      const importedId = String(scenario.id || '').trim();
+      if (_dreamScenarioEditingId && importedId !== _dreamScenarioEditingId) {
+        throw new Error(t('dream.scenario.import_id_mismatch', '导入文件的 id 必须与当前剧本一致'));
+      }
     }
-    if (!_dreamScenarioEditingId) document.getElementById('ds-id').value = importedId;
-    document.getElementById('ds-title').value = String(scenario.title || '').trim();
-    const stages = Array.isArray(scenario.stages) ? scenario.stages : [];
-    _renderDreamScenarioStages(stages);
-    _renderDreamScenarioPrivateTruths(Array.isArray(scenario.private_truths) ? scenario.private_truths : [], stages);
-    toast(t('dream.scenario.imported', 'JSON 已导入，请检查后保存'), 'ok');
+    _applyDreamScenarioDocument(scenario);
+    toast(t('dream.scenario.imported', '剧本已导入草稿，请检查后保存'), 'ok');
   } catch (error) {
-    toast(t('dream.scenario.import_failed', 'JSON 导入失败: {error}', {error: error.message}), 'err');
+    toast(t('dream.scenario.import_failed', '导入失败：{error}', {error: error.message}), 'err');
   }
 }
 
-function exportDreamScenarioJson() {
-  const scenario = _readDreamScenarioDocument();
-  if (!scenario.id) return toast(t('dream.scenario.id_required', 'ID 不能为空'), 'warn');
-  const blob = new Blob([`${JSON.stringify(scenario, null, 2)}\n`], {type: 'application/json;charset=utf-8'});
+async function _validateDreamScenarioDraft(documentValue) {
+  return api('POST', '/dream/scenarios/validate', {
+    id: documentValue.id,
+    document: documentValue,
+  });
+}
+
+function _downloadDreamScenario(filename, content, type) {
+  const blob = new Blob([content], {type});
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${scenario.id}.json`;
+  link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+async function exportDreamScenarioYaml() {
+  const scenario = _readDreamScenarioDocument();
+  if (!scenario.id) return toast(t('dream.scenario.id_required', 'ID 不能为空'), 'warn');
+  try {
+    const result = await _validateDreamScenarioDraft(scenario);
+    _downloadDreamScenario(`${result.id}.yaml`, result.yaml, 'application/yaml;charset=utf-8');
+  } catch (error) {
+    toast(t('dream.scenario.export_failed', '导出失败：{error}', {error: error.message}), 'err');
+  }
+}
+
+async function exportDreamScenarioJson() {
+  const scenario = _readDreamScenarioDocument();
+  if (!scenario.id) return toast(t('dream.scenario.id_required', 'ID 不能为空'), 'warn');
+  try {
+    const result = await _validateDreamScenarioDraft(scenario);
+    _downloadDreamScenario(`${result.id}.json`, `${JSON.stringify(result.document, null, 2)}\n`, 'application/json;charset=utf-8');
+  } catch (error) {
+    toast(t('dream.scenario.export_failed', '导出失败：{error}', {error: error.message}), 'err');
+  }
 }
 
 async function deleteDreamScenario(id) {

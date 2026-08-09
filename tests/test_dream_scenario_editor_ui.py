@@ -27,11 +27,22 @@ def test_scenario_editor_is_structured_and_supports_json_exchange():
     assert 'data-action="importDreamScenarioJson"' in PAGE
     assert 'data-action="exportDreamScenarioJson"' in PAGE
     assert "{ document: documentValue }" in SOURCE
-    assert "JSON.parse(await file.text())" in SOURCE
-    assert "JSON.stringify(scenario, null, 2)" in SOURCE
+    assert "JSON.parse(text)" in SOURCE
+    assert "JSON.stringify(result.document, null, 2)" in SOURCE
     assert "_renderDreamScenarioPrivateTruths" in SOURCE
     assert "data-truth-policy" in SOURCE
     assert "reveal_required" in SOURCE
+
+
+def test_scenario_editor_supports_backend_yaml_round_trip_and_accessible_format_state():
+    assert 'accept=".yaml,.yml,.json,application/yaml,text/yaml,application/json"' in PAGE
+    assert 'id="ds-import-format"' in PAGE
+    assert 'data-i18n-aria-label="dream.scenario.import_file"' in PAGE
+    assert "api('POST', '/dream/scenarios/validate'" in SOURCE
+    assert "exportDreamScenarioYaml" in PAGE
+    assert "_downloadDreamScenario(`${result.id}.yaml`" in SOURCE
+    assert "JSON.parse(text)" in SOURCE
+    assert "YAML parser" not in SOURCE
 
 
 def test_character_editor_exposes_per_mode_dream_behavior():
