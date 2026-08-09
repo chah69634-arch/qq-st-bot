@@ -631,7 +631,7 @@ import（它只传递预加载文本给 prompt，不读 dream 数据）。
 
 角色接受退出使用 Dream control JSON 合同；控制字段在进入 archive、客户端回复和后续 prompt 前剥离。缺失或非法控制字段只记录 `control_missing` / `control_invalid` 观测，不依据自然语言猜测关梦。`POST /dream/exit` 与 `/stop` 继续是无条件、立即、幂等的逃生通道。
 
-`GET /dream/archive` 只返回已归档单人梦的安全元数据并支持分页；`GET /dream/archive/{dream_id}` 只返回授权用户回放所需的 `role/content/ts`。两个端点均通过 `get_paths()` 解析，验证 `char_id` / `dream_id`，不读取 `tmp/current_dream*`，也不把 archive 接入 Reality memory 或 prompt。
+`GET /dream/archive` 只返回已归档单人梦的安全元数据并支持分页；`GET /dream/archive/{dream_id}` 只返回授权用户回放所需的 `role/content/ts`，assistant 行还会在读取时由 `core.narrative_parser.parse_narrative_segments()` 派生 `segments` / `segmented_content`。archive 原文件仍只存 stripped content，segments 是只读展示投影，不是历史迁移或重写。两个端点均通过 `get_paths()` 解析，验证 `char_id` / `dream_id`，不读取 `tmp/current_dream*`，也不把 archive 接入 Reality memory 或 prompt。解析失败时保留原文并返回固定的 `segment_parse_fallback` 标记，单条旧格式消息不会使整场回放失败。
 
 退出后的 Reality 主动感想写入独立的文本无关 lifecycle ledger，状态为 `waiting_afterglow`、`ready`、`blocked`、`sent` 或 `expired`。`blocked` 原因只使用 `not_quiet`、`dnd`、`global_gap`、`budget`、`higher_priority_winner`、`afterglow_not_ready`、`send_failed`；它仍受 Dream Guard、DND、conversation gate、正常预算和安静状态约束。桌面回放只在主聊天 Sidebar 内显示归档，不写当前会话、不触发 WS、TTS 或 pipeline。
 
