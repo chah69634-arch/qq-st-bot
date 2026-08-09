@@ -72,8 +72,12 @@
             <span data-i18n="character.dream_behavior.scenario_directive">剧本模式指令</span>
             <textarea id="char-dream-scenario-directive" placeholder="剧本角色的立场、行动原则，以及内在感情如何影响但不覆盖 stage" data-i18n-placeholder="character.dream_behavior.scenario_placeholder"></textarea>
           </label>
+          <label class="field">
+            <span data-i18n="character.dream_behavior.scenario_identity">剧本身份投影（仅 Scenario）</span>
+            <textarea id="char-dream-scenario-identity" placeholder="仅用于 Dream Scenario 的外貌、基础性格和说话方式摘要；不影响 Reality chat" data-i18n-placeholder="character.dream_behavior.scenario_identity_placeholder"></textarea>
+          </label>
         </div>
-        <p class="admin-source-note" data-i18n="character.dream_behavior.source">保存随角色卡写入 presence_ext.dream_behavior；留空字段不注入 Prompt。</p>
+        <p class="admin-source-note" data-i18n="character.dream_behavior.source">保存随角色卡写入 presence_ext.dream_behavior；Scenario 身份投影只影响 Dream Scenario，不影响 Reality chat；留空字段不注入 Prompt。</p>
       </div>
 
       <div class="card admin-source-note">

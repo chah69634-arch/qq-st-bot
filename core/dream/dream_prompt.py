@@ -304,18 +304,26 @@ def build_dream_prompt(
     else:
         _records.append(_LayerRec("D0_jailbreak", flags=["DISABLED"], note=_d0_note))
 
-    # ── D1: identity_core (FIXED — always above D2) ──────────────────────────
-    d1_parts = [f"# D1·身份核心 ─ {char_name}（固定）"]
-    for label, field_name in (
-        ("角色卡核心规则", "system_prompt"),
-        ("角色设定", "description"),
-        ("性格", "personality"),
-    ):
-        value = getattr(character, field_name, "") or ""
-        if isinstance(value, list):
-            value = "".join(str(item) for item in value)
-        if isinstance(value, str) and value.strip():
-            d1_parts.append(f"{label}：\n{value.strip()}")
+    # ── D1 / D1S: identity core (FIXED — always above D2) ───────────────────
+    _scenario_profile = dream_mode == "scenario" and dream_domain != "group"
+    if _scenario_profile:
+        from core.dream.scenario_profile import scenario_identity_projection
+        d1_parts = [f"# D1S·剧本身份投影 ─ {char_name}（固定）"]
+        identity_projection = scenario_identity_projection(character)
+        if identity_projection:
+            d1_parts.append(identity_projection)
+    else:
+        d1_parts = [f"# D1·身份核心 ─ {char_name}（固定）"]
+        for label, field_name in (
+            ("角色卡核心规则", "system_prompt"),
+            ("角色设定", "description"),
+            ("性格", "personality"),
+        ):
+            value = getattr(character, field_name, "") or ""
+            if isinstance(value, list):
+                value = "".join(str(item) for item in value)
+            if isinstance(value, str) and value.strip():
+                d1_parts.append(f"{label}：\n{value.strip()}")
     _d1_awareness = _D1_NON_LUCID_AWARENESS if lucid_mode == "non_lucid" else _D1_LUCID_AWARENESS
     d1_parts.append(_d1_awareness.format(
         name=char_name, pronoun=char_pronoun, user_clause=_format_user_clause(user_name),
@@ -331,7 +339,10 @@ def build_dream_prompt(
         d1_parts.append(_dream_behavior)
     _d1 = "\n\n".join(d1_parts)
     system_layers.append(_d1)
-    _records.append(_LayerRec("D1_identity_core", len(_d1), _est_tokens(_d1), content=_d1))
+    _records.append(_LayerRec(
+        "D1_identity_core", len(_d1), _est_tokens(_d1),
+        note="scenario_profile" if _scenario_profile else "", content=_d1,
+    ))
 
     # ── DG: group in-scene presence (group domain only) ──────────────────────
     # Extends the D1 single-side pronoun contract to a multi-character scene:
@@ -349,23 +360,29 @@ def build_dream_prompt(
         _records.append(_LayerRec("DG_group_presence", flags=["DISABLED"], note=_dg_note))
 
     # ── D2: world_ruleset (loaded from world package, subordinate to D1) ─────
-    if world.ruleset:
+    if world.ruleset and not _scenario_profile:
         _d2 = f"# D2·今晚梦的世界规则\n{world.ruleset}"
         system_layers.append(_d2)
         _records.append(_LayerRec("D2_world_ruleset", len(_d2), _est_tokens(_d2), content=_d2))
     else:
-        _records.append(_LayerRec("D2_world_ruleset", flags=["DISABLED"]))
+        _records.append(_LayerRec(
+            "D2_world_ruleset", flags=["DISABLED"],
+            note="scenario_profile" if _scenario_profile else "",
+        ))
 
     # ── D3: dream_mes_example (loaded from world package) ────────────────────
     _mes_from_fallback = not bool(world.mes_example)
     example = world.mes_example or _get_dream_mes_example(char_name)
-    if example:
+    if example and not _scenario_profile:
         _d3 = f"# D3·梦境示例对话\n{example}"
         system_layers.append(_d3)
         _d3_flags = ["FALLBACK"] if _mes_from_fallback else []
         _records.append(_LayerRec("D3_mes_example", len(_d3), _est_tokens(_d3), _d3_flags, content=_d3))
     else:
-        _records.append(_LayerRec("D3_mes_example", flags=["DISABLED"]))
+        _records.append(_LayerRec(
+            "D3_mes_example", flags=["DISABLED"],
+            note="scenario_profile" if _scenario_profile else "",
+        ))
 
     # ── D4: frozen_reality (memory_access controlled) ────────────────────────
     # Scenario is a scripted-story space: the current stage is its only
@@ -385,7 +402,7 @@ def build_dream_prompt(
         system_layers.append(_d4)
         _records.append(_LayerRec("D4_frozen_reality", len(_d4), _est_tokens(_d4), content=_d4))
     else:
-        _d4_note = "scenario_mode" if dream_mode == "scenario" else ""
+        _d4_note = "scenario_profile" if _scenario_profile else ""
         _records.append(_LayerRec("D4_frozen_reality", flags=["DISABLED"], note=_d4_note))
 
     # ── D4.5: user_hidden_state_snapshot (tag-gated, read-only, Phase 4) ────────
@@ -412,7 +429,7 @@ def build_dream_prompt(
         if dream_domain == "group":
             _d45_note = "group_domain"
         elif dream_mode == "scenario":
-            _d45_note = "scenario_mode"
+            _d45_note = "scenario_profile"
         else:
             _d45_note = ""
         _records.append(_LayerRec("D4.5_hidden_state", flags=["DISABLED"], note=_d45_note))
@@ -428,20 +445,23 @@ def build_dream_prompt(
         _records.append(_LayerRec("D5_body_projection", len(_d5), _est_tokens(_d5), content=_d5))
         _d5_injected = True
     if not _d5_injected:
-        _d5_note = "scenario_mode" if dream_mode == "scenario" else ""
+        _d5_note = "scenario_profile" if _scenario_profile else ""
         _records.append(_LayerRec("D5_body_projection", flags=["DISABLED"], note=_d5_note))
 
     # ── D6: scene_anchors ────────────────────────────────────────────────────
     scene_block = _format_scene_anchors(local_state)
-    if scene_block:
+    if scene_block and not _scenario_profile:
         _d6 = f"# D6·场景锚点\n{scene_block}"
         system_layers.append(_d6)
         _records.append(_LayerRec("D6_scene_anchors", len(_d6), _est_tokens(_d6), content=_d6))
     else:
-        _records.append(_LayerRec("D6_scene_anchors", flags=["DISABLED"]))
+        _records.append(_LayerRec(
+            "D6_scene_anchors", flags=["DISABLED"],
+            note="scenario_profile" if _scenario_profile else "",
+        ))
 
     # ── D7: dream_tension ────────────────────────────────────────────────────
-    if yexuan_tension > 0.05:
+    if yexuan_tension > 0.05 and not _scenario_profile:
         _d7_bucket = _bucket_tension(yexuan_tension)
         _d7 = (
             f"# D7·{char_name}情绪张力\n"
@@ -451,13 +471,23 @@ def build_dream_prompt(
         system_layers.append(_d7)
         _records.append(_LayerRec("D7_dream_tension", len(_d7), _est_tokens(_d7), content=_d7))
     else:
-        _records.append(_LayerRec("D7_dream_tension", flags=["DISABLED"]))
+        _records.append(_LayerRec(
+            "D7_dream_tension", flags=["DISABLED"],
+            note="scenario_profile" if _scenario_profile else "",
+        ))
 
     # ── D8: dream_director ───────────────────────────────────────────────────
-    _d8_raw = _D8_DREAM_DIRECTOR_NON_LUCID if lucid_mode == "non_lucid" else _D8_DREAM_DIRECTOR
-    _d8 = f"# D8·梦境导演注记\n{_d8_raw.format(name=char_name)}"
+    if _scenario_profile:
+        from core.dream.scenario_profile import SCENARIO_DIRECTOR
+        _d8 = f"# D8S·剧本导演注记\n{SCENARIO_DIRECTOR.format(name=char_name)}"
+    else:
+        _d8_raw = _D8_DREAM_DIRECTOR_NON_LUCID if lucid_mode == "non_lucid" else _D8_DREAM_DIRECTOR
+        _d8 = f"# D8·梦境导演注记\n{_d8_raw.format(name=char_name)}"
     system_layers.append(_d8)
-    _records.append(_LayerRec("D8_dream_director", len(_d8), _est_tokens(_d8), content=_d8))
+    _records.append(_LayerRec(
+        "D8_dream_director", len(_d8), _est_tokens(_d8),
+        note="scenario_profile" if _scenario_profile else "", content=_d8,
+    ))
 
     # Keep exit safety test-independent: D8 may be ablated, DX may not.
     _dx = f"# DX·梦境退出协议\n{_DX_EXIT_PROTOCOL.format(name=char_name)}"
@@ -507,17 +537,20 @@ def build_dream_prompt(
         except Exception as _dm_exc:
             logger.warning("[dream_prompt] DM mirror layer failed: %s", _dm_exc)
     if not _dm_injected:
-        _dm_note = "non-mirror" if dream_mode != "mirror" else "no_core"
+        _dm_note = "scenario_profile" if _scenario_profile else ("non-mirror" if dream_mode != "mirror" else "no_core")
         _records.append(_LayerRec("DM_mirror", flags=["DISABLED"], note=_dm_note))
 
     # ── Dream lorebook (injected between D4 and D5 conceptually) ─────────────
-    if lore_entries:
+    if lore_entries and not _scenario_profile:
         _dlore = "# 梦境世界书\n" + "\n---\n".join(lore_entries)
         system_layers.append(_dlore)
         _lore_note = f"{len(lore_entries)} entries"
         _records.append(_LayerRec("D_lorebook", len(_dlore), _est_tokens(_dlore), note=_lore_note, content=_dlore))
     else:
-        _records.append(_LayerRec("D_lorebook", flags=["DISABLED"]))
+        _records.append(_LayerRec(
+            "D_lorebook", flags=["DISABLED"],
+            note="scenario_profile" if _scenario_profile else "",
+        ))
 
     # ── D9 (group domain only): shared transcript folded into system ─────────
     # Group dream's D9 is a single speaker-prefixed text block (rendered by the
@@ -601,6 +634,8 @@ def build_dream_prompt(
                 "world_id": world_id,
                 "lucid_mode": lucid_mode,
                 "dream_mode": dream_mode,
+                "prompt_profile": "scenario" if _scenario_profile else ("group" if dream_domain == "group" else dream_mode),
+                "prompt_profile_version": "v2" if _scenario_profile else "v1",
                 "scenario_observation": _scenario_observation,
                 "scene_tags": sorted(_scene_tags),
                 "total_tokens": _total_tok,

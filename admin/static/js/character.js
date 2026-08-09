@@ -367,6 +367,7 @@ async function loadCharacterDetail(filename) {
       document.getElementById('char-dream-identity-anchor').value = dreamBehavior.identity_anchor || '';
       document.getElementById('char-dream-sandbox-directive').value = dreamBehavior.sandbox_directive || '';
       document.getElementById('char-dream-scenario-directive').value = dreamBehavior.scenario_directive || '';
+      document.getElementById('char-dream-scenario-identity').value = dreamBehavior.scenario_identity || '';
       document.getElementById('char-edit-form').style.display = '';
       document.getElementById('char-text-form').style.display = 'none';
     }
@@ -499,6 +500,7 @@ async function saveCharacter() {
         identity_anchor: document.getElementById('char-dream-identity-anchor').value.trim(),
         sandbox_directive: document.getElementById('char-dream-sandbox-directive').value.trim(),
         scenario_directive: document.getElementById('char-dream-scenario-directive').value.trim(),
+        scenario_identity: document.getElementById('char-dream-scenario-identity').value.trim(),
       };
       Object.keys(dreamBehavior).forEach(key => { if (!dreamBehavior[key]) delete dreamBehavior[key]; });
       const presenceExt = { ...(_charData.presence_ext || {}) };
