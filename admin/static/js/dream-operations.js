@@ -35,7 +35,11 @@
     ].join('');
     const consistency = document.getElementById('dream-ops-consistency');
     const ok = data.consistency?.last_greeted_matches_last_dream;
-    consistency.textContent = t(ok ? 'dream_ops.consistency_ok' : 'dream_ops.consistency_pending', ok ? 'Consistent' : 'Pending outreach');
+    const closeOk = data.consistency?.close_metadata_consistent;
+    const closeLabel = closeOk == null
+      ? t('dream_ops.close_metadata_unknown', 'Close metadata not available')
+      : t(closeOk ? 'dream_ops.close_metadata_ok' : 'dream_ops.close_metadata_mismatch', closeOk ? 'Close metadata consistent' : 'Close metadata mismatch');
+    consistency.textContent = `${t(ok ? 'dream_ops.consistency_ok' : 'dream_ops.consistency_pending', ok ? 'Consistent' : 'Pending outreach')} · ${closeLabel}`;
   }
 
   function _renderDreamOpsArchives(items) {
@@ -98,6 +102,21 @@
     }).join('')}</tbody></table>`;
   }
 
+  function _renderDreamOpsContinuation(data) {
+    const host = document.getElementById('dream-ops-continuation');
+    if (!host) return;
+    const items = data.continuation?.recent || [];
+    if (!items.length) {
+      host.innerHTML = `<div class="empty">${escapeHtml(t('dream_ops.empty', 'No records'))}</div>`;
+      return;
+    }
+    host.innerHTML = `<table><thead><tr><th>${escapeHtml(t('dream_ops.col.dream', 'Dream'))}</th><th>${escapeHtml(t('dream_ops.col.lifecycle', 'Status'))}</th><th>${escapeHtml(t('dream_ops.col.reason', 'Reason'))}</th><th>${escapeHtml(t('dream_ops.col.attempts', 'Attempts'))}</th><th>${escapeHtml(t('dream_ops.col.time', 'Time'))}</th></tr></thead><tbody>${items.map(item => {
+      const success = item.lifecycle === 'sent';
+      const terminal = item.lifecycle === 'cancelled' || item.lifecycle === 'failed';
+      return `<tr><td><code>${escapeHtml(item.dream_id || '')}</code></td><td>${_opsBadge('dream_ops.lifecycle', item.lifecycle, success ? 'badge-success' : terminal ? 'badge-warn' : 'badge-accent')}</td><td>${_opsLabel('dream_ops.reason', item.reason_code || 'unknown')}</td><td>${Number(item.attempts || 0)}</td><td>${_opsTime(item.sent_at || item.last_attempt_at || item.created_at)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  }
+
   function _renderDreamOpsPostcards(items) {
     const host = document.getElementById('dream-ops-postcards');
     if (!items.length) {
@@ -122,11 +141,12 @@
       _renderDreamOpsArchives(data.archives || []);
       _renderDreamOpsScenarioProgress(data);
       _renderDreamOpsLifecycle(data.exit_lifecycle || []);
+      _renderDreamOpsContinuation(data);
       _renderDreamOpsPostcards(data.postcards || []);
     } catch (error) {
       const message = escapeHtml(t('dream_ops.load_failed', 'Failed to load: {error}', {error: error.message}));
       overview.innerHTML = `<div class="empty">${message}</div>`;
-      ['dream-ops-archives', 'dream-ops-scenario-progress', 'dream-ops-lifecycle', 'dream-ops-postcards'].forEach(id => {
+      ['dream-ops-archives', 'dream-ops-scenario-progress', 'dream-ops-lifecycle', 'dream-ops-continuation', 'dream-ops-postcards'].forEach(id => {
         const host = document.getElementById(id);
         if (host) host.innerHTML = `<div class="empty">${message}</div>`;
       });

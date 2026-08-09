@@ -17,7 +17,18 @@ READY = "ready"
 BLOCKED = "blocked"
 SENT = "sent"
 EXPIRED = "expired"
-LIFECYCLES = frozenset({WAITING_AFTERGLOW, READY, BLOCKED, SENT, EXPIRED})
+DELIVERY_SCHEDULED_GREETING = "scheduled_greeting"
+DELIVERY_CONTINUATION = "continuation"
+CONTINUATION_PENDING = "pending"
+CONTINUATION_DEFERRED = "deferred"
+CONTINUATION_SENT = "sent"
+CONTINUATION_CANCELLED = "cancelled"
+CONTINUATION_FAILED = "failed"
+LIFECYCLES = frozenset({
+    WAITING_AFTERGLOW, READY, BLOCKED, SENT, EXPIRED,
+    CONTINUATION_PENDING, CONTINUATION_DEFERRED, CONTINUATION_SENT,
+    CONTINUATION_CANCELLED, CONTINUATION_FAILED,
+})
 
 NOT_QUIET = "not_quiet"
 DND = "dnd"
@@ -26,6 +37,13 @@ BUDGET = "budget"
 HIGHER_PRIORITY_WINNER = "higher_priority_winner"
 AFTERGLOW_NOT_READY = "afterglow_not_ready"
 SEND_FAILED = "send_failed"
+CONTINUATION_QUEUED = "continuation_queued"
+NEW_USER_TURN = "new_user_turn"
+ALREADY_GREETED = "already_greeted"
+CLOSE_NOT_ELIGIBLE = "close_not_eligible"
+PIPELINE_UNAVAILABLE = "pipeline_unavailable"
+LLM_EMPTY = "llm_empty"
+CONVERSATION_BUSY = "conversation_busy"
 BLOCK_REASONS = frozenset({
     NOT_QUIET,
     DND,
@@ -34,6 +52,13 @@ BLOCK_REASONS = frozenset({
     HIGHER_PRIORITY_WINNER,
     AFTERGLOW_NOT_READY,
     SEND_FAILED,
+    CONTINUATION_QUEUED,
+    NEW_USER_TURN,
+    ALREADY_GREETED,
+    CLOSE_NOT_ELIGIBLE,
+    PIPELINE_UNAVAILABLE,
+    LLM_EMPTY,
+    CONVERSATION_BUSY,
 })
 
 
@@ -64,6 +89,9 @@ def _safe_row(row: dict[str, Any]) -> dict[str, Any]:
     reason = str(row.get("reason_code") or "")
     if reason and reason not in BLOCK_REASONS:
         reason = ""
+    delivery_kind = str(row.get("delivery_kind") or DELIVERY_SCHEDULED_GREETING)
+    if delivery_kind not in {DELIVERY_SCHEDULED_GREETING, DELIVERY_CONTINUATION}:
+        delivery_kind = DELIVERY_SCHEDULED_GREETING
     try:
         attempts = max(0, int(row.get("attempts") or 0))
     except (TypeError, ValueError):
@@ -72,6 +100,7 @@ def _safe_row(row: dict[str, Any]) -> dict[str, Any]:
         "dream_id": str(row.get("dream_id") or "")[:160],
         "uid": str(row.get("uid") or "")[:160],
         "char_id": str(row.get("char_id") or DEFAULT_CHAR_ID)[:160],
+        "delivery_kind": delivery_kind,
         "lifecycle": lifecycle,
         "reason_code": reason,
         "created_at": float(row.get("created_at") or time.time()),
@@ -89,6 +118,7 @@ def record(
     dream_id: str,
     *,
     char_id: str = DEFAULT_CHAR_ID,
+    delivery_kind: str = DELIVERY_SCHEDULED_GREETING,
     lifecycle: str,
     reason_code: str = "",
     expires_at: float | None = None,
@@ -97,8 +127,14 @@ def record(
     """Upsert one bounded record and return the sanitized row."""
     rows = _load(char_id)
     now = time.time()
+    delivery_kind = str(delivery_kind or DELIVERY_SCHEDULED_GREETING)
     index = next(
-        (i for i, item in enumerate(rows) if str(item.get("dream_id")) == str(dream_id) and str(item.get("uid")) == str(uid)),
+        (
+            i for i, item in enumerate(rows)
+            if str(item.get("dream_id")) == str(dream_id)
+            and str(item.get("uid")) == str(uid)
+            and str(item.get("delivery_kind") or DELIVERY_SCHEDULED_GREETING) == delivery_kind
+        ),
         None,
     )
     previous = rows[index] if index is not None else {}
@@ -107,6 +143,7 @@ def record(
         "uid": uid,
         "dream_id": dream_id,
         "char_id": char_id,
+        "delivery_kind": delivery_kind,
         "lifecycle": lifecycle,
         "reason_code": reason_code,
         "expires_at": expires_at if expires_at is not None else previous.get("expires_at"),
@@ -114,10 +151,11 @@ def record(
     })
     if lifecycle == READY and not row.get("ready_at"):
         row["ready_at"] = now
-    if lifecycle == BLOCKED or lifecycle == SENT:
+    if lifecycle in {BLOCKED, SENT, CONTINUATION_DEFERRED, CONTINUATION_SENT,
+                     CONTINUATION_CANCELLED, CONTINUATION_FAILED}:
         row["last_attempt_at"] = now
         row["attempts"] = int(previous.get("attempts") or 0) + 1
-    if lifecycle == SENT:
+    if lifecycle in {SENT, CONTINUATION_SENT}:
         row["sent_at"] = now
         row["reason_code"] = ""
         row["last_error"] = ""
@@ -129,13 +167,26 @@ def record(
     return row
 
 
-def list_records(*, char_id: str = DEFAULT_CHAR_ID, limit: int = 50) -> list[dict[str, Any]]:
+def list_records(
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    limit: int = 50,
+    delivery_kind: str | None = None,
+) -> list[dict[str, Any]]:
     rows = _load(char_id)
-    return [_safe_row(row) for row in rows[-max(1, min(int(limit), 200)):]][::-1]
+    safe_rows = [_safe_row(row) for row in rows]
+    if delivery_kind is not None:
+        safe_rows = [row for row in safe_rows if row.get("delivery_kind") == str(delivery_kind)]
+    return safe_rows[-max(1, min(int(limit), 200)):][::-1]
 
 
-def get_record(dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict[str, Any] | None:
-    for row in list_records(char_id=char_id, limit=200):
+def get_record(
+    dream_id: str,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    delivery_kind: str | None = None,
+) -> dict[str, Any] | None:
+    for row in list_records(char_id=char_id, limit=200, delivery_kind=delivery_kind):
         if row.get("dream_id") == str(dream_id):
             return row
     return None

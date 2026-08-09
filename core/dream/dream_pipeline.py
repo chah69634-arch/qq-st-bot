@@ -367,7 +367,11 @@ async def dream_turn(
 
     state = read_state(uid)
     status = state.get("status")
-    if status not in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
+    if status not in (
+        DreamStatus.DREAM_ACTIVE.value,
+        DreamStatus.DREAM_EXIT_REQUESTED.value,
+        DreamStatus.DREAM_CLOSING.value,
+    ):
         return {
             "reply": "",
             "exit_accepted": False,
@@ -377,11 +381,13 @@ async def dream_turn(
 
     # ── Hard exit pre-LLM intercept ───────────────────────────────────────────
     if user_msg.strip().lower() == HARD_EXIT_KEYWORD:
-        await force_exit_dream(uid)
+        close_result = await force_exit_dream(uid)
         return {
             "reply": "（梦境已关闭）",
             "exit_accepted": False,
             "force_exited": True,
+            "dream_id": close_result.get("dream_id"),
+            "already_closed": bool(close_result.get("already_closed")),
         }
 
     dream_id = state.get("dream_id") or _ensure_dream_id(uid, state)
@@ -722,8 +728,10 @@ async def dream_turn(
         state = read_state(uid)
         state["status"] = DreamStatus.DREAM_CLOSING.value
         write_state(uid, state)
-        await _do_close_dream(uid, dream_id, exit_type="soft")
+        close_result = await _do_close_dream(uid, dream_id, exit_type="soft")
         # char_id is stored in dream_state; _do_close_dream reads it from there
+    else:
+        close_result = {"already_closed": False, "closed_now": False}
 
     from core.narrative_parser import parse_narrative_segments as _parse_segs
     _parsed = _parse_segs(reply)
@@ -732,6 +740,9 @@ async def dream_turn(
         "reply": reply,
         "exit_accepted": exit_accepted,
         "force_exited": False,
+        "dream_id": dream_id,
+        "already_closed": bool(close_result.get("already_closed")),
+        "continuation_eligible": bool(exit_accepted and close_result.get("closed_now")),
         "segments": _parsed["segments"],
         "segmented_content": _parsed["content"],
     }
@@ -743,7 +754,7 @@ async def force_exit_dream(
     exit_mechanism: str = "user_hard_exit",
     exit_initiator: str = "user",
     exit_reason: str = "user_hard_exit",
-) -> None:
+) -> dict[str, Any]:
     """
     Hard exit chokepoint — unconditional, immediate, penetrates all state.
 
@@ -755,13 +766,36 @@ async def force_exit_dream(
     from core.dream.dream_state import read_state, write_state, DreamStatus
 
     state = read_state(uid)
-    dream_id = state.get("dream_id", "")
+    status = state.get("status")
+    dream_id = str(state.get("dream_id") or "").strip()
+    active_statuses = {
+        DreamStatus.DREAM_ACTIVE.value,
+        DreamStatus.DREAM_EXIT_REQUESTED.value,
+        DreamStatus.DREAM_CLOSING.value,
+    }
+    if status not in active_statuses or not dream_id:
+        return {
+            "ok": True,
+            "exited": True,
+            "already_closed": True,
+            "closed_now": False,
+            "dream_id": str(state.get("last_dream_id") or "") or None,
+            "dream_mode": state.get("last_dream_mode"),
+            "exit_mechanism": state.get("last_exit_mechanism"),
+            "exit_initiator": state.get("last_exit_initiator"),
+            "completion": state.get("last_completion"),
+            "exit_reason": state.get("last_exit_reason"),
+            "assistant_turns": state.get("last_exit_assistant_turns"),
+            "archive_ok": state.get("last_archive_ok"),
+            "exited_at": state.get("last_exited_at"),
+        }
 
-    state["status"] = DreamStatus.DREAM_CLOSING.value
-    write_state(uid, state)
+    if status != DreamStatus.DREAM_CLOSING.value:
+        state["status"] = DreamStatus.DREAM_CLOSING.value
+        write_state(uid, state)
 
     logger.info(f"[dream_pipeline] force_exit uid={uid} dream_id={dream_id}")
-    await _do_close_dream(
+    return await _do_close_dream(
         uid,
         dream_id,
         exit_type="hard_exit",
@@ -937,7 +971,7 @@ async def _do_close_dream(
     exit_mechanism: str | None = None,
     exit_initiator: str | None = None,
     exit_reason: str | None = None,
-) -> None:
+) -> dict[str, Any]:
     """Archive log, schedule summary generation, transition to REALITY_AFTERGLOW."""
     from core.dream.dream_state import (
         read_state, write_state, DreamStatus, clear_local_state,
@@ -953,10 +987,39 @@ async def _do_close_dream(
         completion_for_exit,
     )
 
+    # A close is a single-writer transition. Repeated EXIT/WAKE calls observe
+    # the durable afterglow metadata and must not archive, summarize, or mutate
+    # the original close contract a second time.
+    state = read_state(uid)
+    current_dream_id = str(state.get("dream_id") or "").strip()
+    if (
+        not dream_id
+        or current_dream_id != str(dream_id)
+        or state.get("status") not in {
+            DreamStatus.DREAM_ACTIVE.value,
+            DreamStatus.DREAM_EXIT_REQUESTED.value,
+            DreamStatus.DREAM_CLOSING.value,
+        }
+    ):
+        return {
+            "ok": True,
+            "exited": True,
+            "already_closed": True,
+            "closed_now": False,
+            "dream_id": str(state.get("last_dream_id") or "") or None,
+            "dream_mode": state.get("last_dream_mode"),
+            "exit_mechanism": state.get("last_exit_mechanism"),
+            "exit_initiator": state.get("last_exit_initiator"),
+            "completion": state.get("last_completion"),
+            "exit_reason": state.get("last_exit_reason"),
+            "assistant_turns": state.get("last_exit_assistant_turns"),
+            "archive_ok": state.get("last_archive_ok"),
+            "exited_at": state.get("last_exited_at"),
+        }
+
     # Read char_id and dream_mode from dream_state before clearing volatile fields.
     # char_id is NOT in clear_local_state's key list, so it survives into REALITY_AFTERGLOW.
     # dream_mode IS in clear_local_state's key list — must be captured here before clearing.
-    state = read_state(uid)
     char_id = _state_char_id(state, "_do_close_dream", uid, dream_id)
     dream_mode = state.get("dream_mode", "sandbox")
     world_id = str(state.get("frozen_world") or "unknown")
@@ -1001,17 +1064,18 @@ async def _do_close_dream(
         "dream_mode": dream_mode,
     }
 
-    asyncio.create_task(
-        _generate_summary_bg(
-            uid,
-            dream_id,
-            exit_type,
-            char_id=char_id,
-            dream_mode=dream_mode,
-            world_id=world_id,
-            exit_metadata=exit_metadata,
+    if dream_id:
+        asyncio.create_task(
+            _generate_summary_bg(
+                uid,
+                dream_id,
+                exit_type,
+                char_id=char_id,
+                dream_mode=dream_mode,
+                world_id=world_id,
+                exit_metadata=exit_metadata,
+            )
         )
-    )
 
     state = clear_local_state(state)  # clears body_state + emotional_tension + scene etc.
     state["status"] = DreamStatus.REALITY_AFTERGLOW.value
@@ -1022,7 +1086,7 @@ async def _do_close_dream(
     # it return None forever — this was observed for real: two status_shift entries
     # 33s apart in flow_entries, then last_dream_id=="" stuck ever after). Never let
     # an empty incoming dream_id clobber a previously-recorded one.
-    state["last_dream_id"] = dream_id or state.get("last_dream_id", "")
+    state["last_dream_id"] = dream_id
     state["last_exit_type"] = exit_type
     state["last_exit_mechanism"] = exit_mechanism
     state["last_exit_initiator"] = exit_initiator
@@ -1051,6 +1115,21 @@ async def _do_close_dream(
 
     delete_hud_state(uid)
     logger.info(f"[dream_pipeline] closed dream uid={uid} exit_type={exit_type} char_id={char_id}")
+    return {
+        "ok": True,
+        "exited": True,
+        "already_closed": False,
+        "closed_now": True,
+        "dream_id": dream_id,
+        "dream_mode": dream_mode,
+        "exit_mechanism": exit_mechanism,
+        "exit_initiator": exit_initiator,
+        "completion": completion,
+        "exit_reason": exit_reason,
+        "assistant_turns": assistant_turns,
+        "archive_ok": bool(archive_ok),
+        "exited_at": state.get("last_exited_at"),
+    }
 
 
 async def _generate_summary_bg(

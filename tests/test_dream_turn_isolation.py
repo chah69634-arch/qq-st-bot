@@ -242,7 +242,7 @@ def test_reality_allowed_when_afterglow(sandbox):
     "REALITY_CHAT",
 ])
 def test_force_exit_immediate_in_any_state(sandbox, initial_status):
-    """force_exit_dream must result in REALITY_AFTERGLOW regardless of starting state."""
+    """Only an active real Dream may transition; Reality calls are no-ops."""
     from core.dream.dream_state import write_state, read_state, DreamStatus
 
     write_state(_UID, {
@@ -255,10 +255,12 @@ def test_force_exit_immediate_in_any_state(sandbox, initial_status):
     asyncio.run(dream_pipeline.force_exit_dream(_UID))
 
     state = read_state(_UID)
-    assert state["status"] == DreamStatus.REALITY_AFTERGLOW.value, (
-        f"Expected REALITY_AFTERGLOW after force_exit from {initial_status}, "
-        f"got {state['status']}"
+    expected = (
+        DreamStatus.REALITY_AFTERGLOW.value
+        if initial_status in {DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value}
+        else initial_status
     )
+    assert state["status"] == expected
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

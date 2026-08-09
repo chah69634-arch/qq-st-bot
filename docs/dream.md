@@ -648,6 +648,22 @@ import（它只传递预加载文本给 prompt，不读 dream 数据）。
 
 退出后的 Reality 主动感想写入独立的文本无关 lifecycle ledger，状态为 `waiting_afterglow`、`ready`、`blocked`、`sent` 或 `expired`。`blocked` 原因只使用 `not_quiet`、`dnd`、`global_gap`、`budget`、`higher_priority_winner`、`afterglow_not_ready`、`send_failed`；它仍受 Dream Guard、DND、conversation gate、正常预算和安静状态约束。桌面回放只在主聊天 Sidebar 内显示归档，不写当前会话、不触发 WS、TTS 或 pipeline。
 
+### Brief 170：幂等关闭与 Reality continuation
+
+`force_exit_dream()` / `_do_close_dream()` 只接受带真实 `dream_id` 的
+`DREAM_ACTIVE`、`DREAM_EXIT_REQUESTED` 或 `DREAM_CLOSING` 会话。第一次关闭
+一次性归档、启动 summary/afterglow/postcard 链并写入 `last_completion` 等 close
+metadata；Reality 中重复的 `/dream/wake`、`/dream/exit` 只返回结构化
+`already_closed`，不覆盖既有 mode、mechanism、initiator、reason 或时间。
+
+明确请求退出且 Dream control 为 `accept` 的可见回复完成后，才会在现有
+`exit_lifecycle.json` 中登记 `delivery_kind=continuation`。续接等待 uid 的
+`conversation_lock`，使用正常 Reality pipeline 和 `turn_sink`，不进入 scheduler
+QUIET、DND、gap、budget 或 winner；发送成功后才写 `last_greeted_dream_id` 与
+`delivery_kind=continuation` 且 lifecycle=`sent`。新 Reality 用户回合会以固定 `new_user_turn` 原因取消，
+进程启动会恢复 pending/failed 记录。`delivery_kind=scheduled_greeting` 仍由
+普通 `dream_exit` proposer 负责，二者在管理面 `/dream/operations` 分开观测。
+
 ### FUTURE（允许扩展，未做，留 seam）
 - 世界专属身体语义
 - mid-dream world drift（梦中切世界）

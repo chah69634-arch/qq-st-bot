@@ -61,6 +61,39 @@ def propose(ctx: dict | None = None):
         logger.debug("[dream_exit] propose: already greeted dream_id=%r", dream_id)
         return None
 
+    # A real post-Dream continuation owns this close.  The scheduled greeting
+    # outlet must not race it or create a second Reality turn for the same
+    # dream.  Cancelled continuations may fall back to the normal proposer.
+    try:
+        from core.dream.exit_observability import (
+            DELIVERY_CONTINUATION,
+            CONTINUATION_PENDING,
+            CONTINUATION_DEFERRED,
+            CONTINUATION_FAILED,
+            CONTINUATION_SENT,
+            get_record,
+        )
+
+        continuation = get_record(
+            dream_id,
+            char_id=char_id,
+            delivery_kind=DELIVERY_CONTINUATION,
+        )
+        if continuation and continuation.get("lifecycle") in {
+            CONTINUATION_PENDING,
+            CONTINUATION_DEFERRED,
+            CONTINUATION_FAILED,
+            CONTINUATION_SENT,
+        }:
+            logger.debug(
+                "[dream_exit] propose: continuation owns dream_id=%r lifecycle=%s",
+                dream_id,
+                continuation.get("lifecycle"),
+            )
+            return None
+    except Exception as exc:
+        logger.warning("[dream_exit] continuation ownership check failed: %s", exc)
+
     mode = str(state.get("last_dream_mode") or "sandbox")
     exit_type = str(state.get("last_exit_type") or "")
     timing = _resolve_timing(uid, char_id=char_id, state=state, mode=mode)

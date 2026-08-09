@@ -855,6 +855,15 @@ async def main():
         else:
             logger.info("qq.enabled=false，跳过NapCat和QQ消息队列")
 
+    # Brief 170: resume durable Dream -> Reality continuations after all
+    # channels are registered, without routing them through scheduler gating.
+    try:
+        from core.dream.reality_continuation import start_recovery_task
+
+        start_recovery_task()
+    except Exception:
+        logger.warning("Dream Reality continuation recovery failed to start", exc_info=True)
+
     tasks = []
     admin_cfg = cfg.get("admin", {})
     if admin_cfg.get("enabled", False) and admin_cfg.get("auto_start", True):

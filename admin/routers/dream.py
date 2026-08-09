@@ -345,6 +345,7 @@ async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
     # fail-open: pseudo_stream_push never raises, msg_id lets the client dedup
     # against this HTTP response the same way owner chat's stream path does.
     reply = result.get("reply") or ""
+    _char_id = ""
     if reply:
         import uuid as _uuid
 
@@ -362,6 +363,21 @@ async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
             logger.debug("[dream_chat] pseudo_stream_push failed", exc_info=True)
         result["msg_id"] = _msg_id
 
+    # Brief 170: enqueue Reality continuation only after the final Dream reply
+    # has been handed to the visible channel.  The worker itself is durable,
+    # gate-aware, and never runs Dream content through the Reality prompt.
+    if reply and result.get("continuation_eligible") and result.get("dream_id"):
+        try:
+            from core.dream.reality_continuation import enqueue as _enqueue_continuation
+
+            _enqueue_continuation(
+                uid,
+                str(result["dream_id"]),
+                char_id=_char_id,
+            )
+        except Exception:
+            logger.warning("[dream_chat] Reality continuation enqueue failed", exc_info=True)
+
     return result
 
 
@@ -374,9 +390,7 @@ async def dream_exit(_auth=Depends(require_scopes("activity"))):
     uid = _owner_uid()
 
     from core.dream.dream_pipeline import force_exit_dream
-    await force_exit_dream(uid)
-
-    return {"ok": True, "exited": True}
+    return await force_exit_dream(uid)
 
 
 @router.post("/dream/wake", summary="软挽留闸门（满足门控时角色挽留一次；否则直接硬退）")
@@ -406,13 +420,12 @@ async def dream_wake(_auth=Depends(require_scopes("activity"))):
 
     # Not in an active dream → hard exit fallback (idempotent, safe)
     if status != DreamStatus.DREAM_ACTIVE.value:
-        await force_exit_dream(
-            uid,
-            exit_mechanism="system_fallback",
-            exit_initiator="system",
-            exit_reason="system_fallback",
-        )
-        return {"retained": False, "exited": True}
+        return {
+            "retained": False,
+            "exited": True,
+            "already_closed": True,
+            "dream_id": str(state.get("last_dream_id") or "") or None,
+        }
 
     # Already offered retention this dream → hard exit (no repeated nagging)
     if state.get("retention_offered_dream_id") == dream_id:
@@ -664,13 +677,18 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
     """
     uid = _owner_uid()
     from core.dream.dream_state import read_state
-    from core.dream.exit_observability import list_records
+    from core.dream.exit_observability import DELIVERY_CONTINUATION, list_records
     from core.dream.scenario_progress_audit import list_records as list_scenario_progress
     from core.sandbox import get_paths as _get_paths
 
     char_id = _active_dream_char_id()
     state = read_state(uid)
     lifecycle = list_records(char_id=char_id, limit=50)
+    continuation_lifecycle = list_records(
+        char_id=char_id,
+        limit=20,
+        delivery_kind=DELIVERY_CONTINUATION,
+    )
     scenario_dream_id = str(state.get("dream_id") or state.get("last_dream_id") or "")
     scenario_progress_rows = list_scenario_progress(
         char_id=char_id,
@@ -689,6 +707,26 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         "recent": scenario_progress_rows,
     }
     archive_page = await dream_archive_list(offset=0, limit=20, char_id=char_id)
+    last_dream_id = str(state.get("last_dream_id") or "")
+    latest_archive = next(
+        (item for item in archive_page["items"] if item.get("dream_id") == last_dream_id),
+        None,
+    )
+    close_metadata_consistent = None
+    if latest_archive and last_dream_id:
+        pairs = (
+            ("last_dream_mode", "dream_mode"),
+            ("last_exit_mechanism", "exit_mechanism"),
+            ("last_exit_initiator", "exit_initiator"),
+            ("last_completion", "completion"),
+            ("last_exit_reason", "exit_reason"),
+        )
+        archive_values = [str(latest_archive.get(archive_key) or "") for _, archive_key in pairs]
+        if all(value not in {"", "unknown"} for value in archive_values):
+            close_metadata_consistent = all(
+                str(state.get(state_key) or "") == str(latest_archive.get(archive_key) or "")
+                for state_key, archive_key in pairs
+            )
 
     schedule: list[dict] = []
     schedule_path = _get_paths().dreams_postcards_dir(char_id=char_id) / "schedule.json"
@@ -721,7 +759,6 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         pass
 
     summary: dict = {"present": False, "created_at": None, "dream_id": None}
-    last_dream_id = str(state.get("last_dream_id") or "")
     if _SAFE_DREAM_ID_RE.fullmatch(last_dream_id):
         summary_path = _get_paths().dreams_summaries_dir(char_id=char_id) / f"dream_{last_dream_id}.summary.json"
         try:
@@ -750,9 +787,14 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
             "last_greeted_matches_last_dream": bool(
                 state.get("last_greeted_dream_id") in (None, "", last_dream_id)
             ),
+            "close_metadata_consistent": close_metadata_consistent,
         },
         "archives": archive_page["items"],
         "exit_lifecycle": lifecycle,
+        "continuation": {
+            "last": continuation_lifecycle[0] if continuation_lifecycle else None,
+            "recent": continuation_lifecycle,
+        },
         "scenario_progress": scenario_progress,
         "postcards": schedule,
         "afterglow": afterglow,

@@ -338,7 +338,18 @@ Do not replace existing registries with a generic event bus only for abstraction
 
 ---
 
-# 11. Known Gaps
+# 11. Dream continuation recovery (Brief 170)
+
+After channels are registered during `main.main()`, the process schedules the
+bounded `core.dream.reality_continuation.recover_pending()` scan. It consumes
+only the existing Dream exit lifecycle ledger and requeues `pending`
+or `failed` rows. The continuation worker then waits the per-owner
+conversation gate and uses the normal Reality pipeline; it is not a scheduler
+tick, proposal, winner, or separate persistent ledger. The send marker is
+written after `record_assistant_turn()` returns, while the client handles the
+matching Dream active-to-closed transition and one-shot navigation close.
+
+# 12. Known Gaps
 
 ## Missing shutdown contract
 

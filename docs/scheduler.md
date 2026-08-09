@@ -1085,6 +1085,20 @@ curl -H "Authorization: Bearer <token>" \
 
 `dream_postcards` proposer 每日扫描梦境 archive 出站明信片的 schedule；到期未发送的条目复用 Gmail 链路投递。SMTP 失败只递增 attempts 并保留 last_error，后续 tick 持续重试，成功后才标记 sent。
 
+### Dream continuation（Brief 170）
+
+用户明确退出且角色通过 `dream_control.exit=accept` 后的 Reality continuation
+不是 scheduler proposal：它直接等待 uid conversation gate，走正常 Reality
+`fetch_context → build_prompt → run_llm → turn_sink → fanout`，不检查 QUIET、
+DND、全局 gap、主动预算或 winner。发送成功后与 `last_greeted_dream_id` 兼容
+去重；发送失败保留同一 lifecycle ledger 的可恢复记录，新 Reality 用户回合以
+`new_user_turn` 取消，避免插入用户对话。
+
+`exit_lifecycle.json` 通过 `delivery_kind` 区分 `continuation` 和
+`scheduled_greeting`。普通 `dream_exit` proposer 会跳过 continuation 的
+pending/failed/sent 记录，因此非 continuation Dream 仍保持原有 aging、DND、
+QUIET、预算和 winner 约束。
+
 ### dream_exit（Brief 164）
 
 `dream_exit` 只从 `REALITY_AFTERGLOW` 的单人 Dream 状态产生候选，必须经过 QUIET、DND、conversation gate、全局间隔与主动消息预算。候选使用有限 aging：等待时间增长后从 reactive 提升到 window-event，再到 must-not-miss；这只影响普通候选 winner，不绕过任何发送闸门。活跃窗口不强插，超过有效窗口写入 `expired`。
