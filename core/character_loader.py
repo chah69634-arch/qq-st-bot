@@ -95,6 +95,8 @@ class Character:
     # tool_tools_path_a/path_c、tool_exclude_path_a/path_c（core/tool_exposure.py）
     # proactive:       "full"（默认）| "off" — 主动发言总闸（core/scheduler/gating.py）
     # tool_loop:       "on" | "off" | 缺失 — 覆盖/回落全局 tool_loop.enabled（core/tool_dispatcher.py）
+    # dream_behavior:  dict | 缺失 — Dream 人格/模式指令；可选 identity_anchor、
+    #                   sandbox_directive、scenario_directive（core/dream/dream_prompt.py）
     # 角色资产路由（2026-07-25，与 model_routing 同构，端点见
     # admin/routers/character.py /character/{char_id}/asset-bindings）：
     # tts_preset:   str | None — tts.presets.<name> 命名预设（core/output/voice_adapter.py resolve_tts_config）

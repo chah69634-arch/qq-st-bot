@@ -277,8 +277,8 @@
 | `D5_body_projection` | 她的身体感知投影 **Scenario Mode 下永远禁用** | 轴3，boundary_level + yexuan_tension；`dream_mode != "scenario"` |
 | `D6_scene_anchors` | 场景状态 + 临时符号锚点 | dream-local |
 | `D7_dream_tension` | 梦内情绪张力（粗粒度分桶，dream-local；prompt 不暴露精确数值） | — |
-| `D8_dream_director` | 梦境导演注记（允许动作/环境）+ 逃生协议提醒 | boundary_level |
-| `DS_scenario` | 剧本当前阶段（仅 scenario 模式；script title / stage name / dramatic_task / entry_pressure / not_yet_allowed / drift_pressure） | dream_mode=scenario |
+| `D8_dream_director` | 共享渲染格式 + 逃生协议；不规定角色温柔/强硬，不从剧情内情绪猜测退出 | always |
+| `DS_scenario` | 剧本当前阶段（仅 scenario 模式；script title / stage name / dramatic_task / entry_pressure / not_yet_allowed / drift_pressure + 本轮行动契约） | dream_mode=scenario |
 | `DM_mirror` | Mirror 梦境倾向材料（仅 mirror 模式；粗粒度桶标签 + 轻量 symbolic_hints；只读，不诊断，不暴露数值） | dream_mode=mirror |
 | `D9_dream_history` | 梦内滚动短上下文（不过现实 sanitizer） | — |
 | `D10_user_message` | 她当前梦内输入 | — |
@@ -286,6 +286,21 @@
 梦境运行目录另含 `postcards/schedule.json`（冻结信文、投递日、发送重试状态）；该目录不是任何对话或记忆 loader 的输入。
 
 > 与现实栈**相反**之处：D8 要求输出动作/环境（现实禁止），D9 绝不过反话剧化清洗（现实必过），全程无 retrieve / mood_state / author_note_extra。这些反转就是"必须独立 pipeline"的根据。
+
+### Dream 行为权责（2026-08-09）
+
+- 共享层只负责梦境身份连续性、渲染格式、realm 隔离和退出机器协议，不为所有角色指定统一的
+  温柔、退让、强硬或升级策略。旧 D8 的模糊“真实不适信号→自动柔化”已移除，因为它无法可靠
+  区分剧情内反抗与系统退出意图。
+- `/stop` 始终是不可阻拦的硬退出；明确请求醒来/离开仍走 `dream_control` 软退出协议。剧情内的
+  挑衅、撒娇、沉默、绝食或情绪表达本身不是系统退出命令。
+- 每张 JSON 角色卡可在 `presence_ext.dream_behavior` 声明 `identity_anchor`、
+  `sandbox_directive`、`scenario_directive`。缺失时不注入、不使用统一性格兜底；角色仍由卡片原有
+  `system_prompt`、`description`、`personality` 和梦境 preset 塑造（Reality `scenario` 字段不进入
+  Dream，避免现实场景污染）。管理面“角色卡”页可直接编辑这三个 Dream 扩展字段。
+- scenario 中 DS 当前 stage 决定角色的公开立场与行动目标；内在关心可以影响表达，但不能自动
+  兑换成解除限制、放弃立场或跳过剧情后果。除自然的观察/停顿节点外，每轮应产生一个改变现场
+  状态、信息、距离、资源或选择空间的具体行动，纯口头恐吓不算推进。
 
 **D4.5 用户隐性状态快照（Phase 4，只读接入）**：
 

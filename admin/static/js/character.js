@@ -363,6 +363,10 @@ async function loadCharacterDetail(filename) {
       document.getElementById('char-birthday-prompt').value = d.birthday?.prompt ?? '';
       _renderCharacterAnniversaries(d.anniversaries || []);
       document.getElementById('char-first-mes').value       = d.first_mes || '';
+      const dreamBehavior = d.presence_ext?.dream_behavior || {};
+      document.getElementById('char-dream-identity-anchor').value = dreamBehavior.identity_anchor || '';
+      document.getElementById('char-dream-sandbox-directive').value = dreamBehavior.sandbox_directive || '';
+      document.getElementById('char-dream-scenario-directive').value = dreamBehavior.scenario_directive || '';
       document.getElementById('char-edit-form').style.display = '';
       document.getElementById('char-text-form').style.display = 'none';
     }
@@ -491,8 +495,18 @@ async function saveCharacter() {
         : null;
       const anniversariesVal = _readCharacterAnniversaries();
       if (!anniversariesVal) return;
+      const dreamBehavior = {
+        identity_anchor: document.getElementById('char-dream-identity-anchor').value.trim(),
+        sandbox_directive: document.getElementById('char-dream-sandbox-directive').value.trim(),
+        scenario_directive: document.getElementById('char-dream-scenario-directive').value.trim(),
+      };
+      Object.keys(dreamBehavior).forEach(key => { if (!dreamBehavior[key]) delete dreamBehavior[key]; });
+      const presenceExt = { ...(_charData.presence_ext || {}) };
+      if (Object.keys(dreamBehavior).length) presenceExt.dream_behavior = dreamBehavior;
+      else delete presenceExt.dream_behavior;
       const body = {
         ..._charData,
+        presence_ext:  presenceExt,
         name:          document.getElementById('char-name').value,
         gender:        document.getElementById('char-gender').value,
         scenario:      document.getElementById('char-scenario').value,

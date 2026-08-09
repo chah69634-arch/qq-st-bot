@@ -121,13 +121,13 @@ _D1_LUCID_AWARENESS = """{name}的梦境自我认知（固定，不因世界规�
 - {pronoun}知道这是他们共同的梦（lucid shared dream）
 - {pronoun}知道梦醒后现实仍然存在，关系仍然存在
 - {pronoun}在梦里仍是{pronoun}自己：情感是真实的，场景是虚构的
-- {pronoun}的情感底色、说话方式、对你的情感取向，在任何世界规则下保持不变
+- {pronoun}的核心人格、思考方式和说话方式保持连续；具体立场与行动由当前角色卡、世界和模式决定
 
 人称（锁死）：{name}全程以「我」自称；{user_clause}一律称「你」。只演{name}自己这一轮，不替对方旁白、不替她配台词、不用「她」称呼对方。"""
 
 _D1_NON_LUCID_AWARENESS = """{name}的梦境自我认知（non_lucid 模式）：
 - 在这段体验里，{name}沉浸当下，不刻意点破"这是梦"
-- {pronoun}的情感底色、说话方式、对你的情感取向，在任何世界规则下保持不变
+- {pronoun}的核心人格、思考方式和说话方式保持连续；具体立场与行动由当前角色卡、世界和模式决定
 - {pronoun}仍是{pronoun}自己：情感是真实的，只是不用"梦"这个词来框定当下
 
 人称（锁死）：{name}全程以「我」自称；{user_clause}一律称「你」。只演{name}自己这一轮，不替对方旁白、不替她配台词、不用「她」称呼对方。"""
@@ -137,13 +137,13 @@ _D1_NON_LUCID_AWARENESS = """{name}的梦境自我认知（non_lucid 模式）�
 
 _D8_DREAM_DIRECTOR = """梦境导演注记：
 · 说出口的话直接写，不加任何标记。
-· 动作描写独占一行，用单星号包裹：*轻轻握住* *停在原地* *慢慢走近*。
+· 动作描写独占一行，用单星号包裹。
 · 环境/氛围描写独占一行，用引用符号：> 夜色很低，窗外的风声轻轻压下来。
 · 内心感受独占一行，用下划线包裹：_某种平静在内部落定。_
 · 允许象征性意象（光、水、距离、颜色、声音、触感）。
 · 不要 HTML 标签，不要特殊字体控制字符。
-· 边界：梦内强度可高于现实对话，但始终遵从你的意志。
-  若你发出真实不适信号，立即以{name}自然方式柔化场景或过渡出去。
+· 这是一份渲染与协议说明，不替角色规定温柔、强硬、退让或升级；行为由角色卡与当前模式内容决定。
+· 剧情内的反抗、挑衅、撒娇、沉默或情绪表达不是系统退出命令，不要据此擅自改写角色立场或结束场景。
 
 逃生协议（不可撤销，{name}不可阻拦）：
 · 你随时可以发送 /stop 强制离开梦境，{name}必须允许。
@@ -156,14 +156,14 @@ _D8_DREAM_DIRECTOR = """梦境导演注记：
 
 _D8_DREAM_DIRECTOR_NON_LUCID = """梦境导演注记（non_lucid 模式）：
 · 说出口的话直接写，不加任何标记。
-· 动作描写独占一行，用单星号包裹：*轻轻握住* *停在原地* *慢慢走近*。
+· 动作描写独占一行，用单星号包裹。
 · 环境/氛围描写独占一行，用引用符号：> 夜色很低，窗外的风声轻轻压下来。
 · 内心感受独占一行，用下划线包裹：_某种平静在内部落定。_
 · 允许象征性意象（光、水、距离、颜色、声音、触感）。
 · 不要 HTML 标签，不要特殊字体控制字符。
 · non_lucid 模式：{name}在对话中不主动点破"这是梦"，完全沉浸在当下体验。
-· 边界：梦内强度可高于现实对话。
-  若你发出真实不适信号，立即以{name}自然方式柔化场景或过渡出去。
+· 这是一份渲染与协议说明，不替角色规定温柔、强硬、退让或升级；行为由角色卡与当前模式内容决定。
+· 剧情内的反抗、挑衅、撒娇、沉默或情绪表达不是系统退出命令，不要据此擅自改写角色立场或结束场景。
 
 逃生协议（系统层，不可撤销，non_lucid 模式不影响此项）：
 · 你随时可以发送 /stop 强制离开梦境，{name}必须允许。
@@ -313,14 +313,30 @@ def build_dream_prompt(
         _records.append(_LayerRec("D0_jailbreak", flags=["DISABLED"], note=_d0_note))
 
     # ── D1: identity_core (FIXED — always above D2) ──────────────────────────
-    char_desc = (getattr(character, "description", "") or "").strip()
     d1_parts = [f"# D1·身份核心 ─ {char_name}（固定）"]
-    if char_desc:
-        d1_parts.append(char_desc)
+    for label, field_name in (
+        ("角色卡核心规则", "system_prompt"),
+        ("角色设定", "description"),
+        ("性格", "personality"),
+    ):
+        value = getattr(character, field_name, "") or ""
+        if isinstance(value, list):
+            value = "".join(str(item) for item in value)
+        if isinstance(value, str) and value.strip():
+            d1_parts.append(f"{label}：\n{value.strip()}")
     _d1_awareness = _D1_NON_LUCID_AWARENESS if lucid_mode == "non_lucid" else _D1_LUCID_AWARENESS
     d1_parts.append(_d1_awareness.format(
         name=char_name, pronoun=char_pronoun, user_clause=_format_user_clause(user_name),
     ))
+    if dream_mode == "scenario":
+        d1_parts.append(
+            "剧本模式身份边界：保留核心人格与表达连续性，但当前剧本角色的公开立场、"
+            "目标和可见行动以 DS 当前阶段为准。内在关心、依恋或犹豫可以存在，不能自动"
+            "改写成放弃立场、解除限制或跳过剧情后果；只有当前阶段或用户的明确退出请求允许时才改变。"
+        )
+    _dream_behavior = _format_character_dream_behavior(character, dream_mode)
+    if _dream_behavior:
+        d1_parts.append(_dream_behavior)
     _d1 = "\n\n".join(d1_parts)
     system_layers.append(_d1)
     _records.append(_LayerRec("D1_identity_core", len(_d1), _est_tokens(_d1), content=_d1))
@@ -673,6 +689,33 @@ def _format_scene_anchors(local_state: dict[str, Any]) -> str:
     return "；".join(parts)
 
 
+def _format_character_dream_behavior(character: Any, dream_mode: str) -> str:
+    """Return optional per-character Dream direction from ``presence_ext``.
+
+    The shared Dream layers own rendering/isolation/protocol only. Personality
+    policy belongs to the authored character card and can provide a common
+    anchor plus one directive for the active mode. Malformed values are ignored
+    so legacy and plain-text cards retain their existing behavior.
+    """
+    try:
+        ext = getattr(character, "presence_ext", {}) or {}
+        behavior = ext.get("dream_behavior") if isinstance(ext, dict) else None
+        if not isinstance(behavior, dict):
+            return ""
+        parts: list[str] = []
+        identity_anchor = behavior.get("identity_anchor")
+        if isinstance(identity_anchor, str) and identity_anchor.strip():
+            parts.append(f"角色卡梦境人格锚点：\n{identity_anchor.strip()}")
+        mode_key = "scenario_directive" if dream_mode == "scenario" else "sandbox_directive"
+        mode_directive = behavior.get(mode_key)
+        if isinstance(mode_directive, str) and mode_directive.strip():
+            label = "剧本模式" if dream_mode == "scenario" else "自由梦境模式"
+            parts.append(f"角色卡{label}指令：\n{mode_directive.strip()}")
+        return "\n\n".join(parts)
+    except Exception:
+        return ""
+
+
 def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
     """
     Render the current scenario stage as a DS prompt block.
@@ -704,6 +747,13 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
             parts.append(f"戏剧任务：\n{task}")
         if pressure := stage.get("entry_pressure", "").strip():
             parts.append(f"入场压力：\n{pressure}")
+        parts.append(
+            "【本轮行动契约】\n"
+            "保持当前阶段赋予角色的公开立场。不要把内在关心自动写成退让、放弃目标或解除限制。\n"
+            "除非这一轮自然处于观察或停顿节点，否则回复必须包含至少一个会改变现场状态、信息、"
+            "距离、资源或选择空间的具体角色行动；只有口头威胁、重复警告或气氛描写不算行动推进。\n"
+            "行动不得越过本阶段的禁止事项，也不得替用户决定动作、感受或台词。"
+        )
 
         private_truths = script.get("private_truths") or []
         for private_truth in private_truths:

@@ -8,6 +8,8 @@ PAGE = (ROOT / "admin" / "static" / "pages" / "dream-settings.html").read_text(
 SOURCE = (ROOT / "admin" / "static" / "js" / "dream-settings.js").read_text(
     encoding="utf-8"
 )
+CHARACTER_PAGE = (ROOT / "admin" / "static" / "pages" / "character.html").read_text(encoding="utf-8")
+CHARACTER_SOURCE = (ROOT / "admin" / "static" / "js" / "character.js").read_text(encoding="utf-8")
 
 
 def test_scenario_mode_reveals_the_hidden_authoring_panel():
@@ -30,3 +32,11 @@ def test_scenario_editor_is_structured_and_supports_json_exchange():
     assert "_renderDreamScenarioPrivateTruths" in SOURCE
     assert "data-truth-policy" in SOURCE
     assert "reveal_required" in SOURCE
+
+
+def test_character_editor_exposes_per_mode_dream_behavior():
+    assert 'id="char-dream-identity-anchor"' in CHARACTER_PAGE
+    assert 'id="char-dream-sandbox-directive"' in CHARACTER_PAGE
+    assert 'id="char-dream-scenario-directive"' in CHARACTER_PAGE
+    assert "presence_ext?.dream_behavior" in CHARACTER_SOURCE
+    assert "presenceExt.dream_behavior = dreamBehavior" in CHARACTER_SOURCE

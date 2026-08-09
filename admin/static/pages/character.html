@@ -52,6 +52,30 @@
         <div class="admin-action-group"><button class="btn btn-primary btn-sm" data-action="saveCharacterRouting">保存模型路由</button><span id="char-routing-effective" class="admin-result-panel"></span></div>
       </div>
 
+      <div class="card" id="char-dream-behavior-card">
+        <div class="admin-card-header">
+          <div>
+            <h3 data-i18n="character.dream_behavior.title">梦境行为分配</h3>
+            <p class="admin-source-hint" data-i18n="character.dream_behavior.hint">统一层只管格式、隔离与退出；这里把人格和模式行为交给每张角色卡。</p>
+          </div>
+        </div>
+        <div class="form-row col-1">
+          <label class="field">
+            <span data-i18n="character.dream_behavior.identity_anchor">梦境人格锚点（所有模式）</span>
+            <textarea id="char-dream-identity-anchor" placeholder="角色在不同梦境里始终保留的思考方式、表达和核心人格" data-i18n-placeholder="character.dream_behavior.identity_placeholder"></textarea>
+          </label>
+          <label class="field">
+            <span data-i18n="character.dream_behavior.sandbox_directive">沙盒模式指令</span>
+            <textarea id="char-dream-sandbox-directive" placeholder="自由梦境中的主动性、边界和关系表达" data-i18n-placeholder="character.dream_behavior.sandbox_placeholder"></textarea>
+          </label>
+          <label class="field">
+            <span data-i18n="character.dream_behavior.scenario_directive">剧本模式指令</span>
+            <textarea id="char-dream-scenario-directive" placeholder="剧本角色的立场、行动原则，以及内在感情如何影响但不覆盖 stage" data-i18n-placeholder="character.dream_behavior.scenario_placeholder"></textarea>
+          </label>
+        </div>
+        <p class="admin-source-note" data-i18n="character.dream_behavior.source">保存随角色卡写入 presence_ext.dream_behavior；留空字段不注入 Prompt。</p>
+      </div>
+
       <div class="card admin-source-note">
         💡 与用户的关系（称呼、亲密度等）不在角色卡里编辑——那是运行时状态，请去
         <a href="javascript:void(0)" data-action="goto" data-action-args='["users"]' class="admin-inline-008">用户管理</a> 页查看/修改。
