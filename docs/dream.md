@@ -193,6 +193,12 @@
 - **mid-session 写保护守卫**（v0.5）：DREAM_ACTIVE 状态下 `enter_dream` fail-loud：
   模式切换错误（`mode=X → mode=Y`）和 script_id 替换错误分别返回独立错误信息
 - `DS_scenario` 层：只注入当前阶段；绝不注入后续阶段、出口判断、软门控
+- **角色私密真相 / 分阶段披露**：scenario YAML 顶层可选 `private_truths`。每项包含稳定
+  `id`、角色从开场前就知道的 `truth`，以及按 stage id 配置的 `disclosure`：
+  `hidden | hint_only | reveal_allowed | reveal_required`。DS 会在每个阶段都注入幕后真相，避免
+  知情角色被演成失忆，但只注入**当前阶段**的披露策略；`hint_only` 只额外注入当前阶段明确列出的
+  `allowed_hints`。后续阶段正文、后续披露策略和后续线索均不进入 prompt。未配置当前 stage 时
+  默认 `hidden`。这是单人 Scenario 当前梦境角色的私密导演信息，不是 Reality 记忆，也不写回。
 - `drift_pressure`（v0.5）：剧本 stage 可选字段；`after_turns: int` + `instruction: str`；
   当 `stage_turns >= after_turns` 时注入 DS 层"漂移压力 / Drift Pressure"块；
   只注入当前 stage，后续 stage 的 drift_pressure 不泄漏
@@ -443,7 +449,8 @@ fresh clone / release 不依赖旧 compatibility root；新建操作从 tracked 
 `DreamPrefsPane`「世界」标签页独立负责，两处刻意不联动）：
 - **sandbox**：世界选择下拉 + 新建/重命名/删除按钮（接 `POST/PUT rename/DELETE
   /dream/worlds`）+ 世界书条目 + 破限预设文本，行为对既有 sandbox 创作零回归。
-- **scenario**：结构化阶段编辑器 + JSON 导入/导出（接 `/dream/scenarios` CRUD）；字段覆盖标题、阶段任务、入场压力、完成信号、禁止事项与可选 drift pressure
+- **scenario**：结构化阶段编辑器 + JSON 导入/导出（接 `/dream/scenarios` CRUD）；字段覆盖标题、
+  角色私密真相及逐阶段披露策略、阶段任务、入场压力、完成信号、禁止事项与可选 drift pressure
   是「表单化关键字段（ID / 标题，仅用于快速生成骨架模板）+ 原始 YAML 文本区」双栏，
   不做完整可视化编排，保存时以 YAML 文本为最终内容。
 - **mirror**：无创作物的只读说明（mirror 的倾向材料由 User Hidden State 快照自动

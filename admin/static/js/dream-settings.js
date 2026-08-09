@@ -355,6 +355,49 @@ function _scenarioLines(value) {
   return Array.isArray(value) ? value.join('\n') : '';
 }
 
+function _emptyDreamScenarioPrivateTruth(index = 1) {
+  return {id: `truth_${index}`, truth: '', disclosure: {}};
+}
+
+function _scenarioDisclosurePolicyOptions(selected) {
+  const policies = [
+    ['hidden', t('dream.scenario.policy_hidden', '隐藏：角色知道但不披露')],
+    ['hint_only', t('dream.scenario.policy_hint_only', '仅暗示：只用允许线索')],
+    ['reveal_allowed', t('dream.scenario.policy_reveal_allowed', '允许揭露：剧情自然到达时可说')],
+    ['reveal_required', t('dream.scenario.policy_reveal_required', '必须揭露：本阶段让真相落地')],
+  ];
+  return policies.map(([value, label]) => `<option value="${value}" ${value === selected ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
+}
+
+function _renderDreamScenarioPrivateTruths(privateTruths, stages) {
+  const root = document.getElementById('ds-private-truths');
+  if (!root) return;
+  const values = Array.isArray(privateTruths) ? privateTruths : [];
+  if (!values.length) {
+    root.innerHTML = `<div class="empty">${escapeHtml(t('dream.scenario.private_truths_empty', '暂无私密真相；普通线性剧本可以留空。'))}</div>`;
+    return;
+  }
+  root.innerHTML = values.map((item, index) => {
+    const disclosure = item.disclosure && typeof item.disclosure === 'object' ? item.disclosure : {};
+    const rows = (stages || []).map(stage => {
+      const rule = disclosure[stage.id] || {};
+      const policy = rule.policy || 'hidden';
+      return `<div class="dream-scenario-disclosure-row" data-truth-disclosure>
+        <label class="field"><span>${escapeHtml(t('dream.scenario.disclosure_stage', '阶段'))}</span><input type="text" value="${escapeHtml(stage.name || stage.id || '')}" disabled></label>
+        <label class="field"><span>${escapeHtml(t('dream.scenario.disclosure_policy', '披露策略'))}</span><select data-truth-policy>${_scenarioDisclosurePolicyOptions(policy)}</select></label>
+        <label class="field"><span>${escapeHtml(t('dream.scenario.allowed_hints', '允许线索（每行一条，仅“仅暗示”使用）'))}</span><textarea data-truth-hints>${escapeHtml(_scenarioLines(rule.allowed_hints))}</textarea></label>
+      </div>`;
+    }).join('');
+    return `<section class="dream-scenario-private-truth" data-scenario-private-truth>
+      <div class="card-header"><h4>${escapeHtml(t('dream.scenario.private_truth_number', '私密真相 {index}', {index: index + 1}))}</h4><button type="button" class="btn btn-danger btn-sm" data-action="removeDreamScenarioPrivateTruth" data-action-args='[${index}]'>${escapeHtml(t('dream.scenario.remove_private_truth', '移除私密真相'))}</button></div>
+      <div class="form-row"><label class="field"><span>${escapeHtml(t('dream.scenario.private_truth_id', '真相 ID'))}</span><input type="text" data-truth-id value="${escapeHtml(item.id || '')}"></label><label class="field"><span>${escapeHtml(t('dream.scenario.private_truth_knower', '知情者'))}</span><input type="text" value="${escapeHtml(t('dream.scenario.private_truth_actor', '当前梦境角色'))}" disabled></label></div>
+      <label class="field"><span>${escapeHtml(t('dream.scenario.private_truth_text', '角色始终知道的幕后真相'))}</span><textarea data-truth-text>${escapeHtml(item.truth || '')}</textarea></label>
+      <div class="dream-scenario-disclosure-grid">${rows}</div>
+    </section>`;
+  }).join('');
+  bindPageActions(root);
+}
+
 function _renderDreamScenarioStages(stages) {
   const root = document.getElementById('ds-stages');
   const values = stages?.length ? stages : [_emptyDreamScenarioStage(1)];
@@ -393,13 +436,32 @@ function _readDreamScenarioDocument() {
     if (turns || instruction) result.drift_pressure = {after_turns: Number(turns), instruction};
     return result;
   });
-  return {id, title, stages};
+  const private_truths = [...document.querySelectorAll('[data-scenario-private-truth]')].map(item => {
+    const disclosure = {};
+    [...item.querySelectorAll('[data-truth-disclosure]')].forEach((row, index) => {
+      const stageId = stages[index]?.id;
+      if (!stageId) return;
+      const policy = row.querySelector('[data-truth-policy]').value;
+      const allowed_hints = _scenarioListValue(row.querySelector('[data-truth-hints]'));
+      disclosure[stageId] = {policy};
+      if (allowed_hints.length) disclosure[stageId].allowed_hints = allowed_hints;
+    });
+    return {
+      id: item.querySelector('[data-truth-id]').value.trim(),
+      truth: item.querySelector('[data-truth-text]').value.trim(),
+      disclosure,
+    };
+  });
+  const result = {id, title, stages};
+  if (private_truths.length) result.private_truths = private_truths;
+  return result;
 }
 
 function addDreamScenarioStage() {
   const scenario = _readDreamScenarioDocument();
   scenario.stages.push(_emptyDreamScenarioStage(scenario.stages.length + 1));
   _renderDreamScenarioStages(scenario.stages);
+  _renderDreamScenarioPrivateTruths(scenario.private_truths || [], scenario.stages);
 }
 
 function removeDreamScenarioStage(index) {
@@ -407,6 +469,21 @@ function removeDreamScenarioStage(index) {
   if (scenario.stages.length <= 1) return toast(t('dream.scenario.one_stage_required', '剧本至少需要一个阶段'), 'warn');
   scenario.stages.splice(Number(index), 1);
   _renderDreamScenarioStages(scenario.stages);
+  _renderDreamScenarioPrivateTruths(scenario.private_truths || [], scenario.stages);
+}
+
+function addDreamScenarioPrivateTruth() {
+  const scenario = _readDreamScenarioDocument();
+  const privateTruths = scenario.private_truths || [];
+  privateTruths.push(_emptyDreamScenarioPrivateTruth(privateTruths.length + 1));
+  _renderDreamScenarioPrivateTruths(privateTruths, scenario.stages);
+}
+
+function removeDreamScenarioPrivateTruth(index) {
+  const scenario = _readDreamScenarioDocument();
+  const privateTruths = scenario.private_truths || [];
+  privateTruths.splice(Number(index), 1);
+  _renderDreamScenarioPrivateTruths(privateTruths, scenario.stages);
 }
 
 async function openDreamScenarioEditor(id) {
@@ -418,12 +495,15 @@ async function openDreamScenarioEditor(id) {
     idInput.value = id;
     idInput.disabled = true;
     document.getElementById('ds-title').value = '';
-    _renderDreamScenarioStages([_emptyDreamScenarioStage(1)]);
+    const loadingStages = [_emptyDreamScenarioStage(1)];
+    _renderDreamScenarioStages(loadingStages);
+    _renderDreamScenarioPrivateTruths([], loadingStages);
     try {
       const d = await api('GET', `/dream/scenarios/${encodeURIComponent(id)}`);
       const scenario = d.document || {};
       document.getElementById('ds-title').value = scenario.title || '';
       _renderDreamScenarioStages(scenario.stages || []);
+      _renderDreamScenarioPrivateTruths(scenario.private_truths || [], scenario.stages || []);
     } catch(e) {
       toast(t('dream.scenario.load_failed', '读取失败: {error}', {error: e.message}), 'err');
     }
@@ -433,7 +513,9 @@ async function openDreamScenarioEditor(id) {
     idInput.disabled = false;
     document.getElementById('ds-title').value = '';
     document.getElementById('ds-json-file').value = '';
-    _renderDreamScenarioStages([_emptyDreamScenarioStage(1)]);
+    const stages = [_emptyDreamScenarioStage(1)];
+    _renderDreamScenarioStages(stages);
+    _renderDreamScenarioPrivateTruths([], stages);
   }
 }
 
@@ -472,7 +554,9 @@ async function importDreamScenarioJson() {
     }
     if (!_dreamScenarioEditingId) document.getElementById('ds-id').value = importedId;
     document.getElementById('ds-title').value = String(scenario.title || '').trim();
-    _renderDreamScenarioStages(Array.isArray(scenario.stages) ? scenario.stages : []);
+    const stages = Array.isArray(scenario.stages) ? scenario.stages : [];
+    _renderDreamScenarioStages(stages);
+    _renderDreamScenarioPrivateTruths(Array.isArray(scenario.private_truths) ? scenario.private_truths : [], stages);
     toast(t('dream.scenario.imported', 'JSON 已导入，请检查后保存'), 'ok');
   } catch (error) {
     toast(t('dream.scenario.import_failed', 'JSON 导入失败: {error}', {error: error.message}), 'err');

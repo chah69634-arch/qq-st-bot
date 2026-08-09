@@ -209,6 +209,13 @@ def test_structured_document_round_trip(sandbox):
     document = {
         "id": "json_editor",
         "title": "JSON Editor",
+        "private_truths": [{
+            "id": "hidden_identity",
+            "truth": "The stranger already knows who he is.",
+            "disclosure": {
+                "opening": {"policy": "hint_only", "allowed_hints": ["A familiar gesture"]},
+            },
+        }],
         "stages": [{
             "id": "opening",
             "name": "Opening",
@@ -225,6 +232,7 @@ def test_structured_document_round_trip(sandbox):
 
     assert detail["document"] == document
     assert "drift_pressure:" in detail["yaml"]
+    assert "private_truths:" in detail["yaml"]
 
 
 def test_legacy_scenario_is_read_only_and_update_creates_userdata_override(sandbox, tmp_path, monkeypatch):

@@ -9,6 +9,13 @@ _SCRIPTS_BASE can still be monkeypatched in focused tests.
 Minimal schema (v0):
   id:    str
   title: str
+  private_truths:                    # optional; known by the solo dream actor
+    - id:             str
+      truth:          str
+      disclosure:                    # optional per-stage disclosure policy
+        <stage_id>:
+          policy:     hidden | hint_only | reveal_allowed | reveal_required
+          allowed_hints: list[str]   # optional; consumed only by hint_only
   stages:
     - id:               str
       name:             str
@@ -26,6 +33,12 @@ logger = logging.getLogger(__name__)
 
 _SCRIPTS_BASE: Path | None = None
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_DISCLOSURE_POLICIES = frozenset({
+    "hidden",
+    "hint_only",
+    "reveal_allowed",
+    "reveal_required",
+})
 
 
 def _script_path(script_id: str) -> Path:
@@ -97,10 +110,16 @@ def _validate_script(data: dict[str, Any]) -> None:
     stages = data.get("stages")
     if not stages or not isinstance(stages, list):
         raise ValueError("script must have at least one stage")
+    stage_ids: set[str] = set()
     for i, stage in enumerate(stages):
+        if not isinstance(stage, dict):
+            raise ValueError(f"stage[{i}] must be a mapping")
         for key in ("id", "name", "dramatic_task", "entry_pressure"):
             if not stage.get(key):
                 raise ValueError(f"stage[{i}] missing '{key}'")
+        stage_id = stage["id"]
+        if isinstance(stage_id, str):
+            stage_ids.add(stage_id)
         dp = stage.get("drift_pressure")
         if dp is not None:
             if not isinstance(dp, dict):
@@ -109,3 +128,45 @@ def _validate_script(data: dict[str, Any]) -> None:
                 raise ValueError(f"stage[{i}].drift_pressure.after_turns must be int")
             if not isinstance(dp.get("instruction"), str) or not dp["instruction"].strip():
                 raise ValueError(f"stage[{i}].drift_pressure.instruction must be non-empty str")
+
+    private_truths = data.get("private_truths", [])
+    if not isinstance(private_truths, list):
+        raise ValueError("private_truths must be a list")
+    truth_ids: set[str] = set()
+    for i, item in enumerate(private_truths):
+        if not isinstance(item, dict):
+            raise ValueError(f"private_truths[{i}] must be a mapping")
+        truth_id = item.get("id")
+        if not isinstance(truth_id, str) or not _SAFE_ID_RE.match(truth_id):
+            raise ValueError(f"private_truths[{i}].id is invalid")
+        if truth_id in truth_ids:
+            raise ValueError(f"duplicate private truth id: {truth_id!r}")
+        truth_ids.add(truth_id)
+        truth = item.get("truth")
+        if not isinstance(truth, str) or not truth.strip():
+            raise ValueError(f"private_truths[{i}].truth must be non-empty str")
+        disclosure = item.get("disclosure", {})
+        if not isinstance(disclosure, dict):
+            raise ValueError(f"private_truths[{i}].disclosure must be a mapping")
+        for stage_id, rule in disclosure.items():
+            if stage_id not in stage_ids:
+                raise ValueError(
+                    f"private_truths[{i}].disclosure references unknown stage {stage_id!r}"
+                )
+            if not isinstance(rule, dict):
+                raise ValueError(
+                    f"private_truths[{i}].disclosure[{stage_id!r}] must be a mapping"
+                )
+            policy = rule.get("policy", "hidden")
+            if policy not in _DISCLOSURE_POLICIES:
+                raise ValueError(
+                    f"private_truths[{i}].disclosure[{stage_id!r}].policy is invalid"
+                )
+            allowed_hints = rule.get("allowed_hints", [])
+            if not isinstance(allowed_hints, list) or any(
+                not isinstance(hint, str) or not hint.strip() for hint in allowed_hints
+            ):
+                raise ValueError(
+                    f"private_truths[{i}].disclosure[{stage_id!r}].allowed_hints "
+                    "must be a list of non-empty strings"
+                )

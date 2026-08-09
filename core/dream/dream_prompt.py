@@ -677,9 +677,9 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
     """
     Render the current scenario stage as a DS prompt block.
 
-    Only injects current-stage content: title, stage name, dramatic_task,
-    entry_pressure, not_yet_allowed, drift_pressure, and the scenario_control
-    output protocol (v0.6).
+    Injects current-stage content plus actor-private truths with only the current
+    stage's disclosure policy.  Future stage content and future disclosure rules
+    remain unavailable to the model.
 
     Never injects: subsequent stages, stage-exit judgment, or auto-advance logic.
     Returns '' on any error (fail-closed).
@@ -704,6 +704,42 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
             parts.append(f"戏剧任务：\n{task}")
         if pressure := stage.get("entry_pressure", "").strip():
             parts.append(f"入场压力：\n{pressure}")
+
+        private_truths = script.get("private_truths") or []
+        for private_truth in private_truths:
+            if not isinstance(private_truth, dict):
+                continue
+            truth = str(private_truth.get("truth") or "").strip()
+            if not truth:
+                continue
+            disclosure = private_truth.get("disclosure") or {}
+            rule = disclosure.get(stage_id) if isinstance(disclosure, dict) else None
+            rule = rule if isinstance(rule, dict) else {}
+            policy = rule.get("policy", "hidden")
+            truth_parts = [
+                "【角色私下知道的真相】",
+                truth,
+                "这是你从本阶段开始前就知道的事实，不要把自己演成对此失忆或刚刚才发现。",
+                "【当前阶段披露权限】",
+            ]
+            if policy == "hint_only":
+                truth_parts.append("只可通过下列线索含蓄表现；不得直接说出、确认或解释完整真相。")
+                hints = [
+                    str(hint).strip()
+                    for hint in (rule.get("allowed_hints") or [])
+                    if str(hint).strip()
+                ]
+                if hints:
+                    truth_parts.append("允许的线索：\n" + "\n".join(f"· {hint}" for hint in hints))
+                else:
+                    truth_parts.append("本阶段没有指定可用线索，按 hidden 处理，不主动暗示真相。")
+            elif policy == "reveal_allowed":
+                truth_parts.append("本阶段允许在叙事自然到达时揭露真相，但不要为了说明设定而生硬抢跑。")
+            elif policy == "reveal_required":
+                truth_parts.append("本阶段必须让真相在剧情中落地；通过角色行动或台词自然完成揭露。")
+            else:
+                truth_parts.append("本阶段必须隐藏真相：你仍按知情者行动，但不得直接说出、确认或主动暗示。")
+            parts.append("\n".join(truth_parts))
         not_yet = stage.get("not_yet_allowed") or []
         if not_yet:
             parts.append("本阶段不允许：\n" + "\n".join(f"· {item}" for item in not_yet))

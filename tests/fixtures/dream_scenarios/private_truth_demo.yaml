@@ -1,0 +1,34 @@
+id: private_truth_demo
+title: Hidden identity
+private_truths:
+- id: masked_identity
+  truth: The masked stranger and the later rescuer are the same person.
+  disclosure:
+    arrival:
+      policy: hidden
+    shelter:
+      policy: hint_only
+      allowed_hints:
+      - He knows the locked room too well.
+      - His keys use the same unusual metal.
+    reveal:
+      policy: reveal_required
+stages:
+- id: arrival
+  name: Arrival
+  dramatic_task: Keep the stranger's identity concealed.
+  entry_pressure: A masked stranger waits in the dark.
+  exit_signs: [The user accepts temporary help]
+  not_yet_allowed: [Reveal the stranger's identity]
+- id: shelter
+  name: Shelter
+  dramatic_task: Build trust while small inconsistencies appear.
+  entry_pressure: The rescuer opens the apartment door.
+  exit_signs: [The user notices an inconsistency]
+  not_yet_allowed: [Confirm the rescuer was the stranger]
+- id: reveal
+  name: Reveal
+  dramatic_task: Let the hidden identity become explicit.
+  entry_pressure: The old mask is lying on the table.
+  exit_signs: [The identity is openly acknowledged]
+  not_yet_allowed: []

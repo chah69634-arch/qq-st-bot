@@ -114,6 +114,14 @@
               <input type="text" id="ds-title" placeholder="剧本标题" data-i18n-placeholder="dream.scenario.title_placeholder">
             </label>
           </div>
+          <div class="card-header dream-scenario-stages-header">
+            <div>
+              <h3 data-i18n="dream.scenario.private_truths">角色私密真相</h3>
+              <p class="admin-source-hint" data-i18n="dream.scenario.private_truths_hint">角色始终知道真相，但每个阶段分别控制隐藏、暗示或揭露；不会注入后续阶段正文。</p>
+            </div>
+            <button class="btn btn-ghost btn-sm" data-action="addDreamScenarioPrivateTruth" data-i18n="dream.scenario.add_private_truth">＋ 添加私密真相</button>
+          </div>
+          <div id="ds-private-truths"></div>
           <div class="card-header dream-scenario-stages-header"><h3 data-i18n="dream.scenario.stages">阶段</h3><button class="btn btn-ghost btn-sm" data-action="addDreamScenarioStage" data-i18n="dream.scenario.add_stage">＋ 添加阶段</button></div>
           <div id="ds-stages"></div>
         </div>

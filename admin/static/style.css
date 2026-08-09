@@ -238,6 +238,16 @@ label.field span { font-size: 12px; color: var(--muted); }
 .dream-scenario-stage > .field { margin-bottom: 12px; }
 .dream-scenario-stage details { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
 .dream-scenario-stage details summary { color: var(--muted); cursor: pointer; font-size: 12px; margin-bottom: 10px; }
+.dream-scenario-private-truth {
+  border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; padding: 12px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+}
+.dream-scenario-disclosure-grid { display: grid; gap: 8px; margin-top: 10px; }
+.dream-scenario-disclosure-row {
+  display: grid; grid-template-columns: minmax(120px, .7fr) minmax(140px, .8fr) minmax(220px, 2fr);
+  gap: 10px; align-items: end;
+}
+@media (max-width: 860px) { .dream-scenario-disclosure-row { grid-template-columns: 1fr; } }
 :is(
   input:not([type]),
   input[type="text"],

@@ -18,6 +18,7 @@ def test_scenario_mode_reveals_the_hidden_authoring_panel():
 
 def test_scenario_editor_is_structured_and_supports_json_exchange():
     assert 'id="ds-stages"' in PAGE
+    assert 'id="ds-private-truths"' in PAGE
     assert 'id="ds-json-file"' in PAGE
     assert 'id="ds-yaml"' not in PAGE
     assert 'data-action="addDreamScenarioStage"' in PAGE
@@ -26,3 +27,6 @@ def test_scenario_editor_is_structured_and_supports_json_exchange():
     assert "{ document: documentValue }" in SOURCE
     assert "JSON.parse(await file.text())" in SOURCE
     assert "JSON.stringify(scenario, null, 2)" in SOURCE
+    assert "_renderDreamScenarioPrivateTruths" in SOURCE
+    assert "data-truth-policy" in SOURCE
+    assert "reveal_required" in SOURCE
