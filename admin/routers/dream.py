@@ -191,6 +191,35 @@ def _archive_path(dream_id: str, char_id: str) -> Path:
     return get_paths().dreams_archive_dir(char_id=char_id) / f"dream_{dream_id}.jsonl"
 
 
+def _project_archive_message(role: str, content: str, ts: float | None) -> dict:
+    """Project one stored turn into the safe, read-only replay shape.
+
+    Archive files deliberately remain write-once and only contain stripped
+    ``role/content/ts`` fields.  Narrative segments are a display projection
+    derived at read time with the same parser used by live Dream replies.
+    """
+    message = {"role": role, "content": content, "ts": ts}
+    if role != "assistant":
+        return message
+
+    try:
+        from core.narrative_parser import parse_narrative_segments
+
+        parsed = parse_narrative_segments(content)
+        segments = parsed.get("segments")
+        segmented_content = parsed.get("content")
+        if not isinstance(segments, list) or not isinstance(segmented_content, str):
+            raise ValueError("invalid narrative projection")
+        message["segments"] = segments
+        message["segmented_content"] = segmented_content
+    except Exception:
+        # A legacy/malformed line must remain replayable.  The marker is a
+        # fixed, non-sensitive UI signal; no parser exception is exposed.
+        message["segmented_content"] = content
+        message["segment_parse_fallback"] = True
+    return message
+
+
 @router.get("/dream/archive", summary="分页读取单人梦境 archive 元数据（只读）")
 async def dream_archive_list(
     offset: int = Query(default=0, ge=0, le=10000),
@@ -245,7 +274,7 @@ async def dream_archive_detail(
             ts = float(ts)
         except (TypeError, ValueError):
             ts = None
-        messages.append({"role": role, "content": content, "ts": ts})
+        messages.append(_project_archive_message(role, content, ts))
     return {
         "dream_id": selected_id,
         "char_id": selected_char,

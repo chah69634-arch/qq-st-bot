@@ -48,7 +48,13 @@ def test_archive_detail_returns_only_replay_fields_and_validates_id(sandbox):
     result = asyncio.run(dream_archive_detail("replay_1", char_id="dreamer"))
     assert result["messages"] == [
         {"role": "user", "content": "hello", "ts": 100.0},
-        {"role": "assistant", "content": "reply", "ts": 101.0},
+        {
+            "role": "assistant",
+            "content": "reply",
+            "ts": 101.0,
+            "segments": [{"type": "say", "text": "reply"}],
+            "segmented_content": "reply",
+        },
     ]
     assert "hidden_state" not in result
     assert "never_retrieve" not in result
@@ -56,6 +62,50 @@ def test_archive_detail_returns_only_replay_fields_and_validates_id(sandbox):
     with pytest.raises(HTTPException) as error:
         asyncio.run(dream_archive_detail("../outside", char_id="dreamer"))
     assert error.value.status_code == 422
+
+
+def test_archive_detail_projects_all_narrative_segment_types_without_writing_archive(sandbox, monkeypatch):
+    from admin.routers.dream import dream_archive_detail
+
+    archive_path = sandbox.dreams_archive_dir(char_id="dreamer") / "dream_segments_1.jsonl"
+    _write_jsonl(archive_path, [
+        {"role": "assistant", "content": "<say>你好</say><do>抬头</do><env>夜色</env><feel>安心</feel>", "ts": 101.0},
+        {"role": "user", "content": "你还在吗？", "ts": 102.0},
+    ])
+    before = archive_path.read_bytes()
+
+    result = asyncio.run(dream_archive_detail("segments_1", char_id="dreamer"))
+
+    assert result["messages"][0]["segments"] == [
+        {"type": "say", "text": "你好"},
+        {"type": "do", "text": "抬头"},
+        {"type": "env", "text": "夜色"},
+        {"type": "feel", "text": "安心"},
+    ]
+    assert result["messages"][1] == {"role": "user", "content": "你还在吗？", "ts": 102.0}
+    assert archive_path.read_bytes() == before
+
+
+def test_archive_detail_parser_failure_is_raw_content_fallback(sandbox, monkeypatch):
+    from admin.routers.dream import dream_archive_detail
+
+    _write_jsonl(sandbox.dreams_archive_dir(char_id="dreamer") / "dream_fallback_1.jsonl", [
+        {"role": "assistant", "content": "legacy reply", "ts": 101.0},
+    ])
+
+    def _boom(_content):
+        raise RuntimeError("parser failure")
+
+    monkeypatch.setattr("core.narrative_parser.parse_narrative_segments", _boom)
+    result = asyncio.run(dream_archive_detail("fallback_1", char_id="dreamer"))
+
+    assert result["messages"] == [{
+        "role": "assistant",
+        "content": "legacy reply",
+        "ts": 101.0,
+        "segmented_content": "legacy reply",
+        "segment_parse_fallback": True,
+    }]
 
 
 def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
