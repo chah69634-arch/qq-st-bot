@@ -570,6 +570,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
             "advance_blocked_reason": _sc.get("advance_blocked_reason"),
             "advance_blocked_current_bucket": _sc.get("advance_blocked_current_bucket"),
             "advance_blocked_target_bucket": _sc.get("advance_blocked_target_bucket"),
+            "stall_turns": int(_sc.get("stall_turns") or 0),
             "recovery_pending": bool(_sc.get("recovery_pending")),
             "blocked_event_count": len(_sc.get("last_blocked_events") or []),
         }

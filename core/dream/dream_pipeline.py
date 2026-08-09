@@ -383,6 +383,19 @@ async def dream_turn(
 
     from core.dream.dream_prompt import build_dream_prompt
     _dream_capture_data: dict = {}
+    scenario_prompt_core: dict[str, Any] | None = None
+    scenario_recovery_injected = False
+    if state.get("scenario_core"):
+        scenario_prompt_core = {
+            **state["scenario_core"],
+            "_arc_mode": settings.get("scenario_arc_mode", "linear"),
+            "_tension_bucket": _bucket_for_scenario(current_yexuan_tension),
+        }
+        scenario_recovery_injected = bool(
+            state.get("dream_mode") == "scenario"
+            and state["scenario_core"].get("recovery_pending")
+        )
+
     def _dream_capture_hook(data: dict) -> None:
         _dream_capture_data.update(data)
 
@@ -402,7 +415,7 @@ async def dream_turn(
         world_id=state.get("frozen_world", "reality_derived"),
         lucid_mode=lucid_mode,
         dream_mode=state.get("dream_mode", "sandbox"),
-        scenario_core=({**state.get("scenario_core", {}), "_arc_mode": settings.get("scenario_arc_mode", "linear"), "_tension_bucket": _bucket_for_scenario(current_yexuan_tension)} if state.get("scenario_core") else None),
+        scenario_core=scenario_prompt_core,
         mirror_core=state.get("mirror_core"),
         _capture_hook=_dream_capture_hook,
         dream_turn=_dream_turn_index,
@@ -533,6 +546,12 @@ async def dream_turn(
                 "blocked_reason": "stage_lookup_failed",
             }
 
+        # A recovery cue is a one-shot input.  Consume the prior cue before
+        # applying this turn's new observation; a newly blocked event below
+        # may set it again for the following turn.
+        if scenario_recovery_injected:
+            sc = replace(sc, recovery_pending=False)
+
         if normalized["status"] == "valid":
             sc = sc.with_progress_signal(
                 normalized["progress_signal"],
@@ -561,6 +580,16 @@ async def dream_turn(
             "advance_blocked_current_bucket": decision.get("blocked_current_bucket"),
             "advance_blocked_target_bucket": decision.get("blocked_target_bucket"),
         }
+        if decision["disposition"] in {"advanced", "completed"}:
+            next_stall_turns = 0
+        elif decision["disposition"] == "approaching":
+            next_stall_turns = max(0, sc.stall_turns - 1)
+        else:
+            next_stall_turns = sc.stall_turns + 1
+        observation["stall_turns"] = next_stall_turns
+        observation["recovery_pending"] = bool(
+            normalized["status"] == "valid" and normalized.get("blocked_events")
+        )
         if decision.get("advance_to"):
             prior_signal = sc.last_progress_signal
             sc = sc.advance_to_stage(decision["advance_to"])

@@ -220,8 +220,16 @@
     `satisfied_streak` 仅为反序列化兼容字段，新 pipeline 不再以连续两轮作为推进闸门。
   - `scenario_arc_mode=arc` 未达到当前 stage 的粗粒度 `arc` 桶时固定记
     `arc_target_not_reached`，并记录当前/目标桶；不暴露精确张力数值，不静默卡住。
+  - `stall_turns` 只统计当前 stage 的连续停滞：`not_close`、missing/invalid、无合法完成信号或
+    arc 阻断会增加；`approaching` 每轮降低一格；合法推进/完成归零。`drift_pressure.after_turns`
+    以该字段为阈值，不再用 `stage_turns` 代替；没有剧本压力配置时，停滞达到 2 轮注入不含新事实的
+    通用轻量拉回提示。
+  - 过滤后的 `blocked_events` 会生成一次 `recovery_pending`：下一轮 DS 只注入当前 stage 的接住提示，
+    该提示承接用户意图、重申当前禁止事项并把注意力自然带回 `dramatic_task`；使用后清零。stage 切换
+    同时清空旧 stage 的 recovery 状态。
   - `/dream/state` 的 scenario projection 仅返回阶段、回合、计数、disposition 和粗粒度 reason/bucket，
-    不返回用户输入、角色回复或控制块自由文本。
+    stall/recovery 状态，不返回用户输入、角色回复或控制块自由文本。Prompt inspector 的
+    `scenario_observation` 只报告 DS recovery/drift 是否注入，不保存额外正文台账。
   - dream_turn 处理链：先 strip 控制块 → 可见回复送 dream log / 返回值 → 当前 stage 白名单归一化与
     裁决；若发生 stage transition 或 completed，**跳过** `increment_stage_turns()`（过渡轮属旧 stage，
     新 stage 从 `stage_turns=0` 开始）；否则正常 `increment_stage_turns()`。

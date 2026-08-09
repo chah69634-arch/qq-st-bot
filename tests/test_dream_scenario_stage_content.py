@@ -112,13 +112,14 @@ def test_prompt_does_not_contain_subsequent_stages():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_drift_pressure_absent_below_threshold():
-    """stage_turns < after_turns (6): drift pressure block must not appear in DS layer."""
+    """stall_turns < after_turns (6): drift pressure block must not appear in DS layer."""
     from core.dream.dream_prompt import _format_scenario_layer
 
     sc = {
         "script_id": "prison_demo",
         "current_stage_id": "arrival",
-        "stage_turns": 3,
+        "stage_turns": 30,
+        "stall_turns": 3,
         "ending_state": None,
     }
     text = _format_scenario_layer(sc)
@@ -127,13 +128,14 @@ def test_drift_pressure_absent_below_threshold():
 
 
 def test_drift_pressure_injected_at_threshold():
-    """stage_turns >= after_turns (6): drift pressure instruction appears in DS layer."""
+    """stall_turns >= after_turns (6): drift pressure instruction appears in DS layer."""
     from core.dream.dream_prompt import _format_scenario_layer
 
     sc = {
         "script_id": "prison_demo",
         "current_stage_id": "arrival",
-        "stage_turns": 7,
+        "stage_turns": 1,
+        "stall_turns": 7,
         "ending_state": None,
     }
     text = _format_scenario_layer(sc)
@@ -150,7 +152,8 @@ def test_drift_pressure_subsequent_stage_does_not_leak():
     sc_arrival = {
         "script_id": "prison_demo",
         "current_stage_id": "arrival",
-        "stage_turns": 10,
+        "stage_turns": 1,
+        "stall_turns": 10,
         "ending_state": None,
     }
     text = _format_scenario_layer(sc_arrival)
@@ -168,7 +171,8 @@ def test_v071_drift_pressure_not_shown_immediately_after_advance():
     sc = {
         "script_id": "prison_demo",
         "current_stage_id": "negotiation",
-        "stage_turns": 0,
+        "stage_turns": 99,
+        "stall_turns": 0,
         "ending_state": None,
         "satisfied_streak": 0,
     }

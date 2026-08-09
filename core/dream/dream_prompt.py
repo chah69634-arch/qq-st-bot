@@ -34,6 +34,7 @@ _dream_token_logger = logging.getLogger("dream_prompt.token")
 #                  context_snapshot.scene_tags (future field).
 # Fail-closed: tag not found → no injection; exception → no injection.
 _HIDDEN_STATE_TRIGGER_TAGS: frozenset[str] = frozenset({"body_intimate", "physical_closeness"})
+_GENERIC_SCENARIO_RECOVERY_AFTER_STALL_TURNS = 2
 
 # ── Token estimation ──────────────────────────────────────────────────────────
 
@@ -455,6 +456,7 @@ def build_dream_prompt(
     #          not_yet_allowed.
     # Never injects: subsequent stages, exit_signs, soft-gate logic.
     _ds_injected = False
+    _scenario_observation: dict[str, Any] | None = None
     if dream_mode == "scenario" and scenario_core and dream_domain != "group":
         try:
             _ds_text = _format_scenario_layer(scenario_core)
@@ -463,6 +465,13 @@ def build_dream_prompt(
                 system_layers.append(_ds)
                 _records.append(_LayerRec("DS_scenario", len(_ds), _est_tokens(_ds), content=_ds))
                 _ds_injected = True
+                _scenario_observation = {
+                    "current_stage_id": scenario_core.get("current_stage_id"),
+                    "stall_turns": int(scenario_core.get("stall_turns", 0) or 0),
+                    "recovery_injected": "【接住刚才的意图】" in _ds_text,
+                    "drift_pressure_injected": "漂移压力 / Drift Pressure" in _ds_text,
+                    "generic_recovery_injected": "轻量拉回" in _ds_text,
+                }
         except Exception as _ds_exc:
             logger.warning("[dream_prompt] DS scenario layer failed: %s", _ds_exc)
     if not _ds_injected:
@@ -557,6 +566,7 @@ def build_dream_prompt(
                 "world_id": world_id,
                 "lucid_mode": lucid_mode,
                 "dream_mode": dream_mode,
+                "scenario_observation": _scenario_observation,
                 "scene_tags": sorted(_scene_tags),
                 "total_tokens": _total_tok,
                 "layers": [
@@ -697,14 +707,48 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
         not_yet = stage.get("not_yet_allowed") or []
         if not_yet:
             parts.append("本阶段不允许：\n" + "\n".join(f"· {item}" for item in not_yet))
-        # Drift pressure: inject only for current stage when stage_turns >= after_turns
+
+        # A blocked event is a one-turn recovery cue.  It is populated only
+        # after whitelist normalization in dream_pipeline, so authored stage
+        # text and the bounded blocked item are the only inputs here.
+        blocked_events = [
+            str(item).strip()
+            for item in (scenario_core.get("last_blocked_events") or [])
+            if str(item).strip()
+        ]
+        if scenario_core.get("recovery_pending") and blocked_events:
+            task = str(stage.get("dramatic_task") or "").strip()
+            recovery_parts = [
+                "【接住刚才的意图】",
+                "先承接用户刚才想做的事，不指责、不打断沉浸感。",
+                "本轮不要执行下面尚未允许的事项：\n"
+                + "\n".join(f"· {item}" for item in blocked_events),
+                "用环境变化、角色动作、信息缺口或局部压力，把注意力自然带回当前戏剧任务。",
+            ]
+            if task:
+                recovery_parts.append(f"当前戏剧任务：\n{task}")
+            recovery_parts += [
+                "不要透露后续阶段，不要替用户决定动作或台词，也不要向用户解释这段提示。",
+            ]
+            parts.append("\n".join(recovery_parts))
+
+        # Drift pressure is based on consecutive stalled turns, not total
+        # turns.  Only the current stage's pressure can be injected.
         dp = stage.get("drift_pressure")
+        stall_turns = int(scenario_core.get("stall_turns", 0) or 0)
         if dp and isinstance(dp, dict):
             after_turns = dp.get("after_turns")
             instruction = (dp.get("instruction") or "").strip()
-            stage_turns = int(scenario_core.get("stage_turns", 0))
-            if isinstance(after_turns, int) and instruction and stage_turns >= after_turns:
+            if isinstance(after_turns, int) and instruction and stall_turns >= after_turns:
                 parts.append(f"漂移压力 / Drift Pressure\n{instruction}")
+        elif stall_turns >= _GENERIC_SCENARIO_RECOVERY_AFTER_STALL_TURNS:
+            task = str(stage.get("dramatic_task") or "").strip()
+            if task:
+                parts.append(
+                    "轻量拉回\n"
+                    "当前阶段出现停滞。保持自然叙事，把注意力带回当前戏剧任务；"
+                    f"不要创造剧本外事实，也不要透露后续阶段。\n{task}"
+                )
         target = stage.get("arc")
         if scenario_core.get("_arc_mode") == "arc" and target:
             current = scenario_core.get("_tension_bucket", "low")

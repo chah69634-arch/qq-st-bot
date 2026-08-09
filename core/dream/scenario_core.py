@@ -27,6 +27,7 @@ Decision observation fields (Brief 166):
 - last_unknown_blocked_event_count
 - advance_disposition / advance_blocked_reason
 - advance_blocked_current_bucket / advance_blocked_target_bucket
+- stall_turns / recovery_pending
 """
 from __future__ import annotations
 
@@ -53,6 +54,8 @@ class ScenarioCore:
     advance_blocked_reason: str | None = None
     advance_blocked_current_bucket: str | None = None
     advance_blocked_target_bucket: str | None = None
+    stall_turns: int = 0
+    recovery_pending: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +74,8 @@ class ScenarioCore:
             "advance_blocked_reason": self.advance_blocked_reason,
             "advance_blocked_current_bucket": self.advance_blocked_current_bucket,
             "advance_blocked_target_bucket": self.advance_blocked_target_bucket,
+            "stall_turns": self.stall_turns,
+            "recovery_pending": self.recovery_pending,
         }
 
     @classmethod
@@ -91,6 +96,8 @@ class ScenarioCore:
             advance_blocked_reason=data.get("advance_blocked_reason"),
             advance_blocked_current_bucket=data.get("advance_blocked_current_bucket"),
             advance_blocked_target_bucket=data.get("advance_blocked_target_bucket"),
+            stall_turns=int(data.get("stall_turns", 0)),
+            recovery_pending=bool(data.get("recovery_pending", False)),
         )
 
     def increment_stage_turns(self) -> "ScenarioCore":
@@ -144,6 +151,8 @@ class ScenarioCore:
             advance_blocked_reason=None,
             advance_blocked_current_bucket=None,
             advance_blocked_target_bucket=None,
+            stall_turns=0,
+            recovery_pending=False,
         )
 
     def mark_completed(self) -> "ScenarioCore":
