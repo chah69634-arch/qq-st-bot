@@ -13,6 +13,22 @@ _AFTERGLOW_WAIT_HOURS = 8.0
 _STALE_GREETING_LIMIT_HOURS = 16.0
 
 
+def _record_lifecycle(
+    uid: str,
+    dream_id: str,
+    *,
+    char_id: str,
+    lifecycle: str,
+    reason_code: str = "",
+) -> None:
+    try:
+        from core.dream.exit_observability import record
+
+        record(uid, dream_id, char_id=char_id, lifecycle=lifecycle, reason_code=reason_code)
+    except Exception as exc:
+        logger.warning("[dream_exit] lifecycle record failed uid=%s dream_id=%s: %s", uid, dream_id, exc)
+
+
 def propose(ctx: dict | None = None):
     ctx = ctx or {}
     from core.config_loader import get_config
@@ -49,6 +65,17 @@ def propose(ctx: dict | None = None):
     exit_type = str(state.get("last_exit_type") or "")
     timing = _resolve_timing(uid, char_id=char_id, state=state, mode=mode)
     if timing is None:
+        age_hours = _exit_age_hours(state)
+        if age_hours > _STALE_GREETING_LIMIT_HOURS:
+            _record_lifecycle(uid, dream_id, char_id=char_id, lifecycle="expired")
+        else:
+            _record_lifecycle(
+                uid,
+                dream_id,
+                char_id=char_id,
+                lifecycle="waiting_afterglow",
+                reason_code="afterglow_not_ready",
+            )
         logger.debug(
             "[dream_exit] propose: _resolve_timing returned None uid=%s char_id=%s mode=%s exit_age_h=%.2f",
             uid, char_id, mode, _exit_age_hours(state),
@@ -56,14 +83,22 @@ def propose(ctx: dict | None = None):
         return None
 
     tone, age_hours, is_stale = timing
+    _record_lifecycle(uid, dream_id, char_id=char_id, lifecycle="ready")
 
     from core.scheduler.gating import TriggerProposal
     from core.scheduler.state_machine import TriggerState
     from core.scheduler.urgency import UrgencyTier, urgency_in_tier
 
+    urgency_ratio = min(1.0, max(0.0, 0.62 + min(0.30, max(0.0, age_hours) / 8.0 * 0.30)) )
+    urgency_tier = UrgencyTier.REACTIVE
+    if age_hours >= 12.0:
+        urgency_tier = UrgencyTier.WINDOW_EVENT
+    if age_hours >= 15.0:
+        urgency_tier = UrgencyTier.MUST_NOT_MISS
+
     return TriggerProposal(
         trigger_name="dream_exit",
-        urgency=urgency_in_tier(UrgencyTier.REACTIVE, 0.45),
+        urgency=urgency_in_tier(urgency_tier, urgency_ratio),
         topic_source="dream_exit",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
@@ -77,6 +112,7 @@ def propose(ctx: dict | None = None):
             is_stale=is_stale,
         ),
         char_id=char_id,
+        metadata={"dream_id": dream_id},
     )
 
 
@@ -239,7 +275,7 @@ def _make_execute(
         except Exception:
             char_name = "你"
 
-        return await execute_prompt(
+        result = await execute_prompt(
             trigger_name="dream_exit",
             prompt_factory=lambda: _build_dream_exit_prompt(
                 tone,
@@ -253,6 +289,11 @@ def _make_execute(
             after_send=lambda: _mark_greeted(uid, dream_id, char_id=char_id),
             char_id=char_id,
         )
+        if getattr(result, "sent", False):
+            _record_lifecycle(uid, dream_id, char_id=char_id, lifecycle="sent")
+        elif not dry_run:
+            _record_lifecycle(uid, dream_id, char_id=char_id, lifecycle="blocked", reason_code="send_failed")
+        return result
 
     return execute
 

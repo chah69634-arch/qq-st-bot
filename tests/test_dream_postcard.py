@@ -53,12 +53,44 @@ async def test_postcard_system_prompt_omits_invariant_hint_when_none():
 
 
 @pytest.mark.asyncio
-async def test_hard_exit_does_not_generate_postcard():
+async def test_long_hard_exit_can_generate_postcard_when_complete():
     from core.dream import postcard
 
-    with patch.object(postcard, "_archive_turns") as archive:
-        await postcard.generate_postcard("u", "d", "hard_exit")
-    archive.assert_not_called()
+    with (
+        patch.object(postcard, "_load_schedule", return_value=[]),
+        patch.object(postcard, "_archive_turns", return_value=_turns()),
+        patch.object(postcard, "_save_schedule", return_value=True),
+        patch.object(postcard, "_template_text", return_value="template"),
+        patch("core.dream.invariants.select_for_postcard", return_value=None),
+        patch("core.llm_client.chat", new=AsyncMock(return_value="letter")) as chat,
+    ):
+        await postcard.generate_postcard(
+            "u",
+            "d",
+            "hard_exit",
+            completion="complete",
+            exit_metadata={"dream_mode": "sandbox"},
+        )
+    chat.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_short_hard_exit_is_rejected_as_interrupted():
+    from core.dream import postcard
+
+    with (
+        patch.object(postcard, "_load_schedule", return_value=[]),
+        patch.object(postcard, "_archive_turns", return_value=_turns(4)),
+        patch("core.llm_client.chat", new=AsyncMock()) as chat,
+    ):
+        await postcard.generate_postcard(
+            "u",
+            "d",
+            "hard_exit",
+            completion="interrupted",
+            exit_metadata={"dream_mode": "sandbox"},
+        )
+    chat.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -679,6 +679,7 @@ async def _do_close_dream(
         "exit_reason": exit_reason,
         "assistant_turns": assistant_turns,
         "archive_ok": bool(archive_ok),
+        "dream_mode": dream_mode,
     }
 
     asyncio.create_task(
@@ -714,6 +715,20 @@ async def _do_close_dream(
     state["last_exited_at"] = time.time()
     state["forced_impression_rounds_left"] = configured_forced_impression_rounds()
     write_state(uid, state)
+
+    if dream_id:
+        try:
+            from core.dream.exit_observability import record as _record_exit_lifecycle
+
+            _record_exit_lifecycle(
+                uid,
+                dream_id,
+                char_id=char_id,
+                lifecycle="waiting_afterglow",
+                reason_code="afterglow_not_ready",
+            )
+        except Exception as exc:
+            logger.warning("[dream_pipeline] exit lifecycle seed failed uid=%s dream_id=%s: %s", uid, dream_id, exc)
 
     delete_hud_state(uid)
     logger.info(f"[dream_pipeline] closed dream uid={uid} exit_type={exit_type} char_id={char_id}")

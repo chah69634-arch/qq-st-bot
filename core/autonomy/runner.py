@@ -437,10 +437,16 @@ async def run_job(job: Job) -> Run:
     )
     blocked = policy.admission(job.uid, job.char_id, state)
     if blocked:
+        _record_dream_exit_lifecycle(
+            job,
+            lifecycle="blocked",
+            reason_code="not_quiet" if blocked == Disposition.BLOCKED_USER_ACTIVE.value else "send_failed",
+        )
         run.disposition = blocked; return _finish(run)
     from core.conversation_gate import conversation_lock
     lock = conversation_lock(job.uid)
     if lock.locked():
+        _record_dream_exit_lifecycle(job, lifecycle="blocked", reason_code="not_quiet")
         run.disposition = Disposition.BLOCKED_USER_ACTIVE.value; return _finish(run)
     lease_lost = asyncio.Event()
 
@@ -455,6 +461,7 @@ async def run_job(job: Job) -> Run:
     try:
         async with lock:
             result = await _run_locked(job, state, run)
+        _record_dream_exit_outcome(job, result)
         if lease_lost.is_set():
             result.disposition = Disposition.LEASE_LOST.value
         return result
@@ -759,6 +766,52 @@ def _opportunity_context(job: Job) -> str:
 
 def _record_event(run: Run, status: str, **details) -> None:
     run.events.append({"status": status, **{key: value for key, value in details.items() if value not in (None, "")}})
+
+
+def _dream_exit_id(job: Job) -> str:
+    for signal in (job.opportunity or {}).get("signals") or []:
+        if not isinstance(signal, dict):
+            continue
+        for evidence in signal.get("evidence") or []:
+            if isinstance(evidence, dict) and evidence.get("fact") == "dream_exit_ready":
+                dream_id = str(evidence.get("dream_id") or "").strip()
+                if dream_id:
+                    return dream_id
+    return ""
+
+
+def _record_dream_exit_lifecycle(
+    job: Job,
+    *,
+    lifecycle: str,
+    reason_code: str = "",
+) -> None:
+    dream_id = _dream_exit_id(job)
+    if not dream_id:
+        return
+    try:
+        from core.dream.exit_observability import record
+
+        record(
+            job.uid,
+            dream_id,
+            char_id=job.char_id,
+            lifecycle=lifecycle,
+            reason_code=reason_code,
+        )
+    except Exception as exc:
+        logger.warning("[autonomy] dream_exit lifecycle record failed: %s", exc)
+
+
+def _record_dream_exit_outcome(job: Job, run: Run) -> None:
+    if run.talk_sent:
+        _record_dream_exit_lifecycle(job, lifecycle="sent")
+        return
+    reason = "not_quiet" if run.disposition in {
+        Disposition.CANCELED_BY_USER_ACTIVITY.value,
+        Disposition.BLOCKED_USER_ACTIVE.value,
+    } else "send_failed"
+    _record_dream_exit_lifecycle(job, lifecycle="blocked", reason_code=reason)
 
 
 def _memory_candidate_keys(job: Job) -> list[str]:

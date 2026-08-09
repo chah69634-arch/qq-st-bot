@@ -22,6 +22,7 @@ Invariants:
 """
 
 import logging
+import json
 import re
 from pathlib import Path
 
@@ -442,6 +443,87 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
 
     base.update(hud)
     return base
+
+
+@router.get("/dream/operations", summary="读取梦境退出与明信片运维状态（只读）")
+async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
+    """Return bounded lifecycle metadata for the management surface.
+
+    This endpoint deliberately omits archive turns, postcard letter text,
+    prompts, and filesystem paths.  Replay is a separate explicitly scoped
+    archive endpoint added for the desktop reader.
+    """
+    uid = _owner_uid()
+    from core.pipeline_registry import get as _get_pipeline
+    from core.dream.dream_state import read_state
+    from core.dream.exit_observability import list_records
+    from core.sandbox import get_paths as _get_paths
+
+    pl = _get_pipeline()
+    char_id = (getattr(pl, "_active_character_id", None) if pl else None) or DEFAULT_CHAR_ID
+    state = read_state(uid)
+    lifecycle = list_records(char_id=char_id, limit=50)
+
+    schedule: list[dict] = []
+    schedule_path = _get_paths().dreams_postcards_dir(char_id=char_id) / "schedule.json"
+    try:
+        raw = json.loads(schedule_path.read_text(encoding="utf-8")) if schedule_path.exists() else []
+        if isinstance(raw, list):
+            for item in raw[-50:]:
+                if not isinstance(item, dict):
+                    continue
+                schedule.append({
+                    key: item.get(key)
+                    for key in (
+                        "dream_id", "scheduled_date", "sent", "attempts", "last_error",
+                        "generation_status", "delivery_status", "eligibility_reason",
+                        "completion", "exit_mechanism", "exit_initiator",
+                    )
+                })
+    except Exception:
+        schedule = []
+
+    afterglow: dict = {"present": False, "created_at": None}
+    try:
+        from core.memory.user_hidden_state_store import _load_afterglow_raw
+        residue = _load_afterglow_raw(uid, char_id=char_id) or {}
+        afterglow = {
+            "present": bool(residue),
+            "created_at": residue.get("created_at"),
+        }
+    except Exception:
+        pass
+
+    summary: dict = {"present": False, "created_at": None, "dream_id": None}
+    last_dream_id = str(state.get("last_dream_id") or "")
+    if last_dream_id:
+        summary_path = _get_paths().dreams_summaries_dir(char_id=char_id) / f"dream_{last_dream_id}.summary.json"
+        try:
+            data = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {}
+            summary = {
+                "present": bool(data),
+                "created_at": data.get("created_at"),
+                "dream_id": last_dream_id,
+            }
+        except Exception:
+            pass
+
+    return {
+        "char_id": char_id,
+        "current": {
+            key: state.get(key)
+            for key in (
+                "status", "dream_id", "last_dream_id", "last_greeted_dream_id",
+                "last_exit_type", "last_exit_mechanism", "last_exit_initiator",
+                "last_completion", "last_exit_reason", "last_exit_assistant_turns",
+                "last_archive_ok", "last_exited_at",
+            )
+        },
+        "exit_lifecycle": lifecycle,
+        "postcards": schedule,
+        "afterglow": afterglow,
+        "summary": summary,
+    }
 
 
 @router.get("/dream/presets", summary="列出可用破限预设名（只读，供群聊梦境 per-char 选择器，Brief 100 §3）")

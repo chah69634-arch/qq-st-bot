@@ -570,6 +570,10 @@ class DataPaths:
     def dreams_postcards_dir(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "dreams", char_id, "postcards")
 
+    def dreams_exit_lifecycle_path(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Sanitized per-character lifecycle ledger for solo Dream after-exit talk."""
+        return self._p("runtime", "dreams", char_id, "exit_lifecycle.json")
+
     def dreams_invariants_dir(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "dreams", char_id, "invariants")
 

@@ -189,10 +189,10 @@ POLICY_TABLE: dict[str, TriggerPolicy] = {
     ),
     "dream_exit": TriggerPolicy(
         trigger_id="dream_exit",
-        priority="normal",
+        priority="high",
         active_window_behavior="defer",
         max_defer_age_secs=4 * 3600,
-        on_defer_expire="force_send",
+        on_defer_expire="drop",
     ),
 
     # ── filler，活跃窗口内直接 drop ────────────────────────────────────────

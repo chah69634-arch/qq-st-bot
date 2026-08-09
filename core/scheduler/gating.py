@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 import inspect
+import logging
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -15,6 +16,8 @@ from core.safe_write import rotate_jsonl_if_needed, safe_append_jsonl
 from core.sandbox import get_paths
 from core.scheduler.execution import ExecuteFn, is_live_mode
 from core.scheduler.state_machine import TriggerState, get_state as get_current_state
+
+logger = logging.getLogger(__name__)
 
 
 MIGRATED_TRIGGERS: frozenset[str] = frozenset({
@@ -117,6 +120,7 @@ class TriggerProposal:
     execute: Optional[ExecuteFn] = None
     char_id: str | None = None
     weekly_delivery_due: bool = False
+    metadata: dict | None = None
 
 
 def _shadow_cfg() -> dict:
@@ -152,6 +156,24 @@ def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     ctx = _build_context(uid)
     proposals = _collect_native_proposals(ctx)
     picked, reason, candidates = _decide(uid, proposals)
+    if picked is not None and picked.trigger_name == "dream_exit":
+        metadata = picked.metadata or {}
+        dream_id = str(metadata.get("dream_id") or "")
+        char_id = str(picked.char_id or ctx.get("char_id") or "")
+        if dream_id and char_id:
+            try:
+                from core.autonomy.signal_adapters import emit_trigger_signal
+
+                emit_trigger_signal(
+                    uid,
+                    char_id,
+                    "dream_exit",
+                    evidence=[{"fact": "dream_exit_ready", "dream_id": dream_id}],
+                    priority=min(1.0, max(0.1, float(picked.urgency))),
+                    urgency=min(1.0, max(0.1, float(picked.urgency))),
+                )
+            except Exception as exc:
+                logger.warning("[gating] dream_exit signal enqueue failed: %s", exc)
     state = get_current_state(uid)
     log_path = get_paths().gating_shadow_log()
     safe_append_jsonl(
@@ -204,7 +226,13 @@ async def decide_and_execute_event(
                 uid,
                 char_id,
                 picked.trigger_name,
-                evidence=[{"fact": "event_proposal_candidate", "trigger": picked.trigger_name}],
+                evidence=[
+                    {
+                        "fact": "event_proposal_candidate",
+                        "trigger": picked.trigger_name,
+                        **({"dream_id": picked.metadata.get("dream_id")} if picked.trigger_name == "dream_exit" and picked.metadata and picked.metadata.get("dream_id") else {}),
+                    }
+                ],
                 priority=min(1.0, max(0.1, float(picked.urgency))),
                 urgency=min(1.0, max(0.1, float(picked.urgency))),
             )
@@ -284,6 +312,7 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
         or _state_value(state) in {_state_value(s) for s in p.requires_state}
     ]
     if not state_allowed:
+        _record_dream_exit_gate(uid, proposals, lifecycle="blocked", reason_code="not_quiet")
         return None, "state_filtered", candidates
 
     # ── Active-window filter (R2-B / R2-D) ───────────────────────────────────
@@ -309,7 +338,14 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
             for p in state_allowed:
                 if _policy_active_window_behavior(p.trigger_name) == "defer":
                     enqueue_defer(uid, p.trigger_name)
+            _record_dream_exit_gate(uid, state_allowed, lifecycle="blocked", reason_code="not_quiet")
             return None, "active_window_filtered", candidates
+        _record_dream_exit_gate(
+            uid,
+            [p for p in state_allowed if p not in aw_allowed],
+            lifecycle="blocked",
+            reason_code="not_quiet",
+        )
         state_allowed = aw_allowed
 
     # ── DND filter (R2-B) ────────────────────────────────────────────────────
@@ -317,7 +353,14 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     if dnd_active:
         dnd_allowed = [p for p in state_allowed if _policy_is_emergency(p.trigger_name)]
         if not dnd_allowed:
+            _record_dream_exit_gate(uid, state_allowed, lifecycle="blocked", reason_code="dnd")
             return None, "dnd_filtered", candidates
+        _record_dream_exit_gate(
+            uid,
+            [p for p in state_allowed if p not in dnd_allowed],
+            lifecycle="blocked",
+            reason_code="dnd",
+        )
         state_allowed = dnd_allowed
 
     cooldown_allowed = [p for p in state_allowed if _proposal_cooldown_ready(p)]
@@ -331,29 +374,79 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     # authority; the ledger is only queried here, never picks a winner itself.
     from core.scheduler.proactive_ledger import can_send as _ledger_can_send
     ledger_allowed = []
-    ledger_reasons: set[str] = set()
+    ledger_reasons: dict[str, str] = {}
     for p in cooldown_allowed:
         priority = "emergency" if (p.time_sensitive_external_turn or p.weekly_delivery_due or _policy_ledger_exempt(p.trigger_name)) else "normal"
         allowed, reason = _ledger_can_send(p.trigger_name, priority=priority, uid=uid)
         if allowed:
             ledger_allowed.append(p)
         else:
-            ledger_reasons.add(reason)
+            ledger_reasons[p.trigger_name] = reason
     if not ledger_allowed:
-        if ledger_reasons == {"unanswered_cap"}:
+        dream_exit = [p for p in cooldown_allowed if p.trigger_name == "dream_exit"]
+        dream_reason = ledger_reasons.get("dream_exit")
+        if dream_exit:
+            _record_dream_exit_gate(
+                uid,
+                dream_exit,
+                lifecycle="blocked",
+                reason_code=("budget" if dream_reason in {"daily_budget_exceeded", "unanswered_cap"} else "global_gap"),
+            )
+        if set(ledger_reasons.values()) == {"unanswered_cap"}:
             return None, "suppressed_unanswered_cap", candidates
         # Preserve the pre-existing "global_gap_filtered" reason string for the
         # gap case (observability/verification tooling greps for it); budget
         # exhaustion gets its own distinguishable reason.
-        if ledger_reasons == {"daily_budget_exceeded"}:
+        if set(ledger_reasons.values()) == {"daily_budget_exceeded"}:
             return None, "daily_budget_filtered", candidates
         return None, "global_gap_filtered", candidates
     cooldown_allowed = ledger_allowed
 
     picked = max(cooldown_allowed, key=lambda p: p.urgency)
+    dream_exit = next((p for p in cooldown_allowed if p.trigger_name == "dream_exit"), None)
+    if dream_exit is not None and picked is not dream_exit:
+        _record_dream_exit_gate(
+            uid,
+            [dream_exit],
+            lifecycle="blocked",
+            reason_code="higher_priority_winner",
+        )
     # Release from defer queue: trigger was sent (or will be sent this tick).
     release_defer(uid, picked.trigger_name)
     return picked, "picked_highest_urgency", candidates
+
+
+def _record_dream_exit_gate(
+    uid: str,
+    proposals: list[TriggerProposal],
+    *,
+    lifecycle: str,
+    reason_code: str = "",
+) -> None:
+    """Persist only the bounded admission outcome for a Dream-exit proposal."""
+    dream_proposals = [item for item in proposals if item.trigger_name == "dream_exit"]
+    if not dream_proposals:
+        return
+    try:
+        from core.dream.exit_observability import record
+    except Exception:
+        return
+    for proposal in dream_proposals:
+        metadata = proposal.metadata or {}
+        dream_id = str(metadata.get("dream_id") or "").strip()
+        char_id = str(proposal.char_id or "").strip()
+        if not dream_id or not char_id:
+            continue
+        try:
+            record(
+                uid,
+                dream_id,
+                char_id=char_id,
+                lifecycle=lifecycle,
+                reason_code=reason_code,
+            )
+        except Exception as exc:
+            logger.warning("[gating] dream_exit lifecycle record failed: %s", exc)
 
 
 def _policy_active_window_behavior(trigger_name: str) -> str:

@@ -85,6 +85,12 @@ def test_quiet_only_is_filtered_while_chatting(sandbox, monkeypatch):
     monkeypatch.setattr(gating, "is_trigger_ready", lambda name, **kwargs: True)
 
     assert gating.collect_and_decide("owner", [proposal]) is None
+    from core.dream.exit_observability import get_record
+
+    record = get_record("dream-1", char_id="dreamer")
+    assert record is not None
+    assert record["lifecycle"] == "blocked"
+    assert record["reason_code"] == "not_quiet"
 
 
 def test_no_afterglow_waits_but_scenario_and_expired_degrade_to_neutral(sandbox):

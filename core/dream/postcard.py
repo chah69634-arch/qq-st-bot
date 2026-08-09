@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,42 @@ from core.safe_write import safe_write_json
 logger = logging.getLogger(__name__)
 MIN_ASSISTANT_TURNS = 5
 _TEMPLATES = ("postcard", "sms", "diary_fragment", "note", "untitled")
+
+
+@dataclass(frozen=True)
+class PostcardEligibility:
+    eligible: bool
+    reason_code: str
+    assistant_turns: int
+    legacy_inferred: bool = False
+
+
+def evaluate_postcard_eligibility(
+    *,
+    dream_id: str,
+    dream_mode: str,
+    completion: str | None,
+    turns: list[dict[str, Any]],
+    existing_entries: list[dict[str, Any]],
+    archive_readable: bool = True,
+    legacy_inferred: bool = False,
+) -> PostcardEligibility:
+    """Pure postcard qualification decision; never reads or writes state."""
+    assistants = sum(1 for turn in turns if turn.get("role") == "assistant" and str(turn.get("content") or "").strip())
+    if dream_mode != "sandbox":
+        return PostcardEligibility(False, "not_solo_sandbox", assistants, legacy_inferred)
+    if any(str(item.get("dream_id")) == str(dream_id) and item.get("generation_status") != "generation_failed" for item in existing_entries):
+        return PostcardEligibility(False, "duplicate", assistants, legacy_inferred)
+    if not archive_readable:
+        return PostcardEligibility(False, "archive_unreadable", assistants, legacy_inferred)
+    if assistants < MIN_ASSISTANT_TURNS:
+        return PostcardEligibility(False, "short_dream", assistants, legacy_inferred)
+    if completion == "interrupted":
+        return PostcardEligibility(False, "interrupted", assistants, legacy_inferred)
+    if completion != "complete":
+        return PostcardEligibility(False, "unknown_completion", assistants, legacy_inferred)
+    return PostcardEligibility(True, "eligible", assistants, legacy_inferred)
+
 
 def _schedule_path(char_id: str) -> Path:
     from core.sandbox import get_paths
@@ -43,7 +80,9 @@ def _archive_turns(dream_id: str, char_id: str) -> list[dict[str, Any]]:
     try:
         for line in path.read_text(encoding="utf-8").splitlines():
             if line.strip():
-                turns.append(json.loads(line))
+                value = json.loads(line)
+                if isinstance(value, dict):
+                    turns.append(value)
     except Exception as exc:
         logger.warning("[postcard] archive read failed: %s", exc)
     return turns
@@ -59,17 +98,42 @@ def _due_date(entries: list[dict[str, Any]], today: date) -> date:
         candidate += timedelta(days=1)
     return candidate
 
-async def generate_postcard(uid: str, dream_id: str, exit_type: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
+async def generate_postcard(
+    uid: str,
+    dream_id: str,
+    exit_type: str,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    completion: str | None = None,
+    exit_metadata: dict[str, Any] | None = None,
+) -> None:
     """Freeze a qualifying sandbox dream as a scheduled postcard; fail open."""
-    if exit_type == "hard_exit":
-        return
     entries = _load_schedule(char_id)
-    if any(str(item.get("dream_id")) == dream_id for item in entries):
+    if any(str(item.get("dream_id")) == dream_id and item.get("generation_status") != "generation_failed" for item in entries):
         return
     turns = _archive_turns(dream_id, char_id)
-    assistants = [turn for turn in turns if turn.get("role") == "assistant"]
-    if len(assistants) < MIN_ASSISTANT_TURNS:
+    inferred = completion is None
+    if completion is None:
+        # Historical summaries have no completion field.  Infer conservatively
+        # from explicit legacy exit metadata plus the valid-turn threshold.
+        completion = "complete" if exit_type != "hard_exit" and turns else (
+            "complete" if sum(1 for turn in turns if turn.get("role") == "assistant") >= MIN_ASSISTANT_TURNS else "interrupted"
+        )
+    eligibility = evaluate_postcard_eligibility(
+        dream_id=dream_id,
+        dream_mode=str((exit_metadata or {}).get("dream_mode") or "sandbox"),
+        completion=completion,
+        turns=turns,
+        existing_entries=entries,
+        archive_readable=bool(turns),
+        legacy_inferred=inferred,
+    )
+    if not eligibility.eligible:
         return
+    failed_entry = next(
+        (item for item in entries if str(item.get("dream_id")) == dream_id and item.get("generation_status") == "generation_failed"),
+        None,
+    )
     template_id = random.choice(_TEMPLATES)
     try:
         from core import llm_client
@@ -86,15 +150,35 @@ async def generate_postcard(uid: str, dream_id: str, exit_type: str, *, char_id:
         ], max_tokens_override=450)
         letter = str(letter).strip()
         if not letter:
-            return
+            raise ValueError("empty_letter")
         entry = {"dream_id": dream_id, "uid": str(uid), "dream_time_iso": dream_time,
                  "template_id": template_id, "letter_text": letter,
                  "scheduled_date": _due_date(entries, date.today()).isoformat(), "sent": False,
-                 "attempts": 0, "last_error": ""}
-        entries.append(entry)
+                 "attempts": 0, "last_error": "", "generation_status": "generated",
+                 "delivery_status": "scheduled", "eligibility_reason": eligibility.reason_code,
+                 "legacy_inferred": eligibility.legacy_inferred,
+                 "completion": completion,
+                 "exit_mechanism": (exit_metadata or {}).get("exit_mechanism", ""),
+                 "exit_initiator": (exit_metadata or {}).get("exit_initiator", "")}
+        if failed_entry is None:
+            entries.append(entry)
+        else:
+            failed_entry.clear()
+            failed_entry.update(entry)
         _save_schedule(char_id, entries)
     except Exception as exc:
         logger.warning("[postcard] generation failed uid=%s dream=%s: %s", uid, dream_id, exc)
+        failed = next((item for item in entries if str(item.get("dream_id")) == dream_id), None)
+        if failed is None:
+            failed = {"dream_id": dream_id, "uid": str(uid), "sent": False, "attempts": 0}
+            entries.append(failed)
+        failed.update({
+            "generation_status": "generation_failed",
+            "delivery_status": "not_scheduled",
+            "eligibility_reason": "generation_failed",
+            "last_error": "generation_failed",
+        })
+        _save_schedule(char_id, entries)
 
 def _template_text(template_id: str) -> str:
     from core.sandbox import get_paths
@@ -110,14 +194,14 @@ async def deliver_due_postcards(*, char_id: str = DEFAULT_CHAR_ID, today: date |
     changed = sent_count = 0
     from core.mail.mail_sender import send_letter
     for entry in entries:
-        if entry.get("sent") or str(entry.get("scheduled_date", "")) > today_text:
+        if entry.get("sent") or entry.get("generation_status") == "generation_failed" or str(entry.get("scheduled_date", "")) > today_text:
             continue
         ok = await send_letter("一封从梦里寄出的明信片", str(entry.get("letter_text") or ""))
         entry["attempts"] = int(entry.get("attempts") or 0) + 1
         if ok:
-            entry["sent"] = True; entry["last_error"] = ""; sent_count += 1
+            entry["sent"] = True; entry["last_error"] = ""; entry["delivery_status"] = "sent"; sent_count += 1
         else:
-            entry["last_error"] = "SMTP send failed"
+            entry["last_error"] = "smtp_failed"; entry["delivery_status"] = "smtp_failed"
         changed = True
     if changed:
         _save_schedule(char_id, entries)
