@@ -277,7 +277,8 @@
 | `D5_body_projection` | 她的身体感知投影 **Scenario Mode 下永远禁用** | 轴3，boundary_level + yexuan_tension；`dream_mode != "scenario"` |
 | `D6_scene_anchors` | 场景状态 + 临时符号锚点 | dream-local |
 | `D7_dream_tension` | 梦内情绪张力（粗粒度分桶，dream-local；prompt 不暴露精确数值） | — |
-| `D8_dream_director` | 共享渲染格式 + 逃生协议；不规定角色温柔/强硬，不从剧情内情绪猜测退出 | always |
+| `D8_dream_director` | 共享渲染/导演提示；不规定角色温柔/强硬，可消融对照 | always |
+| `DX_exit_protocol` | `/stop` 硬退出 + 软退出机器协议，不可消融 | always |
 | `DS_scenario` | 剧本当前阶段（仅 scenario 模式；script title / stage name / dramatic_task / entry_pressure / not_yet_allowed / drift_pressure + 本轮行动契约） | dream_mode=scenario |
 | `DM_mirror` | Mirror 梦境倾向材料（仅 mirror 模式；粗粒度桶标签 + 轻量 symbolic_hints；只读，不诊断，不暴露数值） | dream_mode=mirror |
 | `D9_dream_history` | 梦内滚动短上下文（不过现实 sanitizer） | — |
@@ -301,6 +302,13 @@
 - scenario 中 DS 当前 stage 决定角色的公开立场与行动目标；内在关心可以影响表达，但不能自动
   兑换成解除限制、放弃立场或跳过剧情后果。除自然的观察/停顿节点外，每轮应产生一个改变现场
   状态、信息、距离、资源或选择空间的具体行动，纯口头恐吓不算推进。
+
+### Dream Prompt 消融开关
+
+管理面“梦境 Prompt”页提供 Dream 专用逐层消融。开关只过滤最终注入，不短路世界包、lore、
+快照或剧本状态读取；结果从下一轮梦境对话起生效，并在 Prompt 快照中记录
+`ablated_layers`。D8 可关闭做导演提示对照；退出合同已拆为不可消融的 `DX_exit_protocol`，
+D10 当前用户消息同样不可消融。状态与 Reality Prompt 消融完全分离，详见 `docs/prompt-layers.md`。
 
 **D4.5 用户隐性状态快照（Phase 4，只读接入）**：
 

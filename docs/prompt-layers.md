@@ -882,6 +882,21 @@ tool loop 内通过"messages 中已存在该 `_layer` 则跳过"的判断确保�
 置不可点，`9_history` 行内红字警示；「保存」调 `PUT /prompt-ablation`，成功 toast「已生效，下一轮
 对话起作用」。快照总览区 `ablated_layers` 非空时显示紫色徽标「已消融层：…」，与红色「被裁层」并列。
 
+### Dream Prompt 独立消融
+
+Dream 使用独立的 `core/dream/dream_prompt_ablation.py`，不复用 Reality 层名或开关文件：
+
+- 状态：`data/runtime/dream_prompt_layer_ablation.json`，缺失/损坏时 fail-open（全部启用）。
+- API：`GET/PUT /dream-prompt-ablation`（`admin` scope），下一轮 Dream turn 热生效。
+- 管理面：`梦境 Prompt` 检视页顶部逐层勾选；快照以 `ablated_layers` 和层级 `ABLATED` flag
+  展示实际过滤结果。
+- 语义：所有 world/lore/snapshot/state 读取与剧本状态计算仍执行，只在 `build_dream_prompt()`
+  完成组装后过滤最终发给模型的 system/history 内容。
+- 可消融：D0、D1、DG、D2-D8、DS、DM、Dream lorebook、D9 history。
+- 不可消融：`DX_exit_protocol`（独立承载 `/stop` 与软退出机器协议）、`D10_user_message`。
+
+Reality `/prompt-ablation` 与 Dream `/dream-prompt-ablation` 完全分离，修改一侧不会影响另一侧。
+
 ---
 
 ## 待评估：Prompt 层配置化 + 面板调参（Phase 2）

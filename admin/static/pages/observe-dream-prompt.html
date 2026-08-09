@@ -1,5 +1,16 @@
 
       <h1 class="page-title">梦境 Prompt 检视 <span class="admin-inline-105">只读 · 最近 5 轮 · 独立于现实 pipeline</span></h1>
+      <div class="card admin-inline-128" id="obs-dream-ablation-card">
+        <div class="card-header">
+          <h3 data-i18n="observe.dream_prompt.ablation">Dream 层级开关（消融测试）</h3>
+          <span class="admin-inline-082" data-i18n="observe.dream_prompt.ablation_hint">只过滤最终注入，不跳过读取或状态计算；下一轮梦境对话生效</span>
+        </div>
+        <div class="admin-card-actions admin-inline-051">
+          <button class="btn btn-ghost btn-sm" data-action="loadDreamPromptAblation" data-i18n="common.refresh">刷新</button>
+          <button class="btn btn-primary btn-sm" data-action="saveDreamPromptAblation" data-i18n="common.save">保存</button>
+        </div>
+        <div id="obs-dream-ablation-list" class="admin-inline-080" data-i18n="common.loading">加载中…</div>
+      </div>
       <div class="admin-inline-048">
         <input type="text" id="obs-dream-prompt-uid" placeholder="uid" class="admin-inline-200">
         <select id="obs-dream-prompt-n" class="admin-inline-180">

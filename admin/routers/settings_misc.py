@@ -555,6 +555,41 @@ async def update_prompt_ablation(body: PromptAblationUpdate, auth=Depends(requir
     }
 
 
+# ─── Dream Prompt 层级消融开关（与 Reality 完全分离）──────────────────────────
+
+class DreamPromptAblationUpdate(BaseModel):
+    disabled_layers: list[str]
+
+
+@router.get("/dream-prompt-ablation", summary="获取 Dream Prompt 层级消融状态")
+async def get_dream_prompt_ablation(auth=Depends(require_scopes("admin"))):
+    from core.dream.dream_prompt_ablation import ALWAYS_ON, KNOWN_LAYERS, get_state
+
+    state = get_state()
+    return {
+        "known_layers": [{"layer": name, "desc": desc} for name, desc in KNOWN_LAYERS],
+        "always_on": sorted(ALWAYS_ON),
+        "disabled_layers": sorted(state["disabled_layers"]),
+    }
+
+
+@router.put("/dream-prompt-ablation", summary="修改 Dream Prompt 层级消融状态")
+async def update_dream_prompt_ablation(
+    body: DreamPromptAblationUpdate,
+    auth=Depends(require_scopes("admin")),
+):
+    from core.dream.dream_prompt_ablation import set_state
+
+    try:
+        state = set_state(body.disabled_layers)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {
+        "message": "Dream 层级消融开关已更新，下一轮梦境对话起作用",
+        "disabled_layers": sorted(state["disabled_layers"]),
+    }
+
+
 # ---------------------------------------------------------------------------
 # /settings/mail — 配置中心「可选」层：邮件通道完整配置（用户反馈补遗）
 # enabled 总开关已经过 /settings/feature-flags 暴露；这里补齐 smtp 明细字段，

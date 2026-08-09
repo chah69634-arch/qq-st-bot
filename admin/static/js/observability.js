@@ -1354,6 +1354,7 @@ async function loadObserveProbe(el = document.getElementById('obs-probe-content'
 
 async function loadObserveDreamPromptUidList() {
   const listEl = document.getElementById('obs-dream-prompt-uid-list');
+  loadDreamPromptAblation();
   try {
     const d = await api('GET', '/observe/dream-prompt');
     const uids = d.uids || [];
@@ -1387,6 +1388,7 @@ async function loadObserveDreamPrompt() {
 
     // ── 总览 ──
     const sceneTags = (s.scene_tags || []).map(t => `<code style="font-size:11px;background:#1d3a6e;color:#93c5fd;padding:1px 4px;border-radius:3px;margin-right:3px">${escapeHtml(t)}</code>`).join('') || '(无)';
+    const ablated = (s.ablated_layers || []).map(layer => `<code style="font-size:11px">${escapeHtml(layer)}</code>`).join(' ');
     let html = `
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${ts} · 第 ${d.n+1}/${d.total_snapshots} 轮 · dream_id: ${escapeHtml(s.dream_id||'?')}</div>
       <div class="card" style="margin-bottom:12px">
@@ -1398,6 +1400,7 @@ async function loadObserveDreamPrompt() {
           <span><span style="color:var(--muted)">token 合计：</span><strong>${(s.total_tokens||0).toLocaleString()}</strong></span>
         </div>
         <div style="padding:4px 14px 10px;font-size:13px"><span style="color:var(--muted)">scene_tags：</span>${sceneTags}</div>
+        ${ablated ? `<div style="padding:0 14px 10px;color:#a78bfa;font-size:12px">已消融层：${ablated}</div>` : ''}
       </div>`;
 
     // ── 层列表 ──
@@ -1444,6 +1447,48 @@ async function loadObserveDreamPrompt() {
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+let _dreamPromptAblationKnownLayers = [];
+
+async function loadDreamPromptAblation() {
+  const el = document.getElementById('obs-dream-ablation-list');
+  if (!el) return;
+  el.textContent = t('common.loading', '加载中…');
+  try {
+    const d = await api('GET', '/dream-prompt-ablation');
+    _dreamPromptAblationKnownLayers = d.known_layers || [];
+    const alwaysOn = new Set(d.always_on || []);
+    const disabled = new Set(d.disabled_layers || []);
+    el.innerHTML = _dreamPromptAblationKnownLayers.map(({layer, desc}) => {
+      const protectedLayer = alwaysOn.has(layer);
+      const historyWarning = layer === 'D9_dream_history'
+        ? `<span style="color:#ef4444;font-size:11px;margin-left:6px">${escapeHtml(t('observe.dream_prompt.history_warning', '关闭梦境历史将显著改变连续性'))}</span>`
+        : '';
+      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;${protectedLayer?'opacity:0.5':''}">
+        <input type="checkbox" class="obs-dream-ablation-toggle" data-layer="${escapeHtml(layer)}"
+          ${disabled.has(layer) && !protectedLayer ? 'checked' : ''} ${protectedLayer ? 'disabled' : ''}>
+        <code style="font-size:11px;background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(layer)}</code>
+        <span style="font-size:12px;color:var(--muted)">${escapeHtml(desc || '')}</span>
+        ${protectedLayer ? `<span style="font-size:11px;color:var(--muted)">${escapeHtml(t('dynamic.observe.not_ablatable', '（不可消融）'))}</span>` : ''}
+        ${historyWarning}
+      </label>`;
+    }).join('');
+  } catch (e) {
+    el.textContent = t('common.load_failed', '加载失败：{error}').replace('{error}', e.message);
+  }
+}
+
+async function saveDreamPromptAblation() {
+  const disabled_layers = Array.from(document.querySelectorAll('.obs-dream-ablation-toggle:checked'))
+    .map(item => item.dataset.layer);
+  try {
+    await api('PUT', '/dream-prompt-ablation', {disabled_layers});
+    toast(t('observe.dream_prompt.ablation_saved', '已生效，下一轮梦境对话起作用'), 'ok');
+    loadDreamPromptAblation();
+  } catch (e) {
+    toast(t('common.save_failed', '保存失败：{error}').replace('{error}', e.message), 'err');
   }
 }
 

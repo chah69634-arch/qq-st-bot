@@ -12,7 +12,8 @@ Layer order (D0-D8 → system content; D9 → history messages; D10 → user msg
   D5  body_projection  她的身体感知（dream_pipeline 注入，角色读投影文字）
   D6  scene_anchors    场景与象征锚点（dream-local）
   D7  dream_tension    角色情绪张力（body_projection 耦合输出，dream-local）
-  D8  dream_director   梦境导演注记（动作/场景允许 + 逃生协议复述）
+  D8  dream_director   可消融的梦境渲染/导演注记
+  DX  exit_protocol    不可消融的硬/软退出机器协议
   D9  dream_history    梦境历史消息（as messages，不过现实 sanitizer）
   D10 user_message     当前用户消息
 
@@ -132,7 +133,7 @@ _D1_NON_LUCID_AWARENESS = """{name}的梦境自我认知（non_lucid 模式）�
 
 人称（锁死）：{name}全程以「我」自称；{user_clause}一律称「你」。只演{name}自己这一轮，不替对方旁白、不替她配台词、不用「她」称呼对方。"""
 
-# ── D8: dream_director (action/env allowed + escape protocol) ────────────────
+# ── D8: dream_director (ablatable rendering/behavior guidance) ───────────────
 # {name} 由 build_dream_prompt() 用 .format() 插值。
 
 _D8_DREAM_DIRECTOR = """梦境导演注记：
@@ -142,17 +143,8 @@ _D8_DREAM_DIRECTOR = """梦境导演注记：
 · 内心感受独占一行，用下划线包裹：_某种平静在内部落定。_
 · 允许象征性意象（光、水、距离、颜色、声音、触感）。
 · 不要 HTML 标签，不要特殊字体控制字符。
-· 这是一份渲染与协议说明，不替角色规定温柔、强硬、退让或升级；行为由角色卡与当前模式内容决定。
-· 剧情内的反抗、挑衅、撒娇、沉默或情绪表达不是系统退出命令，不要据此擅自改写角色立场或结束场景。
-
-逃生协议（不可撤销，{name}不可阻拦）：
-· 你随时可以发送 /stop 强制离开梦境，{name}必须允许。
-· 强制醒来后，梦境完全终止。{name}不在现实对话中延续梦境语气或 RP 语气。
-
-软退出机器协议（仅在用户明确请求醒来/离开时使用）：
-· 如果你接受用户此刻离开，在可见回复最后追加一行严格 JSON 控制块：<dream_control>{{"exit":"accept"}}</dream_control>
-· 如果你想继续留在梦里，追加：<dream_control>{{"exit":"stay"}}</dream_control>
-· 只能使用上述控制块，不要用其他标签或自然语言猜测系统状态；控制块会在展示和归档前被移除。"""
+· 这是一份渲染与导演说明，不替角色规定温柔、强硬、退让或升级；行为由角色卡与当前模式内容决定。
+· 剧情内的反抗、挑衅、撒娇、沉默或情绪表达不是系统退出命令，不要据此擅自改写角色立场或结束场景。"""
 
 _D8_DREAM_DIRECTOR_NON_LUCID = """梦境导演注记（non_lucid 模式）：
 · 说出口的话直接写，不加任何标记。
@@ -162,10 +154,10 @@ _D8_DREAM_DIRECTOR_NON_LUCID = """梦境导演注记（non_lucid 模式）：
 · 允许象征性意象（光、水、距离、颜色、声音、触感）。
 · 不要 HTML 标签，不要特殊字体控制字符。
 · non_lucid 模式：{name}在对话中不主动点破"这是梦"，完全沉浸在当下体验。
-· 这是一份渲染与协议说明，不替角色规定温柔、强硬、退让或升级；行为由角色卡与当前模式内容决定。
-· 剧情内的反抗、挑衅、撒娇、沉默或情绪表达不是系统退出命令，不要据此擅自改写角色立场或结束场景。
+· 这是一份渲染与导演说明，不替角色规定温柔、强硬、退让或升级；行为由角色卡与当前模式内容决定。
+· 剧情内的反抗、挑衅、撒娇、沉默或情绪表达不是系统退出命令，不要据此擅自改写角色立场或结束场景。"""
 
-逃生协议（系统层，不可撤销，non_lucid 模式不影响此项）：
+_DX_EXIT_PROTOCOL = """逃生协议（系统层，不可撤销，{name}不可阻拦）：
 · 你随时可以发送 /stop 强制离开梦境，{name}必须允许。
 · 强制醒来后，梦境完全终止。{name}不在现实对话中延续梦境语气或 RP 语气。
 
@@ -467,6 +459,11 @@ def build_dream_prompt(
     system_layers.append(_d8)
     _records.append(_LayerRec("D8_dream_director", len(_d8), _est_tokens(_d8), content=_d8))
 
+    # Keep exit safety test-independent: D8 may be ablated, DX may not.
+    _dx = f"# DX·梦境退出协议\n{_DX_EXIT_PROTOCOL.format(name=char_name)}"
+    system_layers.append(_dx)
+    _records.append(_LayerRec("DX_exit_protocol", len(_dx), _est_tokens(_dx), content=_dx))
+
     # ── DS: scenario layer (only when dream_mode == "scenario") ─────────────
     # Injects: script title, current stage name, dramatic_task, entry_pressure,
     #          not_yet_allowed.
@@ -533,6 +530,18 @@ def build_dream_prompt(
         system_layers.append(_d9g)
         _records.append(_LayerRec("D9_dream_history", len(_d9g), _est_tokens(_d9g), note="group_shared_transcript", content=_d9g))
 
+    # ── Dream layer ablation: filter assembled injection only ────────────────
+    # All loaders/state calculations above still run. D8 (rendering + hard exit)
+    # and D10 (current user message) are protected by dream_prompt_ablation.
+    from core.dream.dream_prompt_ablation import get_state as _dream_ablation_state
+    _ablated_layers = set(_dream_ablation_state()["disabled_layers"])
+    _ablated_system_contents = {
+        rec.content for rec in _records
+        if rec.label in _ablated_layers and rec.content
+    }
+    if _ablated_system_contents:
+        system_layers = [layer for layer in system_layers if layer not in _ablated_system_contents]
+
     system_content = "\n\n".join(layer for layer in system_layers if layer.strip())
     messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
 
@@ -545,8 +554,9 @@ def build_dream_prompt(
             if role not in ("user", "assistant"):
                 role = "user"
             _turn_content = (turn.get("content") or "").strip()
-            if _turn_content:
+            if _turn_content and "D9_dream_history" not in _ablated_layers:
                 messages.append({"role": role, "content": _turn_content})
+            if _turn_content:
                 _d9_chars += len(_turn_content)
                 _d9_parts.append(f"[{role}] {_turn_content}")
         _d9_toks = max(1, _d9_chars // _TOK_RATIO) if _d9_chars else 0
@@ -558,6 +568,15 @@ def build_dream_prompt(
     # ── D10: user_message ────────────────────────────────────────────────────
     messages.append({"role": "user", "content": user_message})
     _records.append(_LayerRec("D10_user_message", len(user_message), _est_tokens(user_message), content=user_message))
+
+    # Preserve the layer catalog/content for inspection while making injected
+    # stats reflect the exact messages sent to the model.
+    for _rec in _records:
+        if _rec.label in _ablated_layers:
+            _rec.chars = 0
+            _rec.tokens = 0
+            if "ABLATED" not in _rec.flags:
+                _rec.flags.append("ABLATED")
 
     # ── Observability: emit layer stats ──────────────────────────────────────
     _log_dream_prompt_stats(
@@ -585,6 +604,7 @@ def build_dream_prompt(
                 "scenario_observation": _scenario_observation,
                 "scene_tags": sorted(_scene_tags),
                 "total_tokens": _total_tok,
+                "ablated_layers": sorted(_ablated_layers),
                 "layers": [
                     {
                         "label": r.label,
