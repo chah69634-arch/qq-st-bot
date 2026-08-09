@@ -182,6 +182,13 @@
     `allow_body_projection: true`），而不是默认继承。本轮不实现该 flag。
   - body_state 本体、body_tracker、body_projection 计算不变；只是 Scenario prompt 不消费 D5 文本。
   - Sandbox / Mirror 保持原有 D5 注入行为。
+- **Scenario 不注入 D4 frozen_reality（Brief 166）**：
+  - `build_dream_prompt()` 在 `dream_mode == "scenario"` 时不调用 D4 snapshot formatter，最终发给
+    LLM 的 messages 不包含最近现实对话、profile impression、episodic、mid-term、relationship state
+    或 entry reason。
+  - Dream prompt inspector 仍保留 `D4_frozen_reality` 记录，但固定为 `injected=false`、`DISABLED`、
+    `note="scenario_mode"`，以区分硬关闭与空快照。
+  - Sandbox / Mirror 保持 D4 frozen snapshot 行为不变；Scenario 的 D4.5 与 D5 硬关闭合同也继续有效。
 - `ScenarioCore.increment_stage_turns()`：每轮 dream_turn LLM 成功后调用，返回新冻结实例
 - **mid-session 写保护守卫**（v0.5）：DREAM_ACTIVE 状态下 `enter_dream` fail-loud：
   模式切换错误（`mode=X → mode=Y`）和 script_id 替换错误分别返回独立错误信息

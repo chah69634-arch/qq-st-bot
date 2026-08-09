@@ -359,13 +359,25 @@ def build_dream_prompt(
         _records.append(_LayerRec("D3_mes_example", flags=["DISABLED"]))
 
     # ── D4: frozen_reality (memory_access controlled) ────────────────────────
-    snapshot_block = _format_snapshot(context_snapshot, dream_turn=dream_turn, reality_context_full_turns=reality_context_full_turns)
+    # Scenario is a scripted-story space: the current stage is its only
+    # context contract.  Do not even format the frozen snapshot here; this
+    # keeps recent reality, profile impressions, episodic/mid-term material,
+    # relationship state, and entry reasons out of the LLM messages by
+    # construction rather than relying on an inspector/UI filter.
+    snapshot_block = ""
+    if dream_mode != "scenario":
+        snapshot_block = _format_snapshot(
+            context_snapshot,
+            dream_turn=dream_turn,
+            reality_context_full_turns=reality_context_full_turns,
+        )
     if snapshot_block:
         _d4 = f"# D4·入梦前背景（冻结快照，只读）\n{snapshot_block}"
         system_layers.append(_d4)
         _records.append(_LayerRec("D4_frozen_reality", len(_d4), _est_tokens(_d4), content=_d4))
     else:
-        _records.append(_LayerRec("D4_frozen_reality", flags=["DISABLED"]))
+        _d4_note = "scenario_mode" if dream_mode == "scenario" else ""
+        _records.append(_LayerRec("D4_frozen_reality", flags=["DISABLED"], note=_d4_note))
 
     # ── D4.5: user_hidden_state_snapshot (tag-gated, read-only, Phase 4) ────────
     # Injected only when body_intimate / physical_closeness tag is detected in scene.
