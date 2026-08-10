@@ -19,4 +19,6 @@ def test_admin_dream_operations_static_wiring():
     page = (ROOT / "admin/static/pages/observe-dream-operations.html").read_text(encoding="utf-8")
     script = (ROOT / "admin/static/js/dream-operations.js").read_text(encoding="utf-8")
     assert "dream-ops-scenario-progress" in page
+    assert "dream-ops-scenario-reconciliation" in page
     assert "scenario_progress" in script
+    assert "scenario_reconciliation" in script

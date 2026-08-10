@@ -49,3 +49,35 @@ def test_scenario_progress_audit_write_is_fail_open(monkeypatch):
     row = audit.record("dream_fail_open", disposition="no_progress")
     assert row["dream_id"] == "dream_fail_open"
     assert audit.list_records(dream_id="dream_fail_open") == []
+
+
+def test_reconciler_audit_is_text_free_and_has_safe_transition_fields(sandbox):
+    from core.dream.scenario_progress_audit import list_records, record_reconciler
+
+    record_reconciler(
+        "dream_reconcile_audit",
+        char_id="audit_reconciler",
+        assistant_turn_id="dream_reconcile_audit:assistant:1",
+        trigger="control_missing",
+        status="completed",
+        decision="advance_next",
+        applied=True,
+        from_stage_id="opening",
+        to_stage_id="next_stage",
+        expected_state_version=7,
+        state_version=8,
+        state_version_match=True,
+        duration_ms=123,
+        failure_code="",
+        effective_profile="default",
+        preset_name="intent-preset",
+        route_source="intent_fallback",
+    )
+    row = list_records(char_id="audit_reconciler", limit=1)[0]
+    assert row["record_kind"] == "reconciler"
+    assert row["reconciler_applied"] is True
+    assert row["reconciler_from_stage_id"] == "opening"
+    assert row["reconciler_to_stage_id"] == "next_stage"
+    assert row["reconciler_state_version"] == 8
+    forbidden = {"user_message", "reply", "prompt", "private_truth", "base_url", "model"}
+    assert not forbidden.intersection(row)

@@ -112,7 +112,7 @@ def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
     from admin.routers.dream import dream_operations_get
     from core.dream.dream_state import write_state
     from core.dream.exit_observability import record
-    from core.dream.scenario_progress_audit import record as record_scenario_progress
+    from core.dream.scenario_progress_audit import record as record_scenario_progress, record_reconciler
 
     _write_jsonl(sandbox.dreams_archive_dir(char_id="dreamer") / "dream_ops_1.jsonl", [
         {"role": "assistant", "content": "dream prose", "ts": 100.0},
@@ -133,6 +133,16 @@ def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
         from_stage_id="opening",
         to_stage_id="next",
     )
+    record_reconciler(
+        "ops_1",
+        char_id="dreamer",
+        trigger="control_missing",
+        status="completed",
+        decision="stay",
+        from_stage_id="opening",
+        expected_state_version=2,
+        state_version=2,
+    )
     schedule = sandbox.dreams_postcards_dir(char_id="dreamer") / "schedule.json"
     schedule.parent.mkdir(parents=True, exist_ok=True)
     schedule.write_text(json.dumps([{"dream_id": "ops_1", "letter_text": "postcard prose", "sent": False, "attempts": 1, "delivery_status": "smtp_failed", "last_error": "smtp_failed"}], ensure_ascii=False), encoding="utf-8")
@@ -151,4 +161,6 @@ def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
     assert result["scenario_progress"]["last"]["matched_exit_ids"] == ["E1"]
     assert result["scenario_progress"]["last"]["from_stage_id"] == "opening"
     assert result["scenario_progress"]["last"]["to_stage_id"] == "next"
+    assert result["scenario_reconciliation"]["trigger_count"] == 1
+    assert result["scenario_reconciliation"]["latest"]["reconciler_decision"] == "stay"
     assert "raw text" not in encoded

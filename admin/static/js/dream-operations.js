@@ -90,6 +90,32 @@
     </div></div>`;
   }
 
+  function _renderDreamOpsScenarioReconciliation(data) {
+    const host = document.getElementById('dream-ops-scenario-reconciliation');
+    if (!host) return;
+    const summary = data.scenario_reconciliation || {};
+    const latest = summary.latest;
+    if (!latest) {
+      host.innerHTML = `<div class="empty">${escapeHtml(t('dream_ops.empty', 'No records'))}</div>`;
+      return;
+    }
+    const transition = latest.reconciler_from_stage_id && latest.reconciler_to_stage_id
+      ? `${escapeHtml(latest.reconciler_from_stage_id)} → ${escapeHtml(latest.reconciler_to_stage_id)}`
+      : t('dream_ops.scenario_reconcile.no_transition', 'None');
+    host.innerHTML = `<div class="page-context-source" style="padding:12px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 18px">
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.mode', 'Frozen mode'))}:</span> <code>${escapeHtml(summary.injection_mode || 'strict_stage')}</code></span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.trigger', 'Trigger'))}:</span> ${_opsBadge('dream_ops.scenario_reconcile.trigger', latest.reconciler_trigger || 'unknown')}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.status', 'Status'))}:</span> ${_opsBadge('dream_ops.scenario_reconcile.status', latest.reconciler_status || 'unknown', latest.reconciler_status === 'completed' ? 'badge-success' : latest.reconciler_status === 'failed' || latest.reconciler_status === 'stale' ? 'badge-warn' : 'badge-accent')}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.decision', 'Decision'))}:</span> ${_opsLabel('dream_ops.scenario_reconcile.decision', latest.reconciler_decision || 'unknown')}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.applied', 'Applied'))}:</span> ${latest.reconciler_applied ? escapeHtml(t('common.enabled', 'Enabled')) : escapeHtml(t('common.disabled', 'Disabled'))}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.transition', 'Transition'))}:</span> <code>${transition}</code></span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.state_version', 'State version'))}:</span> ${Number(latest.reconciler_expected_state_version || 0)} → ${Number(latest.reconciler_state_version || 0)}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.duration', 'Duration'))}:</span> ${Number(latest.reconciler_duration_ms || 0)} ms</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.failure', 'Failure'))}:</span> ${_opsLabel('dream_ops.scenario_reconcile.failure', latest.reconciler_failure_code || 'none')}</span>
+      <span><span class="muted">${escapeHtml(t('dream_ops.scenario_reconcile.counts', 'Counts'))}:</span> ${Number(summary.trigger_count || 0)} / ${Number(summary.applied_count || 0)} / ${Number(summary.stale_count || 0)} / ${Number(summary.failed_count || 0)}</span>
+    </div></div>`;
+  }
+
   function _renderDreamOpsLifecycle(items) {
     const host = document.getElementById('dream-ops-lifecycle');
     if (!items.length) {
@@ -140,13 +166,14 @@
       _renderDreamOpsOverview(data);
       _renderDreamOpsArchives(data.archives || []);
       _renderDreamOpsScenarioProgress(data);
+      _renderDreamOpsScenarioReconciliation(data);
       _renderDreamOpsLifecycle(data.exit_lifecycle || []);
       _renderDreamOpsContinuation(data);
       _renderDreamOpsPostcards(data.postcards || []);
     } catch (error) {
       const message = escapeHtml(t('dream_ops.load_failed', 'Failed to load: {error}', {error: error.message}));
       overview.innerHTML = `<div class="empty">${message}</div>`;
-      ['dream-ops-archives', 'dream-ops-scenario-progress', 'dream-ops-lifecycle', 'dream-ops-continuation', 'dream-ops-postcards'].forEach(id => {
+      ['dream-ops-archives', 'dream-ops-scenario-progress', 'dream-ops-scenario-reconciliation', 'dream-ops-lifecycle', 'dream-ops-continuation', 'dream-ops-postcards'].forEach(id => {
         const host = document.getElementById(id);
         if (host) host.innerHTML = `<div class="empty">${message}</div>`;
       });

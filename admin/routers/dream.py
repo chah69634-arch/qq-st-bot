@@ -715,11 +715,17 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         delivery_kind=DELIVERY_CONTINUATION,
     )
     scenario_dream_id = str(state.get("dream_id") or state.get("last_dream_id") or "")
-    scenario_progress_rows = list_scenario_progress(
+    scenario_rows = list_scenario_progress(
         char_id=char_id,
         dream_id=scenario_dream_id or None,
         limit=50,
     )
+    scenario_reconciler_rows = [
+        row for row in scenario_rows if row.get("record_kind") == "reconciler"
+    ]
+    scenario_progress_rows = [
+        row for row in scenario_rows if row.get("record_kind") != "reconciler"
+    ]
     scenario_last = scenario_progress_rows[0] if scenario_progress_rows else None
     scenario_current = state.get("scenario_core") or {}
     scenario_progress = {
@@ -730,6 +736,19 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         "final_stage_id": scenario_last.get("current_stage_id") if scenario_last else None,
         "last": scenario_last,
         "recent": scenario_progress_rows,
+    }
+    reconciler_statuses = [row.get("reconciler_status") for row in scenario_reconciler_rows]
+    scenario_reconciliation = {
+        "dream_id": scenario_dream_id or None,
+        "injection_mode": state.get("scenario_injection_mode")
+        or state.get("last_scenario_injection_mode")
+        or "strict_stage",
+        "latest": scenario_reconciler_rows[0] if scenario_reconciler_rows else None,
+        "recent": scenario_reconciler_rows,
+        "trigger_count": len(scenario_reconciler_rows),
+        "applied_count": sum(1 for row in scenario_reconciler_rows if row.get("reconciler_applied")),
+        "stale_count": sum(1 for status in reconciler_statuses if status == "stale"),
+        "failed_count": sum(1 for status in reconciler_statuses if status == "failed"),
     }
     archive_page = await dream_archive_list(offset=0, limit=20, char_id=char_id)
     last_dream_id = str(state.get("last_dream_id") or "")
@@ -821,6 +840,7 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
             "recent": continuation_lifecycle,
         },
         "scenario_progress": scenario_progress,
+        "scenario_reconciliation": scenario_reconciliation,
         "postcards": schedule,
         "afterglow": afterglow,
         "summary": summary,

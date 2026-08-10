@@ -1119,6 +1119,7 @@ async def _do_close_dream(
     # dream_mode IS in clear_local_state's key list — must be captured here before clearing.
     char_id = _state_char_id(state, "_do_close_dream", uid, dream_id)
     dream_mode = state.get("dream_mode", "sandbox")
+    scenario_injection_mode = state.get("scenario_injection_mode", "strict_stage")
     world_id = str(state.get("frozen_world") or "unknown")
 
     from core.dream.dream_flow import append_status_shift
@@ -1192,6 +1193,8 @@ async def _do_close_dream(
     state["last_exit_assistant_turns"] = assistant_turns
     state["last_archive_ok"] = bool(archive_ok)
     state["last_dream_mode"] = dream_mode
+    if dream_mode == "scenario":
+        state["last_scenario_injection_mode"] = scenario_injection_mode
     state["last_exited_at"] = time.time()
     state["forced_impression_rounds_left"] = configured_forced_impression_rounds()
     write_state(uid, state)
