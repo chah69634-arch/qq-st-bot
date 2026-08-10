@@ -49,12 +49,16 @@ COMPLETIONS = frozenset({
 })
 
 EXIT_REASON_CHARACTER_ACCEPTED = "character_accepted"
+EXIT_REASON_USER_WAKE_NO_RETENTION = "user_wake_no_retention"
+EXIT_REASON_USER_WAKE_CONFIRMED_AFTER_RETENTION = "user_wake_confirmed_after_retention"
 EXIT_REASON_USER_HARD_EXIT = "user_hard_exit"
 EXIT_REASON_SYSTEM_FALLBACK = "system_fallback"
 EXIT_REASON_CONTROL_MISSING = "control_missing"
 EXIT_REASON_CONTROL_INVALID = "control_invalid"
 EXIT_REASONS = frozenset({
     EXIT_REASON_CHARACTER_ACCEPTED,
+    EXIT_REASON_USER_WAKE_NO_RETENTION,
+    EXIT_REASON_USER_WAKE_CONFIRMED_AFTER_RETENTION,
     EXIT_REASON_USER_HARD_EXIT,
     EXIT_REASON_SYSTEM_FALLBACK,
     EXIT_REASON_CONTROL_MISSING,
@@ -138,4 +142,3 @@ def public_control_observation(
         "dream_id": dream_id,
         "ts": float(ts),
     }
-

@@ -829,9 +829,19 @@ async def force_exit_dream(
     - Idempotent: safe to call from any state
     - Cannot be disabled by config or role behavior (invariant D)
     """
-    from core.dream.dream_state import read_state, write_state, DreamStatus
+    from core.dream.dream_state import read_state_checked, write_state, DreamStatus
 
-    state = read_state(uid)
+    state, state_ok = read_state_checked(uid)
+    if not state_ok:
+        return {
+            "ok": False,
+            "exited": False,
+            "already_closed": False,
+            "closed_now": False,
+            "dream_id": None,
+            "archive_ok": False,
+            "error": "dream_state_unavailable",
+        }
     status = state.get("status")
     dream_id = str(state.get("dream_id") or "").strip()
     active_statuses = {
@@ -840,6 +850,15 @@ async def force_exit_dream(
         DreamStatus.DREAM_CLOSING.value,
     }
     if status not in active_statuses or not dream_id:
+        duplicate_count = 0
+        if state.get("last_dream_id"):
+            try:
+                duplicate_count = max(0, int(state.get("exit_duplicate_count") or 0)) + 1
+            except (TypeError, ValueError):
+                duplicate_count = 1
+            state["exit_duplicate_count"] = duplicate_count
+            state["last_duplicate_exit_at"] = time.time()
+            write_state(uid, state)
         return {
             "ok": True,
             "exited": True,
@@ -854,6 +873,7 @@ async def force_exit_dream(
             "assistant_turns": state.get("last_exit_assistant_turns"),
             "archive_ok": state.get("last_archive_ok"),
             "exited_at": state.get("last_exited_at"),
+            "duplicate_count": duplicate_count or state.get("exit_duplicate_count", 0),
         }
 
     if status != DreamStatus.DREAM_CLOSING.value:
@@ -1151,6 +1171,39 @@ async def _do_close_dream(
     archive_ok = True
     if dream_id:
         archive_ok = archive_current(uid, dream_id, char_id=char_id)
+
+    if not archive_ok:
+        # Keep DREAM_CLOSING and the current transcript in place.  A failed
+        # archive is not a completed close; the next hard-exit attempt may retry
+        # the single archive operation and no summary/afterglow writer is started.
+        state["last_archive_ok"] = False
+        state["last_close_attempt"] = {
+            "dream_id": dream_id,
+            "exit_type": exit_type,
+            "exit_mechanism": exit_mechanism,
+            "exit_initiator": exit_initiator,
+            "exit_reason": exit_reason,
+            "archive_ok": False,
+            "attempted_at": time.time(),
+        }
+        write_state(uid, state)
+        logger.error("[dream_pipeline] close held in DREAM_CLOSING after archive failure uid=%s dream_id=%s", uid, dream_id)
+        return {
+            "ok": False,
+            "exited": False,
+            "already_closed": False,
+            "closed_now": False,
+            "dream_id": dream_id,
+            "dream_mode": dream_mode,
+            "exit_mechanism": exit_mechanism,
+            "exit_initiator": exit_initiator,
+            "completion": completion,
+            "exit_reason": exit_reason,
+            "assistant_turns": assistant_turns,
+            "archive_ok": False,
+            "exited_at": None,
+            "error": "dream_archive_failed",
+        }
 
     exit_metadata = {
         "exit_mechanism": exit_mechanism,

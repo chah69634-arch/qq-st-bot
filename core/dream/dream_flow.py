@@ -23,6 +23,7 @@ _STATUS_SHIFT_SUMMARIES: dict[str, str] = {
     "exit_requested": "醒来的边缘在靠近",
     "closing": "梦在慢慢消散",
     "retained": "他把你留了下来",
+    "resumed": "你决定再留一会儿",
 }
 
 

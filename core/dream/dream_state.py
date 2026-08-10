@@ -164,6 +164,36 @@ def read_state(user_id: str | int) -> dict[str, Any]:
     return data
 
 
+def read_state_checked(user_id: str | int) -> tuple[dict[str, Any], bool]:
+    """Read a transition state without turning corruption into a valid idle state.
+
+    ``read_state`` intentionally supplies a safe UI default for read-only callers.
+    Exit/resume actions need to distinguish that fallback from a real idle state so
+    they cannot report a successful close or mutate a later session after a corrupt
+    state file is encountered.
+    """
+    path = get_paths().dream_state_path(user_id)
+    if not path.exists():
+        return default_state(user_id), True
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.error("[dream_state] transition read failed uid=%s: %s", user_id, exc)
+        return default_state(user_id), False
+    if not isinstance(data, dict):
+        logger.error("[dream_state] transition state shape invalid uid=%s", user_id)
+        return default_state(user_id), False
+    if data.get("status") not in {item.value for item in DreamStatus}:
+        logger.error("[dream_state] transition status invalid uid=%s: %r", user_id, data.get("status"))
+        return default_state(user_id), False
+    data.setdefault("user_id", safe_user_id(user_id))
+    try:
+        data["state_version"] = max(0, int(data.get("state_version", 0)))
+    except (TypeError, ValueError):
+        data["state_version"] = 0
+    return data, True
+
+
 def write_state(user_id: str | int, state: dict[str, Any]) -> bool:
     if not isinstance(state, dict):
         raise TypeError("dream state must be a dict")

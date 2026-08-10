@@ -24,9 +24,10 @@ Invariants:
 import logging
 import json
 import re
+import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
@@ -114,6 +115,37 @@ def _validated_dream_id(dream_id: str) -> str:
     if not _SAFE_DREAM_ID_RE.fullmatch(value):
         raise HTTPException(status_code=422, detail="dream_id 不合法")
     return value
+
+
+def _requested_dream_id(body: dict | None) -> str | None:
+    """Read the optional session identity used by WAKE/resume transitions."""
+    if body in (None, {}):
+        return None
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="dream request body invalid")
+    raw = body.get("dream_id")
+    if raw is None:
+        return None
+    return _validated_dream_id(str(raw))
+
+
+def _set_wake_observation(
+    state: dict,
+    *,
+    dream_id: str,
+    result: str,
+    confirmation: str,
+    retention_offered: bool,
+) -> dict:
+    """Keep bounded, text-free WAKE choice metadata in the durable state."""
+    state["last_wake_observation"] = {
+        "dream_id": dream_id,
+        "result": result,
+        "confirmation": confirmation,
+        "retention_offered": bool(retention_offered),
+        "ts": time.time(),
+    }
+    return state
 
 
 def _read_archive_file(path: Path) -> tuple[list[dict], bool]:
@@ -407,7 +439,7 @@ async def dream_exit(_auth=Depends(require_scopes("activity"))):
 
 
 @router.post("/dream/wake", summary="软挽留闸门（满足门控时角色挽留一次；否则直接硬退）")
-async def dream_wake(_auth=Depends(require_scopes("activity"))):
+async def dream_wake(body: dict = Body(default={}), _auth=Depends(require_scopes("activity"))):
     """
     Soft retention gate called when user taps the WAKE button.
 
@@ -422,43 +454,95 @@ async def dream_wake(_auth=Depends(require_scopes("activity"))):
     """
     uid = _owner_uid()
 
-    from core.dream.dream_state import DreamStatus, read_state, write_state
+    from core.dream.dream_state import DreamStatus, read_state_checked, write_state
     from core.dream.dream_pipeline import (
         _should_retain, _generate_retention_line, force_exit_dream,
     )
 
-    state = read_state(uid)
+    state, state_ok = read_state_checked(uid)
+    if not state_ok:
+        raise HTTPException(status_code=503, detail="dream_state_unavailable")
     status = state.get("status")
     dream_id = str(state.get("dream_id") or "").strip()
+    requested_dream_id = _requested_dream_id(body)
 
-    # Not in an active dream → hard exit fallback (idempotent, safe)
+    # A supplied identity is never allowed to act on another live session.
+    if requested_dream_id and requested_dream_id != dream_id:
+        # A closed session may be queried idempotently with its last id.  A
+        # live session (including a later new dream) must never accept an old
+        # confirmation token.
+        closed_last_id = str(state.get("last_dream_id") or "").strip()
+        if status not in {
+            DreamStatus.REALITY_AFTERGLOW.value,
+            DreamStatus.REALITY_CHAT.value,
+            DreamStatus.DREAM_ENTRANCE_AVAILABLE.value,
+        } or requested_dream_id != closed_last_id:
+            raise HTTPException(status_code=409, detail="dream_session_mismatch")
+
+    # A retention response is a live confirmation state, not a closed dream.
+    # The second WAKE (or the leave choice) must carry the same session id and
+    # use the single close chokepoint with an observable user-confirmed reason.
+    if status == DreamStatus.DREAM_EXIT_REQUESTED.value:
+        if not dream_id or requested_dream_id != dream_id:
+            raise HTTPException(status_code=409, detail="dream_session_mismatch")
+        _set_wake_observation(
+            state,
+            dream_id=dream_id,
+            result="confirmed_wake",
+            confirmation="confirmed_wake",
+            retention_offered=True,
+        )
+        write_state(uid, state)
+        close_result = await force_exit_dream(
+            uid,
+            exit_mechanism="user_hard_exit",
+            exit_initiator="user",
+            exit_reason="user_wake_confirmed_after_retention",
+        )
+        return {"retained": False, **close_result}
+
+    # REALITY/entrance/locked states are already outside the retention gate.
+    # DREAM_CLOSING is retried only through force_exit_dream so an archive
+    # failure can recover, while completed states return their first metadata.
     if status != DreamStatus.DREAM_ACTIVE.value:
-        return {
-            "retained": False,
-            "exited": True,
-            "already_closed": True,
-            "dream_id": str(state.get("last_dream_id") or "") or None,
-        }
+        close_result = await force_exit_dream(uid)
+        return {"retained": False, **close_result}
 
     # Already offered retention this dream → hard exit (no repeated nagging)
     if state.get("retention_offered_dream_id") == dream_id:
-        await force_exit_dream(
-            uid,
-            exit_mechanism="system_fallback",
-            exit_initiator="system",
-            exit_reason="system_fallback",
+        _set_wake_observation(
+            state,
+            dream_id=dream_id,
+            result="closed",
+            confirmation="no_retention",
+            retention_offered=False,
         )
-        return {"retained": False, "exited": True}
+        write_state(uid, state)
+        close_result = await force_exit_dream(
+            uid,
+            exit_mechanism="user_hard_exit",
+            exit_initiator="user",
+            exit_reason="user_wake_no_retention",
+        )
+        return {"retained": False, **close_result}
 
     # Gate check: immersion + emotional threshold
     if not _should_retain(state):
-        await force_exit_dream(
-            uid,
-            exit_mechanism="system_fallback",
-            exit_initiator="system",
-            exit_reason="system_fallback",
+        _set_wake_observation(
+            state,
+            dream_id=dream_id,
+            result="closed",
+            confirmation="no_retention",
+            retention_offered=False,
         )
-        return {"retained": False, "exited": True}
+        write_state(uid, state)
+        close_result = await force_exit_dream(
+            uid,
+            exit_mechanism="user_hard_exit",
+            exit_initiator="user",
+            exit_reason="user_wake_no_retention",
+        )
+        return {"retained": False, **close_result}
 
     # Transition to EXIT_REQUESTED and mark retention offered
     from core.dream.dream_flow import append_status_shift
@@ -471,21 +555,36 @@ async def dream_wake(_auth=Depends(require_scopes("activity"))):
     retention_text = await _generate_retention_line(uid, state)
     if not retention_text:
         logger.warning("[dream_wake] retention LLM failed uid=%s, falling back to hard exit", uid)
-        await force_exit_dream(
-            uid,
-            exit_mechanism="system_fallback",
-            exit_initiator="system",
-            exit_reason="system_fallback",
+        _set_wake_observation(
+            state,
+            dream_id=dream_id,
+            result="closed",
+            confirmation="no_retention",
+            retention_offered=False,
         )
-        return {"retained": False, "exited": True}
+        write_state(uid, state)
+        close_result = await force_exit_dream(
+            uid,
+            exit_mechanism="user_hard_exit",
+            exit_initiator="user",
+            exit_reason="user_wake_no_retention",
+        )
+        return {"retained": False, **close_result}
 
     state = append_status_shift(state, "retained")
+    _set_wake_observation(
+        state,
+        dream_id=dream_id,
+        result="retained",
+        confirmation="pending",
+        retention_offered=True,
+    )
     write_state(uid, state)
     return {"retained": True, "retention_text": retention_text, "dream_id": dream_id}
 
 
 @router.post("/dream/resume", summary="挽留后留下（status → DREAM_ACTIVE）")
-async def dream_resume(_auth=Depends(require_scopes("activity"))):
+async def dream_resume(body: dict = Body(default={}), _auth=Depends(require_scopes("activity"))):
     """
     Resume after a soft retention: set status back to DREAM_ACTIVE so
     dream_turn() can continue processing messages.
@@ -495,15 +594,40 @@ async def dream_resume(_auth=Depends(require_scopes("activity"))):
     """
     uid = _owner_uid()
 
-    from core.dream.dream_state import DreamStatus, read_state, write_state
+    from core.dream.dream_state import DreamStatus, read_state_checked, write_state
 
-    state = read_state(uid)
+    state, state_ok = read_state_checked(uid)
+    if not state_ok:
+        raise HTTPException(status_code=503, detail="dream_state_unavailable")
+    requested_dream_id = _requested_dream_id(body)
+    current_dream_id = str(state.get("dream_id") or "").strip()
+    if requested_dream_id and requested_dream_id != current_dream_id:
+        raise HTTPException(status_code=409, detail="dream_session_mismatch")
     if state.get("status") == DreamStatus.DREAM_EXIT_REQUESTED.value:
-        state["status"] = DreamStatus.DREAM_ACTIVE.value
-        write_state(uid, state)
-        logger.info("[dream_resume] resumed uid=%s dream_id=%s", uid, state.get("dream_id"))
+        if not current_dream_id or requested_dream_id != current_dream_id:
+            raise HTTPException(status_code=409, detail="dream_session_mismatch")
+        from core.dream.dream_flow import append_status_shift
 
-    return {"ok": True}
+        state = append_status_shift(state, "resumed")
+        state["status"] = DreamStatus.DREAM_ACTIVE.value
+        observation = state.get("last_wake_observation")
+        if isinstance(observation, dict) and observation.get("dream_id") == current_dream_id:
+            state["last_wake_observation"] = {
+                **observation,
+                "result": "retained_and_resumed",
+                "confirmation": "stayed",
+                "resumed_at": time.time(),
+            }
+        write_state(uid, state)
+        logger.info("[dream_resume] resumed uid=%s dream_id=%s", uid, current_dream_id)
+        return {"ok": True, "resumed": True, "dream_id": current_dream_id}
+
+    return {
+        "ok": False,
+        "resumed": False,
+        "dream_id": str(state.get("last_dream_id") or "") or None,
+        "error": "dream_not_waiting_for_confirmation",
+    }
 
 
 _BOUNDARY_FACTOR: dict[str, int] = {
@@ -664,6 +788,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
         "symbolic_anchors": list(state.get("symbolic_anchors") or []),
         "flow_entries": list(state.get("flow_entries") or []),
         "exit_observation": state.get("last_exit_observation"),
+        "wake_observation": state.get("last_wake_observation"),
         "last_exit_mechanism": state.get("last_exit_mechanism"),
         "last_exit_initiator": state.get("last_exit_initiator"),
         "last_completion": state.get("last_completion"),
@@ -823,7 +948,8 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
                 "status", "dream_id", "last_dream_id", "last_greeted_dream_id",
                 "last_exit_type", "last_exit_mechanism", "last_exit_initiator",
                 "last_completion", "last_exit_reason", "last_exit_assistant_turns",
-                "last_archive_ok", "last_exited_at",
+                "last_archive_ok", "last_exited_at", "last_wake_observation",
+                "exit_duplicate_count", "last_duplicate_exit_at", "last_close_attempt",
             )
         },
         "consistency": {

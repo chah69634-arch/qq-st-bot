@@ -80,7 +80,17 @@ def archive_current(user_id: str | int, dream_id: str, *, char_id: str = DEFAULT
         return True
     dest = _archive_dir(char_id=char_id) / f"dream_{dream_id}.jsonl"
     try:
-        dest.write_bytes(tmp.read_bytes())
+        current_bytes = tmp.read_bytes()
+        if dest.exists():
+            # A retry after a partial close must never overwrite an existing
+            # archive.  Only the exact same transcript can be acknowledged.
+            if dest.read_bytes() != current_bytes:
+                logger.error("[dream_log] archive collision uid=%s dream_id=%s", user_id, dream_id)
+                return False
+            tmp.unlink()
+            logger.info("[dream_log] archive already present uid=%s dream_id=%s", user_id, dream_id)
+            return True
+        dest.write_bytes(current_bytes)
         tmp.unlink()
         logger.info(f"[dream_log] archived uid={user_id} dream_id={dream_id} -> {dest.name}")
         return True
