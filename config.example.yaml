@@ -207,6 +207,9 @@ dream:
     full_script_max_stages: 12
     full_script_max_tokens: 6000
     full_script_max_chars: 24000
+    reconciler_timeout_s: 8       # 后台语义校准单次墙钟上限；不阻塞可见回复
+    reconciler_max_concurrency: 2 # 同时运行的 scenario_reconcile 上限
+    reconciler_stall_turns: 2     # 连续停滞达到该轮数后才触发校准
   impression:
     forced_rounds: 3        # 出梦后强制连续注入轮数（精确现实回合数，非时间窗）
     recall_enabled: true    # 强注结束后启用话题召回；false = 强注完即沉默

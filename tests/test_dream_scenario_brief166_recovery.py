@@ -110,6 +110,7 @@ def test_prompt_inspector_reports_recovery_and_drift_injection():
         "recovery_injected": True,
         "drift_pressure_injected": True,
         "generic_recovery_injected": False,
+        "injection_mode": "strict_stage",
     }
 
 

@@ -193,6 +193,18 @@
 - **mid-session 写保护守卫**（v0.5）：DREAM_ACTIVE 状态下 `enter_dream` fail-loud：
   模式切换错误（`mode=X → mode=Y`）和 script_id 替换错误分别返回独立错误信息
 - `DS_scenario` 层：只注入当前阶段；绝不注入后续阶段、出口判断、软门控
+- **Scenario injection mode（Brief 175）**：默认 `strict_stage`，只把当前阶段交给
+  Dream；管理面可选择 `full_script` 作为下一场 Dream 的偏好。`full_script` 仍只作用于
+  单人 Scenario 的 `DS_scenario` 投影：包含有序 stage 的导演字段、当前 stage 标记以及
+  分阶段私密真相/披露策略，但不改变 `ScenarioCore`、Character、Reality prompt 或
+  Sandbox/Mirror/Group Dream。入梦时冻结模式；运行中的设置修改只影响下一场。
+- **Full-script budget**：full mode 入梦前按 stage 数、估算 token 和字符数做显式上限校验；
+  超预算 fail-loud，不静默裁剪或改写 authored 剧本，`strict_stage` 仍可使用同一剧本。
+- **Semantic stage reconciler（Brief 175）**：可见 assistant reply 发送后，只有 control
+  缺失/非法且达到停滞阈值、或 full mode 没有当前合法命中时，才按当前/紧邻下一 stage
+  发起有界的 `scenario_reconcile` 后台校准。结果只能 `stay`、`advance_next` 或
+  `uncertain`，通过 Dream state version CAS 最多推进一阶段；过期、退出、重入和并发
+  结果只记安全审计，不修改新状态。
 - **角色私密真相 / 分阶段披露**：scenario YAML 顶层可选 `private_truths`。每项包含稳定
   `id`、角色从开场前就知道的 `truth`，以及按 stage id 配置的 `disclosure`：
   `hidden | hint_only | reveal_allowed | reveal_required`。DS 会在每个阶段都注入幕后真相，避免

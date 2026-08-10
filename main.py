@@ -893,6 +893,8 @@ async def main():
         log_error("main", e)
         logger.error(f"主循环异常退出: {e}")
     finally:
+        from core.dream.scenario_reconciler import shutdown as _shutdown_scenario_reconciler
+        await _shutdown_scenario_reconciler()
         await _hardware_jobs.shutdown()
         from core.hardware import buttplug_client as _buttplug_client
         await _buttplug_client.disconnect()

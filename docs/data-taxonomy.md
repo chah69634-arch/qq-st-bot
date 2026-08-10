@@ -148,6 +148,12 @@ Scenario 运行时的进度审计是独立的正文无关台账：
 可返回安全的 dream/stage ID、E/B ID、计数、固定 reason 和转场状态，不返回用户输入、角色回复、
 Prompt、剧本正文、exit_sign 原文或 private truth。Scenario 审计写失败不应阻断梦境 pipeline。
 
+Brief 175 的语义校准沿用同一份正文无关审计台账：记录 `scenario_reconcile` 的 Dream/turn
+安全 ID、触发原因、`stay|advance_next|uncertain` 决定、CAS 是否应用、状态是否过期、
+effective preset/source、耗时和固定错误类别；不记录校准输入、可见回复、完整剧本、私密真相、
+Prompt、API key、base URL 或模型自由文本。校准任务只在进程生命周期内存在，退出时由主循环
+统一取消；写审计失败 fail-open。
+
 `bundled/` 是随发行替换的只读公共资产根：`characters/default/` 放默认卡和配套静态资产，`seeds/reality/` 与 `seeds/dream/worlds/_default/` 放播种源，`templates/` 放角色卡与明信片模板，`examples/` 放格式示例。它不属于用户 authored 内容，也不属于 `data/` 运行时状态。
 
 ### Reality memory

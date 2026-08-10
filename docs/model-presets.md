@@ -204,6 +204,10 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    安全运行。该类别使用 10 秒超时与零 SDK 重试，且按 `preset + category` 独立缓存，不影响同一
    preset 的主聊天策略。失败 fail-closed 为不主动发言的裁决；失败台账经
    `GET /observability/api-calls` 以 `caller=sensor_judge` 查询，记录安全错误分类而不记录 prompt。
+   `scenario_reconcile` 使用独立的安全路由：`scenario_reconcile → intent → chat → first preset`；
+   旧 profile 缺失该 category 时仍兼容，默认单次超时 8 秒、零 SDK retry，且调用发生在
+   可见 Dream 回复之后。模型路由管理面展示实际 effective preset 和来源；reconciler 审计
+   只记录 category、preset/source、决定与是否应用，不记录输入、回复、剧本或 Prompt。
    **`probe`/`summary` 等轻量角色未在某个 profile 里单独声明时走的就是这条回退**：
    缺失不报错、不阻塞聊天，直接落到该 profile 的主聊天 preset（Brief 93 §5 核实项，见
    `tests/test_model_presets.py::TestRoutingFallback`）。管理面板「配置」页 §1 的

@@ -261,6 +261,21 @@ def _done(task: asyncio.Task[Any], key: str) -> None:
 
 def schedule(request: dict[str, Any]) -> bool:
     """Schedule at most one reconciler for a Dream assistant turn."""
+    if not request.get("effective_profile"):
+        try:
+            from core.model_registry import resolve_category_info
+
+            route = resolve_category_info(
+                "scenario_reconcile", char_id=str(request.get("char_id") or "")
+            )
+            request = {
+                **request,
+                "effective_profile": route.get("effective_profile", ""),
+                "preset_name": route.get("effective_preset", ""),
+                "route_source": route.get("source", ""),
+            }
+        except Exception:
+            pass
     key = "{}:{}:{}".format(
         request.get("dream_id") or "",
         request.get("assistant_turn_id") or "",
