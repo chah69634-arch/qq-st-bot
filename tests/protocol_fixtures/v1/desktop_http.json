@@ -1,0 +1,36 @@
+{
+  "case_id": "desktop-http-correlation",
+  "request": {
+    "method": "POST",
+    "path": "/desktop/chat",
+    "body": {
+      "message": "fixture desktop hello",
+      "reply_to": {
+        "text": "fixture desktop previous reply",
+        "ts": 1700000000.0
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "reply": "fixture desktop assistant reply",
+      "emotion": "neutral",
+      "turn_id": "turn-fixture-002",
+      "msg_id": "turn-fixture-002"
+    }
+  },
+  "correlation": {
+    "http_id": "turn-fixture-002",
+    "ws_channel_message_id": "turn-fixture-002",
+    "ws_segment_message_id": "turn-fixture-002",
+    "rule": "turn_id and msg_id are opaque equal correlation keys"
+  },
+  "invalid_requests": [
+    {
+      "name": "empty-message",
+      "body": {"message": ""},
+      "status": 422
+    }
+  ]
+}

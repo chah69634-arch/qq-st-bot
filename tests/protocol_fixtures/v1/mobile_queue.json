@@ -1,0 +1,38 @@
+{
+  "case_id": "mobile-poll-and-ack",
+  "poll_response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "active": true,
+      "messages": [
+        {
+          "id": "queue-fixture-001",
+          "seq": 41,
+          "content": "fixture proactive message",
+          "user_id": "fixture-owner",
+          "timestamp": "<TIMESTAMP>",
+          "voice_available": false
+        }
+      ],
+      "count": 1,
+      "cursor": 41
+    }
+  },
+  "ack_requests": [
+    {
+      "name": "first-ack",
+      "body": {"ack_seq": 41},
+      "response": {"status": 200, "body": {"ok": true, "remaining": 0}}
+    },
+    {
+      "name": "duplicate-ack",
+      "body": {"ack_seq": 41},
+      "response": {"status": 200, "body": {"ok": true, "remaining": 0}}
+    }
+  ],
+  "invalid_ack": {
+    "body": {"ack_seq": -1},
+    "status": 422
+  }
+}

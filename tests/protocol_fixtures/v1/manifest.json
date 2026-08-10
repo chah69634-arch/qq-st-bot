@@ -1,0 +1,61 @@
+{
+  "schema_version": "1",
+  "fixture_version": "v1",
+  "contract_revision": "2026-08-10",
+  "source_of_truth": "Emerald-presence",
+  "description": "Public, synthetic protocol contract cases for the supported desktop and mobile adapters.",
+  "normalization": {
+    "timestamp": "<TIMESTAMP>",
+    "opaque_id": "<OPAQUE_ID>"
+  },
+  "cases": [
+    {
+      "id": "mobile-chat-success",
+      "file": "mobile_http.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "POST /mobile/chat",
+      "expected": "200",
+      "classification": "backward-compatible"
+    },
+    {
+      "id": "mobile-poll-and-ack",
+      "file": "mobile_queue.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "GET /mobile/poll; POST /mobile/ack",
+      "expected": "200",
+      "classification": "backward-compatible"
+    },
+    {
+      "id": "desktop-http-correlation",
+      "file": "desktop_http.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "POST /desktop/chat",
+      "expected": "200",
+      "classification": "backward-compatible"
+    },
+    {
+      "id": "desktop-websocket-correlation",
+      "file": "desktop_ws.json",
+      "direction": "server-to-client-and-back",
+      "endpoint": "WS /ws/desktop",
+      "expected": "hello, stream, canonical, action ack",
+      "classification": "backward-compatible"
+    },
+    {
+      "id": "owner-turn-idempotency",
+      "file": "owner_turn.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "POST /v1/owner/turns",
+      "expected": "200, 202, 409",
+      "classification": "consumer-update-required"
+    },
+    {
+      "id": "security-forbidden-client-fields",
+      "file": "security.json",
+      "direction": "client-to-server",
+      "endpoint": "POST /v1/owner/turns and legacy chat adapters",
+      "expected": "reject",
+      "classification": "backward-compatible"
+    }
+  ]
+}

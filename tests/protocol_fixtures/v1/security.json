@@ -1,0 +1,20 @@
+{
+  "case_id": "security-forbidden-client-fields",
+  "forbidden_client_fields": [
+    "uid",
+    "char_id",
+    "origin",
+    "scope",
+    "tool_capability",
+    "tool_capabilities",
+    "path",
+    "file_path",
+    "token"
+  ],
+  "negative_requests": [
+    {"endpoint": "/v1/owner/turns", "body": {"client_turn_id": "client-fixture-002", "message": "fixture", "uid": "attacker"}, "status": 422},
+    {"endpoint": "/v1/owner/turns", "body": {"client_turn_id": "client-fixture-003", "message": "fixture", "char_id": "attacker"}, "status": 422},
+    {"endpoint": "/mobile/chat", "body": {"message": "fixture", "token": "never-inline-a-token"}, "status": "auth-or-validation"},
+    {"endpoint": "/desktop/chat", "body": {"message": "fixture", "file_path": "fixture/path"}, "status": "auth-or-validation"}
+  ]
+}

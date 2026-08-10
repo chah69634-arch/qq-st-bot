@@ -1,0 +1,23 @@
+{
+  "case_id": "owner-turn-idempotency",
+  "request": {
+    "method": "POST",
+    "path": "/v1/owner/turns",
+    "body": {
+      "client_turn_id": "client-fixture-001",
+      "message": "fixture owner input",
+      "reply_to": null,
+      "upload_ids": []
+    }
+  },
+  "responses": [
+    {"status": 200, "body": {"reply": "fixture owner reply", "turn_id": "turn-fixture-003", "msg_id": "turn-fixture-003"}},
+    {"status": 202, "body": {"status": "in_flight", "client_turn_id": "client-fixture-001"}},
+    {"status": 409, "body": {"detail": "client_turn_id payload conflict"}}
+  ],
+  "rules": [
+    "same caller label and client_turn_id with the same payload is idempotent",
+    "a conflicting payload is rejected",
+    "client_turn_id is opaque and is never interpreted as a timestamp"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "case_id": "desktop-websocket-correlation",
+  "client_frames": [
+    {"type": "hello", "client": "fixture-desktop", "version": "0.1"},
+    {"type": "ack", "msg_id": "action-fixture-001", "ok": true},
+    {"type": "pong"}
+  ],
+  "server_frames": [
+    {"type": "hello_ack", "server_version": "0.1"},
+    {"type": "message_stream_start", "msg_id": "turn-fixture-002"},
+    {"type": "message_stream_delta", "msg_id": "turn-fixture-002", "delta": "fixture desktop"},
+    {"type": "message_stream_end", "msg_id": "turn-fixture-002"},
+    {"type": "channel_message", "msg_id": "turn-fixture-002", "content": "fixture desktop assistant reply"},
+    {"type": "action", "msg_id": "action-fixture-001", "action": {"type": "dream_invite"}},
+    {"type": "ping"}
+  ],
+  "assertions": [
+    "stream and canonical frames reuse the same msg_id",
+    "channel_message is acknowledged exactly once by the client",
+    "action completion is acknowledged with msg_id and ok",
+    "reconnect does not change the correlation key"
+  ]
+}

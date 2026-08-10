@@ -1,0 +1,30 @@
+{
+  "case_id": "mobile-chat-success",
+  "request": {
+    "method": "POST",
+    "path": "/mobile/chat",
+    "body": {
+      "message": "fixture hello",
+      "reply_to": {
+        "text": "fixture previous reply",
+        "ts": 1700000000.0
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "reply": "fixture assistant reply",
+      "emotion": "neutral",
+      "turn_id": "turn-fixture-001",
+      "msg_id": "turn-fixture-001"
+    }
+  },
+  "invalid_requests": [
+    {
+      "name": "empty-message",
+      "body": {"message": ""},
+      "status": 422
+    }
+  ]
+}
