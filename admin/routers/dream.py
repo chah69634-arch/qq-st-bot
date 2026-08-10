@@ -607,6 +607,11 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
         if scenario_injection_mode not in _VALID_SCENARIO_INJECTION_MODE:
             scenario_injection_mode = "strict_stage"
         _sc = state["scenario_core"]
+        from core.dream.scenario_projection import scenario_projection_metadata
+
+        _scenario_projection = scenario_projection_metadata(
+            _sc, injection_mode=scenario_injection_mode
+        )
         scenario_info = {
             "script_id": _sc.get("script_id"),
             "current_stage_id": _sc.get("current_stage_id"),
@@ -627,6 +632,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
             "recovery_pending": bool(_sc.get("recovery_pending")),
             "blocked_event_count": len(_sc.get("last_blocked_events") or []),
             "scenario_injection_mode": scenario_injection_mode,
+            "projection": _scenario_projection,
         }
 
     base = {

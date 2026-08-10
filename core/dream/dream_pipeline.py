@@ -405,6 +405,13 @@ async def dream_turn(
     from core.dream.dream_settings import load as _load_settings
     settings = _load_settings(uid)
     _reality_context_full_turns = int(settings.get("reality_context_full_turns", 3))
+    # The setting is only a next-session preference.  An active Scenario uses
+    # the value frozen by enter_dream; legacy state without the field is strict.
+    scenario_injection_mode = state.get(
+        "scenario_injection_mode", settings.get("scenario_injection_mode", "strict_stage")
+    )
+    if scenario_injection_mode not in {"strict_stage", "full_script"}:
+        scenario_injection_mode = "strict_stage"
 
     # Dream-local lorebook matching — pure function, separate from reality lorebook (C4)
     lore_entries: list[str] = []
@@ -498,6 +505,7 @@ async def dream_turn(
         _capture_hook=_dream_capture_hook,
         dream_turn=_dream_turn_index,
         reality_context_full_turns=_reality_context_full_turns,
+        scenario_injection_mode=scenario_injection_mode,
     )
 
     # Call LLM — zero reality side-effects
@@ -925,6 +933,25 @@ async def enter_dream(
             from core.dream.scenario_loader import load_script
             from core.dream.scenario_core import ScenarioCore
             script = load_script(script_id)
+            if scenario_injection_mode == "full_script":
+                from core.dream.scenario_projection import validate_full_script_budget
+
+                budget = validate_full_script_budget(script)
+                if not budget["ok"]:
+                    return {
+                        "ok": False,
+                        "error": "scenario full-script projection exceeds configured budget",
+                        "error_code": "scenario_full_script_budget_exceeded",
+                        "scenario_injection_mode": scenario_injection_mode,
+                        "projection": {
+                            key: budget[key]
+                            for key in (
+                                "stage_count", "estimated_chars", "estimated_tokens",
+                                "max_stages", "max_chars", "max_tokens", "reasons",
+                                "projection_version",
+                            )
+                        },
+                    }
             scenario_core_dict = ScenarioCore.from_script(script).to_dict()
         except (FileNotFoundError, ValueError) as exc:
             return {"ok": False, "error": f"scenario load failed: {exc}"}

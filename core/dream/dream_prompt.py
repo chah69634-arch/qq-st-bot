@@ -263,6 +263,7 @@ def build_dream_prompt(
     dream_domain: str = "solo",
     dg_layer_text: str | None = None,
     shared_transcript_block: str | None = None,
+    scenario_injection_mode: str = "strict_stage",
 ) -> list[dict[str, str]]:
     """
     Assemble the complete dream prompt as a D0-D10 layer stack.
@@ -502,7 +503,7 @@ def build_dream_prompt(
     _scenario_observation: dict[str, Any] | None = None
     if dream_mode == "scenario" and scenario_core and dream_domain != "group":
         try:
-            _ds_text = _format_scenario_layer(scenario_core)
+            _ds_text = _format_scenario_layer(scenario_core, injection_mode=scenario_injection_mode)
             if _ds_text:
                 _ds = f"# DS·剧本当前阶段\n{_ds_text}"
                 system_layers.append(_ds)
@@ -510,6 +511,7 @@ def build_dream_prompt(
                 _ds_injected = True
                 _scenario_observation = {
                     "current_stage_id": scenario_core.get("current_stage_id"),
+                    "injection_mode": scenario_injection_mode if scenario_injection_mode in {"strict_stage", "full_script"} else "strict_stage",
                     "stall_turns": int(scenario_core.get("stall_turns", 0) or 0),
                     "recovery_injected": "【接住刚才的意图】" in _ds_text,
                     "drift_pressure_injected": "漂移压力 / Drift Pressure" in _ds_text,
@@ -637,6 +639,8 @@ def build_dream_prompt(
                 "prompt_profile": "scenario" if _scenario_profile else ("group" if dream_domain == "group" else dream_mode),
                 "prompt_profile_version": "v2" if _scenario_profile else "v1",
                 "scenario_observation": _scenario_observation,
+                "scenario_injection_mode": scenario_injection_mode if dream_mode == "scenario" else None,
+                "scenario_projection": _scenario_projection_metadata(scenario_core, scenario_injection_mode),
                 "scene_tags": sorted(_scene_tags),
                 "total_tokens": _total_tok,
                 "ablated_layers": sorted(_ablated_layers),
@@ -771,7 +775,23 @@ def _format_character_dream_behavior(character: Any, dream_mode: str) -> str:
         return ""
 
 
-def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
+def _scenario_projection_metadata(
+    scenario_core: dict[str, Any] | None,
+    injection_mode: str,
+) -> dict[str, Any]:
+    if not isinstance(scenario_core, dict):
+        return {}
+    try:
+        from core.dream.scenario_projection import scenario_projection_metadata
+
+        return scenario_projection_metadata(scenario_core, injection_mode=injection_mode)
+    except Exception:
+        return {}
+
+
+def _format_scenario_layer(
+    scenario_core: dict[str, Any], *, injection_mode: str = "strict_stage"
+) -> str:
     """
     Render the current scenario stage as a DS prompt block.
 
@@ -782,6 +802,20 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
     Never injects: subsequent stages, stage-exit judgment, or auto-advance logic.
     Returns '' on any error (fail-closed).
     """
+    if injection_mode == "full_script":
+        try:
+            from core.dream.scenario_loader import load_script
+            from core.dream.scenario_projection import render_full_script
+
+            script_id = str(scenario_core.get("script_id") or "")
+            current_stage_id = str(scenario_core.get("current_stage_id") or "")
+            if not script_id or not current_stage_id:
+                return ""
+            return render_full_script(load_script(script_id), current_stage_id)
+        except Exception as exc:
+            logger.warning("[dream_prompt] full scenario projection failed: %s", exc)
+            return ""
+
     try:
         from core.dream.scenario_loader import load_script, get_stage
         script_id = scenario_core.get("script_id", "")
