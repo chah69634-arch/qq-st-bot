@@ -184,6 +184,19 @@ browsing, and desktop file fallbacks. Desktop actions require WS ack. Diary
 mirror writes are a separate `diary.sync` capability and are not part of the
 general admin settings surface.
 
+## Brief 173 owner-turn API and admin observability
+
+The admin navigation entry 「工具与连接 → 接口与部署」 is a read-only control
+surface for the v1 owner-input contract, token metadata, receipt observability,
+and deployment/diary summaries. It does not proxy chat, create a test turn, or
+display token plaintext, request bodies, prompts, tool inputs/results, hashes, or
+filesystem paths. Its receipt table reads `GET /observability/owner-turns` with
+bounded filters and opaque cursor pagination; the endpoint requires `state.read`.
+
+Deployment capability, preflight, desktop WS, and diary sync are shown as
+separate signals. `configured`, `online`, `last_success_at`, and `E2E verified`
+must not be collapsed into one health claim.
+
 ## Brief 163 Admin status and configuration UX
 
 「系统状态」是只读摘要页：`/status` supplies runtime/data-environment basics;

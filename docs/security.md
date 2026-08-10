@@ -121,6 +121,22 @@ The status projection does not expose the request hash or another caller's
 history. Diary sync has its separate `diary.sync` scope and returns only
 bounded status/result metadata, never diary paths or Markdown正文.
 
+## Brief 173 owner-turn API and receipt recovery
+
+The versioned owner-turn contract is documented in
+[owner-turn-api.md](owner-turn-api.md). The admin page may show only owner-input
+token metadata (`label`, profile, disabled state, expiry, and hash prefix); it
+must never render the one-time plaintext, request body, prompt, tool data, or
+local path. `GET /observability/owner-turns` is a `state.read` projection with
+bounded cursor pagination and fixed error codes.
+
+A durable `running` receipt is not proof that an operation is still running.
+On a later read, only a task in the current process `_INFLIGHT` set may remain
+live; an orphaned receipt becomes terminal `interrupted_unknown` with
+`execution_outcome_unknown`. This is fail-closed: the service never reruns a
+possibly side-effecting turn automatically. A caller must intentionally submit
+a new client turn ID after deciding what to do.
+
 ## P4 现状（五类当前标准持有者）
 
 首次配置脚本当前默认维护五条标准记录。既有部署可能额外保留历史 `sensor-service` token；它不再对应运行客户端，确认无调用后可通过管理面停用或删除。`GET /auth/tokens` 可核实 label/scopes（不含明文）：

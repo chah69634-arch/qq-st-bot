@@ -22,6 +22,7 @@ query token。
 | POST/GET | `/mobile/activate`、`/mobile/deactivate`、`/mobile/push`、`/mobile/ack`、`/mobile/poll` | mobile | Emerald-mobile |
 | POST | `/upload/ingest`、`/transcribe` | desktop / admin | 桌宠、手机端 |
 | GET | `/system/health`、`/system/status` | read/admin | 客户端状态页、运维 |
+| POST/GET | `/v1/owner/turns`、`/v1/owner/turns/{client_turn_id}` | owner-input (`chat`) | 外部硬件、脚本和本地适配器；行为合同见 [owner-turn-api.md](owner-turn-api.md) |
 
 ## 端点目录
 
@@ -45,7 +46,7 @@ scope；只读端点通常允许对应的 read scope。
 | GET/POST/PUT/PATCH/DELETE | `/system/*`、`/hardware/*` | admin / hardware | 管理面运维、设备控制 |
 | GET/POST | `/spend/ledger`、`/spend/budget`、`/spend/mandates`、`/spend/check` | admin | 只读支出余额观测、人工检查与台账浏览 |
 | GET | `/observe/*`、`/debug/recall`、`/provenance/*`、`/hidden-state/*` | observe | 管理面与桌面客户端诊断；`/debug/recall?uid=` 是 recall trace 兼容入口 |
-| GET | `/observability/api-calls`、`/observability/perceive-events`、`/observability/runtime-signals` | state.read | 外部 API 调用总账、reality stimulus 审计、当前进程的高频运行信号聚合；均为只读查询。运行信号不落盘，不含正文、prompt、密钥、路径或用户标识。 |
+| GET | `/observability/api-calls`、`/observability/perceive-events`、`/observability/runtime-signals`、`/observability/owner-turns` | state.read | 外部 API 调用总账、reality stimulus 审计、运行信号和脱敏 owner-turn receipt 观测；均为只读查询。 |
 | GET | `/perception/visual-trace` | state.read | 本地 VLM shadow 观察（不含原图，不进入 prompt/记忆） |
 | GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |
 | GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页 |
