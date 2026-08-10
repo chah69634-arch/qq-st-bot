@@ -20,6 +20,12 @@ _MAX_MESSAGE_LENGTH = 12000
 _INFLIGHT: dict[tuple[str, str], asyncio.Task[dict]] = {}
 
 
+def is_currently_inflight(caller_label: str, client_turn_id: str) -> bool:
+    """Return whether this process still owns a live execution task."""
+    task = _INFLIGHT.get((caller_label, client_turn_id))
+    return task is not None and not task.done()
+
+
 @dataclass(frozen=True)
 class TurnCallerContext:
     caller_kind: str
@@ -136,19 +142,29 @@ async def execute_idempotent_owner_turn(
     )
     lock = await owner_turn_receipts.lock_for(context.token_label, client_turn_id)
     async with lock:
-        owner_turn_receipts.prune()
+        owner_turn_receipts.prune(is_inflight=is_currently_inflight)
         row = owner_turn_receipts.load(context.token_label, client_turn_id)
         if row is not None:
             if row.get("request_hash") != request_digest:
                 return "conflict", owner_turn_receipts.projection(row)
             status = row.get("status")
             if status == "completed":
-                projected = _project_canonical_result(row.get("canonical_turn_id"))
+                canonical_char_id = row.get("canonical_char_id")
+                projected = _project_retained_result(
+                    row.get("canonical_turn_id"), canonical_char_id,
+                )
                 return ("completed_replay", projected) if projected is not None else (
                     "completed_result_expired", owner_turn_receipts.projection(row)
                 )
             if status == "running":
-                return "in_flight", owner_turn_receipts.projection(row)
+                if is_currently_inflight(context.token_label, client_turn_id):
+                    return "in_flight", owner_turn_receipts.projection(row)
+                row = owner_turn_receipts.recover_if_interrupted(
+                    context.token_label,
+                    client_turn_id,
+                    is_inflight=False,
+                )
+                return "interrupted_unknown", owner_turn_receipts.projection(row or {})
             return str(status or "failed"), owner_turn_receipts.projection(row)
 
         row = owner_turn_receipts.write(
@@ -202,6 +218,7 @@ async def _execute_and_record(
             status="completed",
             canonical_turn_id=canonical_turn_id,
             created_at=created_at,
+            canonical_char_id=_canonical_character_id(),
         )
         return result
     except Exception as exc:
@@ -212,39 +229,92 @@ async def _execute_and_record(
             status="failed",
             error_code=type(exc).__name__,
             created_at=created_at,
+            canonical_char_id=_canonical_character_id(),
         )
         raise
 
 
-def _project_canonical_result(turn_id: object) -> dict | None:
+def _canonical_character_id() -> str | None:
+    try:
+        from core.scheduler.loop import _active_char_id_or_none
+
+        return _active_char_id_or_none()
+    except Exception:
+        return None
+
+
+def _project_canonical_result(turn_id: object, canonical_char_id: object = None) -> dict | None:
     if not isinstance(turn_id, str) or not turn_id:
         return None
     try:
         from core.config_loader import get_config
         from core.memory.short_term import load
-        from core.scheduler.loop import _active_char_id_or_none
+        from core.sandbox import get_paths
 
         cfg = get_config()
         uid = str(cfg.get("scheduler", {}).get("owner_id", "owner"))
-        char_id = _active_char_id_or_none()
-        if not char_id:
-            return None
-        entries = load(uid, char_id=char_id)
     except Exception:
         return None
-    matches = [
-        entry for entry in entries
-        if entry.get("role") == "assistant" and entry.get("_turn_id") == turn_id
-    ]
-    if not matches:
-        return None
-    reply = matches[-1].get("content")
-    if not isinstance(reply, str):
-        return None
-    return {
-        "reply": reply,
-        "emotion": "neutral",
-        "turn_id": turn_id,
-        "msg_id": turn_id,
-        "critical_written": True,
-    }
+    candidates: list[str] = []
+    if isinstance(canonical_char_id, str) and canonical_char_id:
+        candidates.append(canonical_char_id)
+    active = _canonical_character_id()
+    if active and active not in candidates:
+        candidates.append(active)
+    try:
+        for char_id in get_paths().memory_character_ids():
+            if char_id not in candidates:
+                candidates.append(char_id)
+    except Exception:
+        pass
+    for char_id in candidates:
+        try:
+            entries = load(uid, char_id=char_id)
+        except Exception:
+            continue
+        matches = [
+            entry for entry in entries
+            if entry.get("role") == "assistant" and entry.get("_turn_id") == turn_id
+        ]
+        if not matches:
+            continue
+        reply = matches[-1].get("content")
+        if not isinstance(reply, str):
+            return None
+        return {
+            "reply": reply,
+            "emotion": "neutral",
+            "turn_id": turn_id,
+            "msg_id": turn_id,
+            "critical_written": True,
+        }
+    return None
+
+
+def _project_retained_result(turn_id: object, canonical_char_id: object) -> dict | None:
+    """Call the projector while retaining compatibility with one-argument test seams."""
+    import inspect
+
+    try:
+        parameter_count = len(inspect.signature(_project_canonical_result).parameters)
+    except (TypeError, ValueError):
+        parameter_count = 2
+    if parameter_count < 2:
+        return _project_canonical_result(turn_id)
+    return _project_canonical_result(turn_id, canonical_char_id)
+
+
+async def read_owner_turn_receipt(caller_label: str, client_turn_id: str) -> dict | None:
+    """Read one caller-owned receipt under its same per-key lock."""
+    lock = await owner_turn_receipts.lock_for(caller_label, client_turn_id)
+    async with lock:
+        row = owner_turn_receipts.load(caller_label, client_turn_id)
+        if row is None:
+            return None
+        if row.get("status") == "running":
+            row = owner_turn_receipts.recover_if_interrupted(
+                caller_label,
+                client_turn_id,
+                is_inflight=is_currently_inflight(caller_label, client_turn_id),
+            )
+        return row

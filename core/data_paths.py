@@ -938,6 +938,23 @@ class DataPaths:
         用于 v1 模式下枚举所有用户（各 uid 是其直接子目录）。"""
         return self._p("runtime", "memory", char_id)
 
+    def memory_character_ids(self) -> list[str]:
+        """Return safe character directory names for metadata-only cross-character lookup."""
+        root = self._p("runtime", "memory")
+        try:
+            children = root.iterdir()
+        except OSError:
+            return []
+        result: list[str] = []
+        for child in children:
+            if not child.is_dir():
+                continue
+            try:
+                result.append(safe_user_id(child.name))
+            except ValueError:
+                continue
+        return sorted(set(result))
+
     def runtime_character_dir(self, *, char_id: str) -> Path:
         """Per-character runtime override dir: data/runtime/characters/{char_id}/
         Used for runtime-uploaded assets (e.g. avatar overrides)."""

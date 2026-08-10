@@ -7,10 +7,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from admin.auth import TokenInfo, require_scopes
-from core import owner_turn_receipts
 from core.owner_turn_service import (
     execute_idempotent_owner_turn,
     owner_input_context,
+    read_owner_turn_receipt,
     validate_client_turn_id,
     validate_message,
     validate_upload_ids,
@@ -117,6 +117,8 @@ async def owner_turn(
         return JSONResponse(status_code=202, content={"status": "in_flight", **(result or {})})
     if status == "completed_result_expired":
         return JSONResponse(status_code=410, content={"status": "completed_result_expired", **(result or {})})
+    if status == "interrupted_unknown":
+        raise HTTPException(status_code=503, detail="execution_outcome_unknown")
     if status not in {"completed", "completed_replay"} or result is None:
         raise HTTPException(status_code=503, detail=str((result or {}).get("error_code") or "owner turn unavailable"))
     if status == "completed":
@@ -136,7 +138,7 @@ async def owner_turn_status(
         client_turn_id = validate_client_turn_id(client_turn_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    row = owner_turn_receipts.load(_auth.label, client_turn_id)
+    row = await read_owner_turn_receipt(_auth.label, client_turn_id)
     if row is None:
         raise HTTPException(status_code=404, detail="owner turn not found")
     return owner_turn_receipts.projection(row)
