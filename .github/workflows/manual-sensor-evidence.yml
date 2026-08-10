@@ -1,0 +1,78 @@
+name: manual-sensor-evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_sha:
+        description: "Backend SHA used for the manual sensor run"
+        required: true
+        type: string
+      source_identity:
+        description: "Device or simulator identity, redacted"
+        required: true
+        type: string
+      command:
+        description: "Exact manual smoke command"
+        required: true
+        type: string
+      input_summary:
+        description: "Synthetic or redacted input summary"
+        required: true
+        type: string
+      output_summary:
+        description: "Observed output summary"
+        required: true
+        type: string
+      evidence_location:
+        description: "URL or artifact reference for logs/video"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.backend_sha }}
+      - name: Validate and record manual evidence
+        env:
+          BACKEND_SHA: ${{ inputs.backend_sha }}
+          SOURCE_IDENTITY: ${{ inputs.source_identity }}
+          COMMAND: ${{ inputs.command }}
+          INPUT_SUMMARY: ${{ inputs.input_summary }}
+          OUTPUT_SUMMARY: ${{ inputs.output_summary }}
+          EVIDENCE_LOCATION: ${{ inputs.evidence_location }}
+        run: |
+          set -euo pipefail
+          [[ "$BACKEND_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$BACKEND_SHA"
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          record = {
+              "level": "manual",
+              "backend_sha": os.environ["BACKEND_SHA"],
+              "source_identity": os.environ["SOURCE_IDENTITY"],
+              "command": os.environ["COMMAND"],
+              "input_summary": os.environ["INPUT_SUMMARY"],
+              "output_summary": os.environ["OUTPUT_SUMMARY"],
+              "executed_at": datetime.now(timezone.utc).isoformat(),
+              "evidence_location": os.environ["EVIDENCE_LOCATION"],
+          }
+          Path("manual-sensor-evidence.json").write_text(
+              json.dumps(record, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manual-sensor-evidence-${{ inputs.backend_sha }}
+          path: manual-sensor-evidence.json
+          retention-days: 30

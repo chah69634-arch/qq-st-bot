@@ -1,0 +1,87 @@
+name: offline-evals
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "47 18 * * *"
+  workflow_dispatch:
+    inputs:
+      run_coplay:
+        description: "Opt in to the external-LLM Coplay evaluation"
+        required: true
+        type: boolean
+        default: false
+      coplay_model:
+        description: "Model label recorded with an opt-in Coplay run"
+        required: false
+        type: string
+        default: "configured-by-repository"
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Prepare public fresh-clone configuration
+        run: cp config.example.yaml config.yaml
+      - name: Run independent offline evaluations
+        run: |
+          mkdir -p artifacts
+          python tests/run_identity_eval.py 2>&1 | tee artifacts/identity-eval.txt
+          python tests/run_format_eval.py 2>&1 | tee artifacts/format-eval.txt
+          python tests/run_memeval.py 2>&1 | tee artifacts/memeval.txt
+      - name: Upload offline evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-evals-${{ github.sha }}
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 30
+
+  coplay-opt-in:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_coplay == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Prepare public fresh-clone configuration
+        run: cp config.example.yaml config.yaml
+      - name: Record opt-in model and cost boundary
+        run: |
+          mkdir -p artifacts
+          {
+            echo "model=${{ inputs.coplay_model }}"
+            echo "cost_boundary=explicit workflow_dispatch opt-in; not a PR required check"
+            echo "non_deterministic=true"
+            echo "commit=$(git rev-parse HEAD)"
+          } | tee artifacts/coplay-run-metadata.txt
+      - name: Run Coplay external evaluation
+        run: python tests/run_coplay_eval.py 2>&1 | tee artifacts/coplay-eval.txt
+      - name: Upload Coplay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coplay-opt-in-${{ github.sha }}
+          path: artifacts
+          if-no-files-found: error
+          retention-days: 30
