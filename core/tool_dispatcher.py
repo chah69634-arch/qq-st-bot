@@ -51,6 +51,9 @@ def register_send_callback(callback: Callable):
 # ─── 内联工具实现（设备控制、定时器）─────────────────────────────────────────
 
 async def _device_shutdown(delay_seconds: int = 60) -> str:
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return "disabled_remote_server_local_capability"
     try:
         system = platform.system()
         if system == "Windows":
@@ -66,6 +69,9 @@ async def _device_shutdown(delay_seconds: int = 60) -> str:
 
 
 async def _device_sleep() -> str:
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return "disabled_remote_server_local_capability"
     try:
         system = platform.system()
         if system == "Windows":
@@ -297,6 +303,10 @@ async def _push_desktop_action(action: dict) -> str:
         logger.info("[_push_desktop_action] action=%s target=device offline", action_type)
         return "设备端离线，动作未执行"
 
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return "client_offline" if not transport.is_connected() else "ack_failed"
+
     # Only desktop-owned actions may use the legacy desktop file queue.
     if not _is_desktop_active():
         return "桌宠端离线，动作未执行"
@@ -394,6 +404,9 @@ async def _play_song_wrapper(song_name: str = "", artist: str = "") -> str:
 
 
 async def _exit_yandere_wrapper() -> str:
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return "disabled_remote_server_local_capability"
     import json
     from pathlib import Path
     from core.config_loader import get_config
@@ -1255,6 +1268,10 @@ def is_side_effect_tool(tool_name: str) -> bool:
     effect = get_tool_effect(tool_name)
     if effect:
         return effect != "read"
+    from core.deployment_capabilities import tool_allowed
+    allowed, reason = tool_allowed(tool_name)
+    if not allowed:
+        return reason
     spec = _TOOL_REGISTRY.get(tool_name, {})
     if spec.get("dangerous", False):
         return True
@@ -1350,6 +1367,9 @@ def get_tools_schema(
     for name, info in _TOOL_REGISTRY.items():
         if info.get("self_management"):
             # The gateway is added only by trusted agent loops.
+            continue
+        from core.deployment_capabilities import tool_allowed
+        if not tool_allowed(name)[0]:
             continue
         if not _is_tool_enabled(name):
             continue
@@ -1496,6 +1516,9 @@ def _build_probe_prompt(
     char_name = get_active_char_name()
     for name, spec in _TOOL_REGISTRY.items():
         if allowed_tool_names is not None and name not in allowed_tool_names:
+            continue
+        from core.deployment_capabilities import tool_allowed
+        if not tool_allowed(name)[0]:
             continue
         if spec.get("category") not in categories:
             continue
@@ -1751,6 +1774,7 @@ async def _execute_structured_impl(
     char_id: str,
     bypass_read_log: bool = False,
     tool_status_observer=None,
+    allowed_tool_names: frozenset[str] | None = None,
 ) -> ToolExecutionOutcome:
     """
     执行工具，返回 (tool_result, ask_confirm_text)
@@ -1819,6 +1843,9 @@ async def _execute_structured_impl(
         _fail = get_tool_fail_response()
         _trace("failed", _fail)
         return _execution_outcome("tool_unknown", _fail)
+
+    if allowed_tool_names is not None and tool_name not in allowed_tool_names:
+        return _execution_outcome("tool_failed", "tool capability unavailable for this caller")
 
     tool_info = _TOOL_REGISTRY[tool_name]
     if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
@@ -2035,6 +2062,7 @@ async def execute_structured(
     char_id: str,
     bypass_read_log: bool = False,
     tool_status_observer=None,
+    allowed_tool_names: frozenset[str] | None = None,
 ) -> ToolExecutionOutcome:
     return await _execute_structured_impl(
         tool_name, tool_args, user_id, target_id, is_group, session_state,
@@ -2042,6 +2070,7 @@ async def execute_structured(
         char_id=char_id,
         bypass_read_log=bypass_read_log,
         tool_status_observer=tool_status_observer,
+        allowed_tool_names=allowed_tool_names,
     )
 
 
@@ -2057,6 +2086,7 @@ async def execute(
     char_id: str,
     bypass_read_log: bool = False,
     tool_status_observer=None,
+    allowed_tool_names: frozenset[str] | None = None,
 ) -> tuple[str | None, str | None]:
     """Compatibility tuple API; new routing code should use execute_structured()."""
     outcome = await execute_structured(
@@ -2065,6 +2095,7 @@ async def execute(
         char_id=char_id,
         bypass_read_log=bypass_read_log,
         tool_status_observer=tool_status_observer,
+        allowed_tool_names=allowed_tool_names,
     )
     return outcome.result, outcome.confirmation_request
 
@@ -2088,7 +2119,7 @@ class ToolDispatcher:
     def get_tools_schema(self, categories: list[str] | None = None, *, char_id: str | None = None, uid: str | None = None) -> list:
         return get_tools_schema(categories=categories, char_id=char_id, uid=uid)
 
-    async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str, bypass_read_log: bool = False, tool_status_observer=None):
+    async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str, bypass_read_log: bool = False, tool_status_observer=None, allowed_tool_names: frozenset[str] | None = None):
         return await execute(
             tool_name=tool_name,
             tool_args=tool_args,
@@ -2100,4 +2131,5 @@ class ToolDispatcher:
             char_id=char_id,
             bypass_read_log=bypass_read_log,
             tool_status_observer=tool_status_observer,
+            allowed_tool_names=allowed_tool_names,
         )

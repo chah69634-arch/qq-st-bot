@@ -81,6 +81,7 @@ def get_admin_secret() -> str:
 class TokenInfo:
     label: str
     scopes: frozenset[str]   # profile 已展开
+    profile: str | None = None
 
 
 def resolve_token(raw: str) -> "TokenInfo | None":
@@ -93,11 +94,12 @@ def resolve_token(raw: str) -> "TokenInfo | None":
         return None
     secret = get_admin_secret()
     if secret and hmac.compare_digest(raw, secret):
-        return TokenInfo(label=_LEGACY_LABEL, scopes=frozenset({"admin"}))
+        return TokenInfo(label=_LEGACY_LABEL, scopes=frozenset({"admin"}), profile=None)
     record = find_by_hash(hash_token(raw))
     if record is None:
         return None
-    return TokenInfo(label=record.label, scopes=record.scopes)
+    profile = next(iter(record.profiles)) if len(record.profiles) == 1 else None
+    return TokenInfo(label=record.label, scopes=record.scopes, profile=profile)
 
 
 def _scopes_ok(have: frozenset[str], need: tuple[str, ...]) -> bool:

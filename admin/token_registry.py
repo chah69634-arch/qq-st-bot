@@ -37,6 +37,7 @@ class TokenRecord:
     expires_at: str | None
     disabled: bool
     created_at: str | None = None
+    profiles: frozenset[str] = frozenset()
 
 
 _records: list[TokenRecord] | None = None
@@ -82,13 +83,19 @@ def _load() -> list[TokenRecord]:
     for entry in _read_raw():
         label = entry.get("label", "?")
         try:
+            raw_scopes = list(entry.get("scopes", []) or [])
             records.append(TokenRecord(
                 label=entry["label"],
                 hash=entry["hash"],
-                scopes=expand_scopes(entry.get("scopes", [])),
+                scopes=expand_scopes(raw_scopes),
                 expires_at=entry.get("expires_at"),
                 disabled=bool(entry.get("disabled", False)),
                 created_at=entry.get("created_at"),
+                profiles=frozenset(
+                    item[len("profile:"):]
+                    for item in raw_scopes
+                    if isinstance(item, str) and item.startswith("profile:")
+                ),
             ))
         except (KeyError, ValueError) as e:
             logger.error(f"[token_registry] 跳过非法 token 记录 label={label!r}: {e}")

@@ -216,23 +216,30 @@ async def _execute_selected(
     session_state,
     trusted_user_text: str,
     before_execute: Callable[[], Awaitable[None] | None] | None,
+    allowed_tool_names: frozenset[str] | None = None,
 ) -> None:
     from core.memory.tool_read_log import detect_bypass_intent
 
     await _maybe_call(before_execute)
     name = call.get("name", "")
     arguments = call.get("arguments", {})
-    outcome = await tool_dispatcher.execute_structured(
-        tool_name=name,
-        tool_args=arguments,
-        user_id=uid,
-        target_id=target_id,
-        is_group=is_group,
-        session_state=session_state,
-        origin="user_live",
-        char_id=char_id,
-        bypass_read_log=detect_bypass_intent(trusted_user_text),
-    )
+    if allowed_tool_names is not None and name not in allowed_tool_names:
+        outcome = tool_dispatcher.ToolExecutionOutcome(
+            status="tool_failed", result="tool capability unavailable for this caller",
+        )
+    else:
+        outcome = await tool_dispatcher.execute_structured(
+            tool_name=name,
+            tool_args=arguments,
+            user_id=uid,
+            target_id=target_id,
+            is_group=is_group,
+            session_state=session_state,
+            origin="user_live",
+            char_id=char_id,
+            bypass_read_log=detect_bypass_intent(trusted_user_text),
+            allowed_tool_names=allowed_tool_names,
+        )
     result.selected_tool = name
     result.execution_status = outcome.status
     result.tool_result_generated_at = time.time()
@@ -275,6 +282,7 @@ async def route_pretool(
     exposure_path: str = "path_a",
     provenance_channel: str | None = None,
     before_execute: Callable[[], Awaitable[None] | None] | None = None,
+    allowed_tool_names: frozenset[str] | None = None,
 ) -> PreToolRouteResult:
     """Run the shared fast-match/probe/execute pre-tool contract."""
     effective_channel = provenance_channel or channel
@@ -299,6 +307,11 @@ async def route_pretool(
             str((schema.get("function") or schema).get("name") or ""),
         )
     ]
+    if allowed_tool_names is not None:
+        schemas = [
+            schema for schema in schemas
+            if str((schema.get("function") or schema).get("name") or "") in allowed_tool_names
+        ]
     schemas = filter_exposure_schemas(schemas, exposure)
     available = [
         str((schema.get("function") or schema).get("name") or "")
@@ -332,6 +345,7 @@ async def route_pretool(
             result, call, uid=uid, char_id=char_id, target_id=target_id,
             is_group=is_group, session_state=session_state,
             trusted_user_text=trusted_user_text, before_execute=before_execute,
+            allowed_tool_names=allowed_tool_names,
         )
         session_state.clear()
         _capture(uid, result, trusted_user_text)
@@ -349,6 +363,7 @@ async def route_pretool(
             result, call, uid=uid, char_id=char_id, target_id=target_id,
             is_group=is_group, session_state=session_state,
             trusted_user_text=trusted_user_text, before_execute=before_execute,
+            allowed_tool_names=allowed_tool_names,
         )
         _capture(uid, result, trusted_user_text)
         return result
@@ -375,6 +390,7 @@ async def route_pretool(
             result, result.tool_calls[0], uid=uid, char_id=char_id,
             target_id=target_id, is_group=is_group, session_state=session_state,
             trusted_user_text=trusted_user_text, before_execute=before_execute,
+            allowed_tool_names=allowed_tool_names,
         )
         if result.execution_status == "tool_executed" and tool_loop_enabled:
             result.exclude_tools.add(name)
@@ -450,6 +466,7 @@ async def route_pretool(
             result, call, uid=uid, char_id=char_id,
             target_id=target_id, is_group=is_group, session_state=session_state,
             trusted_user_text=trusted_user_text, before_execute=before_execute,
+            allowed_tool_names=allowed_tool_names,
         )
         if result.should_stop_for_user_input or result.prompt_tool_result:
             break

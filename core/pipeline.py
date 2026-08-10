@@ -917,6 +917,8 @@ class Pipeline:
         tool_event_observer=None,
         tool_call_required: bool = False,
         required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
+        allowed_tool_categories: frozenset[str] | None = None,
+        allowed_tool_names: frozenset[str] | None = None,
     ):
         """主生成多步调用工具再回答，只在 tool_dispatcher.tool_loop_active(uid) 为真时被调用。
 
@@ -967,7 +969,7 @@ class Pipeline:
         # categories/tools/excludes.
         from core.tool_exposure import filter_schemas as _filter_exposure, resolve as _resolve_exposure
         _exposure = _resolve_exposure("path_c", char_id=char_id)
-        categories = list(_exposure.categories)
+        categories = list(allowed_tool_categories) if allowed_tool_categories is not None else list(_exposure.categories)
         excluded_tool_names = set(_exposure.exclude_tools)
         excluded_tool_names.update(exclude_tools or ())
 
@@ -985,6 +987,12 @@ class Pipeline:
             t for t in _filter_exposure(_filter_growth_tools(_raw_tools, char_id=char_id), _exposure)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
+        caller_allowed_tool_names = allowed_tool_names
+        if caller_allowed_tool_names is not None:
+            tools = [
+                tool for tool in tools
+                if (tool.get("function") or tool).get("name") in caller_allowed_tool_names
+            ]
         # This internal gateway is not part of the ordinary registry exposure.
         # It is appended only when this character has at least one mutable,
         # currently available user grant.
@@ -1013,8 +1021,8 @@ class Pipeline:
         model_presets = _get_preset_config()
         chat_preset_name = _resolve_preset_name("chat", char_id=char_id)
         model_preset = model_presets.get("presets", {}).get(chat_preset_name, {})
-        allowed_tool_names, applied_tool_preset = resolve_tool_allowlist(cfg, model_preset)
-        if allowed_tool_names is not None:
+        preset_allowed_tool_names, applied_tool_preset = resolve_tool_allowlist(cfg, model_preset)
+        if preset_allowed_tool_names is not None:
             tools = [
                 tool for tool in tools
                 # MCP is configured by its own server lifecycle/allowlist.
@@ -1022,7 +1030,7 @@ class Pipeline:
                 # dynamic entries into an incomplete, persistent MCP catalogue.
                 if _TOOL_REGISTRY.get((tool.get("function") or tool).get("name", ""), {}).get("category") == "mcp"
                 or (tool.get("function") or tool).get("name") == "manage_self_capability"
-                or (tool.get("function") or tool).get("name") in allowed_tool_names
+                or (tool.get("function") or tool).get("name") in preset_allowed_tool_names
             ]
             logger.info(
                 "[pipeline.run_agentic_loop] applied tool preset=%r model_preset=%r exposed=%d",
@@ -1113,10 +1121,17 @@ class Pipeline:
             origin: str,
         ) -> tuple[str | None, str | None]:
             """Bridge trusted dispatcher lifecycle events into one UI-only status."""
+            execute_kwargs = {
+                "origin": origin,
+                "char_id": char_id,
+                "bypass_read_log": _bypass_read_log,
+            }
+            if caller_allowed_tool_names is not None:
+                execute_kwargs["allowed_tool_names"] = caller_allowed_tool_names
             if tool_event_observer is None:
                 return await _execute(
                     tool_name, tool_args, uid, uid, is_group, session_state,
-                    origin=origin, char_id=char_id, bypass_read_log=_bypass_read_log,
+                    **execute_kwargs,
                 )
 
             # call_id is model-provided, so never expose it as the public status
@@ -1174,7 +1189,7 @@ class Pipeline:
             try:
                 return await _execute(
                     tool_name, tool_args, uid, uid, is_group, session_state,
-                    origin=origin, char_id=char_id, bypass_read_log=_bypass_read_log,
+                    **execute_kwargs,
                     tool_status_observer=_dispatcher_status,
                 )
             finally:
