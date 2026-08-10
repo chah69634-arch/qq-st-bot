@@ -1,10 +1,48 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from admin.auth import require_scopes
 
 router = APIRouter()
+
+
+@router.get(
+    "/observability/owner-turns",
+    summary="读取脱敏 Owner Turn receipt 观测",
+    description=(
+        "只返回 caller/client/canonical ID、状态、时间和固定错误码；不返回正文、"
+        "request hash、Prompt、工具数据、token 或路径。"
+    ),
+)
+async def owner_turn_receipts(
+    status: str = "",
+    caller: str = "",
+    created_after: float | None = Query(None, ge=0),
+    created_before: float | None = Query(None, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+    cursor: str = Query("", max_length=512),
+    _auth=Depends(require_scopes("state.read")),
+):
+    if created_after is not None and created_before is not None and created_after > created_before:
+        raise HTTPException(status_code=422, detail="created_after must not exceed created_before")
+    from core import owner_turn_receipts as receipt_store
+    from core.owner_turn_service import is_currently_inflight
+
+    try:
+        result = receipt_store.list_receipts(
+            status=status or None,
+            caller=caller or None,
+            created_after=created_after,
+            created_before=created_before,
+            limit=limit,
+            cursor=cursor or None,
+            is_inflight=is_currently_inflight,
+        )
+        result["status_counts"] = receipt_store.summary(is_inflight=is_currently_inflight)
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get(

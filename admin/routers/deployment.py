@@ -67,6 +67,10 @@ async def get_deployment_preflight(_auth=Depends(require_scopes("state.read"))):
     ]
     tls_declared = bool(cfg.get("tls") or cfg.get("https") or cfg.get("wss") or reverse_proxy.get("tls"))
     owner_id = str(cfg.get("scheduler", {}).get("owner_id", "owner"))
+    from core import owner_turn_receipts
+    from core.owner_turn_service import is_currently_inflight
+
+    owner_turn_summary = owner_turn_receipts.summary(is_inflight=is_currently_inflight)
     return {
         "mode": mode,
         "bind": {
@@ -79,6 +83,7 @@ async def get_deployment_preflight(_auth=Depends(require_scopes("state.read"))):
         "disabled_capabilities": blocked,
         "frozen_capabilities": frozen,
         "diary_sync": "configured" if get_paths().diary_mirror_status(owner_id=owner_id).exists() else "never_synced",
+        "owner_turns": owner_turn_summary,
         "port_scan": "not_performed",
         "credentials": "redacted",
     }
