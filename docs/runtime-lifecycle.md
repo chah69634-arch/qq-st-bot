@@ -386,3 +386,11 @@ Document:
 - persistent state owners
 - communication paths
 
+
+## Brief 176：Dream WAKE 确认与跨进程收口
+
+Dream 的 `DREAM_EXIT_REQUESTED` 是退出确认待决态，不是已关闭态。客户端的“留下”通过带同一 `dream_id` 的 `/dream/resume` 恢复 `DREAM_ACTIVE`；“还是要醒来”、再次 WAKE 或 Esc 通过唯一的 `force_exit_dream()` / `_do_close_dream()` 收口。只有后端确认 close/archive 成功后，桌面窗口才关闭；请求失败时保留 current session 和可重试出口。
+
+后端关闭成功的持久不变量是：active `dream_id` 清除、`last_dream_id` 固定、current transcript 移入对应 archive，后续 archive replay 只读且不能 resume、send、WS/TTS 或重新写 current。`archive_ok=false` 时保持 `DREAM_CLOSING`，不得由 UI 关闭掩盖失败。重复调用返回首次关闭 metadata，并通过 operations 观测重复次数；旧 `dream_id` 的迟到请求不得影响新梦。
+
+这条链路的单元/协议检查不替代真实跨进程验收。完整验收仍需在不污染真实 runtime/userdata 的隔离环境中，真实启动 backend 与 desktop，验证“挽留 → 确认醒来 → 窗口关闭 → 只读回放 → 旧梦不可发送 → 新梦 ID 不同”。
