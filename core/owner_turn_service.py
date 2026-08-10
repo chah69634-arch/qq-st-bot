@@ -1,0 +1,250 @@
+"""Application boundary for trusted owner turns.
+
+The legacy desktop/mobile implementation remains the compatibility executor
+for now, but route modules no longer construct its caller semantics. This
+module owns the immutable caller context and idempotency boundary used by the
+versioned owner API.
+"""
+
+from __future__ import annotations
+
+import re
+import asyncio
+from dataclasses import dataclass
+from typing import Awaitable, Callable
+
+from core import owner_turn_receipts
+
+_OPAQUE_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+_MAX_MESSAGE_LENGTH = 12000
+_INFLIGHT: dict[tuple[str, str], asyncio.Task[dict]] = {}
+
+
+@dataclass(frozen=True)
+class TurnCallerContext:
+    caller_kind: str
+    token_label: str
+    token_profile: str
+    provenance_channel: str
+    live_origin_channel: str
+    durable_mobile_mirror: bool
+    allowed_tool_categories: frozenset[str] | None = None
+    allowed_tool_names: frozenset[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.caller_kind not in {"desktop", "mobile", "owner_input"}:
+            raise ValueError("invalid owner turn caller kind")
+        if not self.token_label or not self.token_profile:
+            raise ValueError("owner turn caller identity is required")
+        if self.provenance_channel not in {"desktop", "mobile"}:
+            raise ValueError("invalid provenance channel")
+        if self.live_origin_channel not in {"desktop", "mobile"}:
+            raise ValueError("invalid live origin channel")
+
+
+def legacy_desktop_context(token_label: str = "legacy-admin") -> TurnCallerContext:
+    return TurnCallerContext(
+        caller_kind="desktop", token_label=token_label, token_profile="desktop",
+        provenance_channel="desktop", live_origin_channel="desktop",
+        durable_mobile_mirror=True,
+    )
+
+
+def legacy_mobile_context(token_label: str = "legacy-admin") -> TurnCallerContext:
+    return TurnCallerContext(
+        caller_kind="mobile", token_label=token_label, token_profile="mobile",
+        provenance_channel="mobile", live_origin_channel="mobile",
+        durable_mobile_mirror=True,
+    )
+
+
+def owner_input_context(token_label: str, token_profile: str = "owner-input") -> TurnCallerContext:
+    return TurnCallerContext(
+        caller_kind="owner_input", token_label=token_label, token_profile=token_profile,
+        provenance_channel="mobile", live_origin_channel="mobile",
+        durable_mobile_mirror=True,
+        allowed_tool_categories=frozenset({"info", "memory"}),
+    )
+
+
+def validate_client_turn_id(value: object) -> str:
+    if not isinstance(value, str) or not _OPAQUE_ID_RE.fullmatch(value):
+        raise ValueError("client_turn_id must be a stable opaque id")
+    return value
+
+
+def validate_message(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("message must be a string")
+    message = value.strip()
+    if not message:
+        raise ValueError("message cannot be empty")
+    if len(message) > _MAX_MESSAGE_LENGTH:
+        raise ValueError("message exceeds the maximum length")
+    return message
+
+
+def validate_upload_ids(value: object) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 8:
+        raise ValueError("upload_ids must be a bounded list")
+    result = []
+    for item in value:
+        if not isinstance(item, str) or not _OPAQUE_ID_RE.fullmatch(item):
+            raise ValueError("upload_ids must contain opaque ids only")
+        result.append(item)
+    return result
+
+
+async def run_legacy_owner_turn(
+    message: str,
+    context: TurnCallerContext,
+    *,
+    reply_to: dict | None = None,
+    trusted_user_text: str | None = None,
+    executor: Callable[..., Awaitable[dict]],
+) -> dict:
+    """Run the one existing reality chain with a fixed caller context."""
+    kwargs = {"reply_to": reply_to}
+    if context.caller_kind != "desktop":
+        kwargs["live_origin_channel"] = context.live_origin_channel
+        kwargs["durable_mobile_mirror"] = context.durable_mobile_mirror
+    if trusted_user_text is not None:
+        kwargs["trusted_user_text"] = trusted_user_text
+    if context.allowed_tool_categories is not None:
+        kwargs["allowed_tool_categories"] = context.allowed_tool_categories
+    if context.allowed_tool_names is not None:
+        kwargs["allowed_tool_names"] = context.allowed_tool_names
+    return await executor(message, context.provenance_channel, **kwargs)
+
+
+async def execute_idempotent_owner_turn(
+    *,
+    client_turn_id: str,
+    message: str,
+    reply_to: dict | None,
+    upload_ids: list[str],
+    context: TurnCallerContext,
+    executor: Callable[..., Awaitable[dict]],
+) -> tuple[str, dict | None]:
+    """Execute once, or project the canonical result from retained history."""
+    client_turn_id = validate_client_turn_id(client_turn_id)
+    message = validate_message(message)
+    request_digest = owner_turn_receipts.request_hash(
+        message=message, reply_to=reply_to, upload_ids=upload_ids,
+    )
+    lock = await owner_turn_receipts.lock_for(context.token_label, client_turn_id)
+    async with lock:
+        owner_turn_receipts.prune()
+        row = owner_turn_receipts.load(context.token_label, client_turn_id)
+        if row is not None:
+            if row.get("request_hash") != request_digest:
+                return "conflict", owner_turn_receipts.projection(row)
+            status = row.get("status")
+            if status == "completed":
+                projected = _project_canonical_result(row.get("canonical_turn_id"))
+                return ("completed_replay", projected) if projected is not None else (
+                    "completed_result_expired", owner_turn_receipts.projection(row)
+                )
+            if status == "running":
+                return "in_flight", owner_turn_receipts.projection(row)
+            return str(status or "failed"), owner_turn_receipts.projection(row)
+
+        row = owner_turn_receipts.write(
+            caller_label=context.token_label,
+            client_turn_id=client_turn_id,
+            request_digest=request_digest,
+            status="running",
+        )
+        task = asyncio.create_task(_execute_and_record(
+            client_turn_id=client_turn_id,
+            message=message,
+            reply_to=reply_to,
+            upload_ids=upload_ids,
+            context=context,
+            executor=executor,
+            created_at=row.get("created_at"),
+            request_digest=request_digest,
+        ))
+        _INFLIGHT[(context.token_label, client_turn_id)] = task
+        task.add_done_callback(
+            lambda completed: _INFLIGHT.pop((context.token_label, client_turn_id), None)
+            if _INFLIGHT.get((context.token_label, client_turn_id)) is completed else None
+        )
+
+    result = await asyncio.shield(task)
+    return "completed", result
+
+
+async def _execute_and_record(
+    *,
+    client_turn_id: str,
+    message: str,
+    reply_to: dict | None,
+    upload_ids: list[str],
+    context: TurnCallerContext,
+    executor: Callable[..., Awaitable[dict]],
+    created_at: float | None,
+    request_digest: str,
+) -> dict:
+    try:
+        result = await run_legacy_owner_turn(
+            message, context, reply_to=reply_to, executor=executor,
+        )
+        canonical_turn_id = str(result.get("turn_id") or "")
+        if not canonical_turn_id:
+            raise RuntimeError("owner turn did not produce a canonical turn id")
+        owner_turn_receipts.write(
+            caller_label=context.token_label,
+            client_turn_id=client_turn_id,
+            request_digest=request_digest,
+            status="completed",
+            canonical_turn_id=canonical_turn_id,
+            created_at=created_at,
+        )
+        return result
+    except Exception as exc:
+        owner_turn_receipts.write(
+            caller_label=context.token_label,
+            client_turn_id=client_turn_id,
+            request_digest=request_digest,
+            status="failed",
+            error_code=type(exc).__name__,
+            created_at=created_at,
+        )
+        raise
+
+
+def _project_canonical_result(turn_id: object) -> dict | None:
+    if not isinstance(turn_id, str) or not turn_id:
+        return None
+    try:
+        from core.config_loader import get_config
+        from core.memory.short_term import load
+        from core.scheduler.loop import _active_char_id_or_none
+
+        cfg = get_config()
+        uid = str(cfg.get("scheduler", {}).get("owner_id", "owner"))
+        char_id = _active_char_id_or_none()
+        if not char_id:
+            return None
+        entries = load(uid, char_id=char_id)
+    except Exception:
+        return None
+    matches = [
+        entry for entry in entries
+        if entry.get("role") == "assistant" and entry.get("_turn_id") == turn_id
+    ]
+    if not matches:
+        return None
+    reply = matches[-1].get("content")
+    if not isinstance(reply, str):
+        return None
+    return {
+        "reply": reply,
+        "emotion": "neutral",
+        "turn_id": turn_id,
+        "msg_id": turn_id,
+        "critical_written": True,
+    }

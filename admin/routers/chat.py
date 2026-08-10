@@ -36,6 +36,8 @@ async def run_owner_chat_turn(
     durable_mobile_mirror: bool = True,
     trusted_user_text: str | None = None,
     reply_to: dict | None = None,
+    allowed_tool_categories: frozenset[str] | None = None,
+    allowed_tool_names: frozenset[str] | None = None,
 ) -> dict:
     """
     手机/桌宠共用的 owner 对话入口。
@@ -110,12 +112,15 @@ async def run_owner_chat_turn(
         async def _timed_probe():
             nonlocal _t_probe
             _t0 = time.monotonic()
-            result = await _probe_and_execute_tools(
-                _probe_text,
-                user_id,
-                char_id=_frozen_scope.character_id,
-                provenance_channel=provenance_channel,
-            )
+            probe_kwargs = {
+                "char_id": _frozen_scope.character_id,
+                "provenance_channel": provenance_channel,
+            }
+            if allowed_tool_categories is not None:
+                probe_kwargs["categories"] = allowed_tool_categories
+            if allowed_tool_names is not None:
+                probe_kwargs["allowed_tool_names"] = allowed_tool_names
+            result = await _probe_and_execute_tools(_probe_text, user_id, **probe_kwargs)
             _t_probe = time.monotonic() - _t0
             return result
 
@@ -218,6 +223,8 @@ async def run_owner_chat_turn(
                     exclude_tools=_fast_path_exclude_tools,
                     tool_call_required=_tool_call_required,
                     required_tool_names=_required_tool_names,
+                    allowed_tool_categories=allowed_tool_categories,
+                    allowed_tool_names=allowed_tool_names,
                 )
             else:
                 _stream_source = pipeline.run_llm_stream(
@@ -255,6 +262,8 @@ async def run_owner_chat_turn(
                     exclude_tools=_fast_path_exclude_tools,
                     tool_call_required=_tool_call_required,
                     required_tool_names=_required_tool_names,
+                    allowed_tool_categories=allowed_tool_categories,
+                    allowed_tool_names=allowed_tool_names,
                 )
             else:
                 reply = await pipeline.run_llm(messages)
@@ -382,6 +391,8 @@ async def _probe_and_execute_tools(
     *,
     char_id: str,
     provenance_channel: str,
+    categories: frozenset[str] | None = None,
+    allowed_tool_names: frozenset[str] | None = None,
 ):
     """Compatibility seam delegating to the channel-neutral pre-tool router."""
     from core import tool_dispatcher
@@ -400,7 +411,8 @@ async def _probe_and_execute_tools(
         tool_loop_enabled=tool_dispatcher.tool_loop_active(user_id),
         # Path A exposure is channel-neutral; resolve it from the shared
         # path configuration and character override.
-        categories=None,
+        categories=list(categories) if categories is not None else None,
+        allowed_tool_names=allowed_tool_names,
     )
 
 
@@ -497,8 +509,12 @@ async def desktop_chat(body: dict, _auth=Depends(require_scopes("chat"))):
     _uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
     _check_reality_not_in_dream(_uid)
 
+    from core.owner_turn_service import legacy_desktop_context, run_legacy_owner_turn
+    context = legacy_desktop_context(getattr(_auth, "label", "legacy-admin"))
     try:
-        result = await run_owner_chat_turn(message, "desktop", reply_to=reply_to)
+        result = await run_legacy_owner_turn(
+            message, context, reply_to=reply_to, executor=run_owner_chat_turn,
+        )
     except Exception as exc:
         from core.llm_client import UpstreamResponseFormatError
 

@@ -18,16 +18,17 @@ async def mobile_chat(body: dict, _auth=Depends(require_scopes("chat"))):
     reply_to = body.get("reply_to")
 
     from admin.routers.chat import _check_reality_not_in_dream, run_owner_chat_turn
+    from core.owner_turn_service import legacy_mobile_context, run_legacy_owner_turn
     from core.config_loader import get_config
 
     uid = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
     _check_reality_not_in_dream(uid)
-    result = await run_owner_chat_turn(
+    context = legacy_mobile_context(getattr(_auth, "label", "legacy-admin"))
+    result = await run_legacy_owner_turn(
         message,
-        "mobile",
-        live_origin_channel="mobile",
-        durable_mobile_mirror=True,
+        context,
         reply_to=reply_to,
+        executor=run_owner_chat_turn,
     )
 
     from core.scheduler.sensor_events import notify_chat_happened
