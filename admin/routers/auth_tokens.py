@@ -30,6 +30,7 @@ def _to_dict(record: token_registry.TokenRecord) -> dict:
     return {
         "label": record.label,
         "scopes": sorted(record.scopes),
+        "profiles": sorted(record.profiles),
         "expires_at": record.expires_at,
         "disabled": record.disabled,
         "hash_prefix": _hash_prefix(record.hash),

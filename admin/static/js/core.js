@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-175-scenario-reconciler-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-173-owner-turn-1';
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
@@ -33,6 +33,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
   scheduler: {related: ['observe-autonomy']},
   tools: {related: ['mcp', 'character']},
   mcp: {related: ['tools']},
+  'owner-turn-api': {related: ['auth-tokens', 'status']},
   'relationship-facts': {related: ['character', 'observe-memory']},
   'auth-tokens': {related: ['users']},
   status: {related: ['model-routing', 'auth-tokens']},
@@ -238,6 +239,7 @@ async function goto(page, {reloadFragment = false} = {}) {
     'model-routing': loadModelRouting,
     mcp:             loadMcpPage,
     tools:           loadToolsPage,
+    'owner-turn-api': loadOwnerTurnApiPage,
     'relationship-facts': loadRelationshipFactsPage,
     character:       loadCharacterPage,
     lorebook:        () => { loadLorebook(); loadJbEntries(); },
