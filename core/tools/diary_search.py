@@ -8,6 +8,12 @@ from core.error_handler import log_error
 
 async def search_diary_for_user(user_id: str, query: str = "") -> str:
     try:
+        from core.deployment_capabilities import is_remote_server
+        if is_remote_server():
+            from core import diary_mirror
+
+            if diary_mirror.sync_state() == "never_synced":
+                return "日记镜像尚未同步，客户端可能离线；本次没有可搜索的日记。"
         text = read_recent(days=30)
         if not text:
             return "最近30天没有找到日记"

@@ -164,6 +164,25 @@ real synthesis. Character preset binding remains owned by the existing
 character asset-binding endpoint, so role inspection cannot overwrite global
 TTS configuration.
 
+## Brief 171 deployment mode and integration controls
+
+`deployment.mode` is a process-owned enum with `local` as the compatibility
+default and `remote_server` as the explicit server deployment mode. It is not
+an admin hot-switch and is not accepted from owner-turn requests, prompts, or
+models. The admin surface exposes only the read-only capability and preflight
+projections:
+
+- `GET /observability/deployment-capabilities` (`state.read`) reports logical
+  enabled/disabled/online-required states and recent desktop WS ack time.
+- `GET /system/deployment-preflight` (`state.read`) reports redacted topology
+  and persistence checks; it does not scan ports or claim external tunnel,
+  backup, HTTPS, or WSS health.
+
+Remote mode disables server-local shutdown/sleep, exit signaling, filesystem
+browsing, and desktop file fallbacks. Desktop actions require WS ack. Diary
+mirror writes are a separate `diary.sync` capability and are not part of the
+general admin settings surface.
+
 ## Brief 163 Admin status and configuration UX
 
 「系统状态」是只读摘要页：`/status` supplies runtime/data-environment basics;

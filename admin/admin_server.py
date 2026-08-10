@@ -43,7 +43,7 @@ from admin.routers import (
     system, lorebook,
     settings_proxy, settings_llm, settings_misc, settings_prompt_assets,
     settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay, settings_feature_flags, settings_mcp, settings_tools,
-    character, chat,
+    character, chat, owner_turn, diary_sync,
     scheduler, watch, sensor, period,
     garden, mobile, diary, chat_log,
     mood, activity, dream,
@@ -52,7 +52,7 @@ from admin.routers import (
     group, group_dream, relationship_facts,
     transcribe, provenance,
     auth_tokens, coplay, perception, spend, growth, observability, wake_bridge, integrations, autonomy, self_management,
-    phone_control, control_center, user_data,
+    phone_control, control_center, user_data, deployment,
 )
 
 # chess 路由依赖 python-chess（requirements-full.txt 的可选依赖，见 cc-tasks/92 §1），
@@ -81,6 +81,8 @@ app.include_router(settings_mcp.router,           prefix="", tags=["设置-MCP"]
 app.include_router(settings_tools.router,         prefix="", tags=["设置-工具"])
 app.include_router(character.router,      prefix="",           tags=["角色卡"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
+app.include_router(owner_turn.router,      prefix="",           tags=["Owner Turn"])
+app.include_router(diary_sync.router,      prefix="",           tags=["Diary Sync"])
 app.include_router(scheduler.router,      prefix="",           tags=["调度器"])
 app.include_router(watch.router,          prefix="",           tags=["Watch"])
 app.include_router(jailbreak_entries.router, prefix="",        tags=["破限条目"])
@@ -121,6 +123,8 @@ app.include_router(control_center.router,        prefix="", tags=["控制中心"
 app.include_router(user_data.router,             prefix="", tags=["用户数据"])
 
 # ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────
+app.include_router(deployment.router, prefix="", tags=["deployment"])
+
 from fastapi import WebSocket as _WebSocket
 from channels.desktop_ws import handle_connection as _ws_desktop_handler
 

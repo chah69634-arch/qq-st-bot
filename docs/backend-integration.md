@@ -5,6 +5,27 @@
 契约。新增字段前先确认三端（本仓 + PresenceKit-desktop + Emerald-mobile）对齐范围，
 避免任一端单边扩展导致字段语义漂移。
 
+## Versioned owner turns and diary sync (Brief 171)
+
+Trusted owner adapters may use `POST /v1/owner/turns` with an
+`owner-input` token. The request is deliberately smaller than the legacy chat
+body: `client_turn_id`, `message`, optional `reply_to`, and bounded opaque
+`upload_ids`. The server resolves owner and active-character scope from its
+process configuration and preserves the existing Reality pipeline.
+
+The `(caller label, client_turn_id)` receipt is durable metadata. Same-payload
+retries project the canonical retained turn; payload conflicts are `409`, and
+an old receipt whose canonical history has expired is
+`completed_result_expired` instead of a second LLM run. Use
+`GET /v1/owner/turns/{client_turn_id}` for the caller-scoped redacted status
+projection.
+
+Obsidian synchronization is separate from the character inner-diary display
+API. `POST /integrations/diary/sync` (scope `diary.sync`) accepts only bounded
+`YYYY-MM-DD.md` entries plus hash/revision/generation metadata. Remote diary
+tools read the server mirror; local mode retains the existing configured
+Obsidian path and fallback behavior.
+
 ## 引用回复（reply_to）
 
 **适用端点**：`POST /desktop/chat`（`admin/routers/chat.py` → `run_owner_chat_turn()`）。

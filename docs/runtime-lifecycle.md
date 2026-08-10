@@ -349,6 +349,19 @@ tick, proposal, winner, or separate persistent ledger. The send marker is
 written after `record_assistant_turn()` returns, while the client handles the
 matching Dream active-to-closed transition and one-shot navigation close.
 
+# Brief 171: Remote deployment preflight
+
+`deployment.mode` is process configuration (`local` by default or
+`remote_server`) and cannot be changed by a request, prompt, or model. The
+read-only `/system/deployment-preflight` projection reports bind mode,
+declared TLS/WSS, persistent-root writability, desktop WS state, disabled
+capabilities, diary-sync state, and that no port scan was performed. It is a
+readiness projection, not proof that an external tunnel or backup is healthy.
+
+In remote mode server-local OS operations and client file fallbacks are
+disabled. Desktop actions use the existing heartbeat/ack WebSocket path;
+owner turns and mobile polling remain normal HTTP/queue paths.
+
 # 12. Known Gaps
 
 ## Missing shutdown contract

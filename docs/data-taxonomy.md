@@ -277,6 +277,30 @@ hidden state, or ordinary prompt layers. Operations projections omit postcard
 letter text, Dream turns, prompts, SMTP configuration, and local filesystem
 paths.
 
+## Owner diary mirror (Brief 171)
+
+The private server mirror is runtime integration state, not authored
+`userdata`:
+
+```
+data/runtime/integrations/diary/{owner}/
+├── manifest.json
+├── status.json
+└── entries/YYYY-MM-DD.md
+```
+
+Only bounded dated Markdown entries are accepted through the `diary.sync`
+scope. Manifest revisions and hashes make retries idempotent; older revisions
+are ignored and same-date conflicts are reported. Deletes create tombstones in
+the manifest and do not physically delete the previous mirror file. In
+`remote_server`, `core/tools/diary_reader.py` reads this mirror exclusively;
+when it has never received an entry, `has_any_diary_entry()` stays false so a
+missing-yesterday reminder is not synthesized from an empty mirror.
+
+The mirror is not a general vault browser and is never copied into tracked
+authored assets. It is consumed only through the existing diary tool framing
+and source-isolation rules.
+
 ## Authored asset management (Brief 158)
 
 `userdata/` remains the only writer target for private voice assets and

@@ -381,6 +381,20 @@ route_pretool(..., categories=None, exposure_path="path_a")
 
 ---
 
+## Brief 171 deployment capability gate
+
+`core/deployment_capabilities.py` is the central policy seam for
+`deployment.mode`. In `remote_server`, `device_shutdown`, `device_sleep`,
+`exit_yandere`, `fs_list`, and `fs_read` are removed from schema/probe
+exposure and fail closed through direct `execute()` as well. The decision is
+process configuration only; callers cannot widen it through request fields or
+prompt text.
+
+Desktop action tools remain client capabilities. In remote mode they require
+an online desktop WebSocket and a successful ack; server-local file fallback
+is disabled. `GET /observability/deployment-capabilities` reports the redacted
+logical status and recent ack time.
+
 ## fs 只读浏览工具（Brief 31）
 
 文件：`core/tools/fs_browse.py`。让角色能"自己翻电脑"——列目录、读文件，范围严格限于

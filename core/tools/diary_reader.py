@@ -17,6 +17,12 @@ def _diary_root() -> Path:
     return Path(p) if p else get_paths().diary_fallback()
 
 def read_diary(target_date: date) -> str:
+    from core.deployment_capabilities import is_remote_server
+
+    if is_remote_server():
+        from core import diary_mirror
+
+        return diary_mirror.read_entry(target_date)
     """读取指定日期的日记，返回文本，不存在返回空字符串"""
     filename = f"{target_date.strftime('%Y-%m-%d')}.md"
     for path in _diary_root().rglob(filename):
@@ -51,6 +57,12 @@ def has_any_diary_entry() -> bool:
     False——diary_reminder 类触发器据此判断"用户根本没在用日记功能"，不能把
     "从没配置/从没写过"当成"漏了一天没写"（Brief 97 追加修复）。
     """
+    from core.deployment_capabilities import is_remote_server
+
+    if is_remote_server():
+        from core import diary_mirror
+
+        return diary_mirror.has_any_entry()
     root = _diary_root()
     if not root.exists():
         return False

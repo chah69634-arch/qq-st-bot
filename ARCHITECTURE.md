@@ -391,6 +391,27 @@ Stop（Claude 准备结束响应时）
 其他都不动。
 
 
+## Brief 171: Remote owner turns, diary mirror, and capability gates
+
+The versioned `POST /v1/owner/turns` endpoint is an owner-input adapter over
+the existing `pipeline_registry` instance, per-owner conversation gate, frozen
+Reality scope, and turn sink. Its durable receipt stores only caller label,
+request hash, status, canonical turn ID, timestamps, and a safe error code.
+The receipt is an idempotency boundary, not a second conversation or memory
+store; a completed receipt is projected from retained canonical history.
+
+`deployment.mode` is process configuration (`local` by default or
+`remote_server`) and cannot be selected by a request, prompt, or model. In
+remote mode server-local shutdown/sleep, desktop signal-file fallback, server
+filesystem browsing, and legacy exit signaling fail closed. Desktop actions
+remain available only through `/ws/desktop` with an acknowledgement.
+
+Owner diary sync is a separate integration boundary. It accepts only bounded
+`YYYY-MM-DD.md` entries, generation, hashes/revisions, and tombstones into the
+private runtime mirror under `DataPaths`; remote diary readers use that mirror
+and never fall back to a client Obsidian path. The inner-character diary API is
+separate and is not reused for this mirror.
+
 ## 功能控制面
 
 P0–P2 设置入口、权限边界与降级路径以 docs/feature-control-surface.md 为准；不得把 config 字段存在误写成已有可视化控制。

@@ -424,6 +424,19 @@ perform 字段属于 v0.1 `message_segments` 契约；权威入口见 [desktop-c
 
 ---
 
+## Brief 171 remote delivery boundary
+
+`/mobile/chat` remains a compatibility endpoint; the versioned
+`/v1/owner/turns` endpoint is the new owner-input adapter with token-profile
+and idempotency contracts. Both use the same Reality pipeline. The older
+historical note that described `/mobile/chat` as removed is not an instruction
+to remove the route.
+
+When `deployment.mode=remote_server`, desktop delivery does not write
+`channel_queue.json` or `agent_actions.json` as a client fallback. Desktop
+actions are successful only after the WebSocket action ack; offline and
+failed-ack results are explicit failures.
+
 ## 文件降级
 
 当 WebSocket 不在线或发送失败时：

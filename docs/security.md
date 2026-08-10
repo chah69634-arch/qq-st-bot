@@ -107,6 +107,20 @@ tokens:
 Token 明文格式：`emt_` + `secrets.token_urlsafe(32)`，由 `POST /auth/tokens`（或 rotate）
 服务端生成，`emt_` 前缀便于日志清洗时正则识别和肉眼辨认。
 
+## Brief 171 owner-input and diary integration boundaries
+
+`owner-input` is a distinct token profile with `chat` scope. Device, sensor,
+watch, and ordinary integration profiles do not inherit chat. The owner turn
+body accepts only `client_turn_id`, `message`, `reply_to`, and bounded opaque
+`upload_ids`; identity, channel, trust, origin, tool capability, token,
+configuration, and filesystem fields are rejected rather than honored.
+
+Owner-turn receipts are metadata-only and caller-scoped. They do not store the
+message, assistant reply, prompt, tool arguments, tool output, or upload path.
+The status projection does not expose the request hash or another caller's
+history. Diary sync has its separate `diary.sync` scope and returns only
+bounded status/result metadata, never diary paths or Markdown正文.
+
 ## P4 现状（五类当前标准持有者）
 
 首次配置脚本当前默认维护五条标准记录。既有部署可能额外保留历史 `sensor-service` token；它不再对应运行客户端，确认无调用后可通过管理面停用或删除。`GET /auth/tokens` 可核实 label/scopes（不含明文）：

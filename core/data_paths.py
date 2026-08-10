@@ -961,6 +961,29 @@ class DataPaths:
         """data/runtime/auth/audit.jsonl — token lifecycle + auth failure audit trail."""
         return self.auth_dir() / "audit.jsonl"
 
+    def owner_turn_receipt(self, *, caller_label: str, receipt_key: str) -> Path:
+        """Persistent metadata-only idempotency receipt for one owner turn."""
+        return self._p(
+            "runtime", "owner_turn", "receipts", safe_user_id(caller_label),
+            f"{safe_user_id(receipt_key)}.json",
+        )
+
+    def owner_turn_receipts_root(self) -> Path:
+        return self._p("runtime", "owner_turn", "receipts")
+
+    def diary_mirror_root(self, *, owner_id: str | int) -> Path:
+        """Private server-side mirror of client-owned dated diary entries."""
+        return self._p("runtime", "integrations", "diary", safe_user_id(owner_id))
+
+    def diary_mirror_manifest(self, *, owner_id: str | int) -> Path:
+        return self.diary_mirror_root(owner_id=owner_id) / "manifest.json"
+
+    def diary_mirror_status(self, *, owner_id: str | int) -> Path:
+        return self.diary_mirror_root(owner_id=owner_id) / "status.json"
+
+    def diary_mirror_entry(self, *, owner_id: str | int, logical_date: str) -> Path:
+        return self.diary_mirror_root(owner_id=owner_id) / "entries" / f"{logical_date}.md"
+
     def web_autosearch_state(self) -> Path:
         """data/runtime/web_autosearch_state.json — rate-limit state for autonomous web search (X3)."""
         return self._p("runtime", "web_autosearch_state.json")
