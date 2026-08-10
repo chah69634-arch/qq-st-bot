@@ -1,0 +1,100 @@
+name: protocol-compatibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_sha:
+        description: "40-character backend commit SHA"
+        required: true
+        default: "d0e804771a8b5cb470da5008b7a698109dc79b20"
+      desktop_sha:
+        description: "40-character desktop commit SHA"
+        required: true
+        default: "9aecd80578560908b895a261fb7956e354d021c3"
+      mobile_sha:
+        description: "40-character mobile commit SHA"
+        required: true
+        default: "7a71024db98c362bef16e91afe8e0d4fa733b2a4"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout frozen backend
+        uses: actions/checkout@v4
+        with:
+          repository: cicikat/PresenceKit
+          ref: ${{ inputs.backend_sha }}
+          path: backend
+
+      - name: Checkout frozen desktop
+        uses: actions/checkout@v4
+        with:
+          repository: cicikat/PresenceKit-desktop
+          ref: ${{ inputs.desktop_sha }}
+          path: desktop
+
+      - name: Checkout frozen mobile
+        uses: actions/checkout@v4
+        with:
+          repository: cicikat/PresenceKit-mobile
+          ref: ${{ inputs.mobile_sha }}
+          path: mobile
+
+      - name: Assert all checkouts are pinned to the requested SHAs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C backend rev-parse HEAD)" = "${{ inputs.backend_sha }}"
+          test "$(git -C desktop rev-parse HEAD)" = "${{ inputs.desktop_sha }}"
+          test "$(git -C mobile rev-parse HEAD)" = "${{ inputs.mobile_sha }}"
+          test -f backend/tests/protocol_fixtures/v1/manifest.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt
+
+      - name: Run backend provider contract
+        working-directory: backend
+        run: python -m pytest -n auto -q tests/test_protocol_fixtures.py
+
+      - name: Run desktop consumer contract
+        working-directory: desktop
+        env:
+          PRESENCEKIT_PROTOCOL_FIXTURES: ${{ github.workspace }}/backend/tests/protocol_fixtures/v1
+        run: |
+          npm ci
+          npm test -- --run tests/protocol-fixtures.test.ts
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.32.0
+          cache: true
+
+      - name: Run mobile consumer contract
+        working-directory: mobile
+        env:
+          PRESENCEKIT_PROTOCOL_FIXTURES: ${{ github.workspace }}/backend/tests/protocol_fixtures/v1
+        run: |
+          flutter pub get
+          flutter test test/protocol_fixtures_test.dart
+
+      - name: Upload reproducibility metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protocol-compatibility-${{ inputs.backend_sha }}-${{ inputs.desktop_sha }}-${{ inputs.mobile_sha }}
+          path: |
+            backend/tests/protocol_fixtures/v1/manifest.json
+          if-no-files-found: error
+          retention-days: 30
