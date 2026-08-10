@@ -135,6 +135,8 @@ admin:
   # 边缘设备（手机/Watch/ESP32/手机轮询端）应改用 POST /auth/tokens 签发的最小权限 token
   # （P3 落地后可用；见 docs/security.md），不要把这个 secret_key 烧进边缘设备配置里。
   secret_key: YOUR_ADMIN_SECRET
+deployment:
+  mode: local  # local | remote_server; remote_server disables server-local OS/file capabilities
 notify:
   # Conservative first-run default: startup must not send an unsolicited QQ notice.
   enabled: false

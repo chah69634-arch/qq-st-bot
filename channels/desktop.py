@@ -69,12 +69,16 @@ class DesktopChannel(BaseChannel):
                     action_ok, err = await desktop_ws.push_action_and_wait(behavior, timeout=5.0)
                     if not action_ok:
                         logger.warning(f"[desktop_channel] WS action 失败，降级到文件: {err}")
-                        await self._write_action_to_queue(behavior)
+                        if not is_remote_server():
+                            await self._write_action_to_queue(behavior)
                 return
             logger.warning("[desktop_channel] WS push 失败，降级到文件")
         # 路径 2：文件队列 fallback
+        if is_remote_server():
+            logger.info("[desktop_channel] remote_server desktop WS unavailable; no local file fallback")
+            return
         await self._write_to_queue(content, char_id=char_id, sticker=sticker)
-        if behavior:
+        if behavior and not is_remote_server():
             await self._write_action_to_queue(behavior)
 
     async def _write_to_queue(

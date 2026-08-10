@@ -23,6 +23,7 @@ _lock = asyncio.Lock()
 _pending_acks: dict[str, asyncio.Future] = {}
 _last_pong: float = 0.0
 _connect_time: float = 0.0  # epoch when the current WS session was accepted
+_last_ack_at: float = 0.0
 _heartbeat_task: asyncio.Task | None = None
 
 
@@ -33,6 +34,10 @@ def is_connected() -> bool:
 def get_connect_time() -> float:
     """Return the epoch timestamp when the current WS session was accepted (0 if not connected)."""
     return _connect_time if _current_ws is not None else 0.0
+
+
+def get_last_ack_time() -> float | None:
+    return _last_ack_at or None
 
 
 def _new_msg_id() -> str:
@@ -252,13 +257,14 @@ async def handle_connection(ws: WebSocket) -> None:
 
 
 async def _handle_message(msg: dict) -> None:
-    global _last_pong
+    global _last_pong, _last_ack_at
     mtype = msg.get("type")
     if mtype == "hello":
         await _send_json({"type": "hello_ack", "server_version": "1.0"})
     elif mtype == "pong":
         _last_pong = time.time()
     elif mtype == "ack":
+        _last_ack_at = time.time()
         msg_id = msg.get("msg_id")
         fut = _pending_acks.get(msg_id)
         if fut and not fut.done():

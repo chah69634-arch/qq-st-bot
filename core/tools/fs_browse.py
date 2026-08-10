@@ -33,6 +33,9 @@ def _fs_config() -> dict:
 
 
 def _is_enabled() -> bool:
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return False
     return bool(_fs_config().get("enabled", False))
 
 
@@ -98,6 +101,9 @@ def _resolve_and_guard(raw_path: str) -> Path:
 
 
 def fs_list(path: str | None = None, depth: int = 1) -> str:
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return "disabled_remote_server_local_capability"
     if not _is_enabled():
         return "文件浏览未开启"
 
@@ -169,6 +175,9 @@ def _list_dir_entries(root: Path, depth: int, max_entries: int) -> tuple[list[st
 
 
 def fs_read(path: str) -> str:
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return "disabled_remote_server_local_capability"
     if not _is_enabled():
         return "文件浏览未开启"
 
