@@ -37,6 +37,10 @@ class MemoryAccess(str, Enum):
     full_snapshot = "full_snapshot"
 
 
+SCENARIO_INJECTION_MODES: frozenset[str] = frozenset({"strict_stage", "full_script"})
+DEFAULT_SCENARIO_INJECTION_MODE = "strict_stage"
+
+
 _DEFAULTS: dict[str, Any] = {
     "enable_dream_lorebook": True,
     "memory_access": MemoryAccess.relationship_summary.value,
@@ -47,6 +51,7 @@ _DEFAULTS: dict[str, Any] = {
     "display": {"physiological_arousal": False},
     "reality_context_full_turns": 3,
     "scenario_arc_mode": "linear",
+    "scenario_injection_mode": DEFAULT_SCENARIO_INJECTION_MODE,
 }
 
 

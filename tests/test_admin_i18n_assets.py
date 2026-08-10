@@ -75,11 +75,11 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="/static/style.css?v=scenario-private-truths-1">' in index
-    assert '<script src="/static/i18n.js?v=brief-170-exit-continuation-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=brief-170-exit-continuation-1"></script>' in index
-    assert '<script src="/static/js/dream-settings.js?v=brief-170-exit-continuation-1"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-170-exit-continuation-1'" in core_js
-    assert '<script src="/static/js/observability.js?v=brief-170-exit-continuation-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=brief-175-scenario-reconciler-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=brief-175-scenario-reconciler-1"></script>' in index
+    assert '<script src="/static/js/dream-settings.js?v=brief-175-scenario-reconciler-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-175-scenario-reconciler-1'" in core_js
+    assert '<script src="/static/js/observability.js?v=brief-175-scenario-reconciler-1"></script>' in index
     assert '<script src="/static/js/character.js?v=brief-169-scenario-profile-1"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime

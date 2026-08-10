@@ -899,6 +899,9 @@ async def enter_dream(
     _settings_enter = _load_settings_enter(uid)
     frozen_world = _settings_enter.get("world_layer", "reality_derived")
     lucid_mode_entry = _settings_enter.get("lucid_mode", "lucid_shared")
+    scenario_injection_mode = _settings_enter.get("scenario_injection_mode", "strict_stage")
+    if scenario_injection_mode not in {"strict_stage", "full_script"}:
+        scenario_injection_mode = "strict_stage"
 
     # Build scenario_core if entering scenario mode
     scenario_core_dict: dict | None = None
@@ -932,6 +935,10 @@ async def enter_dream(
     state["char_id"] = char_id   # frozen at enter; close/summary/afterglow read from here
     state["dream_mode"] = dream_mode   # frozen for session lifetime — never overwrite mid-session
     state["context_snapshot"] = snapshot
+    if dream_mode == "scenario":
+        state["scenario_injection_mode"] = scenario_injection_mode
+    else:
+        state.pop("scenario_injection_mode", None)
     state["frozen_world"] = frozen_world
     state["lucid_mode"] = lucid_mode_entry
     if scenario_core_dict is not None:
@@ -960,7 +967,12 @@ async def enter_dream(
         "[dream_pipeline] entered dream uid=%s dream_id=%s char_id=%s dream_mode=%s",
         uid, dream_id, char_id, dream_mode,
     )
-    return {"ok": True, "dream_id": dream_id, "dream_mode": dream_mode}
+    return {
+        "ok": True,
+        "dream_id": dream_id,
+        "dream_mode": dream_mode,
+        "scenario_injection_mode": scenario_injection_mode if dream_mode == "scenario" else None,
+    }
 
 
 async def _do_close_dream(

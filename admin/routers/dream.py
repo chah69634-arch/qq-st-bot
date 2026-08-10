@@ -44,11 +44,13 @@ _VALID_BOUNDARY_LEVEL = frozenset({"vague", "body_perceptible", "numbers_visible
 _VALID_WORLD_LAYER_BUILTIN = frozenset({"reality_derived", "abo", "vampire", "cat", "flower_bud", "custom"})
 _VALID_LUCID_MODE = frozenset({"lucid_shared", "non_lucid"})
 _VALID_DREAM_MODE = frozenset({"sandbox", "scenario", "mirror"})
+_VALID_SCENARIO_INJECTION_MODE = frozenset({"strict_stage", "full_script"})
 
 _ENUM_VALIDATORS: dict[str, frozenset] = {
     "memory_access": _VALID_MEMORY_ACCESS,
     "boundary_level": _VALID_BOUNDARY_LEVEL,
     "lucid_mode": _VALID_LUCID_MODE,
+    "scenario_injection_mode": _VALID_SCENARIO_INJECTION_MODE,
 }
 
 
@@ -69,6 +71,7 @@ def _valid_world_layer_values() -> frozenset[str]:
 _PATCH_ALLOWED = frozenset({
     "memory_access", "boundary_level", "world_layer", "lucid_mode",
     "enable_dream_lorebook", "jailbreak_presets", "display",
+    "scenario_injection_mode",
 })
 
 @router.get("/dream/invariants", summary="跨世界身份稳定性（只读）")
@@ -598,7 +601,11 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
 
     dream_mode = state.get("dream_mode", "sandbox")
     scenario_info: dict | None = None
+    scenario_injection_mode = "strict_stage"
     if dream_mode == "scenario" and state.get("scenario_core"):
+        scenario_injection_mode = state.get("scenario_injection_mode", "strict_stage")
+        if scenario_injection_mode not in _VALID_SCENARIO_INJECTION_MODE:
+            scenario_injection_mode = "strict_stage"
         _sc = state["scenario_core"]
         scenario_info = {
             "script_id": _sc.get("script_id"),
@@ -619,6 +626,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
             "stall_turns": int(_sc.get("stall_turns") or 0),
             "recovery_pending": bool(_sc.get("recovery_pending")),
             "blocked_event_count": len(_sc.get("last_blocked_events") or []),
+            "scenario_injection_mode": scenario_injection_mode,
         }
 
     base = {
@@ -626,6 +634,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
         "dream_id": state.get("dream_id"),
         "dream_mode": dream_mode,
         "scenario": scenario_info,
+        "scenario_injection_mode": scenario_injection_mode if dream_mode == "scenario" else None,
         "frozen_world": state.get("frozen_world"),
         "lucid_mode": state.get("lucid_mode"),
         "body": {
@@ -965,7 +974,7 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
     Partial update for dream settings. Validates enum values before writing.
 
     Allowed fields: memory_access / boundary_level / world_layer / lucid_mode /
-                    enable_dream_lorebook / display
+                    enable_dream_lorebook / display / scenario_injection_mode
 
     ★ NEVER backfills into a running dream's frozen_world / lucid_mode.
       Those fields are frozen at dream entry (enter_dream reads from settings

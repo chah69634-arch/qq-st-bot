@@ -11,7 +11,7 @@ def test_admin_dream_operations_static_wiring():
     i18n = (ROOT / "admin/static/i18n.js").read_text(encoding="utf-8")
     assert "observe-dream-operations" in index
     assert "dream-operations" in index
-    assert "brief-170-exit-continuation-1" in index
+    assert "brief-175-scenario-reconciler-1" in index
     assert "observe-dream-operations" in core
     assert "dream_ops.title" in i18n
     assert "dream_ops.scenario_progress" in i18n

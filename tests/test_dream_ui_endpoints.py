@@ -195,6 +195,7 @@ def test_state_get_scenario_exposes_safe_progress_observation_only(sandbox):
 
     scenario = result["scenario"]
     assert scenario["current_stage_id"] == "arrival"
+    assert scenario["scenario_injection_mode"] == "strict_stage"
     assert scenario["stage_turns"] == 4
     assert scenario["advance_disposition"] == "satisfied_without_valid_exit_sign"
     assert scenario["unknown_exit_sign_count"] == 1
@@ -264,6 +265,7 @@ def test_settings_patch_write_and_reread_consistent(sandbox):
             "boundary_level": "numbers_visible",
             "world_layer": "abo",
             "lucid_mode": "non_lucid",
+            "scenario_injection_mode": "full_script",
             "enable_dream_lorebook": False,
         }))
         assert resp["ok"]
@@ -274,6 +276,7 @@ def test_settings_patch_write_and_reread_consistent(sandbox):
     assert reread["boundary_level"] == "numbers_visible"
     assert reread["world_layer"] == "abo"
     assert reread["lucid_mode"] == "non_lucid"
+    assert reread["scenario_injection_mode"] == "full_script"
     assert reread["enable_dream_lorebook"] is False
 
 
@@ -341,6 +344,7 @@ def test_settings_patch_invalid_display_rejected(sandbox, bad_display):
     ("memory_access", "everything"),
     ("boundary_level", "total_access"),
     ("lucid_mode", "super_lucid"),
+    ("scenario_injection_mode", "all_stages"),
 ])
 def test_settings_patch_invalid_enum_rejected(sandbox, field, bad_val):
     """PATCH with invalid enum value → 422, settings not written."""

@@ -9,7 +9,36 @@ let _dreamCurrentPreset = '';
 async function loadDreamSettings() {
   document.getElementById('dream-authoring-mode-select').value = _dreamAuthoringMode;
   onDreamAuthoringModeChange();
-  await Promise.all([loadDreamWorlds(), loadStandaloneDreamPresets()]);
+  await Promise.all([loadDreamWorlds(), loadStandaloneDreamPresets(), loadDreamScenarioInjectionMode()]);
+}
+
+async function loadDreamScenarioInjectionMode() {
+  const toggle = document.getElementById('dream-full-script-toggle');
+  const status = document.getElementById('dream-scenario-injection-status');
+  if (!toggle || !status) return;
+  try {
+    const [settings, state] = await Promise.all([api('GET', '/dream/settings'), api('GET', '/dream/state')]);
+    const nextMode = settings.scenario_injection_mode === 'full_script' ? 'full_script' : 'strict_stage';
+    toggle.checked = nextMode === 'full_script';
+    const activeMode = state.dream_mode === 'scenario' ? (state.scenario_injection_mode || 'strict_stage') : null;
+    status.textContent = activeMode
+      ? t('dream.scenario_injection.active_frozen', '当前梦已冻结为 {mode}；设置只影响下一场梦。', {mode: activeMode})
+      : t('dream.scenario_injection.next', '下一场 scenario 梦：{mode}。', {mode: nextMode});
+  } catch (e) {
+    status.textContent = t('dream.scenario_injection.load_failed', '剧本注入模式读取失败：{error}', {error: e.message});
+  }
+}
+
+async function saveDreamScenarioInjectionMode(checked) {
+  const status = document.getElementById('dream-scenario-injection-status');
+  try {
+    await api('PATCH', '/dream/settings', {scenario_injection_mode: checked ? 'full_script' : 'strict_stage'});
+    if (status) status.textContent = t('dream.scenario_injection.saved', '已保存；只影响下一场 scenario 梦。');
+  } catch (e) {
+    if (status) status.textContent = t('dream.scenario_injection.save_failed', '保存失败：{error}', {error: e.message});
+    document.getElementById('dream-full-script-toggle').checked = !checked;
+    toast(e.message, 'err');
+  }
 }
 
 // ══════════════════════════════════════════════════════════

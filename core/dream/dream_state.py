@@ -247,6 +247,7 @@ def clear_local_state(state: dict[str, Any]) -> dict[str, Any]:
         "frozen_world",  # re-frozen from settings at next enter_dream
         "lucid_mode",  # session-local, cleared at dream close
         "dream_mode",  # session-local, cleared at dream close
+        "scenario_injection_mode",  # session-local, cleared at dream close
         "scenario_core",  # scenario kernel — session-local, cleared at dream close
         "mirror_core",  # mirror kernel — session-local, cleared at dream close
     ):
