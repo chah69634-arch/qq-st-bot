@@ -6,15 +6,15 @@ on:
       backend_sha:
         description: "40-character backend commit SHA"
         required: true
-        default: "d0e804771a8b5cb470da5008b7a698109dc79b20"
+        default: "d12f3ff438c7aacc01d3b0b1f66dbba9677267b5"
       desktop_sha:
         description: "40-character desktop commit SHA"
         required: true
-        default: "9aecd80578560908b895a261fb7956e354d021c3"
+        default: "4f00d0c0bd75e29af0aa3e8c1b1ec0518df407ad"
       mobile_sha:
         description: "40-character mobile commit SHA"
         required: true
-        default: "7a71024db98c362bef16e91afe8e0d4fa733b2a4"
+        default: "5fd9717e89e7011a969c04ba16c618b767f2e7ba"
 
 permissions:
   contents: read
