@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 from enum import Enum
 from typing import Any
@@ -8,6 +9,7 @@ from core.safe_write import safe_write_json
 from core.sandbox import get_paths, safe_user_id
 
 logger = logging.getLogger(__name__)
+_STATE_WRITE_LOCK = threading.RLock()
 
 _FORCED_ROUNDS = 3
 
@@ -54,6 +56,7 @@ def default_state(user_id: str | int) -> dict[str, Any]:
     return {
         "user_id": safe_user_id(user_id),
         "status": DreamStatus.REALITY_CHAT.value,
+        "state_version": 0,
     }
 
 
@@ -154,6 +157,10 @@ def read_state(user_id: str | int) -> dict[str, Any]:
         return default_state(user_id)
 
     data.setdefault("user_id", safe_user_id(user_id))
+    try:
+        data["state_version"] = max(0, int(data.get("state_version", 0)))
+    except (TypeError, ValueError):
+        data["state_version"] = 0
     return data
 
 
@@ -168,10 +175,56 @@ def write_state(user_id: str | int, state: dict[str, Any]) -> bool:
     if status not in {item.value for item in DreamStatus}:
         raise ValueError(f"unknown dream status: {status!r}")
 
-    payload = {**state, "user_id": safe_user_id(user_id)}
-    path = get_paths().dream_state_path(user_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return safe_write_json(path, payload)
+    with _STATE_WRITE_LOCK:
+        path = get_paths().dream_state_path(user_id)
+        current_version = 0
+        try:
+            if path.exists():
+                current = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(current, dict):
+                    current_version = max(0, int(current.get("state_version", 0)))
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            current_version = 0
+        try:
+            requested_version = max(0, int(state.get("state_version", 0)))
+        except (TypeError, ValueError):
+            requested_version = 0
+        next_version = max(current_version, requested_version) + 1
+        state["state_version"] = next_version
+        payload = {**state, "user_id": safe_user_id(user_id), "state_version": next_version}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return safe_write_json(path, payload)
+
+
+def write_state_if_version(
+    user_id: str | int,
+    state: dict[str, Any],
+    *,
+    expected_version: int,
+) -> bool:
+    """Write a state transition only when the durable version is unchanged."""
+    if not isinstance(state, dict):
+        raise TypeError("dream state must be a dict")
+    try:
+        expected = max(0, int(expected_version))
+    except (TypeError, ValueError):
+        return False
+    with _STATE_WRITE_LOCK:
+        path = get_paths().dream_state_path(user_id)
+        try:
+            current = json.loads(path.read_text(encoding="utf-8")) if path.exists() else default_state(user_id)
+        except Exception:
+            return False
+        if not isinstance(current, dict):
+            return False
+        try:
+            current_version = max(0, int(current.get("state_version", 0)))
+        except (TypeError, ValueError):
+            current_version = 0
+        if current_version != expected:
+            return False
+        state["state_version"] = expected
+        return write_state(user_id, state)
 
 
 def configured_forced_impression_rounds() -> int:
@@ -248,6 +301,7 @@ def clear_local_state(state: dict[str, Any]) -> dict[str, Any]:
         "lucid_mode",  # session-local, cleared at dream close
         "dream_mode",  # session-local, cleared at dream close
         "scenario_injection_mode",  # session-local, cleared at dream close
+        "last_assistant_turn_id",  # reconciler CAS identity, cleared at dream close
         "scenario_core",  # scenario kernel — session-local, cleared at dream close
         "mirror_core",  # mirror kernel — session-local, cleared at dream close
     ):

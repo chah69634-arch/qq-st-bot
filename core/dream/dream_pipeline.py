@@ -470,6 +470,7 @@ async def dream_turn(
     _dream_capture_data: dict = {}
     scenario_prompt_core: dict[str, Any] | None = None
     scenario_recovery_injected = False
+    scenario_reconcile_request: dict[str, Any] | None = None
     if state.get("scenario_core"):
         scenario_prompt_core = {
             **state["scenario_core"],
@@ -603,6 +604,8 @@ async def dream_turn(
         # start at stage_turns=0 — we skip increment_stage_turns() on transition turns.
         _did_advance = False
         decision: dict[str, Any]
+        current_stage = None
+        next_stage = None
         try:
             script = load_script(sc.script_id)
             current_stage = get_stage(script, sc.current_stage_id)
@@ -729,7 +732,61 @@ async def dream_turn(
             )
         except Exception as _audit_exc:
             logger.warning("[dream_pipeline] scenario progress audit failed: %s", _audit_exc)
+        if not _did_advance and next_stage is not None and not exit_accepted:
+            try:
+                from core.dream.scenario_reconciler import stall_threshold
+
+                trigger = ""
+                if normalized.get("status") == "missing":
+                    trigger = "control_missing"
+                elif normalized.get("status") == "invalid":
+                    trigger = "control_invalid"
+                elif sc.stall_turns >= stall_threshold():
+                    trigger = "stalled"
+                elif (
+                    scenario_injection_mode == "full_script"
+                    and normalized.get("status") == "valid"
+                    and not normalized.get("matched_exit_ids")
+                ):
+                    trigger = "full_script_sync"
+                if trigger:
+                    dialogue = [
+                        {
+                            "role": item.get("role"),
+                            "text": str(item.get("content") or item.get("text") or "")[:900],
+                        }
+                        for item in dream_history[-5:]
+                        if isinstance(item, dict)
+                    ]
+                    dialogue.extend([
+                        {"role": "user", "text": user_msg[:900]},
+                        {"role": "assistant", "text": reply[:900]},
+                    ])
+                    scenario_reconcile_request = {
+                        "uid": uid,
+                        "dream_id": dream_id,
+                        "char_id": char_id,
+                        "turn_index": _dream_turn_index,
+                        "assistant_turn_id": f"{dream_id}:assistant:{_dream_turn_index + 1}",
+                        "state_version": 0,
+                        "from_stage_id": _scenario_stage_before,
+                        "current_stage": current_stage if isinstance(current_stage, dict) else {},
+                        "next_stage": next_stage if isinstance(next_stage, dict) else {},
+                        "completion_signals": [
+                            str(normalized.get("progress_signal") or ""),
+                            *[str(item) for item in (normalized.get("matched_exit_ids") or [])[:8]],
+                        ],
+                        "dialogue": dialogue[-7:],
+                        "trigger": trigger,
+                    }
+            except Exception:
+                logger.debug("[dream_pipeline] scenario reconciler request build failed", exc_info=True)
+    assistant_turn_id = f"{dream_id}:assistant:{_dream_turn_index + 1}"
+    if state.get("dream_mode") == "scenario":
+        state["last_assistant_turn_id"] = assistant_turn_id
     write_state(uid, state)
+    if scenario_reconcile_request is not None:
+        scenario_reconcile_request["state_version"] = int(state.get("state_version") or 0)
 
     # Transition to DREAM_CLOSING if soft exit was accepted
     if exit_accepted:
@@ -753,6 +810,7 @@ async def dream_turn(
         "continuation_eligible": bool(exit_accepted and close_result.get("closed_now")),
         "segments": _parsed["segments"],
         "segmented_content": _parsed["content"],
+        "scenario_reconcile_request": scenario_reconcile_request,
     }
 
 

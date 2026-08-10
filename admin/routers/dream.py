@@ -339,6 +339,8 @@ async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
     async with conversation_lock(uid):
         result = await dream_turn(uid, message)
 
+    scenario_reconcile_request = result.pop("scenario_reconcile_request", None)
+
     if err := result.get("error"):
         raise HTTPException(status_code=409, detail=err)
 
@@ -365,6 +367,14 @@ async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
         except Exception:
             logger.debug("[dream_chat] pseudo_stream_push failed", exc_info=True)
         result["msg_id"] = _msg_id
+
+    if scenario_reconcile_request:
+        try:
+            from core.dream.scenario_reconciler import schedule as _schedule_scenario_reconcile
+
+            _schedule_scenario_reconcile(scenario_reconcile_request)
+        except Exception:
+            logger.debug("[dream_chat] scenario reconciler schedule failed", exc_info=True)
 
     # Brief 170: enqueue Reality continuation only after the final Dream reply
     # has been handed to the visible channel.  The worker itself is durable,
