@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from admin.auth import TokenInfo, require_scopes
 from core import owner_turn_receipts
@@ -21,6 +22,18 @@ _FORBIDDEN_BODY_KEYS = frozenset({
     "uid", "char_id", "source", "trust", "tool_categories", "origin",
     "token", "config", "path", "file_path", "tool_capabilities",
 })
+
+
+class OwnerTurnRequest(BaseModel):
+    """OpenAPI-visible request shape; semantic validation stays below."""
+
+    client_turn_id: str
+    message: str
+    reply_to: dict | None = None
+    upload_ids: list[str] | None = None
+
+    class Config:
+        extra = "forbid"
 
 
 def _require_owner_input(info: TokenInfo) -> None:
@@ -45,6 +58,8 @@ def _validate_reply_to(value: object) -> dict | None:
 
 
 def _request_body(body: object) -> tuple[str, str, dict | None, list[str]]:
+    if isinstance(body, OwnerTurnRequest):
+        body = body.dict()
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail="request body must be an object")
     keys = set(body)
@@ -69,7 +84,7 @@ def _request_body(body: object) -> tuple[str, str, dict | None, list[str]]:
 
 @router.post("/v1/owner/turns", summary="Execute one idempotent owner turn")
 async def owner_turn(
-    body: dict,
+    body: OwnerTurnRequest,
     _auth: TokenInfo = Depends(require_scopes("chat")),
 ):
     _require_owner_input(_auth)
