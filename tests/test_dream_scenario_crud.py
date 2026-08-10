@@ -260,6 +260,59 @@ def test_validate_yaml_draft_returns_canonical_document_without_writing(sandbox)
     assert not list(sandbox.dream_scenario_read_dirs()[0].glob("*.yaml"))
 
 
+def test_validate_field_outline_yaml_converts_to_canonical_scenario(sandbox):
+    from admin.routers.dream import validate_dream_scenario
+
+    outline = """id: outline_demo
+title: Outline demo
+private_truths:
+id: hidden_fact
+truth: The house changes around the visitor.
+disclosure:
+opening:
+policy: hint_only
+allowed_hints:
+The walls move slightly.
+The clock skips a beat.
+acceptance:
+policy: reveal_required
+stages:
+id: opening
+name: Opening
+dramatic_task: >
+The visitor wakes in a strange house.
+entry_pressure: >
+The door locks behind them.
+exit_signs:
+The visitor notices the moving walls.
+not_yet_allowed:
+The visitor leaves immediately.
+drift_pressure:
+after_turns: 3
+instruction: >
+Raise the unease without resolving the mystery.
+id: acceptance
+name: Acceptance
+dramatic_task: >
+The truth can no longer remain hidden.
+entry_pressure: >
+The room changes shape.
+exit_signs:
+The visitor acknowledges the truth.
+"""
+
+    with _as(_UID):
+        result = _run(validate_dream_scenario({"yaml": outline}))
+
+    assert result["id"] == "outline_demo"
+    assert [stage["id"] for stage in result["document"]["stages"]] == ["opening", "acceptance"]
+    truth = result["document"]["private_truths"][0]
+    assert truth["disclosure"]["opening"]["allowed_hints"] == [
+        "The walls move slightly.", "The clock skips a beat."
+    ]
+    assert "stages:\n- id: opening" in result["yaml"]
+
+
 def test_validate_yaml_draft_rejects_current_id_mismatch_and_duplicate_stage(sandbox):
     from admin.routers.dream import validate_dream_scenario
 
