@@ -488,8 +488,9 @@ async function loadFeatureFlags() {
 async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { const result = await api('PUT', '/settings/feature-flags', { flags }); toast(result.message || t('common.saved', '已保存'), result.reload_status === 'restart_required' ? 'err' : 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
 let _mrEditingPresetName = null;
-const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue'];
+const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'scenario_reconcile'];
 const MR_CATEGORY_DESC = {
+  scenario_reconcile: 'Scenario assistant-turn semantic stage reconciliation; conservative background call.',
   chat:           '角色的正式回复，用户实际看到的每一句话（建议配主力模型）',
   intent:         '判断要不要触发某个动作的轻量辅助判断（便宜模型即可）',
   probe:          '每轮先判断要不要调用工具的轻量探针（便宜模型即可）',
@@ -512,10 +513,11 @@ function _renderActiveCharacterRoutingWarning(override) {
   const character = String(override.label || override.char_id || '');
   const profile = String(override.effective_profile || override.model_routing || '');
   const preset = String(override.resolved_chat_preset || '');
+  const scenarioPreset = String(override.resolved_scenario_reconcile_preset || '');
   el.textContent = t(
-    'dynamic.routing.active_character_override',
-    'Active character {character} is pinned to routing profile {profile} (chat -> {preset}).',
-    { character, profile, preset },
+    'dynamic.routing.active_character_override_v2',
+    'Active character {character} is pinned to routing profile {profile} (chat -> {preset}; scenario_reconcile -> {scenarioPreset}).',
+    { character, profile, preset, scenarioPreset },
   );
   el.style.display = '';
 }

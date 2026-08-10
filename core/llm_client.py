@@ -110,6 +110,7 @@ _CALL_TIMEOUTS: dict[str, float] = {
     "vision":         30.0,
     "perform":        10.0,
     "monologue":      10.0,
+    "scenario_reconcile": 8.0,
 }
 _DEFAULT_CALL_TIMEOUT: float = 90.0
 

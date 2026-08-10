@@ -119,7 +119,7 @@ def _synth_legacy_presets(cfg: dict) -> dict:
         "api_protocol": "chat_completions",
         "params": {k: llm[k] for k in _known_params if k in llm},
     }
-    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge")
+    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge", "scenario_reconcile")
     return {
         "active_routing": "default",
         "defaults": {},
@@ -220,7 +220,9 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
     # Old routing profiles predate sensor_judge.  Preserve their lightweight
     # intent route before falling back to chat; all other categories retain
     # the established category -> chat fallback.
-    if call_category == "sensor_judge":
+    if call_category == "scenario_reconcile":
+        name = profile.get("scenario_reconcile") or profile.get("intent") or profile.get("chat")
+    elif call_category == "sensor_judge":
         name = profile.get("sensor_judge") or profile.get("intent") or profile.get("chat")
     else:
         name = profile.get(call_category) or profile.get("chat")
@@ -247,6 +249,48 @@ def resolve_routing_info(char_id: str) -> dict:
         "model_routing": char_routing,
         "effective_profile": effective_profile,
         "resolved_chat_preset": _resolve_preset_name("chat", char_id=char_id),
+        "resolved_scenario_reconcile_preset": _resolve_preset_name("scenario_reconcile", char_id=char_id),
+    }
+
+
+def resolve_category_info(
+    call_category: str,
+    *,
+    char_id: str | None = None,
+    profile_name: str | None = None,
+) -> dict[str, Any]:
+    """Return safe effective preset and fallback source for admin/telemetry."""
+    mp = _get_preset_config()
+    profiles = mp.get("routing_profiles", {})
+    active = profile_name or mp.get("active_routing", "default")
+    if not profile_name:
+        char_routing = _char_model_routing(char_id) if char_id else _active_char_model_routing()
+        if char_routing in profiles:
+            active = char_routing
+    profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
+    if call_category == "scenario_reconcile":
+        candidates = (("scenario_reconcile", "category"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
+    elif call_category == "sensor_judge":
+        candidates = (("sensor_judge", "category"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
+    else:
+        candidates = ((call_category, "category"), ("chat", "chat_fallback"))
+    preset_name = ""
+    source = "first_preset"
+    for key, candidate_source in candidates:
+        if profile.get(key):
+            preset_name = str(profile[key])
+            source = candidate_source
+            break
+    if not preset_name:
+        preset_name = str(next(iter(mp.get("presets", {})), "legacy"))
+    preset = mp.get("presets", {}).get(preset_name, {})
+    return {
+        "category": call_category,
+        "effective_profile": active,
+        "effective_preset": preset_name,
+        "source": source,
+        "provider_kind": preset.get("provider_kind", "openai"),
+        "model": preset.get("model", ""),
     }
 
 

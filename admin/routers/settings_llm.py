@@ -490,13 +490,16 @@ def _active_character_routing_override() -> dict | None:
         # claim that it still overrides the global selection.
         return None
 
-    return {
+    result = {
         "char_id": char_id,
         "label": character.name or char_id,
         "model_routing": model_routing,
         "effective_profile": effective_profile,
         "resolved_chat_preset": routing.get("resolved_chat_preset", ""),
     }
+    if "resolved_scenario_reconcile_preset" in routing:
+        result["resolved_scenario_reconcile_preset"] = routing.get("resolved_scenario_reconcile_preset", "")
+    return result
 
 
 @router.get("/model-presets", summary="获取多模型 preset 配置")
@@ -506,6 +509,15 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
     """
     from core.model_registry import _get_preset_config
     mp = _get_preset_config()
+    from core.model_registry import resolve_category_info
+    routing_effective = {
+        profile_name: {
+            "scenario_reconcile": resolve_category_info(
+                "scenario_reconcile", profile_name=profile_name
+            ),
+        }
+        for profile_name in mp.get("routing_profiles", {})
+    }
     return {
         "active_routing":    mp.get("active_routing", "default"),
         "presets":           _mask_presets(mp.get("presets", {})),
@@ -513,6 +525,7 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
         "defaults":          mp.get("defaults", {}),
         "is_legacy_synth":   "model_presets" not in get_config(),
         "active_character_routing": _active_character_routing_override(),
+        "routing_effective": routing_effective,
     }
 
 
@@ -550,16 +563,20 @@ async def get_desktop_model_routing(auth=Depends(require_scopes("persona"))):
     mp = _get_preset_config()
     presets = mp.get("presets", {})
     profiles = mp.get("routing_profiles", {})
+    from core.model_registry import resolve_category_info
     rows = []
     for name, profile in profiles.items():
         preset_name = profile.get("chat") or next(iter(presets), "")
         preset = presets.get(preset_name, {})
+        reconcile_route = resolve_category_info("scenario_reconcile", profile_name=name)
         rows.append({
             "name": name,
             "chat_preset": preset_name,
             "provider_kind": preset.get("provider_kind", "openai"),
             "model": preset.get("model", ""),
             "tool_call_mode": preset.get("tool_call_mode", "function_calling"),
+            "scenario_reconcile_preset": reconcile_route.get("effective_preset", ""),
+            "scenario_reconcile_source": reconcile_route.get("source", ""),
         })
     return {
         "active_routing": mp.get("active_routing", "default"),
@@ -591,12 +608,19 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
     persona scope（非 admin-only）：不暴露 preset 的 api_key/base_url，
     只暴露 profile 结构本身，供角色模型绑定下拉框使用。
     """
-    from core.model_registry import _get_preset_config
+    from core.model_registry import _get_preset_config, resolve_category_info
     mp = _get_preset_config()
     profiles = mp.get("routing_profiles", {})
     return {
         "active_routing": mp.get("active_routing", "default"),
-        "profiles": [{"name": name, "categories": dict(mapping)} for name, mapping in profiles.items()],
+        "profiles": [
+            {
+                "name": name,
+                "categories": dict(mapping),
+                "effective": {"scenario_reconcile": resolve_category_info("scenario_reconcile", profile_name=name)},
+            }
+            for name, mapping in profiles.items()
+        ],
     }
 
 
