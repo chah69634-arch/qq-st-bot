@@ -4,7 +4,9 @@
 `/openapi.json` 为准。本页是跨端协作的稳定入口：新增或移除路由时，须同步更新本页和
 客户端调用点，避免各客户端各自维护一份端点表。
 
-桌面 WebSocket 消息与 action 契约不由 OpenAPI 描述，统一见 [desktop-client-protocol.md](desktop-client-protocol.md)。
+桌面 WebSocket 消息与 action 契约不由 OpenAPI 描述，跨仓总览见
+[three-repo-interface-catalog.md](three-repo-interface-catalog.md)，桌面字段细节见
+`Emerald-client/docs/protocol-v0.md`。
 desktop / mobile 共用的聊天请求体可选字段（如 reply_to 引用回复）见 [backend-integration.md](backend-integration.md)。
 
 ## 鉴权与连接
@@ -19,6 +21,7 @@ query token。
 | WS | `/ws/desktop` | desktop | PresenceKit-desktop 桌宠 |
 | WS | `/ws/device` | device | presence-device 固件 |
 | POST | `/desktop/chat`、`/desktop/activate`、`/desktop/wake` | desktop | PresenceKit-desktop |
+| POST | `/mobile/chat` | mobile | PresenceKit-mobile 手机前台主对话 |
 | POST/GET | `/mobile/activate`、`/mobile/deactivate`、`/mobile/push`、`/mobile/ack`、`/mobile/poll` | mobile | Emerald-mobile |
 | POST | `/upload/ingest`、`/transcribe` | desktop / admin | 桌宠、手机端 |
 | GET | `/system/health`、`/system/status` | read/admin | 客户端状态页、运维 |
@@ -45,7 +48,7 @@ scope；只读端点通常允许对应的 read scope。
 | GET/POST/PUT/PATCH | `/llm-params`、`/vision-params`、`/model-presets/*`、`/context-config`、`/chat-*`、`/proxy`、`/settings/*` | settings | 管理面设置 |
 | GET/POST/PUT/PATCH/DELETE | `/system/*`、`/hardware/*` | admin / hardware | 管理面运维、设备控制 |
 | GET/POST | `/spend/ledger`、`/spend/budget`、`/spend/mandates`、`/spend/check` | admin | 只读支出余额观测、人工检查与台账浏览 |
-| GET | `/observe/*`、`/debug/recall`、`/provenance/*`、`/hidden-state/*` | observe | 管理面与桌面客户端诊断；`/debug/recall?uid=` 是 recall trace 兼容入口 |
+| GET | `/observe/*`、`/debug/recall`、`/provenance/*`、`/debug/user-hidden-state` | observe | 管理面与桌面客户端诊断；`/debug/recall?uid=` 是 recall trace 兼容入口 |
 | GET | `/observability/api-calls`、`/observability/perceive-events`、`/observability/runtime-signals`、`/observability/owner-turns` | state.read | 外部 API 调用总账、reality stimulus 审计、运行信号和脱敏 owner-turn receipt 观测；均为只读查询。 |
 | GET | `/perception/visual-trace` | state.read | 本地 VLM shadow 观察（不含原图，不进入 prompt/记忆） |
 | GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |

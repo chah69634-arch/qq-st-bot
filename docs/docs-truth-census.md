@@ -1,11 +1,11 @@
 # PresenceKit 三仓 Docs Truth Census
 
-审计日期：2026-07-29。范围：三个当前工作树中已跟踪的 Markdown/HTML，包含治理入口、admin HTML 和资源 README。代码优先；v1 产品承诺真值为 PresenceKit-backend/docs/v1-release-contract.md，桌面协议正文真值为 PresenceKit-desktop/docs/protocol-v0.md，数据路径以 PresenceKit-backend/docs/data-taxonomy.md 与 core/data_paths.py 交叉核对。
+审计日期：2026-08-10。范围：三个当前工作树中已跟踪的 Markdown/HTML，包含治理入口、admin HTML 和资源 README。代码优先；v1 产品承诺真值为 PresenceKit-backend/docs/v1-release-contract.md，桌面协议正文真值为 PresenceKit-desktop/docs/protocol-v0.md，数据路径以 PresenceKit-backend/docs/data-taxonomy.md 与 core/data_paths.py 交叉核对。
 
-本单只新增 census；发现的 drift 不在本单修正文档。当前工作区已有未提交文档改动，本单不覆盖、不回滚。
+本轮按 P0 清单逐项回到代码核对，并同步修正了正文、索引和历史文档的误导性表述；保留明确标注的 legacy/fallback/historical 证据，不把它们再当 current authority。当前工作区已有未提交文档改动，本单不覆盖、不回滚。
 ## 结论摘要
 
-扫描计数：backend 114 / desktop 23 / mobile 27，合计 164。分类计数：current-authority=25，duplicate=4，current-derived=106，historical=23，needs-verification=5，deletion-candidate=1。
+扫描计数：backend 114 / desktop 23 / mobile 27，合计 164。分类计数：current-authority=25，duplicate=4，current-derived=111，historical=23，needs-verification=0，deletion-candidate=1。
 
 - 当前产品承诺链：release contract → 代码/CI evidence。设计稿、交接和 roadmap 不是 current truth。
 - 当前桌面协议链：desktop docs/protocol-v0.md → backend docs/desktop-client-protocol.md 指针 → backend/client HTTP/WS code。
@@ -15,29 +15,29 @@
 
 | ID | repo | path | 核实结果 | authority | 建议 |
 |---|---|---|---|---|---|
-| DOC-P0-01 | PresenceKit-desktop | docs/backend-integration.md | 日记/事件日志段仍写 data/yexuan_inner 与 data/event_log；与 backend DataPaths/user_memory_root 及客户端不读后端文件边界冲突。 | PresenceKit-backend/docs/data-taxonomy.md + core/data_paths.py | 改为 endpoint/source authority，或明确为 legacy fallback。 |
-| DOC-P0-02 | PresenceKit-mobile | docs/protocols/sensor-event-protocol.md | 列出 POST /sensor/activity；当前后端未找到该路由。 | backend/admin/routers/sensor.py, perception.py, watch.py | 拆分当前端点与历史草案，补鉴权和调用方。 |
-| DOC-P0-03 | PresenceKit-backend | docs/dream.md | 合同级文档混用旧 authored/world/scenario 路径，与 userdata-first DataPaths/AssetRegistry 竞争。 | docs/data-taxonomy.md + core/data_paths.py + core/dream/* | 按 world/preset/scenario 拆 canonical、fallback、seed。 |
-| DOC-P0-04 | PresenceKit-backend | docs/tools.md | 示例仍提示复制到 characters/，会把 legacy fallback 当 canonical authored root。 | docs/data-taxonomy.md + core/asset_registry.py | 改示例入口为 userdata/，兼容 root 单独标注。 |
-| DOC-P0-05 | PresenceKit-backend | docs/memory.md | 同时出现 data/runtime/memory 与 data/event_log/{uid}/trigger_audit，未区分 writer、兼容读和历史遗留。 | core/data_paths.py + core/memory/event_log.py + core/migration.py | 补 writer/read-fallback/legacy 表。 |
-| DOC-P0-06 | PresenceKit-mobile | docs/reference/main-dart-split-plan.md | 已完成计划仍被索引，并含本机绝对路径。 | lib/main.dart + docs/mobile/flutter-structure.md + docs/README.md | 加历史 banner 后移 archive；无追溯需要时删除。 |
+| DOC-P0-01 | PresenceKit-desktop | docs/backend-integration.md | 已修正：日记和聊天日志段以 `/diary/*`、`/chat-log/*` endpoint 为客户端数据源，后端 DataPaths 只作为实现 authority，不再构成客户端文件契约。 | PresenceKit-backend/docs/data-taxonomy.md + core/data_paths.py | 已完成；后端物理路径如需说明必须留在 backend 文档。 |
+| DOC-P0-02 | PresenceKit-mobile | docs/protocols/sensor-event-protocol.md | 已核实：当前端点是 `/sensor/push`、`/sensor/realtime`、`/perception/visual`、`/watch/event`；`/sensor/activity` 已拆到 Historical / Removed，不是可调用路由。 | backend/admin/routers/sensor.py, perception.py, watch.py | 已完成；新增传感器入口时同步代码、调用方和本协议。 |
+| DOC-P0-03 | PresenceKit-backend | docs/dream.md | 已修正：world/preset/scenario、runtime Dream state、seed 与 legacy fallback 已分栏；旧路径只保留为兼容读取说明。 | docs/data-taxonomy.md + core/data_paths.py + core/dream/* | 已完成；新增路径先更新 DataPaths 再更新本合同。 |
+| DOC-P0-04 | PresenceKit-backend | docs/tools.md | 已核实：角色 authored canonical root 是 `userdata/characters/cards/`，旧 `characters/` 仅 compatibility fallback。 | docs/data-taxonomy.md + core/asset_registry.py | 已完成；示例和新写入继续使用 userdata。 |
+| DOC-P0-05 | PresenceKit-backend | docs/memory.md | 已核实：正文已区分 runtime memory writer、event-log legacy read、`trigger_audit.jsonl` forensic writer 和 prompt 排除规则。 | core/data_paths.py + core/memory/event_log.py + core/migration.py | 已完成；后续路径变更继续维护 writer/read-fallback 表。 |
+| DOC-P0-06 | PresenceKit-mobile | docs/archive/main-dart-split-plan.md | 已修正：完成的拆分计划归档并标注历史参考，当前结构入口是 `docs/mobile/flutter-structure.md`；历史命令中的本机路径已替换为占位符。 | lib/main.dart + docs/mobile/flutter-structure.md + docs/README.md | 已完成；不恢复旧 `docs/reference/` 链接。 |
 
 ## 主题唯一 authority 表
 
 | 主题 | canonical doc | code/source authority | supporting docs | historical docs | conflicts |
 |---|---|---|---|---|---|
 | 产品安装与首次配置 | PresenceKit-backend/docs/fresh-clone-testing.md | scripts/setup_auth.py; core/config_loader.py; admin/routers/setup.py | docs/release-guide.md; mobile/README.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 各 README 只作入口，安装真值仍由 setup CLI/config code 决定。 |
-| Release / CI / 签名 / 更新 | PresenceKit-backend/docs/release-guide.md | .github/workflows/*; desktop/mobile workflows; android/app/build.gradle.kts | desktop/docs/release-v0.1.md; mobile/docs/quality/testing-and-dev.md | 各仓 docs/archive/*、cc-tasks/*（如有） | debug signing 只能 fallback，不能写成正式发行能力。 |
+| Release / CI / 签名 / 更新 | PresenceKit-backend/docs/release-guide.md | .github/workflows/*; desktop/mobile workflows; android/app/build.gradle.kts | desktop/docs/release-v0.1.md; mobile/docs/quality/testing-and-dev.md | 各仓 docs/archive/*、cc-tasks/*（如有） | release task 缺少完整 keystore 时 fail-loud；debug signing 仅供 dev/debug，不是正式发行能力。 |
 | 鉴权、token scope 与安全 | PresenceKit-backend/docs/security.md | admin/auth.py; admin/scopes.py; admin/token_registry.py; admin/routers/auth_tokens.py | docs/security_model.md; docs/token-rotation.md; mobile/docs/backend/integration.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 客户端不复制完整 scope 表；legacy secret/prefs 名称需标兼容。 |
 | Desktop HTTP/WS 协议 | PresenceKit-desktop/docs/protocol-v0.md | desktop/src/shared/api/ws.ts; backend/channels/desktop_ws.py; backend/admin/routers/chat.py | backend/docs/desktop-client-protocol.md; desktop/docs/chat-correlation.md; backend/docs/channels.md | 各仓 docs/archive/*、cc-tasks/*（如有） | v0.1 冻结；user_message/assistant_message/state_update/envelope/capabilities 是 roadmap。 |
-| Mobile 前台聊天与后台主动投递 | PresenceKit-mobile/docs/protocols/mobile-channel.md | mobile/lib/services/backend_client.dart; MobileNotificationService.kt; backend/admin/routers/mobile.py; core/turn_sink.py | mobile/docs/backend/integration.md; mobile/docs/mobile/background-notification-design.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 前台 /desktop/chat；/mobile/* 只做 activation/poll/ack/push。 |
+| Mobile 前台聊天与后台主动投递 | PresenceKit-mobile/docs/protocols/mobile-channel.md | mobile/lib/services/backend_client.dart; MobileNotificationService.kt; backend/admin/routers/mobile.py; core/turn_sink.py | mobile/docs/backend/integration.md; mobile/docs/mobile/background-notification-design.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 前台 `/mobile/chat`；桌面前台 `/desktop/chat`；`/mobile/*` 还负责 activation/poll/ack/push。 |
 | Tool loop 与 MCP | PresenceKit-backend/docs/tools.md | core/tool_dispatcher.py; core/mcp_client.py; admin/routers/settings_mcp.py; main.py | docs/feature-control-surface.md; docs/known-issues.md; docs/wake-bridge.md | 各仓 docs/archive/*、cc-tasks/*（如有） | MCP 已实现但 Experimental、默认关闭、默认 Path C；管理员可显式加入共享 Path A，不是 transport。 |
 | Interaction/Event 边界 | PresenceKit-backend/docs/interaction-event-model.md | core/perceive_event.py; core/perceive_event_audit.py; core/pipeline.py; core/stage/runner.py | docs/stage.md; docs/dream.md; docs/tools.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 不存在 v1 统一 EventBus/EventEnvelope dispatcher；Stage/Activity/Dream 各自隔离。 |
 | Data taxonomy 与迁移 | PresenceKit-backend/docs/data-taxonomy.md | core/data_paths.py; core/sandbox.py; core/data_registry.py; core/migration.py; core/asset_registry.py | docs/c1-root-asset-inventory.md; docs/private-content-manifest.md; docs/memory.md | 各仓 docs/archive/*、cc-tasks/*（如有） | userdata authored primary；旧 paths 仅 fallback/seed/history，不能机械删除。 |
 | Memory / prompt / turn sink | PresenceKit-backend/docs/memory.md + docs/prompt-layers.md + docs/assistant-turn-sink.md | core/memory/*; core/prompt_builder.py; core/turn_sink.py; core/conversation_gate.py | desktop/docs/memory.md; backend/docs/channels.md | 各仓 docs/archive/*、cc-tasks/*（如有） | memory writer/sanitize/turn sink 以 backend code 为真；memory.md 需清理旧 audit path。 |
 | Scheduler / trigger / presence | PresenceKit-backend/docs/scheduler.md | core/scheduler/loop.py; state_machine.py; gating.py; proposer_registry.py; triggers/* | docs/feature-control-surface.md; docs/known-issues.md; admin/static/pages/scheduler.html | 各仓 docs/archive/*、cc-tasks/*（如有） | trigger 不是 user short-term turn；sensor/stimulus 有独立 gate。 |
 | Dream / Stage / Activity | PresenceKit-backend/docs/dream.md + docs/stage.md + docs/activity-session.md | core/dream/*; core/stage/*; core/activity/*; admin/routers/dream.py,group_dream.py,reading.py,gomoku.py,chess.py | docs/dream-system.html; docs/dream-seed-activity.md; docs/reading-activity.md; docs/gomoku-activity.md; docs/chess-activity.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 三域均有实现但隔离；concept HTML 与旧 world paths 不得当 current truth。 |
-| Hardware / sensor | PresenceKit-backend/docs/presence-device-firmware.md + docs/visual-perception.md | firmware/presence-device/*; backend/admin/routers/{sensor,perception,watch}.py; desktop/src-tauri/src/sensor/*; mobile/.../SensorAccess.kt | mobile/docs/protocols/sensor-event-protocol.md; mobile/docs/android/native-capabilities.md | 各仓 docs/archive/*、cc-tasks/*（如有） | producer 在 clients/firmware，backend routes/state 是接收真值；/sensor/activity 待核查。 |
+| Hardware / sensor | PresenceKit-backend/docs/presence-device-firmware.md + docs/visual-perception.md | firmware/presence-device/*; backend/admin/routers/{sensor,perception,watch}.py; desktop/src-tauri/src/sensor/*; mobile/.../SensorAccess.kt | mobile/docs/protocols/sensor-event-protocol.md; mobile/docs/android/native-capabilities.md | 各仓 docs/archive/*、cc-tasks/*（如有） | producer 在 clients/firmware，backend routes/state 是接收真值；`/sensor/activity` 已标为 historical/removed。 |
 | Feature flags 与设置控制面 | PresenceKit-backend/docs/feature-control-surface.md | admin/routers/settings_*.py; core/config_loader.py; admin/static/pages/*.html | desktop/docs/settings-control-audit.md; backend/docs/security.md | 各仓 docs/archive/*、cc-tasks/*（如有） | 设置文档只写已有消费者和入口；UI 不等于 flag 已开启。 |
 
 ## 归档 / merge / delete 建议
@@ -46,7 +46,7 @@
 
 - backend docs/system-readiness.md：已有历史快照语义，移入 docs/archive，避免与 known-issues 竞争。
 - backend docs/dream-system.html：概念 brief，不与 docs/dream.md 竞争。
-- mobile docs/reference/main-dart-split-plan.md：已完成计划且含本机路径，移 archive。
+- mobile docs/archive/main-dart-split-plan.md：已完成计划，保留历史参考；当前结构以 docs/mobile/flutter-structure.md 为准。
 - desktop docs/pet-window-reference.md：来源 repo 未核实，保留原则即可，当前实现说明以代码派生文档为准。
 - cc-tasks/*、docs/archive/*、mobile spike/*：保留历史证据，但不可被索引为 current authority。
 
@@ -59,7 +59,7 @@
 ### 可删除候选
 
 - mobile docs/roadmap-notes.md：当前为空/无可核实事实，确认无外部引用后删除。
-- mobile docs/reference/main-dart-split-plan.md：无追溯需求时删除，否则只移 archive。
+- mobile docs/archive/main-dart-split-plan.md：已归档；不再建立 `docs/reference/` 的旧路径链接。
 - CLAUDE.md/CODEX.md：是兼容镜像，标 duplicate/compatibility keep，不删除。
 
 ## 命名与幽灵模式判定
@@ -68,7 +68,7 @@
 - qq-st-bot 是后端旧项目名，可留在迁移说明；当前门面优先 PresenceKit。
 - yexuan_memery 是移动端 legacy SharedPreferences 名，presence_mobile/settings 是当前 MethodChannel，均为兼容契约。
 - user_message、assistant_message、state_update、capabilities/envelope 是桌面 v1 roadmap 词，不是 v0.1 必需字段。
-- /mobile/chat 与 /sensor/activity 当前代码核对不是正式端点；archive 旧链路只作历史证据。
+- /mobile/chat 已由 backend router 注册，并由 Flutter `BackendClient.sendChat()` 实际调用；`/sensor/activity` 已与当前 endpoint 表拆开并标为 historical/removed。archive 旧链路只作历史证据。
 - userdata/characters/ 是 authored primary；旧 characters/content 和旧 data 路径仅在明确 fallback/seed/history 语义下保留。
 - MCP 已实现但 Experimental、默认关闭、默认 Path C；显式加入共享 Path A 时三个端同步生效。它不是 desktop/mobile transport。
 - Stage、ActivitySession、Dream/Dream Stage 已有实现与 endpoint；各自 deferred knob 需单独描述，不能总括为尚未实现。
@@ -163,23 +163,24 @@
 | PresenceKit-backend | docs/assistant-turn-sink.md | 触发器统一写入与广播 — 设计文档（Phase 1） | 2026-07-24 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/backend-integration.md | 后端集成契约（跨仓共用字段） | 未标注 | current-derived | blocking | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | README.md; docs/protocol-v0.md; docs/chat-correlation.md; docs/known-issues.md |
 | PresenceKit-backend | docs/c1-root-asset-inventory.md | C1 根目录资产盘点与迁移记录 | 2026-07-25 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-backend | docs/channels.md | docs/channels.md — 通道与桌宠通信 | 2026-07-11 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | /mobile/chat 被明确写为已删除，与当前 admin/routers/mobile.py 及三仓调用方核对一致。 | keep | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-backend | docs/channels.md | docs/channels.md — 通道与桌宠通信 | 2026-08-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | `/mobile/chat` 已确认由 admin router 注册，并由 Flutter `BackendClient.sendChat()` 实际调用；此前“已删除/无调用方”表述为 stale drift。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/chess-activity.md | Chess Activity (P0) | 2026-06-09 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/coplay.md | Coplay（陪玩模式） | 2026-07-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/data-taxonomy.md | Data Taxonomy | 未标注 | current-authority | blocking | data/userdata taxonomy 权威说明 | backend/core/data_paths.py; core/sandbox.py; core/data_registry.py; core/migration.py | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | docs/README.md; docs/c1-root-asset-inventory.md; docs/memory.md; docs/prompt-layers.md |
 | PresenceKit-backend | docs/desktop-client-protocol.md | Desktop client protocol | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/dev-environment.md | docs/dev-environment.md — Windows Agent 开发与验证环境 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-backend | docs/testing-matrix.md | 后端测试矩阵 | 2026-08-10 | current-derived | supporting | 测试入口与验收边界说明；不单独拥有代码或 CI 权威 | tests/; pytest.ini; .github/workflows/tests.yml; docs/v1-release-readiness.md | 明确 CI 仅为固定 smoke subset；identity/format/memeval/coplay、手工 sensor、跨仓与真机验收不由该 workflow 自动证明。 | keep | docs/README.md; docs/dev-environment.md; docs/v1-release-readiness.md |
 | PresenceKit-backend | docs/dream-seed-activity.md | Dream Seed Activity — 梦境预构 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/dream-system.html | <title>PresenceKit Dream System // Concept Brief</title> | 未标注 | historical | non-blocking | 历史设计、交接、工单、快照或概念材料；无当前权威声明 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | move to archive | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-backend | docs/dream.md | docs/dream.md — Dream System 总览与设计原则 | 未标注 | needs-verification | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 当前合同文档混用旧 authored/world/scenario 路径；需与 DataPaths、AssetRegistry、Dream loaders 分段核对。 | update | docs/README.md; docs/stage.md; docs/data-taxonomy.md; docs/dream-system.html |
+| PresenceKit-backend | docs/dream.md | docs/dream.md — Dream System 总览与设计原则 | 2026-08-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 已核对 canonical、seed、runtime 和 legacy fallback 分层；旧 runtime fallback 仍明确标为兼容读取。 | keep | docs/README.md; docs/stage.md; docs/data-taxonomy.md; docs/dream-system.html |
 | PresenceKit-backend | docs/feature-control-surface.md | 功能控制面事实清单（2026-07-13） | 2026-07-13 | current-authority | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | backend/admin/routers/settings_*.py; core/config_loader.py; admin/static/pages/*.html | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/fresh-clone-testing.md | docs/fresh-clone-testing.md — 新用户开箱测试姿势 | 未标注 | current-derived | blocking | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/garden.md | docs/garden.md — 花园系统 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/gomoku-activity.md | Gomoku Activity (P0 + P1 + P3-pending) | 2026-06-09 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/intent-grounding.md | 安全补丁验收 Checklist(通用模板) | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/interaction-event-model.md | docs/interaction-event-model.md — Interaction / Event Envelope Model | 未标注 | current-authority | supporting | Interaction/Event boundary 说明权威 | backend/core/perceive_event.py; core/perceive_event_audit.py; core/pipeline.py; core/stage/ | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | docs/README.md; docs/stage.md; docs/dream.md; docs/tools.md |
-| PresenceKit-backend | docs/known-issues.md | docs/known-issues.md — 已知问题与技术债 | 2026-08-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-backend | docs/memory.md | docs/memory.md — 记忆子系统设计 | 2026-07-18 | needs-verification | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 正文混用 data/runtime/memory 与 data/event_log/{uid}/trigger_audit，未清楚区分 writer、兼容读和历史遗留。 | update | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-backend | docs/known-issues.md | docs/known-issues.md — 已知问题与技术债 | 2026-08-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 已记录 SENSOR-1：signal-first sensor 候选目前不自动恢复旧 behavior action payload；其余历史问题按 closed/legacy 标注。 | keep | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-backend | docs/memory.md | docs/memory.md — 记忆子系统设计 | 2026-08-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 已核对 runtime memory writer、event-log legacy read 与 trigger audit forensic writer 的边界。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/model-presets.md | docs/model-presets.md — 多模型 Preset 系统 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/perform-mapping.md | docs/perform-mapping.md — 句级表演意图映射（Brief 20） | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/presence-device-firmware.md | presence-device 固件（ESP32 具身硬件） | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
@@ -195,7 +196,7 @@
 | PresenceKit-backend | docs/system-readiness.md | docs/system-readiness.md — 系统可承载性盘点 | 未标注 | historical | non-blocking | 历史设计、交接、工单、快照或概念材料；无当前权威声明 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/test_record.md | 角色工具调用测试记录 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/token-rotation.md | Token 轮换与配置速查 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-backend | docs/tools.md | docs/tools.md — 工具系统 | 2026-07-25 | needs-verification | supporting | tool loop/MCP/tool registry 说明权威 | backend/core/tool_dispatcher.py; core/mcp_client.py; admin/routers/settings_mcp.py | 示例仍出现复制到 characters/ 的旧操作路径；userdata/ 是 authored primary，旧 root 仅 fallback/seed。 | update | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-backend | docs/tools.md | docs/tools.md — 工具系统 | 2026-08-10 | current-derived | supporting | tool loop/MCP/tool registry 说明权威 | backend/core/tool_dispatcher.py; core/mcp_client.py; admin/routers/settings_mcp.py | 已核对示例使用 userdata/characters/cards/；旧 characters/ 已单独标为 compatibility fallback。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/v1-release-contract.md | v1 Release Contract | 未标注 | current-authority | blocking | v1 产品边界与承诺真值 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/v1-release-readiness.md | v1 Release Readiness | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-backend | docs/vector-store.md | docs/vector-store.md — 语义向量库 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
@@ -206,7 +207,7 @@
 | PresenceKit-desktop | CLAUDE.md | PresenceKit-desktop — 开发说明 | 未标注 | duplicate | non-blocking | 兼容入口镜像；不单独拥有权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-desktop | README.md | PresenceKit-desktop | 未标注 | current-authority | supporting | 仓库入口/索引/架构或协作规则权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-desktop | README.zh-CN.md | PresenceKit-desktop | 未标注 | current-authority | supporting | 仓库入口/索引/架构或协作规则权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-desktop | docs/backend-integration.md | docs/backend-integration.md — 后端接口与接入现状 | 2026-07-13 | needs-verification | blocking | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 日记/事件日志段仍写 data/yexuan_inner 与 data/event_log；客户端不应把后端物理目录当集成契约。 | update | README.md; docs/protocol-v0.md; docs/chat-correlation.md; docs/known-issues.md |
+| PresenceKit-desktop | docs/backend-integration.md | docs/backend-integration.md — 后端接口与接入现状 | 2026-08-10 | current-derived | blocking | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 已核对日记/聊天日志以 endpoint 为客户端契约，后端物理路径只由 backend 文档负责。 | keep | README.md; docs/protocol-v0.md; docs/chat-correlation.md; docs/known-issues.md |
 | PresenceKit-desktop | docs/chat-correlation.md | ChatPanel 回复对账契约（v0.1） | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-desktop | docs/design-constraints.md | Design Constraints & Architecture PTSD | 2026-07-12 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-desktop | docs/dream-hud.md | Dream HUD | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
@@ -217,6 +218,7 @@
 | PresenceKit-desktop | docs/pet-window-reference.md | pet-window-reference.md - desktop companion UI reference | 未标注 | historical | non-blocking | 历史设计、交接、工单、快照或概念材料；无当前权威声明 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | move to archive | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-desktop | docs/protocol-v0.md | PresenceKit-desktop 协议 v0.1 | 未标注 | current-authority | blocking | 桌面 v0.1 wire protocol 唯一正文权威 | desktop/src/shared/api/ws.ts; desktop/src/shared/api/backend.ts; backend/channels/desktop_ws.py; backend/admin/routers/chat.py | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | PresenceKit-backend/docs/desktop-client-protocol.md; docs/backend-integration.md; docs/chat-correlation.md |
 | PresenceKit-desktop | docs/release-v0.1.md | PresenceKit-desktop v0.1 发布范围 | 未标注 | historical | non-blocking | 历史设计、交接、工单、快照或概念材料；无当前权威声明 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-desktop | docs/testing.md | 桌面端测试与验收矩阵 | 2026-08-10 | current-derived | supporting | 测试入口与验收边界说明；不单独拥有代码或 CI 权威 | desktop/src/**/*.test.*; desktop/package.json; desktop/.github/workflows/ci.yml; desktop/src-tauri/ | 当前 19 个 Vitest 测试文件；CI 有 tsc、Vitest、前端 build、cargo check，但无 Tauri IPC、真实窗口、跨仓协议或 macOS 真机 E2E。 | keep | README.md; docs/known-issues.md; docs/release-v0.1.md |
 | PresenceKit-desktop | docs/settings-control-audit.md | 设置与功能开关审计（P0–P2） | 2026-07-13 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-desktop | docs/ui-mods.md | UI Mods 说明书（主题 mod 制作与系统地图） | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-desktop | index.html |     <title>陪伴</title> | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
@@ -232,7 +234,7 @@
 | PresenceKit-mobile | docs/README.md | docs/README.md - 文档索引 | 2026-07-13 | current-authority | supporting | 仓库入口/索引/架构或协作规则权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/android/native-capabilities.md | Android 原生能力 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/backend/integration.md | 后端集成 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-mobile | docs/known-issues.md | 已知问题与技术债 | 2026-07-24 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | debug signing 被记录为 release fallback 风险，未被写成正式发行能力；与 android/app/build.gradle.kts 一致。 | keep | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-mobile | docs/known-issues.md | 已知问题与技术债 | 2026-07-24 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 缺失或不完整 release keystore 时构建 fail-loud；debug APK 只来自显式开发/调试任务，不得作为正式发行能力；与 android/app/build.gradle.kts 一致。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/mobile/background-notification-design.md | 后台通知与主动消息设计 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/mobile/color-mods.md | 手机端颜色预设与 Mod | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/mobile/flutter-structure.md | Flutter 结构 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
@@ -241,9 +243,9 @@
 | PresenceKit-mobile | docs/protocols/mobile-channel.md | Mobile Channel 协议现状 | 未标注 | current-authority | blocking | mobile activation/poll/ack/proactive contract 说明权威 | mobile/lib/services/backend_client.dart; mobile/android/.../MobileNotificationService.kt; backend/admin/routers/mobile.py | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | docs/README.md; docs/backend/integration.md; docs/mobile/background-notification-design.md |
 | PresenceKit-mobile | docs/protocols/phone-control-protocol.md | 手机自动化协议（phone control / "computer use 手机版"） | 2026-07-25 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/protocols/relay-publish-contract.md | 中继发布契约 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-mobile | docs/protocols/sensor-event-protocol.md | 多端与硬件传感器事件协议 | 2026-07-13 | needs-verification | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 文档声明 POST /sensor/activity，当前后端核到 /sensor/push、/sensor/realtime、/perception/visual、/watch/event，未找到该路由。 | update | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-mobile | docs/quality/testing-and-dev.md | 测试与开发 | 2026-07-19 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
-| PresenceKit-mobile | docs/reference/main-dart-split-plan.md | `lib/main.dart` 拆分计划 | 2026-06-12 | historical | non-blocking | 历史设计、交接、工单、快照或概念材料；无当前权威声明 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 已完成计划仍被索引，且含本机绝对路径；不应继续作为当前结构说明。 | move to archive | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-mobile | docs/protocols/sensor-event-protocol.md | 多端与硬件传感器事件协议 | 2026-08-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 已核对当前四类 endpoint；`/sensor/activity` 明确位于 Historical / Removed，避免被当作调用契约。 | keep | 未发现已登记入链；见主题表/索引扫描 |
+| PresenceKit-mobile | docs/quality/testing-and-dev.md | 测试与开发 | 2026-08-10 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或 CI 权威 | mobile/test/; mobile/android/app/src/test/; mobile/.github/workflows/ci.yml; mobile/.github/workflows/release.yml; mobile/android/app/build.gradle.kts | 已修正 14→17 个 Dart 测试文件的盘点，并将 2026-07-19 结果标为历史证据；仍明确 tester 回环、Kotlin instrumented test、真机矩阵和 release flavor/CI 漂移。 | keep | docs/quality/testing-and-dev.md; docs/known-issues.md; docs/v1-release-readiness.md |
+| PresenceKit-mobile | docs/archive/main-dart-split-plan.md | `lib/main.dart` 拆分计划 | 2026-08-10 | historical | non-blocking | 历史设计、交接、工单、快照或概念材料；无当前权威声明 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 已完成计划已归档并标注历史参考；本机路径已替换为占位符，当前结构见 `docs/mobile/flutter-structure.md`。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/reference/push-relay-spike.md | Push Relay Spike — 结论文档 | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | docs/roadmap-notes.md | 待捋逻辑 | 未标注 | deletion-candidate | non-blocking | 无稳定当前事实或为空；不应承担权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | delete | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | ios/Runner/Assets.xcassets/LaunchImage.imageset/README.md | Launch Screen Assets | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
@@ -252,15 +254,15 @@
 | PresenceKit-mobile | spike/push_relay_ntfy/android/test_log_template.md | ntfy Relay Spike — Test Log | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 | PresenceKit-mobile | web/index.html | index | 未标注 | current-derived | supporting | 当前专题/派生说明；不单独拥有产品或协议权威 | 对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文 | 未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。 | keep | 未发现已登记入链；见主题表/索引扫描 |
 
-## 后续修正文档工单建议
+## 本轮修正记录与剩余治理项
 
-1. DOC-1：重写 desktop backend integration 数据源段，改为 endpoint + backend source authority，标注 legacy fallback。
-2. DOC-2：mobile sensor-event-protocol 做 endpoint census，核定/历史化 /sensor/activity，补 /watch/event 与 /perception/visual。
-3. DOC-3：统一 Dream/data taxonomy/path inventory 的 authored root：userdata primary、defaults seed、旧 root fallback。
-4. DOC-4：清理 tools/memory path ghost，建立 writer / read fallback / historical 表。
-5. DOC-5：逐仓绑定 workflow、产物、签名和 upgrade smoke evidence；debug-signed APK 永远标非发行资产。
-6. DOC-6：历史文档治理与 docs README 索引收敛，确认空 roadmap 是否删除。
-7. DOC-7：增加 CI-only docs link/authority lint，排除 code-fence/template placeholders。
+1. DOC-1：已完成。desktop backend integration 现在以 endpoint + backend source authority 为准，不再把后端物理目录当客户端契约。
+2. DOC-2：已完成。sensor endpoint 已逐项对照代码，`/sensor/activity` 已历史化，并补齐 `/watch/event` 与 `/perception/visual` 的当前边界。
+3. DOC-3：已完成。Dream/data taxonomy 已明确 userdata primary、defaults seed、runtime state 和旧 root fallback。
+4. DOC-4：已完成。tools/memory 已分别补齐 authored root 以及 writer/read-fallback/forensic 表述。
+5. DOC-5：已完成文档侧修正。release 文档现在明确完整 keystore 缺失时 fail-loud，debug APK 仅是开发验证资产；真实安装升级和签名产物仍需运行环境验收。
+6. DOC-6：已完成。拆分计划已归档、绝对路径已占位化，移动端索引改指向当前结构文档；空 roadmap 是否删除仍需单独确认外部引用。
+7. DOC-7：保留为后续治理项：增加 CI-only docs link/authority lint，并排除 code-fence/template placeholders。
 
 ## 验证记录
 

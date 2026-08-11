@@ -8,20 +8,20 @@
 
 ## 一、问题陈述（依据 codex 报告）
 
-当前"他说完一句话"的善后散落在多条链路，质量参差：
+以下问题陈述保留为 Phase 1 的历史背景；Phase 1 已落地，当前路径以代码和下方“当前实现”描述为准：
 
 | 入口 | 写 event_log | 写 short_term | broadcast | 备注 |
 |---|---|---|---|---|
-| `/desktop/chat`（desktop 与 mobile 前台共用） | ✓ user+assistant | ✓ user+assistant | ✓ 全 channel | 基线，conversation_gate 串行，post_process 关键块 await |
+| `/desktop/chat` / `/mobile/chat`（桌面/手机前台各自入口） | ✓ user+assistant | ✓ user+assistant | ✓ 全 channel | 共用 owner-chat pipeline；分别保留 desktop/mobile provenance，conversation_gate 串行，post_process 关键块 await |
 | 普通 scheduler conversational trigger（morning_greeting / period_reminder / birthday / festival / timenode / topic_followup / reminders / diary_reminder / hr_high / hr_critical / garden_bloom 等） | 成功发言后 ✓ assistant only | 成功发言后 ✓ assistant only | 成功发言后 ✓ 全 channel | 当前先提交 signal，经 autonomy admission；仅 `talk_owner` 成功时进入 sink |
-| **sensor_aware** | 成功发言后 ✓ assistant only | 成功发言后 ✓ assistant only | 成功发言后 ✓ 全 channel | 当前提交高 urgency sensor signal；仍经过统一 autonomy admission 与 `talk_owner` |
-| **sleep_end**（`admin/routers/watch.py:_flush_sleep_buffer`） | ✓ 但**写成 user+assistant**（污染 user 行） | 同左 | ✓ broadcast | 没传 `trigger_name`，被当成 owner turn；同时绕过 `watch.py:on_watch_event` |
+| **sensor_aware** | 成功发言后 ✓ assistant only | 成功发言后 ✓ assistant only | 成功发言后 ✓ desktop + mobile（含 mobile durable mirror） | 当前提交高 urgency sensor signal；仍经过统一 autonomy admission 与 `talk_owner`，不向 QQ fanout |
+| **sleep_end**（`admin/routers/watch.py:_flush_sleep_buffer`） | ✓ assistant only | ✓ assistant only | ✓ 统一 sink fanout | 当前由 `scheduler.on_watch_event` → autonomy `talk_owner` 进入 sink，带 `trigger_name="sleep_end"` |
 | 维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / activity_switch / dnd） | — | — | — | 不是 assistant turn，不在 Phase 1 范围 |
 
 副问题：
 
-- garden_bloom / harvest_expired / vase_wilted / handle_ask / handle_gift / handle_self 等花园事件，冷却名已登记但 `_is_ready / _mark` 没真正节流，部分还叠 30% 概率（codex 报告原话）。
-- 普通触发器 post_process 用 `asyncio.create_task` 不 await，意味着触发器返回时记忆可能尚未落盘，并发场景下可能与下一条用户消息交错。
+- garden_bloom / harvest_expired / vase_wilted / handle_ask / handle_gift / handle_self 等花园事件，历史上曾被报告为“冷却名已登记但未真正节流”；当前 `garden_water.py` / `garden_daily.py` 已在事件执行前使用 `_is_ready()`，成功路径通过 `_mark()` / `would_mark` 记录。
+- 普通触发器的旧路径曾用 `asyncio.create_task` 不 await；当前 `record_assistant_turn` 会在 fanout 前 await `post_process_critical` 完成本地记忆落盘，`detect_emotion/mood_state` 等慢段在发送后异步执行。
 
 ---
 
@@ -33,12 +33,12 @@ Phase 1 必须达成：
    - `data/runtime/memory/{char_id}/{uid}/event_log/{date}.md`
    - `data/runtime/memory/{char_id}/{uid}/history.json`（short-term）
    - 所有目标 channel 的下行（按 fanout 策略）
-2. 共用 `/desktop/chat` 对 desktop/mobile 前台客户端的可观察行为**完全不变**（字段、时序、behavior 都一致）
+2. `/desktop/chat` 与 `/mobile/chat` 对各自前台客户端的可观察行为**保持不变**（字段、时序、behavior 都一致）
 3. 所有触发器写入语义统一：`trigger_name` 非空、assistant only；source 在 sink 内部保留，落盘仍编码到 `trigger_name`
 
 Phase 1 不破坏：
 
-- `/desktop/chat`、`POST /sensor/realtime`、`POST /watch/*` 这些外部接口
+- `/desktop/chat`、`/mobile/chat`、`POST /sensor/realtime`、`POST /watch/*` 这些外部接口
 - `channels.registry.broadcast()` 的现有契约
 - `capture_turn()` 的现有签名（仅可能在调用方向上微调）
 
@@ -50,9 +50,9 @@ Phase 1 不做：
 
 ## 三、核心抽象：`record_assistant_turn`
 
-新增模块 `core/turn_sink.py`，作为"他发话已完成"的唯一汇聚点。
+现行模块 `core/turn_sink.py` 作为"他发话已完成"的唯一汇聚点；以下签名展示关键参数，完整参数以代码为准。
 
-### 3.1 函数签名（草案）
+### 3.1 函数签名（当前实现摘要）
 
 ```python
 # core/turn_sink.py
@@ -62,7 +62,7 @@ from enum import Enum
 from typing import Optional, Sequence, Union
 
 class TurnSource(str, Enum):
-    USER_CHAT = "user_chat"   # /desktop/chat（desktop/mobile 前台共用）
+    USER_CHAT = "user_chat"   # /desktop/chat 或 /mobile/chat（各自保留通道 provenance）
     TRIGGER   = "trigger"     # 普通 scheduler 触发器
     SENSOR    = "sensor"      # sensor_aware（trigger 子类，单独打标便于追踪）
     WATCH     = "watch"       # 手表事件（hr_high / hr_critical / sleep_end）
@@ -90,7 +90,7 @@ async def record_assistant_turn(
     fanout: FanoutPolicy = "all",
     payload: Optional[dict] = None,        # 内部兼容壳；当前只读取 payload["behavior"]
     await_critical_post_process: bool = True,
-    bypass_gate: bool = False,             # 仅 hr_critical 等极高优先级允许 True
+    bypass_gate: bool = False,             # 仅已持有外层 conversation_lock 的 adapter/兼容调用方使用
     pipeline=None,                          # 由调用方注入或从 pipeline_registry 取
 ) -> TurnResult:
     ...
@@ -108,7 +108,7 @@ async def record_assistant_turn(
 2. **生成 `turn_id`**（UUID4），随后回填给 `capture_turn`
 
 3. **进入 `conversation_gate(uid)`**（per-uid lock，与 owner 入口共享）
-   - `bypass_gate=True` 时跳过（仅供 hr_critical 这类不能等的事件用）
+   - `bypass_gate=True` 时跳过；仅供已经持有外层 `conversation_lock` 的 adapter/兼容调用方使用，`hr_critical` 只绕过状态机准入，不绕过此锁
    - 串行化的好处：触发器与用户输入不会交错写入 short_term / event_log
 
 4. **`capture_turn`**（保持现有契约）
@@ -122,22 +122,22 @@ async def record_assistant_turn(
    - 解析 `FanoutPolicy` → 具体 channel 实例列表（从 `channels.registry`）
    - 逐个 `await channel.send(message, user_id, behavior=behavior)`，单个失败不阻塞其他
    - 失败计入 `TurnResult.fanout_failures`
-   - **此步之后，任何"直推 desktop_ws / mobile_queue"的代码必须删除**
+   - **当前约束**：除 channel 实现内部外，业务入口不得直推 `desktop_ws` / `mobile_queue`；sensor_aware 的旧直推已移除
 
 7. **post_process 慢队列触发**（与 owner 入口一致）
    - 入 slow_queue：`summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_identity` / `consistency_check` / `user_profile_update`
-   - `await_critical_post_process=True` 时等待关键块（`detect_emotion` + `mood_state.update` + `capture_turn`）完成再返回
+   - `await_critical_post_process=True` 时只等待关键块（本地条件读取 + `capture_turn`）完成；`detect_emotion` / `mood_state.update` 在 fanout 后由 `post_process_slow` 异步执行
    - TTS / 表情包等副作用保持 `asyncio.create_task` 模式，不接管
 
 8. **返回 `TurnResult`**
 
 ### 3.3 与现有模块的关系
 
-- **不替换 `_pipeline_send`**：它继续作为"跑完 pipeline 拿到文本"的封装，只是内部的 `broadcast + capture + create_task(post_process)` 这一段替换为 `await record_assistant_turn(...)`。触发器代码层面无感。
+- **不替换 `_pipeline_send`**：它继续作为"跑完 pipeline 拿到文本"的封装，发言路径由 `record_assistant_turn` 统一完成 critical 落盘、fanout 与 slow 段调度。触发器代码层面无感。
 - **不改 `capture_turn`**：它仍然是写入原语，签名稳定。
 - **不改 `channels.registry.broadcast`**：record_assistant_turn 内部就是调用它。
-- **behavior 通道**：sensor_aware 现在直推 WS 时携带 action 包。迁移后由 `DesktopChannel.send(text, user_id, behavior=...)` 接收 behavior，自己决定怎么序列化（WS 在线发原 channel_message 再发 action；离线写 `data/runtime/agent_actions.json`）。action 协议保持不变。
-  - `MobileChannel.send` 将 behavior 同条写入 `data/runtime/mobile_queue.json`；`QQChannel.send` 忽略 behavior。
+- **behavior 通道**：`DesktopChannel.send(text, user_id, behavior=...)` 与 `MobileChannel.send` 仍支持既有 action payload；但当前 sensor signal-first 路径只把 `behavior_id` 作为 autonomy evidence，不自动构造 `build_action_packet()`，因此不会把旧 action 直接送到 channel。恢复该能力需要单独的 autonomy payload/协议设计。
+  - 非 sensor 的既有调用方仍可传 behavior；`QQChannel.send` 忽略 behavior。
 
 ### 3.4 当前追加：Narrative Message 双轨
 
@@ -157,7 +157,7 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
 
 | 调用方 | 当前路径 | 改造后 | 行为差异 |
 |---|---|---|---|
-| `admin/routers/chat.py::run_owner_chat_turn` | 自己 await post_process + broadcast | `await record_assistant_turn(source=USER_CHAT, fanout="all", ...)` | 等价；首批回归 |
+| `admin/routers/chat.py::run_owner_chat_turn` | `await record_assistant_turn(source=USER_CHAT, ...)` | 同一入口继续由 turn sink 完成 critical 落盘、fanout 与 slow 段调度 | 当前实现 |
 | `core/scheduler/loop.py::_pipeline_send` migrated compatibility 边界 | 旧 broadcast + capture + create_task | 丢弃旧 prompt，只排有界 signal | 不再直接产生 assistant turn |
 | `core/scheduler/triggers/time_based.py`（morning_greeting / night_reminder / random_message / weather_alert / daily_journal / spontaneous_recall） | 旧 `_pipeline_send` 发言 | 例行 `_check_*` 是配置感知的 signal 生产者；autonomy runner 不重复按时钟造 routine | 发言统一由 admission 后的 `talk_owner` 进入 sink |
 | `core/scheduler/triggers/diary.py`（diary_reminder / diary_share_reminder） | 旧 `_pipeline_send` 发言 | 提交 signal | 成功 `talk_owner` 后才写入与广播 |
@@ -166,45 +166,38 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
 | `core/scheduler/triggers/timenode.py` | 同上 | 同上 | 同上 |
 | `core/scheduler/triggers/festival.py` | 同上 | 同上 | 同上 |
 | `core/scheduler/triggers/memory.py::topic_followup` | 预判 LLM + `_pipeline_send` | 预判 LLM 保留；发话路径不动 | 同上 |
-| `core/scheduler/triggers/garden_water.py::garden_bloom` 等 | `_pipeline_send` | 不动；**冷却节流另议**（见开放问题 #2） | 同上 |
+| `core/scheduler/triggers/garden_water.py::garden_bloom` 等 | scheduler gating / `execute_prompt` | 当前事件前 `_is_ready()`，成功后 `_mark()` / `would_mark` | 同上 |
 | `core/scheduler/triggers/garden_daily.py` 各事件 | 同上 | 同上 | 同上 |
-| `core/scheduler/triggers/watch.py`（hr_high / hr_critical） | `_pipeline_send` | hr_critical 用 `bypass_gate=True` | 极高优先级不被用户输入阻塞 |
+| `core/scheduler/triggers/watch.py`（hr_high / hr_critical） | 统一 scheduler gating → `_pipeline_send` | `hr_critical` 用 `bypass_state_machine=True`，但仍进入 per-uid `conversation_lock`；不是 `bypass_gate=True` | 极高优先级可绕过状态机，但仍保持写入/LLM 串行 |
 | `core/scheduler/loop.py::reminders` 分支 | `_pipeline_send` | 不动 | 同上 |
 | **`core/scheduler/triggers/sensor_aware.py`** | 旧 `_pipeline_send(output_mode="return") + desktop_ws.push_message` | 提交 sensor signal，统一由 autonomy `talk_owner` 调 `record_assistant_turn` | 不再有独立直推出口 |
-| **`admin/routers/watch.py::_flush_sleep_buffer`** | broadcast 但无 `trigger_name`，写成 user+assistant | `record_assistant_turn(source=WATCH, trigger_name="sleep_end", ...)`，回写也接入 `watch.py:on_watch_event` 统一入口 | **修 bug：user 行不再被污染、watch 事件流不再被绕过** |
+| **`admin/routers/watch.py::_flush_sleep_buffer`** | 历史实现曾直接 broadcast、没有 `trigger_name`，并把 sleep buffer 写成 user+assistant | 当前由 `scheduler.on_watch_event` 进入 autonomy `talk_owner`，再由 `record_assistant_turn(source=WATCH, trigger_name="sleep_end", ...)` 统一回写与 fanout | **已修复：user 行不再被污染，watch 事件流不再被绕过** |
 
 ---
 
-## 五、待你确认的产品/设计决策
+## 五、设计决策记录（Phase 1 已落地）
 
-1. **sensor_aware 的 fanout 范围**
-   - 选项 A：`fanout="all"`（含 QQ）—— 与"漏 fanout 是 bug"的判定最一致
-   - 选项 B：`fanout=["desktop", "mobile"]`，跳过 QQ —— 体感反应跟桌面环境强相关，QQ 用户收到可能困惑
-   - **我倾向 B**：体感反应跨设备到手机端合理，跨到 QQ 失去语境
-   - 你怎么定？
+以下条目保留原设计讨论，当前实现以代码和前文“当前实现”表为准；已落地项不再是待确认的实现任务。
 
-2. **garden 事件冷却节流是否在 Phase 1 内修**
-   - codex 报告指出冷却名已登记但未真正节流
-   - 选项 A：Phase 1 顺手补 `_is_ready / _mark` —— 改动小、收益明确
-   - 选项 B：拆成 Phase 1.5 单独提 PR
-   - 选项 C：留给 Phase 2 一起进冷却参数热改
-   - **我倾向 A**
+1. **sensor_aware 的 fanout 范围（已由代码决定）**
+   - 当前为 `fanout=["desktop", "mobile"]`，跳过 QQ；`core/turn_sink.py` 仍会按 mobile durable mirror 规则保留手机队列。
+   - 这是当前行为，不再是“选项 A/B”待确认项。
 
-3. **触发器是否经过 `conversation_gate`**
-   - 选项 A：全部经过 —— 写入一致性最强，代价是用户正在打字时触发器被短暂阻塞
-   - 选项 B：默认经过，hr_critical 等极少数 `bypass_gate=True`
-   - 选项 C：全部不经过，保留现有"触发器随时插话"语义
-   - **我倾向 B**：99% 串行 + 极少数兜底逃生
+2. **garden 事件冷却节流（已完成）**
+   - `garden_water.py` / `garden_daily.py` 当前在事件处理前调用 `_is_ready()`，成功路径通过 `_mark()` 和 `would_mark` 记录触发状态。
+   - 原“冷却名已登记但未真正节流”只描述历史状态；剩余 garden 策略调整应另立 Phase 2 任务。
+
+3. **触发器是否经过 `conversation_gate`（已由代码决定）**
+   - 当前 scheduler 触发器统一进入 per-uid `conversation_lock`，覆盖 `fetch_context → build_prompt → run_llm → record_assistant_turn`。
+   - `hr_critical` 的 `bypass_state_machine=True` 只绕过状态机准入，不绕过 conversation gate；`record_assistant_turn(bypass_gate=True)` 仅用于已持有外层锁的 adapter/兼容调用方。
 
 4. **post_process 是否 await 关键块**
-   - 选项 A：默认 await —— 与 owner 入口一致，触发器返回时记忆已落盘
-   - 选项 B：默认 create_task —— 触发器返回更快
-   - **我倾向 A**：只 await 关键块（emotion + mood + capture_turn），慢队列继续异步，代价可控
-   - 这条与 #3 联动
+   - 当前实现：send 前只 await `post_process_critical` 的本地条件判断、`capture_turn` 和必要的状态快照；不在 send 前等待 LLM/网络调用。
+   - send/fanout 完成后再异步调度 `post_process_slow`，其中包含 `detect_emotion`、`mood_state`、avatar/profile 和 slow queue。
+   - 这条与 #3 联动；“await emotion + mood + capture_turn”仅是历史设计稿表述，不是当前时序。
 
-5. **sleep_end 是否要顺便修"绕过 watch.py:on_watch_event"**
-   - 这是 codex 报告里捎带提到的副问题
-   - **我倾向修**：既然要重写这段，事件流一起接通，否则下次又是补丁
+5. **sleep_end 事件流（已解决）**
+   - **已解决**：`_flush_sleep_buffer` 当前通过 `scheduler.on_watch_event` 进入统一 autonomy/turn sink 链路，并用 `trigger_name="sleep_end"` 区分触发来源。
 
 ---
 
@@ -227,14 +220,14 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
 ### 6.2 回归测试
 
 - `/desktop/chat` 发一条 → memory 与 channel 行为**与改造前字节一致**
-- mobile 前台通过 `/desktop/chat` 同上
-- sensor_aware 触发 → **预期差异**：多了 `data/runtime/mobile_queue.json` 条目（按开放问题 #1 决议可能也加 QQ）
+- mobile 前台通过 `/mobile/chat` 同上；desktop 前台通过 `/desktop/chat`
+- sensor_aware 触发 → **预期差异**：多了 `data/runtime/mobile_queue.json` 条目，不向 QQ fanout
 - sleep_end 触发 → **预期差异**：`data/runtime/memory/{char_id}/{uid}/history.json` 的 user 行不再被括号 prompt 污染
 
 ### 6.3 并发场景
 
 - 用户正在打字时触发器到点 → 触发器等待 conversation_gate，不交错写入
-- hr_critical 触发 + 用户同时输入 → hr_critical `bypass_gate=True`，照常发，但 capture_turn 在内部锁保护下不损坏 short_term
+- hr_critical 触发 + 用户同时输入 → `bypass_state_machine=True` 允许它进入执行，但仍经 per-uid `conversation_lock` 串行；capture_turn 在内部锁保护下不损坏 short_term
 
 ---
 
@@ -254,25 +247,22 @@ Phase 2 设计文档另开，预计文件名 `docs/trigger-decision-layer.md`。
 
 ## 八、风险与未决事项
 
-- **conversation_gate 锁粒度**：当前是 per-uid，触发器经过时是否需要更细粒度（per-trigger-type）？我倾向不需要，因为 short_term 写入本就需要 per-uid 串行。
+- **conversation_gate 锁粒度**：当前固定为 per-uid；触发器与 owner chat 共用同一串行锁，暂不拆成 per-trigger-type，因为 short_term/event_log 写入本就需要 per-uid 串行。
 - **slow_queue 堆积**：触发器集中触发（早上 8 点多个触发器同时到期）会让 slow_queue 临时变长。Phase 1 上线后需要观察队列长度指标；若堆积严重，Phase 2 考虑多 worker 或分队列。
-- **DesktopChannel.send 是否支持 behavior**：sensor_aware 现在直推 WS 时附带 action 包，迁移要求 channel 层接收 behavior 并正确转发到 WS / 文件 fallback。如果当前签名不支持，需要先扩 channel 接口，**注意保持客户端协议向前兼容**。
+- **DesktopChannel.send behavior**：channel 签名和 WS / 文件 fallback 仍保持 action 协议兼容；当前未决的是 signal-first sensor 是否要把候选 behavior 重新提升为 autonomy payload，不能把旧 action 分支写成已恢复。
 - **`pipeline_registry` 注入**：`record_assistant_turn` 需要 Pipeline 实例触发 post_process，依赖 `pipeline_registry.get()`。调度器路径已有 `_pipeline` 引用，可直接传入；owner 入口同样从 registry 取。
 - **沙盒路径**：所有 `data/*.json` 读写仍走 `core/sandbox.get_paths()`，record_assistant_turn 自身不直接落盘（透过 capture_turn / broadcast 间接落盘）。
 
 ---
 
-## 九、落地步骤建议
+## 九、落地记录（Phase 1 已完成）
 
-1. 本设计文档 review、产品决策（开放问题 #1-#5）落定
-2. 新增 `core/turn_sink.py`，单元测试覆盖 4 种 source + 3 种 fanout
-3. 在 `core/scheduler/loop.py::_pipeline_send` 内部接入 `record_assistant_turn`（不改触发器代码）
-4. 在 `admin/routers/chat.py::run_owner_chat_turn` 接入；跑 owner 入口回归
-5. 改 `core/scheduler/triggers/sensor_aware.py`：删除 `desktop_ws.push_message` 直推
-6. 改 `admin/routers/watch.py::_flush_sleep_buffer`：用 `WATCH` source + `trigger_name="sleep_end"`，回写接入 `watch.py:on_watch_event`
-7. 按开放问题 #2 决议，决定是否补 garden 事件冷却节流
-8. 跑 codex 报告里那张触发器表，逐个触发验证（第六节方案）
-9. 生产灰度 1-2 周；观察 slow_queue 长度、capture_turn 重试率、fanout 失败率
+- `core/turn_sink.py` 已成为 owner、scheduler、sensor、QQ 等 reality assistant turn 的统一入口。
+- `post_process_critical` 在 fanout 前只做毫秒级本地捕获与状态写入；`post_process_slow` 在 fanout 后异步处理情绪、画像和慢队列。
+- `sensor_aware` 不再保留独立的桌面 WS 直推出口，当前由 autonomy `talk_owner` 走统一 sink，并按当前 fanout 策略投递。
+- `sleep_end` 已通过 `scheduler.on_watch_event` 接入统一事件流，使用 `WATCH` + `trigger_name="sleep_end"`。
+- garden 事件冷却已由 `garden_water.py` / `garden_daily.py` 的 `_is_ready`、`_mark` 和 `would_mark` 接入；它是独立于 turn sink 的触发器级闸门，后续只需补验收观测，不应再写成未实现。
+- 第六节的逐触发器回归和生产观察仍属于验收/观测工作，不应写成已经完成的代码改造。
 
 ---
 
@@ -448,11 +438,10 @@ USER_CHAT 回复要不要进 `mobile_queue.json` 完全看当时 `mobile.is_acti
 mobile 队列，后台也就没有横幅可弹。
 
 现在这段 `if exclude_origin_channel != "mobile": targets.append(mobile_ch)` 对所有 source 无条件
-生效，不再区分 `_is_proactive`。之所以安全、不会导致前台重复弹通知：手机与桌宠共用
-`/desktop/chat`（`channel_name` 恒为 `"desktop"`，从不是 `"mobile"`，见
-`admin/routers/chat.py:528`），而 PresenceKit-mobile 的 `MainActivity.onResume()` 会把
-`MobileNotificationService`整个停掉——App 在前台时压根没有东西在监听中继信号，消息只是安静地
-躺在队列里，跟现有的前台 `/mobile/poll` 轮询一起被正常消费，不会额外弹窗。
+生效，不再区分 `_is_proactive`。手机 `/mobile/chat` 使用 `mobile` live origin，仍会通过
+独立的 mobile durable mirror 把回复写入队列；Flutter 前台同时消费同步 HTTP 回复和
+`/mobile/poll`，并用同一 `turn_id`/`msg_id` 去重。桌宠 `/desktop/chat` 则保留 desktop
+入口的同步回显与桌面 WS 语义。
 
 测试：`tests/test_turn_sink.py::test_user_chat_reaches_offline_mobile_queue`。
 
@@ -467,9 +456,9 @@ mobile 队列，后台也就没有横幅可弹。
 | 没有统一的"assistant turn 完整 hook" | 新增 `record_assistant_turn` 作为唯一汇聚点 |
 | 触发器弱于 /desktop/chat（无 gate、post_process 不 await） | conversation_gate 共享 + 默认 await 关键块 |
 | trigger 分支只写 assistant 行 | 保持现有契约，本就是预期行为，元数据加全 |
-| sensor_aware 绕过 broadcast 直推 WS | 强制走统一 fanout，behavior 由 channel 自行序列化 |
+| sensor_aware 绕过 broadcast 直推 WS | 旧直推已封存；当前 signal-first 走 autonomy/turn sink。channel 仍负责既有 behavior payload 的序列化，但 sensor 当前只携带候选 evidence |
 | sleep_end 没传 trigger_name 污染 user 行 | 用 `WATCH` source + `trigger_name="sleep_end"` 修正 |
-| garden 事件冷却名挂着但未节流 | 列入开放问题 #2 等决议 |
+| garden 事件冷却名挂着但未节流 | 已由 `_is_ready` / `_mark` / `would_mark` 接入；后续仅保留验收观测 |
 
 codex 报告里维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / activity_switch / dnd）**不在本 Phase 1 范围**，因为它们不是 assistant turn。
 

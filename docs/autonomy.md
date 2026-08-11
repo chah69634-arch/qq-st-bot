@@ -1,13 +1,10 @@
 # Signal-first Autonomy
 
-This document defines the v1 boundary for proactive work. A scheduler or sensor
-may report facts, but it does not generate a user-visible line. `core.autonomy`
-is the only proactive decision and delivery path; `talk_owner` is its only
-user-facing outlet.
+本文定义 v1 的 proactive 工作边界。scheduler 或 sensor 可以报告事实，但不能生成面向用户的一句话。`core.autonomy` 是唯一的 proactive 决策与交付路径；`talk_owner` 是唯一的用户可见出口。
 
-## Versioned Contract
+## 版本化契约
 
-Signals use `autonomy-signal.v1`:
+Signal 使用 `autonomy-signal.v1`：
 
 ```json
 {
@@ -29,12 +26,9 @@ Signals use `autonomy-signal.v1`:
 }
 ```
 
-`evidence` is system-provided fact data, not a user statement. `expiry` is a
-Unix timestamp; zero means no explicit expiry. `memory_query` is an optional
-anchored query and is never inferred from a greeting or time-of-day label.
+`evidence` 是系统提供的事实数据，不是用户陈述。`expiry` 是 Unix timestamp；零表示没有显式过期时间。`memory_query` 是可选的、有 anchor 的查询，不能从 greeting 或 time-of-day label 推断。
 
-Signals produced during one scheduler tick are merged into one
-`autonomy-opportunity.v1` before a job is queued:
+同一个 scheduler tick 产生的 signal 会在 job 入队前合并为一个 `autonomy-opportunity.v1`：
 
 ```json
 {
@@ -50,159 +44,64 @@ Signals produced during one scheduler tick are merged into one
 }
 ```
 
-The opportunity is persisted on the durable autonomy job. The runner receives
-the complete opportunity, performs bounded memory recall (`allow_strengthen =
-false`), and receives an explicit local reality timestamp. Ordinary model text
-is private. It may use the autonomy allowlist, call `talk_owner` once, or end
-with no user-visible message.
+Opportunity 持久化在 durable autonomy job 中。runner 接收完整 opportunity，执行有界 memory recall（`allow_strengthen = false`），并接收明确的本地 reality timestamp。普通 model text 是私有的；它可以使用 autonomy allowlist、调用一次 `talk_owner`，或无用户可见消息地结束。
 
-The runner keeps this prompt projection intentionally smaller than a normal chat
-prompt. It includes system-observed activity, bounded profile/mid-term/history
-layers, and a system-executed `memory_query` layer. Recall cards retain their
-source, event/recorded timestamps, speaker provenance, strength, and source-turn
-IDs. Missing or unknown provenance is not a valid historical anchor, and signal
-evidence is always labeled as a candidate reason rather than past dialogue.
-Successful tool results and active hardware jobs are separate factual layers;
-neither one requires a user-facing message. `talk_owner` rejects unsupported
-memory claims such as an ungrounded 'I remember'/'you said' statement.
+runner 使用的 prompt projection 有意小于普通 chat prompt。它包含系统观察到的 activity、有界的 profile/mid-term/history 层，以及系统执行的 `memory_query` 层。Recall card 保留 source、event/recorded timestamp、speaker provenance、strength 和 source-turn ID。缺失或未知 provenance 不是有效的历史 anchor；signal evidence 始终标为 candidate reason，而不是过去的对话。成功的 tool result 和 active hardware job 是独立的事实层；两者都不要求产生用户可见消息。`talk_owner` 会拒绝没有 grounding 的 “I remember”/“you said” 等 unsupported memory claim。
 
-Scheduler and sensor adapters live in `core.autonomy.signal_adapters`. They
-only emit bounded facts for routine/time-background, heart-rate state changes,
-memory reactivation, unfinished topics, desktop reopen, and runtime restart.
-Candidates in the same 15-minute opportunity window are deduplicated by
-stable routine key or by `reason` and memory key. The scheduler `_check_*`
-module is the only producer for configured morning/night/midday/random routine
-facts; the runner does not synthesize a second clock-based copy. Routine facts
-default to `action_mode=none` and never force `TALK`. Expired candidates are discarded before queueing;
-urgency can elevate the recorded priority but never bypasses dream, active-user,
-conversation, or budget gates.
+Scheduler 和 sensor adapter 位于 `core.autonomy.signal_adapters`。它们只为 routine/time-background、heart-rate state change、memory reactivation、unfinished topic、desktop reopen 和 runtime restart 产生有界事实。同一 15 分钟 opportunity window 内的 candidate 按 stable routine key，或按 `reason` 与 memory key 去重。scheduler 的 `_check_*` module 是配置的 morning/night/midday/random routine fact 的唯一 producer；runner 不会再合成第二份基于时钟的副本。Routine fact 默认使用 `action_mode=none`，绝不会强制 `TALK`。过期 candidate 在入队前丢弃；urgency 可以提高记录的 priority，但绝不能绕过 Dream、active-user、conversation 或 budget gate。
 
 ### Desktop reopen signal
 
-`POST /desktop/wake` Path B is a signal producer, not an assistant-turn
-executor. After the existing perceive-event dedupe and Dream Guard accept the
-request, `enqueue_desktop_wake_signal()` stores one `desktop_wake` signal with
-`action_mode=reflect` and a ten-minute TTL. Evidence contains only the reopen
-fact, a bounded offline duration (maximum 30 days), a safe perceive event id,
-and a truncated SHA-256 fingerprint of the perceive dedupe key. Raw `last_seen`, raw
-`last_seen_at`, request bodies and the dedupe key are not persisted in the
-signal.
+`POST /desktop/wake` Path B 是 signal producer，不是 assistant-turn executor。现有 perceive-event dedupe 和 Dream Guard 接受请求后，`enqueue_desktop_wake_signal()` 保存一个 `desktop_wake` signal，使用 `action_mode=reflect` 和十分钟 TTL。Evidence 只包含 reopen fact、有界的 offline duration（最多 30 天）、安全的 perceive event ID，以及 perceive dedupe key 截断后的 SHA-256 fingerprint。不会把原始 `last_seen`、原始 `last_seen_at`、request body 或 dedupe key 持久化到 signal。
 
-The HTTP response acknowledges queueing and does not promise speech. The signal
-can merge with other candidates in the next tick, and the runner may finish
-silent, use tools only, or call `talk_owner` once. Perceive duplicates and Dream
-blocks never enqueue. If autonomy is already disabled, no wake signal is
-stored; if it is disabled after queueing, the pending wake is removed and
-recorded as a terminal suppression. Expired wake signals also receive terminal
-job/run records, and a Dream block after job creation is terminal rather than
-retryable. These one-shot rules prevent a stale reopen from firing after a
-later re-enable.
+HTTP response 只确认已入队，不承诺会说话。Signal 可以在下一个 tick 与其他 candidate 合并，runner 可以静默结束、只使用工具，或调用一次 `talk_owner`。Perceive duplicate 和 Dream block 都不会入队。若 autonomy 已关闭，不保存 wake signal；若入队后 autonomy 被关闭，则删除 pending wake，并记录 terminal suppression。过期 wake signal 也会得到 terminal job/run record，job 创建后发生的 Dream block 是 terminal 而不是 retryable。这些 one-shot 规则防止旧的 reopen 在稍后重新启用时触发。
 
-Dream blocking is applied per signal when an opportunity contains a desktop
-reopen plus other sources. The blocked parent job always finishes. Its
-`desktop_wake` signal receives a terminal `not_replayed` event, while each
-still-valid non-wake signal is merged into one bounded child retry job. The
-child keeps the shortest remaining signal TTL (and never extends the parent
-TTL), records `retry_parent_job_id` / `retry_parent_run_id`, and retains the
-normal Dream retry backoff. Non-wake signals that expire before the split get
-terminal `expired` events instead. A pure non-wake opportunity continues to
-retry the original job; a pure wake opportunity creates no child.
+当 opportunity 同时包含 desktop reopen 和其他 source 时，Dream block 按 signal 分别应用。被阻塞的 parent job 始终完成，其 `desktop_wake` signal 收到 terminal `not_replayed` event；仍然有效的 non-wake signal 合并为一个有界的 child retry job。Child 使用剩余 signal TTL 中最短的一个（绝不延长 parent TTL），记录 `retry_parent_job_id` / `retry_parent_run_id`，并保留正常的 Dream retry backoff。拆分前已过期的 non-wake signal 另行收到 terminal `expired` event。纯 non-wake opportunity 继续重试原 job；纯 wake opportunity 不创建 child。
 
-Memory reactivation reuses the scheduler recall ledger with separate stages.
-Selecting a candidate records its stable memory key in opportunity evidence; a
-completed system recall is reported as `memory_read`; the first completed model
-evaluation records `memory_candidate_evaluated`; only a delivered `talk_owner`
-call writes the existing successful-recall ledger and reports
-`memory_recall_talk_sent`. Silent, blocked, failed, and canceled delivery never
-pretend to be a successful recollection. A recently evaluated/recalled memory is
-suppressed for the recall window unless a caller supplies explicit new anchored
-context, such as a new owner turn or new evidence.
+Memory reactivation 复用 scheduler recall ledger，并使用独立阶段。选中 candidate 时，将其 stable memory key 写入 opportunity evidence；完成系统 recall 时报告 `memory_read`；第一次完成 model evaluation 时记录 `memory_candidate_evaluated`；只有已交付的 `talk_owner` call 才写入现有 successful-recall ledger，并报告 `memory_recall_talk_sent`。静默、阻塞、失败和取消的 delivery 不会冒充成功回忆。最近已经 evaluation/recalled 的 memory 会在 recall window 内被抑制，除非调用方提供显式的新 anchored context，例如新的 owner turn 或新 evidence。
 
-When autonomy is enabled, the scheduler's native proposal pass remains a
-read-only shadow audit. It does not execute a second proactive turn; the
-autonomy runner is the sole evaluator and delivery path for that tick.
+Autonomy 启用时，scheduler 的 native proposal pass 仍作为只读 shadow audit 保留。它不会执行第二条 proactive turn；该 tick 的唯一 evaluator 和 delivery path 是 autonomy runner。
 
-## Retired Direct Executors
+## 已退役的直接执行器
 
-Scheduler-facing conversational triggers are compatibility producers only.
-If an old callback reaches `scheduler._pipeline_send`, the callback's prompt is
-discarded and a bounded signal is persisted for the next autonomy tick. It does
-not enter the LLM pipeline or a channel. The runner drains all pending signals
-once, merges them into one opportunity, and `talk_owner` remains the only
-user-visible outlet.
+面向 scheduler 的 conversational trigger 现在只是 compatibility producer。如果旧 callback 到达 `scheduler._pipeline_send`，callback 的 prompt 会被丢弃，并为下一个 autonomy tick 持久化一个有界 signal。它不会进入 LLM pipeline 或 channel。Runner 一次 drain 所有 pending signal，将它们合并为一个 opportunity；`talk_owner` 仍是唯一的用户可见出口。
 
-The migration currently covers routine greetings, night/midday cues, fixed
-random messages, ordinary heart-rate/sensor attention, recall/follow-up,
-calendar reminders, and birthday candidates. Birthday and serious health
-candidates retain higher signal urgency, but do not bypass autonomy admission,
-the talk gate, conversation serialization, active-user cancellation, or the
-proactive ledger.
+当前迁移覆盖 routine greeting、night/midday cue、fixed random message、普通 heart-rate/sensor attention、recall/follow-up、calendar reminder 和 birthday candidate。Birthday 与 serious health candidate 保留更高的 signal urgency，但不绕过 autonomy admission、talk gate、conversation serialization、active-user cancellation 或 proactive ledger。
 
-Manual scheduler triggering queues the same kind of opportunity. It never
-forces a direct assistant message. Delivery also records an opportunity
-correlation id; an already claimed id is rejected before another `talk_owner`
-send can happen.
+手动 scheduler trigger 会排队同类型的 opportunity，绝不强制直接发送 assistant message。Delivery 还会记录 opportunity correlation ID；已被 claim 的 ID 会在下一次 `talk_owner` send 前拒绝。
 
 ## Unified Effective State
 
-`GET /admin/autonomy/effective-state`（`state.read`）是 scheduler/autonomy 控制面的只读
-生效状态契约。它是管理页读取开关的唯一后端入口，返回 `contract_version`、配置值、
-effective runtime value、override source、`restart_required` 和唯一 runtime consumer。
-契约还包含 scheduler task availability、autonomy queue/circuit、`talk_owner` gate、
-全局发送冷却、autonomy evaluation/daily talk budget，以及每个 trigger 的
-`migrated` / `maintenance-only` / `retired` / `active` 生命周期状态。
+`GET /admin/autonomy/effective-state`（`state.read`）是 scheduler/autonomy control surface 的只读生效状态契约。它是管理页面读取开关的唯一后端入口，返回 `contract_version`、配置值、effective runtime value、override source、`restart_required` 和唯一 runtime consumer。契约还包含 scheduler task availability、autonomy queue/circuit、`talk_owner` gate、全局发送 cooldown、autonomy evaluation/daily talk budget，以及每个 trigger 的 `migrated` / `maintenance-only` / `retired` / `active` lifecycle status。
 
-顶层 `proactive.state` 只使用 `enabled`、`disabled`、`unavailable`、`queued`、`running`、
-`cooled_down`、`blocked`。`proactive.reason` 是当前最先命中的阻断原因，因此客户端不
-需要拼接多个 status/config/ledger 端点来猜测“为什么没有主动行为”。所有这些配置均为
-hot-reload 或 durable autonomy state，`restart_required` 当前为 `false`。
+顶层 `proactive.state` 只使用 `enabled`、`disabled`、`unavailable`、`queued`、`running`、`cooled_down`、`blocked`。`proactive.reason` 是当前最先命中的阻断原因，因此客户端不需要拼接多个 status/config/ledger endpoint 来猜测“为什么没有主动行为”。所有这些配置都是 hot-reload 或 durable autonomy state，`restart_required` 当前为 `false`。
 
-`POST /scheduler/trigger/{name}` 与 `POST /admin/autonomy/test-enqueue` 是 test-only 入口。
-它们只排队事实/测试任务，响应明确标记 `direct_delivery=false`，生产发送仍必须经过
-scheduler tick、autonomy admission 与 `talk_owner`。
+`POST /scheduler/trigger/{name}` 与 `POST /admin/autonomy/test-enqueue` 是 test-only 入口。它们只排队事实/测试任务，response 明确标记 `direct_delivery=false`；生产发送仍必须经过 scheduler tick、autonomy admission 和 `talk_owner`。
 
-## Observable Outcomes
+## 可观测结果
 
-`GET /observability/autonomy-opportunities` (scope `state.read`) returns a
-redacted lifecycle stream. The `status` field distinguishes:
+`GET /observability/autonomy-opportunities`（scope `state.read`）返回脱敏的 lifecycle stream。`status` 字段含义如下：
 
-| Status | Meaning |
+| Status | 含义 |
 |---|---|
-| `unevaluated` | Signal/opportunity is queued or currently leased. |
-| `evaluated_silent` | The opportunity was evaluated and no message was chosen. |
-| `tools_completed_no_talk` | Tools completed, but `talk_owner` was not called. |
-| `talk_sent` | `talk_owner` delivered through `turn_sink`. |
-| `canceled_user_activity` | A real user turn took priority and canceled the run. |
-| `expired` | The signal or opportunity reached its TTL without evaluation. |
-| `blocked_or_failed` | A gate, budget, lease, model, or tool failure stopped evaluation. |
+| `unevaluated` | Signal/opportunity 已入队或当前被 lease。 |
+| `evaluated_silent` | Opportunity 已评估，但没有选择发送消息。 |
+| `tools_completed_no_talk` | Tools 已完成，但没有调用 `talk_owner`。 |
+| `talk_sent` | `talk_owner` 已通过 `turn_sink` 交付。 |
+| `canceled_user_activity` | 真实用户 turn 优先，取消了本次运行。 |
+| `expired` | Signal/opportunity 在评估前达到 TTL。 |
+| `blocked_or_failed` | Gate、budget、lease、model 或 tool failure 停止了评估。 |
 
-Prompt snapshots remain behind the existing admin-only run prompt endpoint and
-are not included in this state-read surface.
+Prompt snapshot 仍位于现有 admin-only run prompt endpoint 后面，不包含在这个 state-read surface 中。
 
-Split Dream retries are correlated on this surface by the child opportunity's
-`retry_parent_job_id` / `retry_parent_run_id` and the parent run's bounded
-signal terminal/child-queued events. No separate wake or retry ledger exists.
+拆分出的 Dream retry 在此 surface 上通过 child opportunity 的 `retry_parent_job_id` / `retry_parent_run_id`，以及 parent run 的有界 signal terminal/child-queued event 关联。不存在单独的 wake 或 retry ledger。
 
-For `desktop_wake`, the safe signal id is the HTTP `correlation_id`; the signal
-also carries the perceive event id and a dedupe fingerprint. The existing
-perceive-event audit records accepted, duplicate and Dream-blocked gate results,
-while autonomy opportunity/run records show merge membership and the terminal
-disposition. No separate wake ledger is introduced for Path B.
+对于 `desktop_wake`，安全 signal ID 就是 HTTP `correlation_id`；signal 还携带 perceive event ID 和 dedupe fingerprint。现有 perceive-event audit 记录 accepted、duplicate 和 Dream-blocked gate result，而 autonomy opportunity/run record 显示 merge membership 和 terminal disposition。Path B 不引入单独的 wake ledger。
 
 ## Migration Registry
 
-`core/scheduler/gating.py::MIGRATED_TRIGGERS` is the retired-speech registry.
-Names in this set may still appear in cooldown, proposer, or audit code, but
-their executor is never run by the gating layer and the compatibility
-`_pipeline_send` boundary can only persist a signal. This covers time-based
-greetings/reminders and recall, watch and sensor events, diary and period
-reminders, overflow, presence nag, dream exit, festival/timenode, garden
-events, coplay commentary, and letter writer.
+`core/scheduler/gating.py::MIGRATED_TRIGGERS` 是 retired-speech registry。集合中的名称仍可能出现在 cooldown、proposer 或 audit code 中，但 gating layer 永远不会运行它们的 executor，兼容性 `_pipeline_send` boundary 只能持久化 signal。范围包括 time-based greeting/reminder 和 recall、watch 与 sensor event、diary 与 period reminder、overflow、presence nag、dream exit、festival/timenode、garden event、coplay commentary 和 letter writer。
 
-Maintenance-only tasks are deliberately outside this registry. Examples are
-`diary_inject`, episodic/log cleanup, memory janitor, event-log salvage,
-hidden-state decay/consolidation, storyline aggregation, and garden state
-maintenance. They continue to mutate their owned state without creating an
-assistant turn or entering `talk_owner`.
+Maintenance-only task 有意不在该 registry 中。例如 `diary_inject`、episodic/log cleanup、memory janitor、event-log salvage、hidden-state decay/consolidation、storyline aggregation 和 garden state maintenance。它们继续修改自己拥有的 state，但不会创建 assistant turn 或进入 `talk_owner`。
 
-No global EventBus or model-visible trigger tool is introduced by this design.
+本设计不引入全局 EventBus，也不引入 model-visible trigger tool。

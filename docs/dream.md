@@ -443,7 +443,7 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 ```
 
 - `DREAM_LOCKED`：**预留 enum，未实现**。MVP 不做系统级软退锁，"挽留"只走 RP 叙事。
-- 现实窗锁定：`DREAM_ACTIVE / DREAM_CLOSING` 时共用的 `/desktop/chat` 和 QQ owner
+- 现实窗锁定：`DREAM_ACTIVE / DREAM_CLOSING` 时 `/desktop/chat`、`/mobile/chat` 和 QQ owner
   消息都会被**后端硬拒绝**现实回合（安全网，挡 stale client / 第二设备 / 竞态）；QQ
   拒绝路径不进入现实 pipeline，也不写 runtime / memory。沉浸连续性靠 UI 把用户锁在
   梦境窗实现，不靠端点 reroute。
@@ -727,6 +727,7 @@ QUIET、DND、gap、budget 或 winner；发送成功后才写 `last_greeted_drea
 `data/runtime/dreams/_stage/{group_id}/`（见 `docs/data-taxonomy.md`）。状态机也不复用本文档
 §六的完整状态图——v1 没有 `DREAM_EXIT_REQUESTED` / `DREAM_LOCKED` / `REALITY_AFTERGLOW`，
 硬退直接回 `REALITY_CHAT`。
+
 ## 十二、WAKE 二次确认与一次性封存（Brief 176）
 
 `DREAM_EXIT_REQUESTED` 表示 soft retention 正在等待用户选择，梦仍是 current session；只有用户选择确认醒来，且 `_do_close_dream()` 返回 `closed_now=true` 或可信的 `already_closed`，才算 confirmed wake。用户选择留下时，`/dream/resume` 必须携带并匹配同一 `dream_id`，仅恢复为 `DREAM_ACTIVE`，不清理 current transcript。
@@ -734,4 +735,3 @@ QUIET、DND、gap、budget 或 winner；发送成功后才写 `last_greeted_drea
 首次 WAKE 未触发挽留使用 `user_wake_no_retention`；挽留后确认醒来使用 `user_wake_confirmed_after_retention`；显式 hard exit 继续使用 `user_hard_exit`。所有关闭路径仍只经 `force_exit_dream()` / `_do_close_dream()`，archive 失败保留 `DREAM_CLOSING` 与 current transcript，不能向客户端伪报已封存。重复 WAKE/EXIT 只返回首次关闭 metadata，并记录重复计数，不重复 archive、summary、afterglow 或 continuation。
 
 关闭后的 archive 只读回放不重新挂载 current session；旧 `dream_id` 的 resume/confirm 请求返回 session mismatch，不得影响后来新梦。Dream operations 只暴露脱敏状态、原因、archive 成功标记与重复调用观测，不包含 transcript 正文。
-

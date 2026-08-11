@@ -1,18 +1,9 @@
-# Design constraints: remote owner turns and diary mirror
+# 设计约束：远程 owner turn 与日记镜像
 
-This page records the Brief 171 additions to the repository's design rules;
-the broader design authority remains [`DESIGN.md`](../DESIGN.md).
+本文记录 Brief 171 为仓库设计规则增加的约束；更高层的设计权威仍是
+[`DESIGN.md`](../DESIGN.md)。
 
-- The versioned owner-turn API is an adapter over the existing Reality
-  pipeline, conversation gate, frozen character scope, and turn sink. It does
-  not create a second pipeline, memory writer, or event bus.
-- Caller identity, owner scope, provenance, live origin, and tool capability
-  come from server-side token/profile configuration. Request JSON cannot
-  override them.
-- `deployment.mode=remote_server` fails closed for server-local OS commands,
-  filesystem browsing, legacy exit signaling, and desktop file fallbacks.
-  Client actions require the existing desktop WS acknowledgement.
-- The Obsidian diary mirror accepts only bounded dated Markdown entries and
-  metadata. It is runtime integration state, separate from the character
-  inner-diary API, and tombstones do not physically delete source or mirror
-  files.
+- 版本化 owner-turn API 是现有 Reality pipeline、conversation gate、冻结角色作用域和 turn sink 的适配器；不创建第二条 pipeline、记忆写入器或 event bus。
+- 调用方身份、owner 作用域、provenance、live origin 和工具能力均来自服务端 token/profile 配置，不能由请求 JSON 覆盖。
+- `deployment.mode=remote_server` 对服务端本机 OS 命令、文件系统浏览、legacy exit signaling 和桌面文件 fallback fail closed；客户端 action 必须经过现有 desktop WS acknowledgement。
+- Obsidian 日记镜像只接受有界的日期 Markdown 条目和 metadata。它属于 runtime integration state，与角色 inner-diary API 分离；tombstone 不会物理删除源文件或镜像文件。

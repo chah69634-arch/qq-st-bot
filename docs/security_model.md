@@ -31,7 +31,7 @@ public endpoint。
 
 受保护端点（全量）：
 - `/characters/*` / `/scheduler/*` / `/lorebook/*` / `/jailbreak-entries/*`
-- `/mobile/activate` / `/mobile/poll` / `/mobile/push`
+- `/mobile/chat` / `/mobile/activate` / `/mobile/poll` / `/mobile/push`
 - `/desktop/chat` / `/desktop/activate` / `/desktop/wake`
 - `/upload/ingest`
 - `/dream/enter` / `/dream/chat` / `/dream/exit` / `/dream/state` / `/dream/settings`
@@ -121,7 +121,7 @@ Phase 2 在 Phase 1.5 持久化基础上增加了三个组件，边界如下：
 
 ### Dream Guard 与渲染标签收口（P2.4 fail-closed）
 
-- `DREAM_ACTIVE` / `DREAM_CLOSING` 时 QQ owner 消息、`/desktop/chat`、
+- `DREAM_ACTIVE` / `DREAM_CLOSING` 时 QQ owner 消息、`/desktop/chat`、`/mobile/chat`、
   `/desktop/wake` Path B 均被拒，不进入现实 pipeline，不写 runtime / memory。
 - **Fail-closed**：dream state 文件存在但 JSON 损坏 / 读取异常 / 状态非法时，
   同样拒绝 reality turn（`BLOCK_UNCERTAIN`），记录 `logger.error`。

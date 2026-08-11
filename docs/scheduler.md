@@ -237,7 +237,7 @@ snapshot() -> dict
 | 出口 | 记账方式 |
 |---|---|
 | `execution.execute_prompt()` | 发送成功后 `record_send()`（替代旧 `_mark_global_proactive`） |
-| `sensor_aware.handle_tick()` | judge/LLM 之前先 `can_send()` 拦截；发送成功后 `record_send()`（此前完全不记账，RC1） |
+| `sensor_aware.handle_tick()` | judge 前先 `can_send()`；通过后只入 signal store；最终由 autonomy `talk_owner` 成功送达时以 `trigger_name="autonomy"` 统一 `record_send()` |
 | autonomy `talk_owner`（包括由 `desktop_wake` signal 合并出的机会） | `talk_gate` 先查间隔/预算，真实发送成功后以 `trigger_name="autonomy"` 调用 `record_send()`；仅入队或静默不记发送账 |
 | `manual_trigger`（管理面板测试） | record-only：绕过冷却/条件检查属设计，但也该记账 |
 | watch emergency（`hr_critical` 等） | 经 `execute_prompt()` 自动覆盖；`priority="emergency"` 豁免限流但仍记账 |
@@ -557,7 +557,7 @@ owner QQ 消息
 | S2 | **Legacy `_check_*` gather 路径** | `loop.py::_loop()` → `asyncio.gather(_check_*...)` | 生产活跃；speaking 触发器通过 `legacy_tick_should_send()` 在 live 模式下让路，维护型触发器仍正常运行 |
 | S3 | **`legacy_tick_should_send()` 让路垫片** | `execution.py` | 当前 `EXECUTE_MODE="live"` → 返回 False，阻止 legacy speaking 触发器双发 |
 | S4 | **Watch 事件到达 adapter** | `triggers/watch.py` → `gating.decide_and_execute_event()` | `WATCH_EXECUTE_MODE` 仅切换事件到达时 live/dry-run；hr_critical/hr_high/sleep_end 均经过 `_decide()`，普通 tick 可重试缓存 proposal |
-| S5 | **sensor_aware `output_mode="return"` 旁路** | `triggers/sensor_aware.py` | 调用 `_pipeline_send(output_mode="return", record_turn=False)` 拿 reply，再自行调用 `record_assistant_turn(fanout=["desktop","mobile"])`；不是完整绕过，仍经过 perceive_event gate 和 conversation_lock |
+| S5 | **sensor_aware signal-first 路径** | `triggers/sensor_aware.py` → `core/autonomy/signal_adapters.py` | `handle_tick()` 只入 signal store；autonomy runner 合并 opportunity，显式 `talk_owner` 后才进入 `talk_gate.send()` / `record_assistant_turn()`。旧 `output_mode="return"` 分支在源码 `return` 后封存 |
 | S6 | **policy.py 決策表** | `policy.py` | **R2-C 完成**；gating._decide() 以 POLICY_TABLE 为单一权威；_pipeline_send 不再参与决策 |
 | S7 | **`_pipeline_send` 执行层（仅 send + mark）** | `loop.py::_pipeline_send()` | **R2-C done**：`_legacy_active_window_blocks()` / `_legacy_dnd_blocks()` 已删除；_pipeline_send 不再做 active-window / DND 过滤 |
 
@@ -584,11 +584,11 @@ owner QQ 消息
 | hr_critical, hr_high | `on_watch_event("heart_rate", ...)` → `decide_and_execute_event()` → `_decide()` → proposal execute | `WATCH_EXECUTE_MODE` 仅控制即时 live/dry-run；普通 tick 可重试缓存 proposal |
 | sleep_end | `on_watch_event("sleep_end", ...)` → 同上 | state / active-window / DND / cooldown / policy 均统一决策 |
 
-**类型三：Sensor 实时 Speaking Trigger（独立路径）**
+**类型三：Sensor 实时 Speaking Signal（signal-first）**
 
 | 触发器 | 执行路径 | 备注 |
 |---|---|---|
-| sensor_aware | `_check_sensor_aware()` → `handle_tick()` → `_pipeline_send(output_mode="return")` → `record_assistant_turn(fanout=["desktop","mobile"])` | 独立 8 分钟冷却；不走 gating |
+| sensor_aware | `_check_sensor_aware()` → `handle_tick()` → `emit_trigger_signal()` → autonomy runner → `talk_owner` → `record_assistant_turn` | 先过 ProactiveLedger + DND；信号 15 分钟 bucket 去重；不直接跑 LLM/channel |
 
 **类型四：Maintenance Tick（纯状态/清理，不发言）**
 
@@ -624,7 +624,7 @@ owner QQ 消息
 | Gating live（execute_prompt）| `execute_prompt()` 调用 `_pipeline_send()` | 仅在 `sent=True` 后调用 `loop._mark()` | 否（write_execute_blocked 记录）| 是（execute_dryrun.jsonl blocked 条目）|
 | Legacy speaking（步退）| N/A（live 模式下不执行）| N/A | N/A | N/A |
 | Watch event-driven | `decide_and_execute_event()` → `_decide()` → `execute_prompt()` → `_pipeline_send()` | 仅 sent 后 mark | 否 | 是（log_error）|
-| sensor_aware | 手动 `record_assistant_turn()` | 不调用 `_mark()`（无 cooldown 名）| sensor_events.mark_proactive_sent() 8min 冷却 | 是（audit ring buffer）|
+| sensor_aware | autonomy `talk_gate.send()` → `record_assistant_turn()` | `record_send("autonomy")` 记账；旧 `sensor_events.mark_proactive_sent()` 只在不可达兼容分支 | signal enqueue / autonomy run / talk disposition 均可观测 |
 | Maintenance tick | 不 send | 立即 mark（不依赖 send 结果）| N/A | 是（log_error 各步独立）|
 
 **A4 失败退避（sent=False）**：`execute_prompt()`（含 `letter_writer` 自有的
@@ -708,9 +708,11 @@ Pipeline 未注入时降级：直接发送 prompt 原文（不经过 LLM）。
 | `"speak"`（默认）| 生成 reply 后经 `turn_sink` 写入并广播，返回 reply 文本；被 active window 拦截、owner_id 缺失、LLM 空回复或异常时返回 `None` |
 | `"return"` | 生成 reply 后经 `turn_sink` 写入但不广播，直接返回 reply 文本；失败时返回 `None` |
 
-`sensor_aware` trigger 使用 `output_mode="return", record_turn=False` 拿到 reply 后，再显式调用
-`record_assistant_turn(source=SENSOR, fanout=["desktop", "mobile"], payload={"behavior": action})`，
-以便附加 action 包并跳过 QQ。其余所有 trigger 不传这些参数（保持默认 `"speak"` 行为）。
+当前 `sensor_aware` 不再使用上述 `output_mode="return"` 旁路：它只调用
+`emit_trigger_signal()`，由 autonomy runner 的 `talk_owner` 最终决定是否说话并进入
+`record_assistant_turn(source=TRIGGER, trigger_name="autonomy")`。旧的
+`record_assistant_turn(source=SENSOR, payload={"behavior": action})` 分支位于不可达兼容代码中，
+仅作迁移审计记录。其余未迁移 compatibility trigger 仍按各自 `output_mode` 语义执行。
 
 ---
 
@@ -962,7 +964,7 @@ prompt 里已经拼好的当日 `event_log` 原文（`log_hint`），`recall_pol
 
 ---
 
-## sensor_aware 触发器
+## sensor_aware 信号适配器
 
 sensor 实时状态感知触发器，是"他主动开口"链路的最终出口。
 
@@ -972,33 +974,33 @@ sensor 实时状态感知触发器，是"他主动开口"链路的最终出口�
 | tick 间隔 | `scheduler.sensor_aware.tick_interval_seconds`（默认 30） |
 | 默认状态 | **disabled**（`enabled: false`） |
 | 启用方式 | `config.yaml` 设置 `enabled: true`，重启服务 |
-| 全局发言冷却 | 8 分钟（`_PROACTIVE_COOLDOWN_SECS`，代码常量，不暴露在 config）；**只作下限**，见下方 A3 纳管 |
+| 全局发言冷却 | 先由 `proactive_ledger.can_send("sensor_aware")` 做只读闸门；信号入队另有 15 分钟 dedupe bucket。真正送达后由 autonomy `talk_gate.send()` 记账 `record_send("autonomy")` |
 | 所在文件 | `core/scheduler/triggers/sensor_aware.py` |
 
 ### 行为级别
 
-| 级别 | score 阈值 | WS action_type | 说明 |
+| 级别 | score 阈值 | 历史 action 意图 | 当前 signal-first 行为 |
 |---|---|---|---|
-| `passive_speak` | ≥ 35 | 无 action | 只推 `channel_message` |
-| `soft_hint` | ≥ 50 | `pet_emote` | 桌宠表情切换 |
-| `attention_grab` | ≥ 65 | `notify` | 系统通知 + 置顶 |
-| `direct_act` | ≥ 80 | `execute` | 执行 `behavior_id` 对应动作 |
+| `passive_speak` | ≥ 35 | 无 action | `behavior_id` 仅作为 signal evidence，最终由 autonomy 决定是否 talk |
+| `soft_hint` | ≥ 50 | `pet_emote` | 当前不自动执行 action；只保留候选 evidence |
+| `attention_grab` | ≥ 65 | `notify` | 当前不自动执行 action；只保留候选 evidence |
+| `direct_act` | ≥ 80 | `execute` | 当前不自动执行 action；恢复需另立 autonomy payload/协议设计 |
 
-### A3/B 纳管：ProactiveLedger + DND（CC 任务 19）
+### A3/B 纳管：ProactiveLedger + DND + signal-first
 
-此前 `handle_tick()` 完全旁路 `gating._decide()`：无状态机、无 active-window、无
-DND、无全局间隔，只有自己的 8 分钟私有冷却，且发送成功后也不记账——其他触发器
-感知不到它刚说过话（RC1，实测 sensor_aware 发言 4 分钟后 `weather_alert` 紧跟着
-触发）。现在在 judge/LLM **之前**（省掉被拦时的整条 pipeline 开销）新增两道检查：
+当前 `handle_tick()` 在 judge/LLM 之前执行 `proactive_ledger.can_send("sensor_aware")`
+和 `is_dnd(uid)` 检查；通过后只调用 `emit_trigger_signal()` 入队，不直接调用 LLM、turn sink
+或 channel。信号以 `sensor_aware:<15-minute-bucket>` 做去重，后续由 autonomy runner 合并
+opportunity，并仅在显式 `talk_owner` 成功时进入 `talk_gate.send()` → `record_assistant_turn()`。
 
-1. `proactive_ledger.can_send("sensor_aware", priority="normal")` —— 全局间隔 +
-   当日预算任一不过，记 `stage="global_gap_blocked"` 并返回。
-2. `is_dnd(uid)` —— 请勿打扰中直接返回。
+真正送达后由 `talk_gate.send()` 调用 `proactive_ledger.record_send("autonomy", ...)`，因此
+其他主动触发器看到的是统一 autonomy 记账。旧的 8 分钟私有 `sensor_events` 冷却和
+`sensor_events.mark_proactive_sent()` 仍留在 `handle_tick()` 返回后的不可达兼容分支中，不是
+当前 signal-first 发送路径。
 
-发送成功后调用 `proactive_ledger.record_send("sensor_aware", ...)`。8 分钟私有
-冷却继续保留，但只作下限（即使全局间隔/预算允许，8 分钟内仍不重复发）。
-`recall_policy="none"`：sensor_aware 的"由头"已在 `build_situation_narrative()`
-里写死，不需要被检索层带偏（见下方「search_query 召回锚点说明」）。
+旧分支仍保留在源码中供迁移审计，但已由 `return` 明确封存；其中的
+`_pipeline_send(output_mode="return")`、`build_action_packet()` 和 `record_assistant_turn(SENSOR)`
+不能写成当前生产链路。
 
 ### 触发链路
 
@@ -1007,17 +1009,21 @@ scheduler._check_sensor_aware()         ← loop.py 每 60s 检查一次（受 t
   → sensor_events.tick()               ← 返回本 tick 候选事件列表
   → sensor_judge.judge(event)          ← 客观评分，附 intent_tier
   → BehaviorPlanner.plan(event, score) ← 硬代码行为决策，score < 35 → 丢弃
-  → proactive_ledger.can_send() + is_dnd()  ← A3：全局间隔/预算/DND 检查（被拦则不进 LLM）
-  → _pipeline_send(output_mode="return", record_turn=False, recall_policy="none") ← LLM 生成发言文本
-  → record_assistant_turn(source=SENSOR, fanout=["desktop", "mobile"], payload={"behavior": action})
-                                      ← 写记忆 + 推 channel_message；passive_speak 不带 action 包
-  → sensor_events.mark_proactive_sent()
-  → proactive_ledger.record_send()    ← A3/B：让其他触发器感知到刚说过话
+  → proactive_ledger.can_send() + is_dnd()  ← 被拦则不入队
+  → emit_trigger_signal()              ← 15 分钟 bucket 去重后写入 autonomy signal store
+  → autonomy runner 合并 opportunity / bounded context
+  → 显式 talk_owner → talk_gate.send()
+  → record_assistant_turn(source=TRIGGER, trigger_name="autonomy")
+                                      ← 写记忆 + 按 autonomy fanout 推送
+  → proactive_ledger.record_send("autonomy")
 ```
+
+当前 signal-first 路径只携带 `behavior_id` 等候选证据，不自动生成或执行旧的
+`build_action_packet()`；行为 action 若要恢复，需要单独的 autonomy payload/协议设计。
 
 ### 与 chat router 的联动
 
-`POST /desktop/chat` 成功处理后调用 `sensor_events.notify_chat_happened()`，重置 `SILENT_TOGETHER` 和 `LONG_FOCUS` 的冷却窗口，避免"人刚聊完立刻被问候"。
+`POST /desktop/chat` 或 `POST /mobile/chat` 成功处理后调用 `sensor_events.notify_chat_happened()`，重置 `SILENT_TOGETHER` 和 `LONG_FOCUS` 的冷却窗口，避免"人刚聊完立刻被问候"。
 
 ### 审计接口
 
@@ -1046,10 +1052,8 @@ scheduler._check_sensor_aware()         ← loop.py 每 60s 检查一次（受 t
       "judge_reason": "专注时间较长",
       "tier": "medium",
       "candidate_behavior": {"level": "soft_hint", "behavior_id": "focus_acknowledged", ...},
-      "pipeline_send_prompt": "（他觉得该跟她说一句。现在是下午...",
-      "pipeline_send_reply": "还在忙？",
-      "action_packet": {"action_type": "pet_emote", "params": {"behavior_id": "focus_acknowledged"}},
-      "final_stage": "sent",
+      "signal_queued": true,
+      "final_stage": "signal_queued",
       "cooldown_remaining_seconds": null
     }
   ]

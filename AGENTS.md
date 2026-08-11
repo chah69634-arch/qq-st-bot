@@ -26,7 +26,8 @@
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
 | 改工具系统（新增工具、探针规则、桌面动作、execute() origin 闸门） | `docs/tools.md` |
 | 改调度器（定时触发、主动消息） | `docs/scheduler.md` |
-| 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md`；桌面 v0.1 协议入口见 `docs/desktop-client-protocol.md` |
+| 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md`；三仓协议总账见 `docs/three-repo-interface-catalog.md`，桌面 v0.1 字段见 `Emerald-client/docs/protocol-v0.md` |
+| 整理或修改三仓接口、跨端设置/观测、调用链 | `docs/three-repo-interface-catalog.md`；精确 REST schema 以 `/openapi.json` 为准 |
 | 改多角色群聊、Stage session、共享 transcript、回合仲裁 | `docs/stage.md` |
 | 改花园系统（情绪花槽、自动/被动浇水、采后处理、管理面板状态） | `docs/garden.md` |
 | 理解事件/交互三维 envelope（realm/kind/lifecycle）、stimulus 边界、v0.1 约束 | `docs/interaction-event-model.md` |
@@ -52,7 +53,7 @@
 | 工具注册 + 调度 + 探针 | `core/tool_dispatcher.py` |
 | Intiface / Buttplug 硬件控制 | `core/hardware/buttplug_client.py` / `core/hardware/device_registry.py` / `core/tools/hardware_tools.py` |
 | 通道注册与广播 | `channels/registry.py` |
-| 桌宠通道 WebSocket + 文件降级 | `channels/desktop_ws.py` / `channels/desktop.py`；协议权威指针 `docs/desktop-client-protocol.md` |
+| 桌宠通道 WebSocket + 文件降级 | `channels/desktop_ws.py` / `channels/desktop.py`；跨仓接口总账 `docs/three-repo-interface-catalog.md`，桌面消息细节见 `Emerald-client/docs/protocol-v0.md` |
 | 桌宠聊天 HTTP 入口 | `admin/routers/chat.py` → `/desktop/chat` |
 | 手机通道 + 轮询接口 | `channels/mobile.py` / `admin/routers/mobile.py` |
 | 统一 assistant turn sink | `core/turn_sink.py` |
@@ -244,6 +245,17 @@ python tests/run_eval.py             # validate prompt tag/layer activation afte
 ## 设置控制面文档
 
 修改模型路由、TTS、scheduler、relay、thinking、tool loop 或高级功能开关时，必须同步 docs/feature-control-surface.md 与客户端的设置审计文档。
+
+## 当前阶段：每个小功能都要做三面闭环检查
+
+现在这个阶段，新增、删除或修改任何小功能都必须执行跨仓闭环检查，不能因为改动很小而跳过：
+
+1. 查后端管理面板：功能是否需要设置开关、默认值、effective state、只读观测、审计记录；新增落盘状态、trace、队列或台账时，观测端点必须同单提供。
+2. 查客户端设置面：桌面前端是否已有或需要补功能设置、能力检查、降级提示；若手机也消费该功能，继续查 Flutter/Android 的设置、权限、后台服务和中继路径。配置字段存在不等于用户已有设置 UI。
+3. 查原调用链和相邻功能：从触发器/输入 → router/pipeline → queue/WS → Tauri IPC 或 mobile channel → UI/通知，核对鉴权 scope、字段、关联键、去重、ack、TTL、锁、生命周期和 fallback，确认不会让原调用链失效，也不会误伤其他功能。
+4. 为原路径和相邻路径补最小回归测试；未做全的部分必须同时记入 `docs/known-issues.md` 与 `docs/three-repo-interface-catalog.md`，标明 `open`/`roadmap`/`observe`，不得把“接口存在”写成“功能完成”。
+
+三仓施工均适用本规则；跨仓接口改动还要同步三仓各自接口文档和本总账。
 
 ## Architecture References
 

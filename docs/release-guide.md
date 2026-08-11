@@ -189,22 +189,23 @@ npm run tauri build
 
    ```bash
    flutter pub get
-   flutter build apk --release
-   # 产物：build/app/outputs/flutter-apk/app-release.apk
+   flutter build apk --release --flavor prod
+   # 产物：build/app/outputs/flutter-apk/app-prod-release.apk
    ```
 
 4. **签名说明**：`android/key.properties` 不入库（`.gitignore` 已排除，
    仓库里只有 `key.properties.example`）。
    - 有正式 keystore：按 `key.properties.example` 在本机建一份
      `android/key.properties`（不要提交），构建脚本会自动检测并用正式签名。
-   - 没有正式 keystore：Gradle 会 fallback 到 **debug 签名**，仅可用于本地/内测验证；
-     **不得作为 v1 正式分发 APK 发布**。先完成签名密钥保管、复现构建和升级签名验证。
+   - 没有或不完整的正式 keystore：release task 会在打包前 **fail loud**，不会回退到
+     debug 签名；debug APK 只来自明确的开发/调试任务，**不得作为 v1 正式分发 APK 发布**。
+     先完成签名密钥保管、复现构建和升级签名验证。
 5. 打包资产 + 校验和，创建 Release（这仓没有 tag 触发的自动化，`gh release
    create` 是唯一入口）：
 
    ```bash
    cd build/app/outputs/flutter-apk
-   cp app-release.apk PresenceKit-mobile-vX.Y.Z.apk
+   cp app-prod-release.apk PresenceKit-mobile-vX.Y.Z.apk
    sha256sum PresenceKit-mobile-vX.Y.Z.apk > PresenceKit-mobile-vX.Y.Z.apk.sha256
 
    git tag -a vX.Y.Z -m "PresenceKit-mobile vX.Y.Z"   # 仅做版本标记，不触发任何 CI

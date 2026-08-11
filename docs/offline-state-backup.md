@@ -1,103 +1,55 @@
-# Offline Private-State Backup
+# 离线私有状态 backup
 
-`scripts/update_release.py` creates an updater rollback copy of **program
-files**.  It intentionally preserves local state and is not a private-state
-backup.  `backup-state` is a separate offline snapshot for the local private
-state described below.
+`scripts/update_release.py` 为 updater rollback 创建的是**程序文件**副本。它会有意保留本地状态，因此不是私有状态 backup。`backup-state` 是独立的离线快照命令，负责保存下文描述的本地私有状态。
 
-## Scope and safety boundary
+## 范围与安全边界
 
-Create a snapshot only after PresenceKit has been stopped.  The command checks
-the lifecycle PID marker and process state before reading any source file.  A
-running service or an indeterminate result fails closed; it never stops a
-process, retries around concurrent writes, or performs an online backup.
-The current non-sensitive decision is also available to `state.read` tokens at
-`GET /observability/backup-service-state`; it returns only `offline`,
-`running`, or `unknown`.
+只有在 PresenceKit 已停止后才能创建快照。命令会在读取任何源文件前检查 lifecycle PID marker 和进程状态。若服务仍运行或结果无法确定，则 fail closed；它不会停止进程、围绕并发写入重试，也不会执行在线 backup。
 
-The current protection inventory (version 1) includes:
+当前的非敏感决策状态也可由 `state.read` token 通过 `GET /observability/backup-service-state` 查询；返回值只有 `offline`、`running` 或 `unknown`。
 
-- `data/`, except clearly derived/forensic caches: vector indexes and SQLite
-  sidecars, memory indexes, image cache, inbox, ordinary logs, debug output,
-  pending perception files, opt-in LLM request logs, and the ephemeral service
-  PID marker;
-- `userdata/` when it exists;
-- required `config.yaml`, plus optional `config.local.yaml` and
-  `secrets.local.yaml` when present;
-- legacy private authored-asset subtrees still supported for compatibility:
-  private cards/notes, Reality/Dream assets, stickers, and non-example
-  per-character content.  Public `bundled/`, defaults, examples, source code,
-  virtual environments, build output, release-updater backups, and ordinary
-  logs are not copied.
+当前 protection inventory（版本 1）包括：
 
-The inventory is centralized in `core.backup_state.PROTECTION_ROOTS`.  An
-audited future private root must be classified there; a known unclassified root
-causes creation to fail rather than being omitted.
+- `data/`，但排除明确的派生/取证缓存：vector index 与 SQLite sidecar、memory index、image cache、inbox、普通日志、debug 输出、pending perception 文件、选择性启用的 LLM request log，以及临时 service PID marker；
+- 存在时的 `userdata/`；
+- 必需的 `config.yaml`，以及存在时的 `config.local.yaml` 和 `secrets.local.yaml`；
+- 仍为兼容性保留的 legacy 私有 authored-asset 子树：私有 cards/notes、Reality/Dream 资产、贴纸和非 example 的按角色 content。公共 `bundled/`、defaults、examples、源代码、虚拟环境、构建输出、release-updater backup 和普通日志不会被复制。
 
-## Create and verify
+inventory 集中在 `core.backup_state.PROTECTION_ROOTS`。未来经过审计的私有根目录必须在这里分类；已知但未分类的根目录会导致创建失败，而不是被静默省略。
 
-Snapshots must be placed outside the installation directory, including its
-`data/` and `userdata/` roots.  The output must not already exist.
+## 创建与验证
+
+快照必须放在安装目录之外，包括其 `data/` 和 `userdata/` 根目录之外。输出路径不能已经存在。
 
 ```powershell
 python main.py backup-state create --output <protected-volume>\presencekit-snapshot --protection-mode protected_volume
 python main.py backup-state verify <protected-volume>\presencekit-snapshot
 ```
 
-Use `--json` for a small structured result and `--quiet` to suppress a success
-message.  Results never print config, token, secret, memory, or manifest-file
-contents.
+使用 `--json` 获取小型结构化结果，使用 `--quiet` 抑制成功消息。结果不会打印 config、token、secret、memory 或 manifest 文件内容。
 
-The sole first-release mode is `protected_volume`: it is an unencrypted
-directory snapshot and the operator explicitly asserts that its destination is
-a protected volume.  It is **not** described as encrypted.  Portable/offsite
-archives require audited standard encryption before this command will support
-them.  The current dependency set has no approved archive-encryption library,
-so this work intentionally does not invent cryptography or accept passwords on
-the command line.  A future portable mode should add a reviewed, maintained
-dependency with hidden-input or OS secret-store key handling.
+首个发行版本唯一支持的模式是 `protected_volume`：它是未加密的目录快照，operator 必须明确声明目标位于受保护卷中。不能把它描述成 encrypted。Portable/offsite archive 需要经过审计的标准加密后，命令才会支持。当前依赖集合没有获批准的 archive-encryption library，因此本功能不会自创密码学，也不接受命令行密码。未来 portable mode 应增加经过审核且维护中的依赖，并使用隐藏输入或 OS secret-store 处理密钥。
 
-## Manifest and verification
+## Manifest 与验证
 
-Every snapshot has `manifest.json` and a sibling `manifest.sha256` integrity
-check.  The versioned manifest contains product version, data-layout marker
-fields, timestamp, backup id, protection mode, protection-root inventory,
-optional absent files, and per-file relative path, size, SHA-256, and root id.
-It never stores installation paths, configuration contents, memories, tokens,
-or secrets.  SQLite files are copied only while stopped; WAL/SHM files that are
-not explicitly excluded are included as ordinary declared files rather than
-being guessed at or deleted.
+每份快照都有 `manifest.json` 和同级的 `manifest.sha256` integrity check。版本化 manifest 包含产品版本、data-layout marker 字段、时间戳、backup ID、protection mode、protection-root inventory、可选的缺失文件，以及每个文件的相对路径、大小、SHA-256 和 root ID。
 
-`verify` validates the manifest/checksum, supported schema, layout metadata,
-root inventory, required config entry, every declared size/hash, safe relative
-paths, reparse points, readability, and unexpected files.  It validates backup
-integrity only.
+它不会保存安装路径、配置内容、memory、token 或 secret。SQLite 文件只在服务停止时复制；未被明确排除的 WAL/SHM 文件作为普通声明文件纳入，不会被猜测或删除。
 
-## Not supported
+`verify` 会验证 manifest/checksum、受支持的 schema、layout metadata、root inventory、必需 config 条目、每个声明文件的大小/哈希、安全相对路径、reparse point、可读性和意外文件。它只验证 backup 完整性。
 
-This command does not restore in place, modify live data, stop/start the
-service, back up while it runs, upload to cloud storage, copy to a network
-drive, or automatically delete old snapshots.  Retention is deliberately left
-separate until restore and operator storage policies are designed and tested.
+## 不支持的行为
 
-## Restore and recovery drill
+该命令不会原地 restore、修改 live data、停止/启动服务、在服务运行时 backup、上传云存储、复制到网络盘或自动删除旧快照。在 restore 和 operator 存储策略经过设计与测试前，Retention 会刻意保持独立。
 
-Restore verifies the source snapshot first and publishes only to a nonexistent
-or completely empty directory outside the live installation and snapshot:
+## Restore 与恢复演练
+
+Restore 会先验证源快照，然后只发布到 live installation 和快照之外的不存在目录或完全空目录：
 
 ```powershell
 python main.py backup-state restore <snapshot> --target <new-empty-directory>
 ```
 
-It rejects unsafe/absolute paths, reparse points, Windows case collisions,
-ADS/device names, excessive path lengths, file-count/size limits, and hash
-mismatches. Every restored file is re-hashed. The default read-only startup
-check parses config/auth, loads active character/assets and Lore/Pipeline, and
-parses JSON state without starting services. A no-outbound guard blocks LLM,
-MCP, QQ, channel fanout, scheduler, web/search/weather, and hardware calls.
-No queue is consumed and no runtime memory/state is written.
+它会拒绝不安全/绝对路径、reparse point、Windows 大小写冲突、ADS/device name、过长路径、超出文件数量/大小限制的输入以及哈希不匹配。每个恢复文件都会重新计算哈希。默认只读 startup check 会解析 config/auth，加载 active character/assets 和 Lore/Pipeline，并解析 JSON state，但不会启动服务。no-outbound guard 会阻止 LLM、MCP、QQ、channel fanout、scheduler、web/search/weather 和 hardware 调用。不会消费 queue，也不会写入 runtime memory/state。
 
-The restored directory receives a secret-safe
-`.presencekit-recovery/recovery-report.json`. `--no-startup-check` is only for
-diagnostics, not recommended recovery. Final cutover remains manual; there is
-no automatic rollback, online restore, or implicit cross-version migration.
+恢复目录会收到 secret-safe 的 `.presencekit-recovery/recovery-report.json`。`--no-startup-check` 仅适用于诊断，不建议用于恢复。最终切换仍是手动操作；没有 automatic rollback、online restore 或隐式跨版本迁移。

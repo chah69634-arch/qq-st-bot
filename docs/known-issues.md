@@ -1,9 +1,23 @@
 # docs/known-issues.md — 已知问题与技术债
 
-> 最近核对：2026-07-16（cc-tasks/28 三仓技术债清盘）。
+> 最近核对：2026-08-10（本轮按代码逐项复核文档与跨仓契约）。
 > 这里只保留仍需行动或观察的条目；已关闭条目的完整背景保留在 Git 历史。
 
 ## 当前仍存在
+
+### SENSOR-1：sensor signal-first 尚未恢复旧行为 action payload
+
+**状态**：`open`（文档/代码边界已确认，未在本轮改业务代码）
+
+`core/scheduler/triggers/sensor_aware.py::handle_tick()` 在 signal-first 分支只把
+`behavior_id` 等事实放入 `emit_trigger_signal()`，随后由 autonomy `talk_owner` 通过
+`talk_gate.send()` 进入普通 `record_assistant_turn()`。旧的 `build_action_packet()`、
+`DesktopChannel.send(..., behavior=...)` 组装和 `SENSOR` turn sink 分支位于显式 `return`
+之后，当前不可达。因此 `passive_speak` 等文字候选仍可进入 autonomy 评估，但
+`pet_emote` / `notify` / `execute` 不能从这条 signal 自动执行。
+
+若要恢复行为动作，需另立 autonomy payload、危险模式闸门、desktop/mobile 协议和验收方案；
+不能仅把旧的不可达分支重新放开。
 
 ### PROF-1：user_profile 场景类字段的反抖动阈值曾经"锁死"（已修复 2026-07-25）
 

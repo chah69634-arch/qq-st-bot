@@ -9,9 +9,11 @@
 - [ARCHITECTURE.md](../ARCHITECTURE.md)：系统全貌与主 pipeline。
 - [DESIGN.md](../DESIGN.md)：设计意图、准入标准与禁止行为。
 - [api-reference.md](api-reference.md)：后端 HTTP/WS 端点与调用方。
+- [three-repo-interface-catalog.md](three-repo-interface-catalog.md)：三仓 HTTP、WS、Tauri IPC、Android channel、relay、设置/观测闭环和当前缺口总账。
 - [backend-integration.md](backend-integration.md)：desktop / mobile 共用的请求体字段契约（如 reply_to）。
-- [desktop-client-protocol.md](desktop-client-protocol.md)：桌面 v0.1 协议权威入口（正文位于 PresenceKit-desktop）。
+- 桌面 v0.1 消息细节：`Emerald-client/docs/protocol-v0.md`；本仓不再引用不存在的 `desktop-client-protocol.md`。
 - [dev-environment.md](dev-environment.md)：Windows 沙箱开发与验证。
+- [testing-matrix.md](testing-matrix.md)：后端自动化测试、评测脚本、CI 范围与发布验收矩阵。
 - [known-issues.md](known-issues.md)：当前问题、观察项和技术债。
 - [docs-truth-census.md](docs-truth-census.md)：三仓文档导航清单与漂移分类；它不是代码实现 authority。
 

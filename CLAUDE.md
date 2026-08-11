@@ -54,7 +54,7 @@ Scheduler       → core/scheduler/loop.py
 2. **`fetch_context()`**: concurrently loads all memory layers
 3. **`build_prompt()`**: assembles 12+ layer `messages[]` with tag gating; hard limit 20k chars triggers dynamic pruning (R4-B): all messages carrying `_drop_priority` are dropped in ascending order (lower = dropped first) until under limit; layers without `_drop_priority` (core constraints, `11_author_note`) are never pruned
 4. **`run_llm()`**: calls LLM with retry
-5. **`post_process()`** (non-blocking `create_task`): critical path writes under `uid_lock`; slow-queue single-worker handles memory consolidation
+5. **`post_process_critical` / `post_process_slow`**：`turn_sink` 在 fanout 前等待关键的本地捕获与写入；fanout 后异步执行 `detect_emotion`、mood/profile 和 slow queue。任何 LLM/网络往返不得阻塞 send 前关键路径。
 
 **Five memory layers** (all under `data/`, all paths via `core/sandbox.get_paths()`):
 

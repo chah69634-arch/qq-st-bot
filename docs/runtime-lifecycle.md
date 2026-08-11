@@ -1,130 +1,128 @@
-# Runtime Lifecycle
+# Runtime 生命周期
 
-> Emerald-Presence runtime startup order and long-lived component ownership.
+> Emerald-Presence 的 runtime 启动顺序和长期组件 ownership。
 >
-> This document describes the current runtime topology.
-> It is not a future architecture proposal.
+> 本文描述当前 runtime topology，不是未来 architecture proposal。
 
 ---
 
-## 1. Process Entry
+## 1. 进程入口
 
-Backend entry point:
+Backend entry point：
 
-
+```text
 python main.py
+```
 
+`main.py` 负责应用启动。
 
-`main.py` owns application startup.
-
-No subsystem should independently create global runtime instances or background services outside the startup path.
+除 startup path 外，任何 subsystem 都不应独立创建 global runtime instance 或 background service。
 
 ---
 
-# 2. Backend Startup Sequence
+## 2. 后端启动顺序
 
-Current startup order:
+当前启动顺序：
 
-
+```text
 main.py
 |
-+-- load configuration
++-- 加载配置
 |
-+-- validate admin authentication
++-- 校验 admin authentication
 |
-+-- load active character
++-- 加载 active character
 |
-+-- initialize lore engine
++-- 初始化 lore engine
 |
-+-- create Pipeline
++-- 创建 Pipeline
 |
-+-- register Pipeline
++-- 注册 Pipeline
 |
-+-- register slow handlers
++-- 注册 slow handler
 |
-+-- cleanup pending state
++-- 清理 pending state
 |
-+-- start background services
++-- 启动 background service
 |
-+-- start HTTP/admin service
-
++-- 启动 HTTP/admin service
+```
 
 ---
 
-## 3. Core Runtime Owners
+## 3. 核心 Runtime Owner
 
 ### Pipeline
 
-Owner:
+Owner：
 
-
+```text
 main.py
+```
 
+创建：
 
-Creation:
-
-
+```text
 Pipeline(character, lore_engine, active_character_id)
+```
 
+注册：
 
-Registration:
-
-
+```text
 pipeline_registry.register()
+```
 
+生命周期：
 
-Lifetime:
+```text
+进程生命周期
+```
 
-
-process lifetime
-
-
-Responsibilities:
+职责：
 
 - conversation processing
 - prompt construction
 - memory interaction
 - LLM execution coordination
 
-Other modules should access Pipeline through the registry instead of creating their own instance.
+其他模块应通过 registry 访问 Pipeline，不要自行创建实例。
 
 ---
 
-## 4. Scheduler Lifecycle
+## 4. Scheduler 生命周期
 
-Owner:
+Owner：
 
-
+```text
 main.py
+```
 
+启动：
 
-Startup:
-
-
+```text
 scheduler.start()
+```
 
+生命周期：
 
-Lifetime:
-
-
+```text
 background asyncio task
+```
 
+职责：
 
-Responsibilities:
-
-- periodic checks
-- proactive proposals
+- 周期性检查
+- proactive proposal
 - trigger evaluation
 - gating
 - execution coordination
 
+Scheduler 结构：
 
-Scheduler structure:
-
-
+```text
 scheduler loop
 |
-+-- trigger modules
++-- trigger module
 |
 +-- proposer registry
 |
@@ -133,33 +131,33 @@ scheduler loop
 +-- execution
 |
 +-- turn sink / output
+```
 
+重要约束：
 
-Important:
+Scheduler 依赖 Pipeline 先完成初始化。
 
-Scheduler depends on Pipeline being initialized first.
-
-Trigger execution before Pipeline registration is invalid.
+Pipeline 注册前执行 trigger 是无效行为。
 
 ---
 
-# 5. Registry Ownership
+## 5. Registry Ownership
 
-The system currently uses several registries.
+系统当前使用多个 registry。
 
-They solve different problems and should not be merged without a clear reason.
+它们解决不同问题；没有明确理由时不能合并。
 
 ---
 
 ## Pipeline Registry
 
-Purpose:
+用途：
 
-Store the active Pipeline instance.
+保存 active Pipeline instance。
 
-Flow:
+流程：
 
-
+```text
 main.py
 |
 v
@@ -167,19 +165,19 @@ Pipeline creation
 |
 v
 pipeline_registry.register()
-
+```
 
 ---
 
 ## Tool Registry
 
-Purpose:
+用途：
 
-Register available tools.
+注册可用工具。
 
-Flow:
+流程：
 
-
+```text
 tool module
 |
 v
@@ -187,19 +185,19 @@ tool dispatcher registry
 |
 v
 LLM/tool execution
-
+```
 
 ---
 
 ## Scheduler Proposer Registry
 
-Purpose:
+用途：
 
-Allow trigger modules to submit proposals.
+允许 trigger module 提交 proposal。
 
-Flow:
+流程：
 
-
+```text
 trigger module
 |
 v
@@ -210,72 +208,66 @@ scheduler gating
 |
 v
 execution
-
+```
 
 ---
 
-# 6. Long-lived Components
+## 6. 长期组件
 
-| Component | Owner | Lifetime |
+| 组件 | Owner | 生命周期 |
 |---|---|---|
-| Pipeline | main.py | process lifetime |
-| Lore Engine | main.py | process lifetime |
-| Scheduler Task | scheduler.start() | process lifetime |
-| Hardware job manager | main.py → `core.hardware.jobs.startup()` | process lifetime; workers stop/cancel during shutdown |
-| FastAPI Admin Server | main.py | process lifetime |
-| Sensor workers | corresponding runner | process lifetime when enabled |
+| Pipeline | main.py | 进程生命周期 |
+| Lore Engine | main.py | 进程生命周期 |
+| Scheduler Task | scheduler.start() | 进程生命周期 |
+| Hardware job manager | main.py → `core.hardware.jobs.startup()` | 进程生命周期；shutdown 时停止/取消 worker |
+| FastAPI Admin Server | main.py | 进程生命周期 |
+| Sensor worker | 对应 runner | 启用时为进程生命周期 |
 
-The FastAPI admin server and QQ listener run behind separate service boundaries in
-`main.py`. A bind failure, `SystemExit`, or ordinary exception in one service is
-logged without cancelling the other service. Cooperative task cancellation still
-propagates during process shutdown.
+FastAPI admin server 和 QQ listener 在 `main.py` 后面运行于独立的 service boundary。某个 service 的 bind failure、`SystemExit` 或普通 exception 会被记录，但不会取消另一个 service。进程 shutdown 时，协作式 task cancellation 仍会传播。
 
 ---
 
-# 7. Background Workers
+## 7. Background Worker
 
-Background services must have:
+Background service 必须具备：
 
-- explicit owner
-- startup location
-- shutdown behavior
+- 明确的 owner
+- 明确的 startup location
+- 明确的 shutdown behavior
 
-Current examples:
+当前示例：
 
-
+```text
 scheduler task
 sensor runner
 visual observation runner
-hardware workers
+hardware worker
+```
 
-The hardware job manager is started by `main.py` after Pipeline setup. It marks
-jobs left active by a previous process as `expired`, attempts an explicit stop,
-and unregisters its device-disconnect listener during shutdown. A worker never
-starts from module import.
+Hardware job manager 在 Pipeline setup 后由 `main.py` 启动。它会把前一个进程留下的 active job 标记为 `expired`，尝试显式停止，并在 shutdown 时注销 device-disconnect listener。Worker 永远不会从 module import 时启动。
 
-
-A module should not silently create a background task during import.
+模块不应在 import 时静默创建 background task。
 
 ---
 
-# 8. Import Rules
+## 8. Import 规则
 
-Importing a module should not:
+Import module 不应：
 
-- start threads
-- create network connections
-- create global runtime objects
-- launch asyncio tasks
+- 启动 thread
+- 创建 network connection
+- 创建 global runtime object
+- 启动 asyncio task
 
-Initialization belongs to startup code.
+初始化属于 startup code。
 
 ---
 
-# 9. Event Flow
+## 9. Event Flow
 
-Current message flow:
+当前消息流：
 
-
+```text
 Input
 |
 v
@@ -292,11 +284,11 @@ Turn Sink
 |
 v
 Output
+```
 
+Proactive flow：
 
-Proactive flow:
-
-
+```text
 Sensor / Scheduler / Trigger
 |
 v
@@ -310,15 +302,15 @@ Execution
 |
 v
 Pipeline / Output
-
+```
 
 ---
 
-# 10. EventBus Status
+## 10. EventBus 状态
 
-Current system does not use a universal EventBus.
+当前系统不使用 universal EventBus。
 
-Existing mechanisms:
+现有机制：
 
 - pipeline registry
 - tool registry
@@ -326,66 +318,52 @@ Existing mechanisms:
 - perceive_event
 - turn sink
 
-These currently represent different boundaries.
+它们目前代表不同的边界。
 
-A future EventBus should only be introduced when there is a clear requirement for:
+只有在明确需要以下能力时，未来才应引入 EventBus：
 
-- cross-module asynchronous notification
-- multiple independent consumers
+- 跨模块异步通知
+- 多个独立 consumer
 - lifecycle ownership
 
-Do not replace existing registries with a generic event bus only for abstraction.
+不要只为了 abstraction 就用 generic event bus 替换现有 registry。
 
 ---
 
-# 11. Dream continuation recovery (Brief 170)
+## 11. Dream continuation recovery（Brief 170）
 
-After channels are registered during `main.main()`, the process schedules the
-bounded `core.dream.reality_continuation.recover_pending()` scan. It consumes
-only the existing Dream exit lifecycle ledger and requeues `pending`
-or `failed` rows. The continuation worker then waits the per-owner
-conversation gate and uses the normal Reality pipeline; it is not a scheduler
-tick, proposal, winner, or separate persistent ledger. The send marker is
-written after `record_assistant_turn()` returns, while the client handles the
-matching Dream active-to-closed transition and one-shot navigation close.
+`main.main()` 注册 channel 后，进程会调度有界的 `core.dream.reality_continuation.recover_pending()` 扫描。它只消费现有 Dream exit lifecycle ledger，并重新排队 `pending` 或 `failed` row。Continuation worker 随后等待 per-owner conversation gate，并使用正常 Reality pipeline；它不是 scheduler tick、proposal、winner 或单独的 persistent ledger。Send marker 在 `record_assistant_turn()` 返回后写入；客户端负责匹配 Dream active-to-closed transition 和一次性 navigation close。
 
-# Brief 171: Remote deployment preflight
+## Brief 171：Remote deployment preflight
 
-`deployment.mode` is process configuration (`local` by default or
-`remote_server`) and cannot be changed by a request, prompt, or model. The
-read-only `/system/deployment-preflight` projection reports bind mode,
-declared TLS/WSS, persistent-root writability, desktop WS state, disabled
-capabilities, diary-sync state, and that no port scan was performed. It is a
-readiness projection, not proof that an external tunnel or backup is healthy.
+`deployment.mode` 是进程配置（默认 `local`，或 `remote_server`），不能由 request、prompt 或 model 修改。只读的 `/system/deployment-preflight` projection 报告 bind mode、声明的 TLS/WSS、persistent-root 可写性、desktop WS state、已禁用 capability、diary-sync state，以及未执行 port scan。它是 readiness projection，不证明外部 tunnel 或 backup 健康。
 
-In remote mode server-local OS operations and client file fallbacks are
-disabled. Desktop actions use the existing heartbeat/ack WebSocket path;
-owner turns and mobile polling remain normal HTTP/queue paths.
+在 remote mode 下，服务端本地 OS operation 和客户端 file fallback 被禁用。Desktop action 使用现有 heartbeat/ack WebSocket path；owner turn 和 mobile polling 仍使用正常 HTTP/queue path。
 
-# 12. Known Gaps
+---
 
-## Missing shutdown contract
+## 12. 已知缺口
 
-Current lifecycle documentation focuses on startup.
+### 缺少 shutdown 契约
 
-Future work:
+当前生命周期文档重点描述 startup。
 
-- service shutdown order
+未来工作：
+
+- service shutdown 顺序
 - task cancellation
 - resource cleanup
 
+### 缺少 runtime topology 视图
 
-## Missing runtime topology view
+未来改进：
 
-Future improvement:
+记录：
 
-Document:
-
-- running workers
-- owned tasks
-- persistent state owners
-- communication paths
-
+- 正在运行的 worker
+- owned task
+- persistent state owner
+- communication path
 
 ## Brief 176：Dream WAKE 确认与跨进程收口
 

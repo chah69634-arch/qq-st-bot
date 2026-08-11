@@ -1,6 +1,6 @@
 {
   "schema_version": "presencekit.docs-truth-census.v1",
-  "census_date": "2026-07-29",
+  "census_date": "2026-08-10",
   "scope": {
     "repos": [
       "PresenceKit-backend",
@@ -27,9 +27,9 @@
   "classification_counts": {
     "current-authority": 25,
     "duplicate": 4,
-    "current-derived": 106,
+    "current-derived": 113,
     "historical": 23,
-    "needs-verification": 5,
+    "needs-verification": 0,
     "deletion-candidate": 1
   },
   "p0_document_drift": [
@@ -37,49 +37,49 @@
       "id": "DOC-P0-01",
       "repo": "PresenceKit-desktop",
       "path": "docs/backend-integration.md",
-      "issue": "日记/事件日志段仍写 data/yexuan_inner 与 data/event_log；与 backend DataPaths/user_memory_root 及客户端不读后端文件边界冲突。",
+      "issue": "已修正：日记和聊天日志段以 /diary/*、/chat-log/* endpoint 为客户端数据源，后端 DataPaths 只作为实现 authority，不再构成客户端文件契约。",
       "authority": "PresenceKit-backend/docs/data-taxonomy.md + core/data_paths.py",
-      "recommended_action": "改为 endpoint/source authority，或明确为 legacy fallback。"
+      "recommended_action": "已完成；后端物理路径如需说明必须留在 backend 文档。"
     },
     {
       "id": "DOC-P0-02",
       "repo": "PresenceKit-mobile",
       "path": "docs/protocols/sensor-event-protocol.md",
-      "issue": "列出 POST /sensor/activity；当前后端未找到该路由。",
+      "issue": "已核实：当前端点是 /sensor/push、/sensor/realtime、/perception/visual、/watch/event；/sensor/activity 已拆到 Historical / Removed，不是可调用路由。",
       "authority": "backend/admin/routers/sensor.py, perception.py, watch.py",
-      "recommended_action": "拆分当前端点与历史草案，补鉴权和调用方。"
+      "recommended_action": "已完成；新增传感器入口时同步代码、调用方和本协议。"
     },
     {
       "id": "DOC-P0-03",
       "repo": "PresenceKit-backend",
       "path": "docs/dream.md",
-      "issue": "合同级文档混用旧 authored/world/scenario 路径，与 userdata-first DataPaths/AssetRegistry 竞争。",
+      "issue": "已修正：world/preset/scenario、runtime Dream state、seed 与 legacy fallback 已分栏；旧路径只保留为兼容读取说明。",
       "authority": "docs/data-taxonomy.md + core/data_paths.py + core/dream/*",
-      "recommended_action": "按 world/preset/scenario 拆 canonical、fallback、seed。"
+      "recommended_action": "已完成；新增路径先更新 DataPaths 再更新本合同。"
     },
     {
       "id": "DOC-P0-04",
       "repo": "PresenceKit-backend",
       "path": "docs/tools.md",
-      "issue": "示例仍提示复制到 characters/，会把 legacy fallback 当 canonical authored root。",
+      "issue": "已核实：角色 authored canonical root 是 userdata/characters/cards/，旧 characters/ 仅 compatibility fallback。",
       "authority": "docs/data-taxonomy.md + core/asset_registry.py",
-      "recommended_action": "改示例入口为 userdata/，兼容 root 单独标注。"
+      "recommended_action": "已完成；示例和新写入继续使用 userdata。"
     },
     {
       "id": "DOC-P0-05",
       "repo": "PresenceKit-backend",
       "path": "docs/memory.md",
-      "issue": "同时出现 data/runtime/memory 与 data/event_log/{uid}/trigger_audit，未区分 writer、兼容读和历史遗留。",
+      "issue": "已核实：正文已区分 runtime memory writer、event-log legacy read、trigger_audit.jsonl forensic writer 和 prompt 排除规则。",
       "authority": "core/data_paths.py + core/memory/event_log.py + core/migration.py",
-      "recommended_action": "补 writer/read-fallback/legacy 表。"
+      "recommended_action": "已完成；后续路径变更继续维护 writer/read-fallback 表。"
     },
     {
       "id": "DOC-P0-06",
       "repo": "PresenceKit-mobile",
-      "path": "docs/reference/main-dart-split-plan.md",
-      "issue": "已完成计划仍被索引，并含本机绝对路径。",
+      "path": "docs/archive/main-dart-split-plan.md",
+      "issue": "已修正：完成的拆分计划归档并标注历史参考，当前结构入口是 docs/mobile/flutter-structure.md；历史命令中的本机路径已替换为占位符。",
       "authority": "lib/main.dart + docs/mobile/flutter-structure.md + docs/README.md",
-      "recommended_action": "加历史 banner 后移 archive；无追溯需要时删除。"
+      "recommended_action": "已完成；不恢复旧 docs/reference/ 链接。"
     }
   ],
   "topic_authority": [
@@ -97,7 +97,7 @@
       "code_authority": ".github/workflows/*; desktop/mobile workflows; android/app/build.gradle.kts",
       "supporting_docs": "desktop/docs/release-v0.1.md; mobile/docs/quality/testing-and-dev.md",
       "historical_docs": "各仓 docs/archive/*、cc-tasks/*（如有）",
-      "conflicts": "debug signing 只能 fallback，不能写成正式发行能力。"
+      "conflicts": "release task 缺失或不完整 keystore 时 fail-loud；debug signing 只允许显式开发/调试任务，不能写成正式发行能力。"
     },
     {
       "topic": "鉴权、token scope 与安全",
@@ -177,7 +177,7 @@
       "code_authority": "firmware/presence-device/*; backend/admin/routers/{sensor,perception,watch}.py; desktop/src-tauri/src/sensor/*; mobile/.../SensorAccess.kt",
       "supporting_docs": "mobile/docs/protocols/sensor-event-protocol.md; mobile/docs/android/native-capabilities.md",
       "historical_docs": "各仓 docs/archive/*、cc-tasks/*（如有）",
-      "conflicts": "producer 在 clients/firmware，backend routes/state 是接收真值；/sensor/activity 待核查。"
+      "conflicts": "producer 在 clients/firmware，backend routes/state 是接收真值；/sensor/activity 已标为 historical/removed。"
     },
     {
       "topic": "Feature flags 与设置控制面",
@@ -1275,6 +1275,23 @@
     },
     {
       "repo": "PresenceKit-backend",
+      "path": "docs/testing-matrix.md",
+      "title": "后端测试矩阵",
+      "apparent_last_verified_date": "2026-08-10",
+      "status": "current-derived",
+      "v1_relevance": "supporting",
+      "claimed_authority": "测试入口与验收边界说明；不单独拥有代码或 CI 权威",
+      "actual_code_source_authority": "tests/; pytest.ini; .github/workflows/tests.yml; docs/v1-release-readiness.md",
+      "known_drift": "明确 CI 仅为固定 smoke subset；identity/format/memeval/coplay、手工 sensor、跨仓与真机验收不由该 workflow 自动证明。",
+      "recommended_action": "keep",
+      "links_references_from_other_docs": [
+        "docs/README.md",
+        "docs/dev-environment.md",
+        "docs/v1-release-readiness.md"
+      ]
+    },
+    {
+      "repo": "PresenceKit-backend",
       "path": "docs/dream-seed-activity.md",
       "title": "Dream Seed Activity — 梦境预构",
       "apparent_last_verified_date": null,
@@ -1303,13 +1320,13 @@
       "repo": "PresenceKit-backend",
       "path": "docs/dream.md",
       "title": "docs/dream.md — Dream System 总览与设计原则",
-      "apparent_last_verified_date": null,
-      "status": "needs-verification",
+      "apparent_last_verified_date": "2026-08-10",
+      "status": "current-derived",
       "v1_relevance": "supporting",
       "claimed_authority": "当前专题/派生说明；不单独拥有产品或协议权威",
       "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "当前合同文档混用旧 authored/world/scenario 路径；需与 DataPaths、AssetRegistry、Dream loaders 分段核对。",
-      "recommended_action": "update",
+      "known_drift": "已核对 canonical、seed、runtime 和 legacy fallback 分层；旧 runtime fallback 仍明确标为兼容读取。",
+      "recommended_action": "keep",
       "links_references_from_other_docs": [
         "docs/README.md",
         "docs/stage.md",
@@ -1409,7 +1426,7 @@
       "v1_relevance": "supporting",
       "claimed_authority": "当前专题/派生说明；不单独拥有产品或协议权威",
       "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。",
+      "known_drift": "已记录 SENSOR-1：signal-first sensor 候选目前不自动恢复旧 behavior action payload；其余历史问题按 closed/legacy 标注。",
       "recommended_action": "keep",
       "links_references_from_other_docs": []
     },
@@ -1417,13 +1434,13 @@
       "repo": "PresenceKit-backend",
       "path": "docs/memory.md",
       "title": "docs/memory.md — 记忆子系统设计",
-      "apparent_last_verified_date": "2026-07-18",
-      "status": "needs-verification",
+      "apparent_last_verified_date": "2026-08-10",
+      "status": "current-derived",
       "v1_relevance": "supporting",
       "claimed_authority": "当前专题/派生说明；不单独拥有产品或协议权威",
       "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "正文混用 data/runtime/memory 与 data/event_log/{uid}/trigger_audit，未清楚区分 writer、兼容读和历史遗留。",
-      "recommended_action": "update",
+      "known_drift": "已核对 runtime memory writer、event-log legacy read 与 trigger audit forensic writer 的边界。",
+      "recommended_action": "keep",
       "links_references_from_other_docs": []
     },
     {
@@ -1633,13 +1650,13 @@
       "repo": "PresenceKit-backend",
       "path": "docs/tools.md",
       "title": "docs/tools.md — 工具系统",
-      "apparent_last_verified_date": "2026-07-25",
-      "status": "needs-verification",
+      "apparent_last_verified_date": "2026-08-10",
+      "status": "current-derived",
       "v1_relevance": "supporting",
       "claimed_authority": "tool loop/MCP/tool registry 说明权威",
       "actual_code_source_authority": "backend/core/tool_dispatcher.py; core/mcp_client.py; admin/routers/settings_mcp.py",
-      "known_drift": "示例仍出现复制到 characters/ 的旧操作路径；userdata/ 是 authored primary，旧 root 仅 fallback/seed。",
-      "recommended_action": "update",
+      "known_drift": "已核对示例使用 userdata/characters/cards/；旧 characters/ 已单独标为 compatibility fallback。",
+      "recommended_action": "keep",
       "links_references_from_other_docs": []
     },
     {
@@ -1776,13 +1793,13 @@
       "repo": "PresenceKit-desktop",
       "path": "docs/backend-integration.md",
       "title": "docs/backend-integration.md — 后端接口与接入现状",
-      "apparent_last_verified_date": "2026-07-13",
-      "status": "needs-verification",
+      "apparent_last_verified_date": "2026-08-10",
+      "status": "current-derived",
       "v1_relevance": "blocking",
       "claimed_authority": "当前专题/派生说明；不单独拥有产品或协议权威",
       "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "日记/事件日志段仍写 data/yexuan_inner 与 data/event_log；客户端不应把后端物理目录当集成契约。",
-      "recommended_action": "update",
+      "known_drift": "已核对日记/聊天日志以 endpoint 为客户端契约，后端物理路径只由 backend 文档负责。",
+      "recommended_action": "keep",
       "links_references_from_other_docs": [
         "README.md",
         "docs/protocol-v0.md",
@@ -1923,6 +1940,23 @@
       "known_drift": "未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。",
       "recommended_action": "keep",
       "links_references_from_other_docs": []
+    },
+    {
+      "repo": "PresenceKit-desktop",
+      "path": "docs/testing.md",
+      "title": "桌面端测试与验收矩阵",
+      "apparent_last_verified_date": "2026-08-10",
+      "status": "current-derived",
+      "v1_relevance": "supporting",
+      "claimed_authority": "测试入口与验收边界说明；不单独拥有代码或 CI 权威",
+      "actual_code_source_authority": "desktop/src/**/*.test.*; desktop/package.json; desktop/.github/workflows/ci.yml; desktop/src-tauri/",
+      "known_drift": "当前 19 个 Vitest 测试文件；CI 有 tsc、Vitest、前端 build、cargo check，但无 Tauri IPC、真实窗口、跨仓协议或 macOS 真机 E2E。",
+      "recommended_action": "keep",
+      "links_references_from_other_docs": [
+        "README.md",
+        "docs/known-issues.md",
+        "docs/release-v0.1.md"
+      ]
     },
     {
       "repo": "PresenceKit-desktop",
@@ -2128,7 +2162,7 @@
       "v1_relevance": "supporting",
       "claimed_authority": "当前专题/派生说明；不单独拥有产品或协议权威",
       "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "debug signing 被记录为 release fallback 风险，未被写成正式发行能力；与 android/app/build.gradle.kts 一致。",
+      "known_drift": "缺失或不完整 release keystore 时构建 fail-loud；debug APK 只来自显式开发/调试任务，不得作为正式发行能力；与 android/app/build.gradle.kts 一致。",
       "recommended_action": "keep",
       "links_references_from_other_docs": []
     },
@@ -2244,39 +2278,43 @@
       "repo": "PresenceKit-mobile",
       "path": "docs/protocols/sensor-event-protocol.md",
       "title": "多端与硬件传感器事件协议",
-      "apparent_last_verified_date": "2026-07-13",
-      "status": "needs-verification",
+      "apparent_last_verified_date": "2026-08-10",
+      "status": "current-derived",
       "v1_relevance": "supporting",
       "claimed_authority": "当前专题/派生说明；不单独拥有产品或协议权威",
       "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "文档声明 POST /sensor/activity，当前后端核到 /sensor/push、/sensor/realtime、/perception/visual、/watch/event，未找到该路由。",
-      "recommended_action": "update",
+      "known_drift": "已核对当前四类 endpoint；/sensor/activity 明确位于 Historical / Removed，避免被当作调用契约。",
+      "recommended_action": "keep",
       "links_references_from_other_docs": []
     },
     {
       "repo": "PresenceKit-mobile",
       "path": "docs/quality/testing-and-dev.md",
       "title": "测试与开发",
-      "apparent_last_verified_date": "2026-07-19",
+      "apparent_last_verified_date": "2026-08-10",
       "status": "current-derived",
       "v1_relevance": "supporting",
-      "claimed_authority": "当前专题/派生说明；不单独拥有产品或协议权威",
-      "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "未发现已核实的当前事实漂移；历史/兼容命中按分类原则解释。",
+      "claimed_authority": "当前专题/派生说明；不单独拥有产品或 CI 权威",
+      "actual_code_source_authority": "mobile/test/; mobile/android/app/src/test/; mobile/.github/workflows/ci.yml; mobile/.github/workflows/release.yml; mobile/android/app/build.gradle.kts",
+      "known_drift": "已修正 14→17 个 Dart 测试文件的盘点，并将 2026-07-19 结果标为历史证据；仍明确 tester 回环、Kotlin instrumented test、真机矩阵和 release flavor/CI 漂移。",
       "recommended_action": "keep",
-      "links_references_from_other_docs": []
+      "links_references_from_other_docs": [
+        "docs/quality/testing-and-dev.md",
+        "docs/known-issues.md",
+        "docs/v1-release-readiness.md"
+      ]
     },
     {
       "repo": "PresenceKit-mobile",
-      "path": "docs/reference/main-dart-split-plan.md",
+      "path": "docs/archive/main-dart-split-plan.md",
       "title": "`lib/main.dart` 拆分计划",
-      "apparent_last_verified_date": "2026-06-12",
+      "apparent_last_verified_date": "2026-08-10",
       "status": "historical",
       "v1_relevance": "non-blocking",
       "claimed_authority": "历史设计、交接、工单、快照或概念材料；无当前权威声明",
       "actual_code_source_authority": "对应实现文件、路由、注册表、workflow 或 UI source；代码胜过本文",
-      "known_drift": "已完成计划仍被索引，且含本机绝对路径；不应继续作为当前结构说明。",
-      "recommended_action": "move to archive",
+      "known_drift": "已完成计划已归档并标注历史参考；本机路径已替换为占位符，当前结构见 docs/mobile/flutter-structure.md。",
+      "recommended_action": "keep",
       "links_references_from_other_docs": []
     },
     {
@@ -2375,7 +2413,7 @@
     "archive_or_banner": [
       "PresenceKit-backend/docs/system-readiness.md",
       "PresenceKit-backend/docs/dream-system.html",
-      "PresenceKit-mobile/docs/reference/main-dart-split-plan.md",
+      "PresenceKit-mobile/docs/archive/main-dart-split-plan.md",
       "PresenceKit-desktop/docs/pet-window-reference.md",
       "all cc-tasks and docs/archive materials"
     ],
@@ -2386,7 +2424,7 @@
     ],
     "deletion_candidates": [
       "PresenceKit-mobile/docs/roadmap-notes.md",
-      "PresenceKit-mobile/docs/reference/main-dart-split-plan.md if no audit trace required"
+      "PresenceKit-mobile/docs/roadmap-notes.md if no external references remain"
     ],
     "compatibility_keep": [
       "CLAUDE.md/CODEX.md mirror",

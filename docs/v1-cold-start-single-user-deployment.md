@@ -1,165 +1,92 @@
-# v1 Cold Start and Single-User Deployment
+# v1 冷启动与单用户部署
 
-This is the operator runbook for a new v1 installation. It describes the
-supported single-user shape: one owner, one backend process, and local or
-explicitly protected remote clients. Authentication remains mandatory even
-when every client belongs to the same person.
+本文是新 v1 安装的 operator runbook，描述受支持的单用户形态：一个 owner、一个后端进程，以及本地或明确受保护的远程客户端。即使所有客户端都属于同一个人，鉴权仍然是强制要求。
 
-## Clean install
+## 全新安装
 
-1. Use Python 3.10-3.12 (3.12 is the supported recommendation), install the
-   dependencies, and copy `config.example.yaml` to `config.yaml`.
-2. Run `python scripts/setup_auth.py`. Keep `secrets.local.yaml` outside source
-   control. The command creates the break-glass admin secret and scoped device
-   tokens; it does not print existing token values on a later run.
-3. For a desktop-only install set `standalone_mode: true`. Leave `qq.enabled`
-   false unless NapCat is deliberately part of this deployment.
-4. Start `python main.py`. A valid auth secret/token, a loadable default
-   character, and a valid data root are required before services start.
-5. Open the admin panel on the configured loopback address. The Setup page
-   requires a working chat model and `scheduler.owner_id`; Embedding is
-   optional and falls back to keyword recall when not configured.
-6. Select or create the active character card, test the model connection, then
-   send one owner chat through the desktop client or `/desktop/chat`.
+1. 使用 Python 3.10-3.12（推荐并受支持的是 3.12），安装依赖，并将 `config.example.yaml` 复制为 `config.yaml`。
+2. 运行 `python scripts/setup_auth.py`。将 `secrets.local.yaml` 保持在 source control 之外。该命令创建 break-glass admin secret 和 scoped device token；后续再次运行时不会打印已有 token value。
+3. 如果只部署桌面端，设置 `standalone_mode: true`。除非 NapCat 是此部署的一部分，否则保持 `qq.enabled` 为 false。
+4. 启动 `python main.py`。服务启动前必须具备有效的 auth secret/token、可加载的 default character 和有效 data root。
+5. 在配置的 loopback 地址打开 admin panel。Setup 页面要求可用的 chat model 和 `scheduler.owner_id`；Embedding 是可选项，未配置时会回退到 keyword recall。
+6. 选择或创建 active character card，测试模型连接，然后通过桌面客户端或 `/desktop/chat` 发送一条 owner chat。
 
-The clean-start success condition is a real assistant reply, not merely a
-running HTTP process. Do not copy a developer `data/`, `config.yaml`, or
-`secrets.local.yaml` into a clean-start test.
+冷启动成功条件是真实的 assistant reply，而不只是 HTTP 进程正在运行。不要把开发环境的 `data/`、`config.yaml` 或 `secrets.local.yaml` 复制到冷启动测试中。
 
-## Conservative defaults
+## 保守默认值
 
-The public template is intentionally dormant until the owner opts in:
+公共模板在 owner 明确 opt-in 前有意保持 dormant：
 
-| Surface | First-run expectation | How to verify |
+| Surface | 首次运行预期 | 验证方式 |
 |---|---|---|
-| Unsolicited speech | `scheduler.enabled: false`; no owner means no proactive run | `GET /scheduler/status` |
-| Autonomy | Durable autonomy config starts disabled | `GET /admin/autonomy/effective-state` |
-| MCP | Global and per-server switches are disabled; startup makes no external MCP connection | `GET /settings/mcp` |
-| Hardware | Hardware and Intiface are disabled; no job is started at boot | `GET /hardware/status` (when available) |
-| High-risk tools | Shutdown, sleep, toy actuation, and similar tools are disabled or confirmation-gated | Admin tool policy page and `GET /status` |
-| QQ/NapCat | Disabled by default; standalone mode does not create a QQ connection | startup log and `GET /status` |
-| Embedding | Placeholder credentials are treated as not configured; chat remains usable | `GET /settings/setup-status` |
+| Unsolicited speech | `scheduler.enabled: false`；没有 owner 就不会运行 proactive | `GET /scheduler/status` |
+| Autonomy | Durable autonomy config 初始关闭 | `GET /admin/autonomy/effective-state` |
+| MCP | 全局和每个 server 的开关都关闭；启动时不会连接外部 MCP | `GET /settings/mcp` |
+| Hardware | Hardware 和 Intiface 关闭；启动时不创建 job | `GET /hardware/status`（可用时） |
+| High-risk tools | Shutdown、sleep、toy actuation 等工具关闭或需要 confirmation gate | Admin tool policy page 和 `GET /status` |
+| QQ/NapCat | 默认关闭；standalone mode 不创建 QQ connection | startup log 和 `GET /status` |
+| Embedding | Placeholder credential 视为未配置；聊天仍可使用 | `GET /settings/setup-status` |
 
-`coplay.enabled` is only a deployment capability switch. It does not arm a
-game session. Never treat it as permission to start a game automatically.
+`coplay.enabled` 只是 deployment capability switch，不会启动 game session。绝不能把它当成自动开始游戏的 permission。
 
-## Readiness checklist
+## 就绪检查表
 
-Run these checks after first setup and after every restore or upgrade. Record
-the result with the release candidate commit.
+首次设置、每次 restore 或 upgrade 后都运行这些检查，并用 release candidate commit 记录结果。
 
-- [ ] **Model:** Setup reports the base chat model configured and its connection
-  test succeeds. Provider errors are actionable and do not silently select a
-  different provider.
-- [ ] **Data paths:** `/status` reports the intended production data root;
-  `mode` is not a test sandbox. `data/layout_version.json` is present after a
-  successful v1 initialization.
-- [ ] **Permissions:** the service account can read bundled assets and write
-  the declared `data/` and `userdata/` roots, but the backup destination is
-  outside the installation. Secrets are not world-readable.
-- [ ] **Authentication:** the panel accepts the scoped panel token; an absent
-  secret/token blocks startup; a device token cannot call admin-only routes.
-- [ ] **Character:** the active card loads and a chat reply is delivered. A
-  placeholder card is a product-quality warning, not a runtime fallback.
-- [ ] **Scheduler/autonomy:** `/scheduler/status` and
-  `/admin/autonomy/effective-state` show the intended enabled state, owner,
-  cooldown, and channel. A disabled scheduler must not emit a turn.
-- [ ] **MCP:** `/settings/mcp` shows disabled when not explicitly required.
-  If enabled, every server has a local allowlist/policy and a failed server is
-  reported as unavailable without preventing local chat.
-- [ ] **Channels:** test one intended channel only. Verify desktop WS or
-  mobile poll/ack as applicable; leave QQ disconnected when `standalone_mode`
-  is used.
-- [ ] **Health and logs:** `/system/health` is reachable with `state.read`,
-  silent-failure counters are understood, and logs contain no credential URLs.
+- [ ] **Model：** Setup 报告 base chat model 已配置且 connection test 成功。Provider error 必须可处理，不能静默选择另一个 provider。
+- [ ] **Data paths：** `/status` 报告预期的 production data root；`mode` 不是 test sandbox。v1 初始化成功后应存在 `data/layout_version.json`。
+- [ ] **Permissions：** service account 可以读取 bundled asset，并写入声明的 `data/` 与 `userdata/` 根目录，但 backup destination 位于安装目录之外。Secrets 不能被全局读取。
+- [ ] **Authentication：** panel 接受 scoped panel token；缺少 secret/token 会阻止启动；device token 不能调用 admin-only route。
+- [ ] **Character：** active card 成功加载并交付 chat reply。Placeholder card 是产品质量警告，不是 runtime fallback。
+- [ ] **Scheduler/autonomy：** `/scheduler/status` 与 `/admin/autonomy/effective-state` 显示预期的 enabled state、owner、cooldown 和 channel。关闭的 scheduler 不能产生 turn。
+- [ ] **MCP：** 未明确需要时，`/settings/mcp` 显示 disabled。启用时每个 server 都有本地 allowlist/policy；server 失败时应报告 unavailable，但不能阻止本地聊天。
+- [ ] **Channels：** 只测试一个预期 channel。按情况验证 desktop WS 或 mobile poll/ack；使用 `standalone_mode` 时保持 QQ 断开。
+- [ ] **Health and logs：** 使用 `state.read` 可访问 `/system/health`，理解 silent-failure counter，日志中没有 credential URL。
 
-The checks above are operational evidence. A green HTTP health response alone
-does not prove model, channel, or scheduler readiness.
+以上检查是运行证据。HTTP health response 为绿色，单独不能证明 model、channel 或 scheduler 已就绪。
 
-## v0.2.2 migration
+## v0.2.2 迁移
 
-v0.2.2 is a preview source and is not an automatic-update source. The supported
-path is deliberately explicit:
+v0.2.2 是 preview source，不是 automatic-update source。受支持的路径有意保持显式：
 
-1. Stop the old process and create/verify an offline private-state snapshot.
-2. Install v1 in a new empty directory.
-3. Copy only the protected state listed by
-   [Offline Private-State Backup](offline-state-backup.md): `data/`,
-   `userdata/`, local configuration/secrets, and reviewed legacy private
-   authored assets. Do not overlay `core/`, `scripts/`, `defaults/`,
-   `examples/`, `.venv/`, or other program files.
-4. Run the authored-root dry run with `--fail-on-diverged --fail-on-invalid`.
-   `legacy-only`, `diverged`, `invalid`, `incomplete`, or `unresolved` results
-   are actionable blockers requiring manual review; they are never silently
-   overwritten.
-5. Start v1 and complete the clean-start and readiness checks. The first viable
-   startup writes the v1 layout marker; it does not claim to have migrated
-   arbitrary preview state.
+1. 停止旧进程，并创建/验证 offline private-state snapshot。
+2. 在新的空目录安装 v1。
+3. 只复制 [Offline Private-State Backup](offline-state-backup.md) 列出的受保护状态：`data/`、`userdata/`、本地 configuration/secrets 和经过复核的 legacy 私有 authored asset。不要覆盖 `core/`、`scripts/`、`defaults/`、`examples/`、`.venv/` 或其他程序文件。
+4. 使用 `--fail-on-diverged --fail-on-invalid` 运行 authored-root dry run。`legacy-only`、`diverged`、`invalid`、`incomplete` 或 `unresolved` 结果都是需要人工复核的可操作阻塞项，绝不会被静默覆盖。
+5. 启动 v1 并完成冷启动和就绪检查。第一次可用启动会写入 v1 layout marker；它不会声称已经迁移任意 preview state。
 
-For v1 and later, the updater accepts only a supported v1 marker and a
-non-downgrade target. Preview sources, future schemas, missing markers, and
-downgrades fail before program replacement. Restore the updater snapshot or an
-offline private-state snapshot in a new target and cut over manually.
+v1 及更高版本的 updater 只接受受支持的 v1 marker 和非 downgrade target。Preview source、future schema、缺失 marker 和 downgrade 都会在程序替换前失败。将 updater snapshot 或 offline private-state snapshot restore 到新的 target，然后手动切换。
 
-## Backup, restore, and retention
+## Backup、restore 与 retention
 
-Stop the service before taking a snapshot. The command refuses a running or
-unknown service and never uploads data:
+创建 snapshot 前停止服务。命令拒绝运行中或未知状态的服务，并且永远不会上传数据：
 
 ```powershell
 python main.py backup-state create --output <protected-volume>\presencekit-snapshot --protection-mode protected_volume
 python main.py backup-state verify <protected-volume>\presencekit-snapshot
 ```
 
-Keep at least one recent snapshot on a separate protected volume. Retention and
-off-site encryption are operator responsibilities; `protected_volume` is not an
-encrypted archive. Test a restore before relying on a backup:
+至少在另一个受保护卷上保留一份近期 snapshot。Retention 和 off-site encryption 由 operator 负责；`protected_volume` 不是 encrypted archive。依赖 backup 前先测试 restore：
 
 ```powershell
 python main.py backup-state restore <snapshot> --target <new-empty-directory>
 ```
 
-Restore verifies hashes and performs a read-only startup check with outbound
-calls disabled. It does not replace the live installation, delete the source,
-or perform an implicit version migration. Review the recovery report, then
-perform a manual cutover.
+Restore 会验证哈希，并在关闭 outbound call 的情况下执行只读 startup check。它不会替换 live installation、删除 source 或隐式执行 version migration。复核 recovery report，然后手动切换。
 
-## Single-user server shape
+## 单用户 server 形态
 
-- Bind the admin service to `127.0.0.1` for local clients. For LAN or remote
-  access, put an HTTPS reverse proxy in front of it, restrict the proxy to the
-  required paths, and keep the backend bind private. Do not expose plain HTTP
-  or the break-glass secret to the public network.
-- Store `secrets.local.yaml` and any proxy credentials with the service account
-  permissions only. Use scoped `panel`, `desktop`, `mobile`, `watch`, and
-  `device` tokens; do not reuse the admin secret on edge devices.
-- Back up while stopped, verify the manifest, and keep the backup destination
-  outside the install. Rotate tokens after a device is lost and after a backup
-  leaves the protected host.
-- Rotate `data/logs` and forensic logs according to the configured size/keep
-  limits. Do not place secrets in debug prompts or enable LLM request logging
-  outside a short diagnostic window.
-- Restart with the same service account and data root. Hardware jobs left
-  active by a prior process are marked expired and an explicit stop is
-  attempted; they are never resumed automatically.
-- Scheduler schedule entries default to `restart_miss_policy: skip`. Expired
-  wake/autonomy signals are terminal, and one-shot desktop wake signals are
-  discarded when autonomy is disabled. A restart therefore does not replay a
-  stale proactive event.
+- 本地客户端将 admin service 绑定到 `127.0.0.1`。若需要 LAN 或远程访问，在前面放置 HTTPS reverse proxy，限制 proxy 只暴露所需路径，并保持后端 bind 为私有。不要向公网暴露 plain HTTP 或 break-glass secret。
+- 只给 service account 权限保存 `secrets.local.yaml` 和 proxy credential。使用 scoped 的 `panel`、`desktop`、`mobile`、`watch` 和 `device` token；不要在 edge device 上复用 admin secret。
+- 停止服务后 backup，验证 manifest，并保持 backup destination 在安装目录之外。设备丢失或 backup 离开受保护主机后轮换 token。
+- 按配置的 size/keep limit 轮换 `data/logs` 和 forensic log。不要把 secret 放进 debug prompt，也不要在短暂诊断窗口之外启用 LLM request logging。
+- 使用相同 service account 和 data root 重启。此前进程留下的 active hardware job 会标记为 expired，并尝试显式停止；永远不会自动恢复。
+- Scheduler schedule entry 默认使用 `restart_miss_policy: skip`。过期的 wake/autonomy signal 是 terminal 状态，autonomy 关闭时 one-shot desktop wake signal 会被丢弃。因此重启不会重放过时的 proactive event。
 
-## External MCP failure behavior
+## 外部 MCP 失败行为
 
-MCP is optional. With `mcp_servers.enabled: false`, startup must not attempt a
-network connection. When an explicitly enabled server is unreachable, its
-connection is recorded as unavailable, its tools are not exposed, and local
-chat continues. Do not respond to an `outcome_unknown` hardware action by
-automatically retrying it; inspect device state or use the emergency stop path.
+MCP 是可选项。`mcp_servers.enabled: false` 时，启动不得尝试 network connection。显式启用的 server 无法访问时，会记录为 unavailable，不暴露其工具，本地聊天继续运行。对于 `outcome_unknown` hardware action，不要自动重试；应检查设备状态或使用 emergency stop path。
 
-## Residual release risks
+## 剩余发布风险
 
-The following are not proven by this runbook and must remain visible in the
-release decision: Android production signing and Keystore migration, real-device
-relay/Doze recovery, cross-repository protocol compatibility, optional hardware
-and MCP integrations, and any authored-root entries reported by the migration
-dry run. These are release evidence gaps, not reasons to weaken authentication
-or enable integrations by default.
+以下事项不会由本 runbook 证明，必须继续出现在发布决策中：Android production signing 和 Keystore migration、真机 relay/Doze recovery、跨仓协议兼容性、可选 hardware 与 MCP integration，以及迁移 dry run 报告的任何 authored-root 条目。这些是 release evidence gap，不是削弱鉴权或默认启用 integration 的理由。

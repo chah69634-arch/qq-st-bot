@@ -11,7 +11,7 @@
 ```
 QQ 消息 → main.py → message_queue
 桌宠消息 → admin/routers/chat.py（POST /desktop/chat）
-手机前台消息 → admin/routers/chat.py（POST /desktop/chat，与桌面共用 owner-chat 入口）
+手机前台消息 → admin/routers/mobile.py（POST /mobile/chat，使用 mobile provenance，共用 owner-chat pipeline）
 文件上传 → POST /upload/ingest → media_processor → 拼入用户消息
 调度器主动消息 → core/scheduler/loop.py
          ├─ state_machine：观测 owner turn / sensor tick，维护 CHATTING / QUIET / RESTLESS
@@ -60,8 +60,8 @@ Intiface / Buttplug 硬件是 reality-side actuator：只有 owner 私聊中的�
 不进入 scheduler、trigger 或 Dream pipeline。`core/hardware/buttplug_client.py` 通过
 `aiohttp` 的无代理 WebSocket 连接本机 Intiface Central，并维护进程内设备发现状态。
 
-手机端与桌宠用户输入均走 `POST /desktop/chat`。该共用 owner 入口通过
-`core/conversation_gate.py` 的 per-user conversation lock，保证同一用户多端输入按顺序完成
+手机端与桌宠用户输入分别走 `POST /mobile/chat` 与 `POST /desktop/chat`，但复用同一 owner-chat
+执行链。两条入口都通过 `core/conversation_gate.py` 的 per-user conversation lock，保证同一用户多端输入按顺序完成
 `fetch_context → run_llm → critical post_process`。记忆文件自身仍由 `core/memory/locks.py`
 里的 `uid_lock` 保护。
 
@@ -106,15 +106,20 @@ get_tags()（build_prompt 内计算；部分入口可显式传入复用）
     │
     ▼ 步骤4  post_process()（owner 入口与调度器主动消息通过 turn_sink 等待关键写入）
   │
-  │  【关键路径】uid_lock(uid) 内，按顺序同步完成：
+  │  【关键路径】send 前在 uid_lock(uid) 内只完成本地写入与条件读取：
+  ├─ maybe_mark_sleepy_from_time       本地 sleepy 状态写入（无 LLM/网络往返）
+  ├─ capture_turn()                    写 history + event_log（user/assistant，emotion 占位 neutral）
+  │                                     失败会入 capture_turn_retry 慢队列，重试超限落 DLQ
+  └─ pending perception 确认 / profile 条件快照等本地操作
+  │
+  │  【发送后慢段】fanout 完成后 asyncio.create_task 调度：
   ├─ detect_emotion()                  asyncio.wait_for(timeout=8s)，超时降级 neutral
   ├─ global_lock("mood_state") 内：
   │   ├─ mood_state.update(emotion)    更新情绪状态
-  │   └─ yandere 触发检测              关键词 + 关系阈值
-  └─ capture_turn()                    写 history + event_log（user/assistant，含 turn_id）
-                                      失败会入 capture_turn_retry 慢队列，重试超限落 DLQ
+  │   └─ yandere / hidden-state 信号   使用本轮真实 emotion
+  └─ avatar / profile / slow_queue      单 worker 异步执行总结、反思、画像更新等
   │
-  │  【慢队列】uid_lock 释放后入 slow_queue，单 worker 异步执行：
+  │  【慢队列】post_process_slow 入队后单 worker 异步执行：
   ├─ summarize_to_midterm              LLM 压缩单轮到 mid_term，写血缘字段；emotion 显著时触发 reflect_to_episodic(eager)
   ├─ reflect_to_episodic               mid_term 列表 → episodic，更新 fixation_state；达阈值触发 consolidate_to_identity
   ├─ consolidate_to_identity           unconsolidated episodic + old identity + profile → user_identity.yaml
@@ -172,7 +177,7 @@ owner private turn
 探针在 pipeline 之前处理，目的是先判断本轮是否需要调用工具：
 
 - 使用极简 system prompt（`get_probe_prompt()`），不带角色卡
-- QQ 入口有关键词快速路径；共用的 `/desktop/chat` owner-chat 入口走 LLM probe，不走关键词快速路径
+- QQ 入口有关键词快速路径；`/desktop/chat` 与 `/mobile/chat` owner-chat 入口走 LLM probe，不走关键词快速路径
 - 只判断 info + desktop 两类工具
 - memory 类工具不走探针，靠 LLM 在正式对话中自主调用
 - QQ 入口（`main.py`）和 owner HTTP 入口（`admin/routers/chat.py`）共用同一个 `get_probe_prompt()` 函数

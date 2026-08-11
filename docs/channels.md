@@ -4,7 +4,7 @@
 
 ## 协议权威
 
-桌面端当前正式协议为 **v0.1（legacy 冻结版）**。本仓只维护实现说明，协议消息全集、ack/nack 语义、9 类 desktop action allowlist 与 HTTP/WS 对账契约统一从 [desktop-client-protocol.md](desktop-client-protocol.md) 跳转到 PresenceKit-desktop 权威正文。v1 未排期，双方均未实现；不得在本仓单边增加消息类型或 desktop action。
+桌面端当前正式协议为 **v0.1（legacy 冻结版）**。本仓只维护实现说明，协议消息全集、ack/nack 语义、9 类 desktop action allowlist 与 HTTP/WS 对账契约统一见三仓总账 [three-repo-interface-catalog.md](three-repo-interface-catalog.md) 和桌面仓的 `docs/protocol-v0.md`。v1 未排期，双方均未实现；不得在本仓单边增加消息类型或 desktop action。
 
 实现真值：`channels/desktop_ws.py`（帧与心跳）、`admin/admin_server.py`（Bearer WS 鉴权）、`admin/routers/chat.py`（`POST /desktop/chat`）。
 
@@ -31,10 +31,10 @@ QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 
 
 注意：QQ 主入口的可见发送由 `_qq_reality_reply_adapter` 调用 `text_output.send()`，LLM reply
 记忆写入统一走 `core.turn_sink.record_assistant_turn()`；冻结管理面板 `/chat` 已返回 410。
-`/desktop/chat`、scheduler、sensor_aware 同样走 turn sink。legacy
-`/desktop/trigger` 已确认零调用方并删除。手机端发消息也调用 `/desktop/chat`
-（`channel_name="desktop"` 硬编码），`POST /mobile/chat` 端点未被三端任一实际调用，
-已作为 legacy 删除（cc-tasks round-接口盘点，2026-07-11）；手机侧的独立收发路径仅剩
+`/desktop/chat`、`/mobile/chat`、scheduler、sensor_aware 同样走 turn sink。legacy
+`/desktop/trigger` 已确认零调用方并删除。手机端前台发消息调用 `/mobile/chat`，保留
+`mobile` provenance 与 mobile durable mirror；桌宠前台发消息调用 `/desktop/chat`，保留
+`desktop` provenance 与桌面交付语义。手机侧独立收发路径还包括
 `/mobile/poll` `/mobile/ack` `/mobile/push` `/mobile/activate` `/mobile/deactivate`。
 
 ---
@@ -159,7 +159,7 @@ proactive turn 单独加了一层过滤：只有 `channels.desktop_ws.is_connect
 `DesktopChannel.send()`、也就不会写 `channel_queue.json`。此前的行为是照样写文件，等桌宠端下次
 打开时一次性把积压的所有 proactive 消息都当作"刚收到"弹出来，跟触发时间完全脱节，很出戏。
 
-USER_CHAT 来源（`/desktop/chat` 的回显）不受此过滤影响——那是当次请求的直接响应，理应可靠送达。
+USER_CHAT 来源（`/desktop/chat` 或 `/mobile/chat` 的同步回显）不受此过滤影响——那是当次请求的直接响应，理应可靠送达。
 WS 在线时因瞬时网络问题导致 `push_message` 失败，仍然走 `channel_queue.json` 兜底（短时缓冲，不
 是长期补发队列）。
 
@@ -420,16 +420,16 @@ QQ / mobile / memory / hidden_state 路径无需任何修改 — `strip_render_t
 由 `core/perform_mapper.py`（`enrich_say_segments`）在 `build_say_segments()` 之后、`push_segments`
 之前挂上；fail-open——任何内部异常/超时都原样返回未标注的 segments，绝不影响主流程。
 模块职责、rules/llm 两个 provider、词典维护方式见 `docs/perform-mapping.md`。
-perform 字段属于 v0.1 `message_segments` 契约；权威入口见 [desktop-client-protocol.md](desktop-client-protocol.md)，映射细节见 `docs/perform-mapping.md`。
+perform 字段属于 v0.1 `message_segments` 契约；权威入口见 [three-repo-interface-catalog.md](three-repo-interface-catalog.md) 和桌面仓的 `docs/protocol-v0.md`，映射细节见 `docs/perform-mapping.md`。
 
 ---
 
 ## Brief 171 remote delivery boundary
 
-`/mobile/chat` remains a compatibility endpoint; the versioned
+`/mobile/chat` is the mobile foreground owner-chat endpoint; the versioned
 `/v1/owner/turns` endpoint is the new owner-input adapter with token-profile
 and idempotency contracts. Both use the same Reality pipeline. The older
-historical note that described `/mobile/chat` as removed is not an instruction
+historical note that described `/mobile/chat` as removed is stale and is not an instruction
 to remove the route.
 
 When `deployment.mode=remote_server`, desktop delivery does not write
