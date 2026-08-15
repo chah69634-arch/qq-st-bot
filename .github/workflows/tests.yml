@@ -99,6 +99,9 @@ jobs:
       - name: Configure isolated backend tests
         run: echo "SKIP_CROSS_REPO=1" >> "$GITHUB_ENV"
 
+      - name: Run public full-pytest preflight
+        run: python -m tests.ci_preflight
+
       - name: Run full pytest with junit evidence
         run: |
           mkdir -p artifacts
