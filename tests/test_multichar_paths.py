@@ -1,4 +1,6 @@
-from tests.fixtures.public_assets import TEST_CHAR_ID
+import shutil
+
+from tests.fixtures.public_assets import TEST_CHAR_ID, install_public_character_cards
 """
 多角色路径铺线验证测试（S4 + S5 + S6）
 
@@ -20,8 +22,22 @@ from core.sandbox import DataPaths, _LAYOUT_CHARACTER_INNER, _LAYOUT_DREAM, _LAY
 @pytest.fixture
 def dp(tmp_path):
     """使用 tmp_path 作为沙盒根，隔离文件系统。"""
-    paths = DataPaths(mode="test", test_session_id="multichar_unit")
+    paths = DataPaths(
+        mode="test",
+        test_session_id="multichar_unit",
+        project_root=tmp_path,
+    )
     paths._base = tmp_path
+    install_public_character_cards(paths)
+
+    # Keep the bundled fallback inside the same isolated public fixture root.
+    # The production resolver still owns the precedence; this fixture only
+    # makes both sides of that contract available in a fresh clone.
+    bundled_source = Path(__file__).parents[1] / "bundled" / "characters" / "default"
+    bundled_target = paths.bundled_default_character_dir()
+    bundled_target.mkdir(parents=True, exist_ok=True)
+    for filename in ("activity_pool.yaml", "author_notes.json", "traits.yaml"):
+        shutil.copyfile(bundled_source / filename, bundled_target / filename)
     return paths
 
 
@@ -66,8 +82,8 @@ def test_character_inner_v1_top_paths(dp, tmp_path):
 
 def test_activity_pool_v1(dp):
     # C1 migrated private activity pool is now the primary path.
-    assert dp.activity_pool(char_id=TEST_CHAR_ID) == Path(
-        f'userdata/characters/authored/{TEST_CHAR_ID}/activity_pool.yaml'
+    assert dp.activity_pool(char_id=TEST_CHAR_ID) == (
+        dp.user_authored_character_dir(char_id=TEST_CHAR_ID) / "activity_pool.yaml"
     )
     assert dp.activity_pool() == dp.activity_pool(char_id=TEST_CHAR_ID)
 
@@ -75,12 +91,23 @@ def test_activity_pool_v1(dp):
 def test_author_notes_pool_userdata_primary(dp):
     # C1 migrated private author notes are now the primary path.
     result = dp.author_notes_pool(char_id=TEST_CHAR_ID)
-    assert result == Path(f'userdata/characters/authored/{TEST_CHAR_ID}/author_notes.json')
+    assert result == dp.user_authored_character_dir(char_id=TEST_CHAR_ID) / "author_notes.json"
     assert dp.author_notes_pool() == dp.author_notes_pool(char_id=TEST_CHAR_ID)
 
 
+def test_activity_pool_falls_back_when_public_authored_fixture_is_missing(dp):
+    authored = dp.user_authored_character_dir(char_id=TEST_CHAR_ID) / "activity_pool.yaml"
+    authored.unlink()
+
+    assert dp.activity_pool(char_id=TEST_CHAR_ID) == (
+        dp.bundled_default_character_dir() / "activity_pool.yaml"
+    )
+
+
 def test_traits_resolve_to_bundled_default(dp):
-    assert dp.yexuan_traits(char_id=TEST_CHAR_ID) == Path("bundled/characters/default/traits.yaml")
+    assert dp.yexuan_traits(char_id=TEST_CHAR_ID) == (
+        dp.bundled_default_character_dir() / "traits.yaml"
+    )
     assert dp.yexuan_traits() == dp.yexuan_traits(char_id=TEST_CHAR_ID)
 
 
