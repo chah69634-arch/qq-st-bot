@@ -22,6 +22,16 @@ import pytest
 
 PUBLIC_DEFAULT_CHAR_ID = "default"
 
+
+@pytest.fixture
+def public_default_traits(sandbox):
+    """Install the tracked public default traits into this test project root."""
+    source = Path(__file__).parents[1] / "bundled" / "characters" / "default" / "traits.yaml"
+    target = sandbox.bundled_default_character_dir() / "traits.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    return target
+
 # ── Fixtures（镜像 test_pipeline_write_scope.py，用于 post_process 集成测试）────
 
 @pytest.fixture
@@ -215,7 +225,7 @@ async def test_no_enqueue_when_write_disabled(
 
 # ── 5. Handler 写入 trait_state ────────────────────────────────────────────────
 
-async def test_handler_creates_trait_state_file(sandbox):
+async def test_handler_creates_trait_state_file(sandbox, public_default_traits):
     """The public default character's handler writes a valid trait_state file."""
     from core.pipeline import _handler_trait_tracker_update
     from core.memory.scope import MemoryScope
@@ -238,6 +248,25 @@ async def test_handler_creates_trait_state_file(sandbox):
     assert isinstance(state["windows"], list)
     assert isinstance(state["underrepresented"], list)
     assert len(state["windows"]) >= 1, "at least one window must be recorded"
+
+
+async def test_handler_does_not_inherit_default_traits_for_non_default_role(
+    sandbox, public_default_traits,
+):
+    """A public default schema must not become an arbitrary role's traits."""
+    from core.pipeline import _handler_trait_tracker_update
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("u_non_default", TEST_CHAR_ID)
+    payload = {
+        "uid": "u_non_default",
+        "char_id": TEST_CHAR_ID,
+        "scope": scope.to_payload(),
+    }
+
+    await _handler_trait_tracker_update(payload)
+
+    assert not sandbox.trait_state(char_id=TEST_CHAR_ID).exists()
 
 
 # ── 6. author_note_rotator 读取路径与 handler 写入路径一致 ─────────────────────

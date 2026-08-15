@@ -14,6 +14,9 @@ import httpx
 import pytest
 
 
+TEST_API_KEY = "test-only-placeholder"
+
+
 # ===========================================================================
 # 1. Param merge + whitelist
 # ===========================================================================
@@ -122,7 +125,7 @@ async def test_native_anthropic_preset_uses_httpx_client_and_keeps_auth_mode(mon
                 "api_protocol": "anthropic_messages",
                 "anthropic_auth_mode": "bearer",
                 "base_url": "https://relay.example",
-                "api_key": "test-key",
+                "api_key": TEST_API_KEY,
                 "model": "claude-test",
             },
         },
@@ -232,7 +235,7 @@ class TestBackwardCompatSynth:
         from core.model_registry import _synth_legacy_presets
         cfg = {
             "llm": {
-                "api_key": "sk-test",
+                "api_key": TEST_API_KEY,
                 "base_url": "https://api.deepseek.com",
                 "model": "deepseek-chat",
                 "tool_call_mode": "function_calling",
@@ -267,7 +270,7 @@ class TestBackwardCompatSynth:
 
         fake_cfg = {
             "llm": {
-                "api_key": "sk-test",
+                "api_key": TEST_API_KEY,
                 "base_url": "https://api.deepseek.com",
                 "model": "deepseek-chat",
                 "tool_call_mode": "function_calling",
@@ -293,8 +296,8 @@ class TestApiProtocol:
         cfg = {
             "model_presets": {
                 "presets": {
-                    "chat-model": {"provider_kind": "openai", "model": "chat"},
-                    "review-model": {"provider_kind": "openai", "model": "review"},
+                    "chat-model": {"provider_kind": "openai", "model": "chat", "api_key": TEST_API_KEY},
+                    "review-model": {"provider_kind": "openai", "model": "review", "api_key": TEST_API_KEY},
                 },
                 "routing_profiles": {"default": {"chat": "chat-model"}},
             },
@@ -317,6 +320,7 @@ class TestApiProtocol:
                     "response-preset": {
                         "provider_kind": "openai",
                         "api_protocol": "responses",
+                        "api_key": TEST_API_KEY,
                         "model": "test-model",
                     },
                 },

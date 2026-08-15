@@ -2016,8 +2016,42 @@ async def _handler_trait_tracker_update(payload: dict) -> None:
     try:
         with open(traits_path, encoding="utf-8") as _f:
             data = yaml.safe_load(_f)
+        if not isinstance(data, dict):
+            logger.warning(
+                "[pipeline.trait_tracker] traits schema unsupported: char_id=%s path=%s reason=root_not_mapping",
+                char_id, traits_path,
+            )
+            return
+
         trait_key = f"{char_id}_traits"
-        traits: list = data.get(trait_key) or data.get("yexuan_traits") or []
+        if trait_key in data:
+            schema_key = trait_key
+        elif char_id == "default" and "default_traits" in data:
+            schema_key = "default_traits"
+        elif char_id == "default" and "yexuan_traits" in data:
+            schema_key = "yexuan_traits"
+        else:
+            logger.warning(
+                "[pipeline.trait_tracker] traits schema unsupported: char_id=%s path=%s reason=unknown_schema",
+                char_id, traits_path,
+            )
+            return
+
+        traits = data[schema_key]
+        if (
+            not isinstance(traits, list)
+            or any(
+                not isinstance(trait, dict)
+                or not isinstance(trait.get("id"), str)
+                or not isinstance(trait.get("keywords"), list)
+                for trait in traits
+            )
+        ):
+            logger.warning(
+                "[pipeline.trait_tracker] traits schema unsupported: char_id=%s path=%s reason=invalid_schema key=%s",
+                char_id, traits_path, schema_key,
+            )
+            return
     except Exception as _e:
         logger.warning(
             "[pipeline.trait_tracker] traits 定义加载失败，跳过: char_id=%s path=%s error=%s",
