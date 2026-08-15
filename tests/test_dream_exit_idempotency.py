@@ -109,10 +109,12 @@ async def test_continuation_cancels_when_new_reality_turn_arrives(sandbox, monke
     from core.dream import reality_continuation
     from core.dream.dream_state import write_state
     from core.dream.exit_observability import DELIVERY_CONTINUATION, get_record
+    from core.scheduler import proactive_ledger
     from core.scheduler.proactive_ledger import record_user_message
 
     uid = "owner-continuation-race"
     dream_id = "dream-continuation-race"
+    monkeypatch.setattr(proactive_ledger, "time", SimpleNamespace(time=lambda: 1000.0))
     write_state(uid, {
         "status": "REALITY_AFTERGLOW",
         "last_dream_id": dream_id,

@@ -96,6 +96,12 @@ def _safe_row(row: dict[str, Any]) -> dict[str, Any]:
         attempts = max(0, int(row.get("attempts") or 0))
     except (TypeError, ValueError):
         attempts = 0
+    owner_turn_seq = row.get("owner_turn_seq")
+    if owner_turn_seq is not None:
+        try:
+            owner_turn_seq = max(0, int(owner_turn_seq))
+        except (TypeError, ValueError):
+            owner_turn_seq = None
     return {
         "dream_id": str(row.get("dream_id") or "")[:160],
         "uid": str(row.get("uid") or "")[:160],
@@ -104,6 +110,7 @@ def _safe_row(row: dict[str, Any]) -> dict[str, Any]:
         "lifecycle": lifecycle,
         "reason_code": reason,
         "created_at": float(row.get("created_at") or time.time()),
+        "owner_turn_seq": owner_turn_seq,
         "ready_at": row.get("ready_at"),
         "last_attempt_at": row.get("last_attempt_at"),
         "sent_at": row.get("sent_at"),
@@ -123,6 +130,7 @@ def record(
     reason_code: str = "",
     expires_at: float | None = None,
     last_error: str = "",
+    owner_turn_seq: int | None = None,
 ) -> dict[str, Any]:
     """Upsert one bounded record and return the sanitized row."""
     rows = _load(char_id)
@@ -148,6 +156,7 @@ def record(
         "reason_code": reason_code,
         "expires_at": expires_at if expires_at is not None else previous.get("expires_at"),
         "last_error": last_error,
+        "owner_turn_seq": owner_turn_seq if owner_turn_seq is not None else previous.get("owner_turn_seq"),
     })
     if lifecycle == READY and not row.get("ready_at"):
         row["ready_at"] = now

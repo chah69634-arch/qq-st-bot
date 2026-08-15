@@ -28,6 +28,7 @@ def _lifecycle_record(
     lifecycle: str,
     reason_code: str = "",
     last_error: str = "",
+    owner_turn_seq: int | None = None,
 ) -> dict[str, Any]:
     from core.dream.exit_observability import DELIVERY_CONTINUATION, record
 
@@ -39,7 +40,19 @@ def _lifecycle_record(
         lifecycle=lifecycle,
         reason_code=reason_code,
         last_error=last_error,
+        owner_turn_seq=owner_turn_seq,
     )
+
+
+def _owner_turn_seq(uid: str) -> int | None:
+    """Return the monotonic owner-turn version, or None for legacy ledgers."""
+    try:
+        from core.scheduler.proactive_ledger import continuity_status
+
+        value = continuity_status(uid).get("user_turn_seq")
+        return None if value is None else max(0, int(value))
+    except Exception:
+        return None
 
 
 def enqueue(uid: str, dream_id: str, *, char_id: str) -> bool:
@@ -65,7 +78,8 @@ def enqueue(uid: str, dream_id: str, *, char_id: str) -> bool:
     existing = get_record(dream_id, char_id=char_id, delivery_kind=DELIVERY_CONTINUATION)
     if existing and existing.get("lifecycle") in {CONTINUATION_SENT, CONTINUATION_CANCELLED}:
         return False
-    # The Dream close timestamp is the race baseline. A user may have already
+    owner_turn_seq = _owner_turn_seq(uid)
+    # The Dream close timestamp is the legacy race baseline. A user may have already
     # started a Reality turn between the close and the visible pseudo-stream
     # completion, before this enqueue call gets a chance to create its row.
     try:
@@ -81,6 +95,7 @@ def enqueue(uid: str, dream_id: str, *, char_id: str) -> bool:
                 char_id=char_id,
                 lifecycle=CONTINUATION_CANCELLED,
                 reason_code="new_user_turn",
+                owner_turn_seq=owner_turn_seq,
             )
             return False
     except Exception:
@@ -96,6 +111,7 @@ def enqueue(uid: str, dream_id: str, *, char_id: str) -> bool:
         char_id=char_id,
         lifecycle="pending",
         reason_code="continuation_queued",
+        owner_turn_seq=owner_turn_seq,
     )
     try:
         task = asyncio.create_task(_run_once(uid, dream_id, char_id=char_id))
@@ -117,11 +133,16 @@ def enqueue(uid: str, dream_id: str, *, char_id: str) -> bool:
     return True
 
 
-def _new_user_turn(uid: str, created_at: float) -> bool:
+def _new_user_turn(uid: str, created_at: float, owner_turn_seq: int | None = None) -> bool:
     try:
         from core.scheduler.proactive_ledger import continuity_status
 
-        last_user_message_at = float(continuity_status(uid).get("last_user_message_at") or 0.0)
+        continuity = continuity_status(uid)
+        if owner_turn_seq is not None:
+            current_turn_seq = _owner_turn_seq(uid)
+            if current_turn_seq is not None:
+                return current_turn_seq > owner_turn_seq
+        last_user_message_at = float(continuity.get("last_user_message_at") or 0.0)
         return last_user_message_at > float(created_at) + 0.001
     except Exception:
         return False
@@ -142,7 +163,7 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
         return
     created_at = float(row.get("created_at") or time.time())
 
-    if _new_user_turn(uid, created_at):
+    if _new_user_turn(uid, created_at, row.get("owner_turn_seq")):
         _lifecycle_record(
             uid,
             dream_id,
@@ -186,7 +207,11 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
             # Re-read all owner state after waiting for the gate. A real user
             # turn may have arrived while the continuation was queued.
             row = get_record(dream_id, char_id=char_id, delivery_kind=DELIVERY_CONTINUATION) or row
-            if _new_user_turn(uid, float(row.get("created_at") or created_at)):
+            if _new_user_turn(
+                uid,
+                float(row.get("created_at") or created_at),
+                row.get("owner_turn_seq"),
+            ):
                 _lifecycle_record(
                     uid,
                     dream_id,

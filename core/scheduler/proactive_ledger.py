@@ -37,7 +37,7 @@ _state: dict = {
     "daily_count": 0,
     "daily_logical_day": "",
     "recent": [],  # [{"trigger_name", "gist", "ts", "channel"}], 最近 3 条
-    "continuity_by_uid": {},  # uid -> {last_proactive_sent_at,last_user_message_at,consecutive_unanswered_talks,last_char_id}
+    "continuity_by_uid": {},  # uid -> {last_proactive_sent_at,last_user_message_at,user_turn_seq,consecutive_unanswered_talks,last_char_id}
 }
 _loaded = False
 _loaded_path_token: str | None = None
@@ -143,6 +143,7 @@ def _continuity(uid: str) -> dict:
     return _state["continuity_by_uid"].setdefault(str(uid), {
         "last_proactive_sent_at": 0.0,
         "last_user_message_at": 0.0,
+        "user_turn_seq": 0,
         "consecutive_unanswered_talks": 0,
         "last_char_id": "",
     })
@@ -183,15 +184,21 @@ def record_send(trigger_name: str, *, channel: str = "", gist: str = "", uid: st
     _persist()
 
 
-def record_user_message(uid: str) -> None:
+def record_user_message(uid: str) -> int:
     """Only a real owner message clears continuity; sensors/tools/internal events never call this."""
     _load()
     continuity = _continuity(str(uid))
     now = time.time()
+    try:
+        user_turn_seq = int(continuity.get("user_turn_seq") or 0) + 1
+    except (TypeError, ValueError):
+        user_turn_seq = 1
+    continuity["user_turn_seq"] = user_turn_seq
     continuity["last_user_message_at"] = now
     if now > float(continuity.get("last_proactive_sent_at") or 0):
         continuity["consecutive_unanswered_talks"] = 0
     _persist()
+    return user_turn_seq
 
 
 def continuity_status(uid: str) -> dict:
