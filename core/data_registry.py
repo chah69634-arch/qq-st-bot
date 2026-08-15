@@ -83,6 +83,7 @@ REGISTRY: dict[str, PathMeta] = {
     "memory_index":           PathMeta("derived",   "reality",         "per_char_user", "ignore"),
     "image_cache_dir":        PathMeta("derived",   "shared",          "global",        "ignore"),
     "inbox_dir":              PathMeta("derived",   "shared",          "global",        "ignore"),
+    "memory_character_ids":   PathMeta("derived",   "reality",         "per_char",      "ignore"),
 
     # ── S6: per-user memory 新布局 ──────────────────────────────────────────────
     # user_memory_root: 每用户在 memory/{char_id}/{uid}/ 下的根目录（写入目标）
@@ -235,6 +236,13 @@ REGISTRY: dict[str, PathMeta] = {
     "dream_group_state_path":     PathMeta("canonical", "dream", "per_group", "ignore"),
     "dream_group_settings_path":  PathMeta("canonical", "dream", "per_group", "ignore"),
     "dream_group_arbiter_trace":  PathMeta("forensic",  "dream", "per_group", "ignore"),
+    "dream_group_transition_audit": PathMeta("forensic", "dream", "per_group", "ignore"),
+
+    # ── Dream observability ledgers ──────────────────────────────────────────
+    # These ledgers contain bounded metadata only; they are not transcript or
+    # prompt sources and are exposed through the read-only Dream operations API.
+    "dreams_exit_lifecycle_path": PathMeta("canonical", "dream", "per_char", "ignore"),
+    "dreams_scenario_progress_audit_path": PathMeta("forensic", "dream", "per_char", "ignore"),
 
     # ── Private exchange: off-hours char-to-char sessions (Brief 86) ──────────
     # _private/ root — no per-call params, just the scan root for all pairs.

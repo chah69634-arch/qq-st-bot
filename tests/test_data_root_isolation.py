@@ -25,7 +25,7 @@ def test_high_confidence_test_identifiers_are_classified(value):
     assert is_test_identifier(value)
 
 
-@pytest.mark.parametrize("value", ["owner", "1043484516", "testimony", "user_testimony"])
+@pytest.mark.parametrize("value", ["owner", "1234567890", "testimony", "user_testimony"])
 def test_normal_user_identifiers_are_not_classified(value):
     assert not is_test_identifier(value)
 
