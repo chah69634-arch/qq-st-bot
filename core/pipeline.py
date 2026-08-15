@@ -1003,8 +1003,16 @@ class Pipeline:
             _self_management_state = _self_management_view(uid, char_id) if _self_management_enabled() else {"capabilities": []}
             _rows = _self_management_state.get("capabilities", [])
             _mutable_rows = [row for row in _rows if row.get("system_available") and (row.get("grant") or {}).get("allowed") and (row.get("grant") or {}).get("mutable_by_agent") and not row.get("locked")]
-            if _mutable_rows:
-                _info = _TOOL_REGISTRY["manage_self_capability"]
+            _gateway_name = "manage_self_capability"
+            _gateway_allowed_by_call = (
+                _gateway_name not in excluded_tool_names
+                and (
+                    caller_allowed_tool_names is None
+                    or _gateway_name in caller_allowed_tool_names
+                )
+            )
+            if _mutable_rows and _gateway_allowed_by_call:
+                _info = _TOOL_REGISTRY[_gateway_name]
                 tools.append({"type": "function", "function": {"name": "manage_self_capability", "description": _info["description"], "parameters": _info["parameters"]}})
                 self_management_context = {
                     "revision": _self_management_state.get("revision", 0),
@@ -1029,7 +1037,6 @@ class Pipeline:
                 # The built-in tool page must not turn currently connected
                 # dynamic entries into an incomplete, persistent MCP catalogue.
                 if _TOOL_REGISTRY.get((tool.get("function") or tool).get("name", ""), {}).get("category") == "mcp"
-                or (tool.get("function") or tool).get("name") == "manage_self_capability"
                 or (tool.get("function") or tool).get("name") in preset_allowed_tool_names
             ]
             logger.info(

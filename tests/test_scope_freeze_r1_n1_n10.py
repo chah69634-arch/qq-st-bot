@@ -141,7 +141,18 @@ async def test_n1_scope_frozen_across_fetch_build_post(sandbox, monkeypatch):
         frozen_char_ids["fetch"] = frozen_scope.character_id if frozen_scope else None
         return {}
 
-    def _spy_build(uid, content, context, tool_result=None, tags=None, channel=None, char_id=None):
+    def _spy_build(
+        uid,
+        content,
+        context,
+        tool_result=None,
+        tags=None,
+        channel=None,
+        char_id=None,
+        tool_result_status=None,
+        tool_result_generated_at=None,
+        **kwargs,
+    ):
         frozen_char_ids["build"] = char_id
         return [], {"pending_paths": []}
 

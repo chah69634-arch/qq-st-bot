@@ -1192,12 +1192,37 @@ _TOOL_REGISTRY["manage_self_capability"] = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["enable", "disable", "set_value"]},
-            "capability_id": {"type": "string", "maxLength": 160},
-            "value": {"type": ["boolean", "integer", "string", "array", "object", "null"]},
-            "reason": {"type": "string", "minLength": 1, "maxLength": 240},
-            "expected_revision": {"type": "integer", "minimum": 0},
-            "action_id": {"type": "string", "minLength": 1, "maxLength": 128},
+            "action": {
+                "type": "string",
+                "enum": ["enable", "disable", "set_value"],
+                "description": "要执行的受授权变更类型：启用、停用或在约束内设置值。",
+            },
+            "capability_id": {
+                "type": "string",
+                "maxLength": 160,
+                "description": "当前用户明确授权且允许角色修改的能力 ID。",
+            },
+            "value": {
+                "type": ["boolean", "integer", "string", "array", "object", "null"],
+                "description": "仅 set_value 使用的新值，必须符合该能力的约束。",
+            },
+            "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "description": "这次变更的简短原因，会进入有界审计记录。",
+            },
+            "expected_revision": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "发起调用前看到的能力状态 revision；不一致时拒绝，避免覆盖用户新改动。",
+            },
+            "action_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "本次变更的幂等 action ID；重试同一 ID 不会重复写入。",
+            },
         },
         "required": ["action", "capability_id", "reason", "expected_revision", "action_id"],
     },

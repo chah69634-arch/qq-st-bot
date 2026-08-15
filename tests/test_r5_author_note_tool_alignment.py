@@ -66,7 +66,14 @@ def _get_author_note_text(messages: list[dict]) -> str:
     return ""
 
 
-def _build_minimal(monkeypatch, *, tool_result=None, user_message="你好"):
+def _build_minimal(
+    monkeypatch,
+    *,
+    tool_result=None,
+    user_message="你好",
+    tool_result_status=None,
+    tool_result_generated_at=None,
+):
     """用最小参数调用 build()，返回 (messages, meta)。"""
     _apply_build_stubs(monkeypatch)
 
@@ -83,6 +90,8 @@ def _build_minimal(monkeypatch, *, tool_result=None, user_message="你好"):
         profile={},
         group_context=[],
         tool_result=tool_result,
+        tool_result_status=tool_result_status,
+        tool_result_generated_at=tool_result_generated_at,
         char_id="yexuan",
     )
     return messages, meta
@@ -243,17 +252,37 @@ def test_layer10_adapts_and_frames_only_safe_tool_result(monkeypatch):
         calls["to_tool_result"] = value
         return real_to_tool_result(value)
 
-    def _spy_frame_tool_result(safe_summary, char_name=None):
+    def _spy_frame_tool_result(
+        safe_summary,
+        char_name=None,
+        *,
+        generated_at=None,
+        validity=None,
+    ):
         calls["safe_summary"] = safe_summary
-        return real_frame_tool_result(safe_summary, char_name=char_name)
+        calls["generated_at"] = generated_at
+        calls["validity"] = validity
+        return real_frame_tool_result(
+            safe_summary,
+            char_name=char_name,
+            generated_at=generated_at,
+            validity=validity,
+        )
 
     monkeypatch.setattr(_tr, "to_tool_result", _spy_to_tool_result)
     monkeypatch.setattr(_tr, "frame_tool_result", _spy_frame_tool_result)
-    messages, _ = _build_minimal(monkeypatch, tool_result=raw)
+    messages, _ = _build_minimal(
+        monkeypatch,
+        tool_result=raw,
+        tool_result_status="tool_executed",
+        tool_result_generated_at=123.5,
+    )
     layer10 = next(m["content"] for m in messages if m.get("_layer") == "10_tool_result")
 
     assert calls["to_tool_result"] is raw
     assert calls["safe_summary"] == "SAFE"
+    assert calls["generated_at"] == 123.5
+    assert calls["validity"] == "current_turn"
     assert "SAFE" in layer10
     assert "SECRET" not in layer10
 

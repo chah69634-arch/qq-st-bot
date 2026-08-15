@@ -685,9 +685,13 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
 | `origin="autonomy_loop"` | autonomy runner 受限工具调用 |
 | `origin="admin_console"` | 管理面 MCP Tool-call Console |
+| `origin="assistant_self_management"` | Path C 原生 tool call 的 self-management gateway；不能执行普通业务工具 |
+| `origin="autonomy_self_management"` | autonomy 的 self-management gateway；不能执行普通业务工具 |
 
-白名单还包括 `autonomy_loop`、`admin_console` 与 self-management 专用 origin；所有 origin 均只是在
-统一 dispatcher 内标记调用来源，不改变权限或类别边界。
+白名单还包括 `autonomy_loop`、`admin_console` 与两个 self-management 专用 origin；所有 origin 均只是在
+统一 dispatcher 内标记调用来源，不改变权限或类别边界。`manage_self_capability` 只有在全局 Self
+Capability 开启、当前角色存在用户已授权且 `mutable_by_agent` 的未锁定能力时才加入 Path C 或 autonomy
+schema；Path C 的 `exclude_tools`、调用方白名单和 chat tool preset 仍可将它排除。
 Path A 的 pending confirmation、missing input、快速路径和普通探针均由
 `core.pretool_router.route_pretool()` 收口，并显式传入 `origin="user_live"`；旧入口只保留兼容薄封装。
 

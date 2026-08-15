@@ -95,7 +95,15 @@ async def test_execute_unknown_origins_rejected(sandbox):
         )
 
     assert _EXECUTE_ALLOWED_ORIGINS == frozenset(
-        {"user_live", "assistant_loop", "assistant_loop_relay", "admin_console"}
+        {
+            "user_live",
+            "assistant_loop",
+            "assistant_loop_relay",
+            "autonomy_loop",
+            "admin_console",
+            "assistant_self_management",
+            "autonomy_self_management",
+        }
     )
 
 

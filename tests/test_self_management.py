@@ -87,7 +87,7 @@ def test_management_tool_is_hidden_from_regular_schema_and_rejects_regular_origi
     assert "manage_self_capability" not in {schema["function"]["name"] for schema in get_tools_schema(uid="u1", char_id="char_a")}
     result, confirm = asyncio.run(execute("manage_self_capability", {"action": "disable", "capability_id": "autonomy.enabled", "reason": "quiet", "expected_revision": 0, "action_id": "a1"}, "u1", "u1", False, object(), origin="assistant_loop", char_id="char_a"))
     assert confirm is None
-    assert "unavailable" in result.lower()
+    assert "自主管理" in result
 
 
 def test_self_management_origin_cannot_execute_a_business_tool(sandbox):
@@ -97,7 +97,7 @@ def test_self_management_origin_cannot_execute_a_business_tool(sandbox):
 
     result, confirm = asyncio.run(execute("get_time", {}, "u1", "u1", False, object(), origin="autonomy_self_management", char_id="char_a"))
     assert confirm is None
-    assert "only change self capability" in result.lower()
+    assert "只能修改自身能力" in result
 
 
 def test_admin_routes_use_active_owner_character_scope(sandbox, monkeypatch):

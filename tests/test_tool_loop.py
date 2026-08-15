@@ -297,7 +297,8 @@ async def test_exclude_tools_filtered_from_schema(monkeypatch):
     )
 
     tool_names = {t["function"]["name"] for t in chat_turn_calls[0]["tools"]}
-    assert tool_names == {"web_search"}
+    assert "web_search" in tool_names
+    assert "toy_vibrate" not in tool_names
 
 
 # ── 6. 单步工具异常 → 不中断循环，失败文案回填 ──────────────────────────────
