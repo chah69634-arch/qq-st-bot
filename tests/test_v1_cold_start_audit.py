@@ -51,14 +51,23 @@ def test_clean_install_has_a_loadable_neutral_character_seed():
 
 def test_cold_start_runbook_documents_recovery_and_readiness_contract():
     text = Path("docs/v1-cold-start-single-user-deployment.md").read_text(encoding="utf-8")
-    for marker in (
-        "## Clean install",
-        "## Conservative defaults",
-        "## Readiness checklist",
-        "## v0.2.2 migration",
-        "backup-state create",
-        "backup-state restore",
-        "restart_miss_policy: skip",
-        "## External MCP failure behavior",
-    ):
-        assert marker in text
+    sections = {
+        "## 全新安装": ("config.example.yaml", "setup_auth.py", "python main.py"),
+        "## 保守默认值": ("scheduler.enabled: false", "/settings/mcp"),
+        "## 就绪检查表": ("/admin/autonomy/effective-state", "scoped panel token"),
+        "## v0.2.2 迁移": ("--fail-on-diverged --fail-on-invalid", "preview source"),
+        "## Backup、restore 与 retention": (
+            "backup-state create",
+            "backup-state restore",
+            "<new-empty-directory>",
+        ),
+        "## 外部 MCP 失败行为": ("unavailable", "本地聊天继续运行"),
+    }
+    for heading, markers in sections.items():
+        assert heading in text
+        for marker in markers:
+            assert marker in text
+
+    assert "restart_miss_policy: skip" in text
+    assert "轮换 token" in text
+    assert "不要向公网暴露 plain HTTP" in text

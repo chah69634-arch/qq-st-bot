@@ -8,7 +8,8 @@ tests/test_profile_location_fallback.py — 2026-07-25，茶茶反馈
    同一新值被"连续 2 次一致提取"才落盘覆盖；但 location 属于"此刻状态"，用户通常
    只提一次就不会再重复，导致 pending 永远停在 count=1，location 从此追不上现实
    （见 tests/test_user_profile_override.py 里新增的 8/8b 用例，覆盖机制本身）。
-2. main.py 里 `_profile.get("location", "杭州")` 是经典 dict.get(key, default) 误用：
+2. 普通消息的实际 probe 入口 `core/pretool_router.py` 里 `_profile.get("location", "杭州")`
+   是经典 dict.get(key, default) 误用：
    default 只在 key 缺失时生效，但 user_profile 的默认 schema 里 "location" 这个 key
    永远存在（未设置时值是 None，不是缺失）。所以这一行从未真正触发过"杭州"兜底，
    location 为 None 时会把 None 传进 core/tool_dispatcher.py::get_probe_prompt()，
@@ -36,15 +37,18 @@ def test_dict_get_with_default_does_not_fall_back_on_none_value():
     )
 
 
-def test_main_py_uses_or_fallback_not_get_default_for_location():
-    """静态回归：main.py 不应再出现 `.get("location", "杭州")` 这种旧写法。"""
+def test_pretool_router_uses_or_fallback_not_get_default_for_location():
+    """静态回归：canonical probe 路由不应再使用 dict.get 默认值兜底。"""
     import main as _main
+    from core import pretool_router
 
-    src = inspect.getsource(_main)
+    main_src = inspect.getsource(_main)
+    src = inspect.getsource(pretool_router)
+    assert "from core.pretool_router import" in main_src
     assert '_profile.get("location", "杭州")' not in src, (
-        "main.py 不应再用 dict.get(key, default) 给 location 兜底"
+        "canonical probe router 不应再用 dict.get(key, default) 给 location 兜底"
         "（该写法在 location 已存在但为 None 时不生效，见本文件顶部说明）"
     )
-    assert '_profile.get("location") or "杭州"' in src, (
-        "main.py 应使用 profile.get('location') or '杭州' 的写法"
+    assert 'user_profile.load(uid, char_id=char_id).get("location") or "杭州"' in src, (
+        "canonical probe router 应使用 profile.get('location') or '杭州' 的写法"
     )
