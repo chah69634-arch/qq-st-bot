@@ -128,8 +128,10 @@ bridge，PresenceKit 不会持久化它；该字段仅检查 PresenceKit 当前�
 `event` / `reason` / `policy_lane` / `disposition` 记录 ingress、drain、gate、pipeline 和 terminal
 结果；绝不记录 message、token、请求体、外部 ID 或 MCP 返回正文。
 
-页面的「发送测试唤醒」调用 `POST /integrations/garden/test-wake`（`admin`）。它只组装
-`reason=manual_test` 的低信任 hint，然后复用正式 `POST /integrations/garden/wake` 的提交逻辑。
+当前版本的 Integrations 管理页处于冻结状态，不提供「发送测试唤醒」按钮，也不会主动调用
+`POST /integrations/garden/test-wake`。该 `admin` 端点仅作为受保护的兼容入口保留：调用方只可提交
+`reason=manual_test` 的低信任 hint，后端仍复用正式 `POST /integrations/garden/wake` 的提交逻辑。
+协议稳定并重新开放管理入口前，不应把该端点描述为当前 UI 能力。
 该操作不 inline drain，不直接调用 LLM、turn sink 或 MCP；owner active、DND、Dream Guard、预算和
 cooldown 仍然会使记录保持 `pending`。PowerShell 模板只使用路径占位符和当前后端地址；integration token
 只会在创建/轮换时显示一次，之后仅显示已配置状态。
