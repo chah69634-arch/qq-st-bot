@@ -286,7 +286,11 @@ class TestDreamExit:
         assert resp.status_code in (401, 403)
 
     def test_correct_token_passes_auth(self, authed):
-        with patch("core.dream.dream_pipeline.force_exit_dream", new_callable=AsyncMock):
+        with patch(
+            "core.dream.dream_pipeline.force_exit_dream",
+            new_callable=AsyncMock,
+            return_value={"status": "closed"},
+        ):
             resp = authed.post("/dream/exit")
             assert resp.status_code not in (401, 403)
 

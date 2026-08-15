@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from admin.auth import TokenInfo, require_scopes
 from core.owner_turn_service import (
@@ -32,8 +32,7 @@ class OwnerTurnRequest(BaseModel):
     reply_to: dict | None = None
     upload_ids: list[str] | None = None
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 def _require_owner_input(info: TokenInfo) -> None:

@@ -39,4 +39,4 @@ def test_control_center_endpoint_and_overview_use_the_contract():
 
 def test_overview_static_asset_version_is_explicit():
     index = (Path(__file__).parents[1] / "admin" / "static" / "index.html").read_text(encoding="utf-8")
-    assert "/static/js/overview.js?v=admin-global-effective-state-overview-1" in index
+    assert "/static/js/overview.js?v=brief-180-admin-static-1" in index

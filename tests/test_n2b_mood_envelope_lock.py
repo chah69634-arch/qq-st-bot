@@ -15,7 +15,6 @@ tests/test_n2b_mood_envelope_lock.py — N2-B 验收测试
   T11 main.py 对 thinking 调用已改为 await（源码检查）
   T12 main.py 传入 qq envelope 给 thinking helper（源码检查）
 """
-import asyncio
 import inspect
 import re
 import types
@@ -353,13 +352,13 @@ class TestHelperIsAsync:
 
     def test_maybe_mark_sleepy_is_coroutinefunction(self):
         from core.mood_helpers import maybe_mark_sleepy_from_time
-        assert asyncio.iscoroutinefunction(maybe_mark_sleepy_from_time), (
+        assert inspect.iscoroutinefunction(maybe_mark_sleepy_from_time), (
             "maybe_mark_sleepy_from_time 不是 async def。N2-B 要求 helper 为异步函数。"
         )
 
     def test_mark_tool_thinking_is_coroutinefunction(self):
         from core.mood_helpers import mark_tool_thinking_mood
-        assert asyncio.iscoroutinefunction(mark_tool_thinking_mood), (
+        assert inspect.iscoroutinefunction(mark_tool_thinking_mood), (
             "mark_tool_thinking_mood 不是 async def。N2-B 要求 helper 为异步函数。"
         )
 

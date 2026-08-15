@@ -172,7 +172,7 @@ def test_character_permissions_requires_auth_and_returns_shape(sandbox, monkeypa
     assert payload["char_id"] == "yexuan"
     assert "current_mode" in payload
     cats = {c["category"] for c in payload["categories"]}
-    assert cats == {"info", "desktop", "memory", "system", "fs", "phone_control"}
+    assert cats == {"info", "desktop", "memory", "system", "fs", "phone_control", "mcp"}
     desktop = next(c for c in payload["categories"] if c["category"] == "desktop")
     assert desktop["mode_restricted"] is True
     info_cat = next(c for c in payload["categories"] if c["category"] == "info")
