@@ -848,6 +848,18 @@ def get_status() -> dict:
 async def manual_trigger(name: str) -> str:
     """Queue a manual autonomy opportunity; this endpoint never sends a turn."""
     from core.scheduler.gating import MIGRATED_TRIGGERS
+
+    # Validate the owner-side period input before the generic migrated branch.
+    # A missing date is a configuration/input result, not an autonomy signal.
+    if name == "period_reminder":
+        oid = _owner_id()
+        if not oid:
+            return "owner_id 未配置"
+        from core.memory.health_state import get_period_info
+        if not get_period_info(oid).get("last_period_date"):
+            logger.info("[period] missing_period_date")
+            return "missing_period_date"
+
     if name in MIGRATED_TRIGGERS:
         oid = _owner_id()
         char_id = _active_char_id_or_none()
@@ -908,26 +920,6 @@ async def manual_trigger(name: str) -> str:
                 oid, char_id, "管理员发起的测试来信", execution_id=execution_id,
             )
             return f"letter_writer execution_id={execution_id} sent={result.sent}"
-        elif name == "period_reminder":
-            oid = _owner_id()
-            if not oid:
-                return "owner_id 未配置"
-            from core.memory.health_state import get_period_info
-            from datetime import date as _date
-            info = get_period_info(oid)
-            last_date_str = info.get("last_period_date")
-            if not last_date_str:
-                logger.info("[period] missing_period_date")
-                return "missing_period_date"
-            last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
-            days_elapsed = (_date.today() - last_date).days
-            await _pipeline_send(
-                f"（{_char_name()}记得你的生理期已经来了{days_elapsed}天，悄悄关心一下）",
-                trigger_name="period_reminder",
-                search_query="生理期",
-                recall_policy="anchored",
-            )
-            _mark("period_reminder")
         elif name == "diary_reminder":
             oid = _owner_id()
             if not oid:

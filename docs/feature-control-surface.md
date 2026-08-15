@@ -110,7 +110,9 @@ runtime values, source lifecycle, talk gate, cooldown, daily budgets, runtime ta
 and the owning runtime consumer. Scheduler/autonomy pages should consume this contract instead of
 inferring state from unrelated status/config/ledger responses. Manual trigger endpoints are
 test-only queue fixtures and advertise `direct_delivery=false`; they never bypass production
-autonomy admission.
+autonomy admission. `period_reminder` additionally returns `missing_period_date` without queueing
+when the owner-side period input is absent; a valid date still follows the migrated signal-first
+path and never invokes direct delivery.
 
 The control-center overview reads `GET /admin/control-center/effective-state` (`state.read`) as
 its only global state source. The contract includes a row for Tool Loop, MCP, Self Capability,

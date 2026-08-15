@@ -22,6 +22,7 @@ def test_talk_switch_reaches_autonomy_runtime_schema(sandbox, monkeypatch):
     from core.autonomy import runner, store
     from core.autonomy.models import Job, Run
 
+    _admission_ready(monkeypatch)
     state = store.load("owner", "char")
     state["config"].update({"enabled": True, "talk_enabled": False, "max_steps": 1})
     monkeypatch.setattr(runner.policy, "allowed_tools", lambda *_args: [])
@@ -39,7 +40,9 @@ def test_talk_switch_reaches_autonomy_runtime_schema(sandbox, monkeypatch):
         state,
         Run(uid="owner", char_id="char", source="manual", job_id="job"),
     ))
-    assert "talk_owner" not in seen[0]
+    # talk_enabled=false is an effective runtime gate; the runner may still
+    # perform a model step for tools, but it must not expose talk_owner.
+    assert all("talk_owner" not in names for names in seen)
     assert any(event.get("status") == "talk_unavailable" and event.get("reason") == "talk_disabled" for event in run.events)
 
 

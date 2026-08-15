@@ -70,6 +70,10 @@ Autonomy 启用时，scheduler 的 native proposal pass 仍作为只读 shadow a
 
 手动 scheduler trigger 会排队同类型的 opportunity，绝不强制直接发送 assistant message。Delivery 还会记录 opportunity correlation ID；已被 claim 的 ID 会在下一次 `talk_owner` send 前拒绝。
 
+`manual_trigger("period_reminder")` 是同一 signal-first 合约的输入校验例外：owner 没有
+`last_period_date` 时返回稳定原因 `missing_period_date` 且不入队；有日期时只创建 autonomy
+opportunity，不恢复旧的 `_pipeline_send` 直发路径。
+
 ## Unified Effective State
 
 `GET /admin/autonomy/effective-state`（`state.read`）是 scheduler/autonomy control surface 的只读生效状态契约。它是管理页面读取开关的唯一后端入口，返回 `contract_version`、配置值、effective runtime value、override source、`restart_required` 和唯一 runtime consumer。契约还包含 scheduler task availability、autonomy queue/circuit、`talk_owner` gate、全局发送 cooldown、autonomy evaluation/daily talk budget，以及每个 trigger 的 `migrated` / `maintenance-only` / `retired` / `active` lifecycle status。

@@ -31,39 +31,50 @@ def _patch_env(monkeypatch, *, user_active: bool = False, dnd_active: bool = Fal
 
 def _patch_ledger_gap_exhausted(monkeypatch):
     """模拟"全局间隔未到"：normal 优先级一律拒绝，emergency 优先级放行（真实 ledger 语义）。"""
-    def fake_can_send(trigger_name, *, priority="normal"):
+    calls = []
+
+    def fake_can_send(trigger_name, *, priority="normal", uid=""):
+        calls.append((trigger_name, priority, uid))
         if priority == "emergency":
             return True, "emergency_exempt"
         return False, "gap_not_elapsed"
 
     monkeypatch.setattr("core.scheduler.proactive_ledger.can_send", fake_can_send)
+    return calls
 
 
 def test_random_message_is_crowded_out_by_ledger_gap(monkeypatch):
     """对照组：非豁免触发器在全局间隔未到时应被顶掉。"""
     _patch_env(monkeypatch)
-    _patch_ledger_gap_exhausted(monkeypatch)
+    calls = _patch_ledger_gap_exhausted(monkeypatch)
     picked, reason, _ = _decide("u1", [_proposal("random_message")])
     assert picked is None
     assert reason == "global_gap_filtered"
+    assert calls == [("random_message", "normal", "u1")]
 
 
 def test_birthday_midnight_bypasses_ledger_gap(monkeypatch):
     _patch_env(monkeypatch)
-    _patch_ledger_gap_exhausted(monkeypatch)
+    calls = _patch_ledger_gap_exhausted(monkeypatch)
     picked, reason, _ = _decide("u1", [_proposal("birthday_midnight")])
     assert picked is not None
     assert picked.trigger_name == "birthday_midnight"
     assert reason == "picked_highest_urgency"
+    assert calls == [("birthday_midnight", "emergency", "u1")]
 
 
 def test_birthday_eve_afternoon_night_all_bypass_ledger_gap(monkeypatch):
     _patch_env(monkeypatch)
-    _patch_ledger_gap_exhausted(monkeypatch)
+    calls = _patch_ledger_gap_exhausted(monkeypatch)
     for name in ("birthday_eve", "birthday_afternoon", "birthday_night"):
         picked, reason, _ = _decide("u1", [_proposal(name)])
         assert picked is not None and picked.trigger_name == name, name
         assert reason == "picked_highest_urgency", name
+    assert calls == [
+        ("birthday_eve", "emergency", "u1"),
+        ("birthday_afternoon", "emergency", "u1"),
+        ("birthday_night", "emergency", "u1"),
+    ]
 
 
 def test_birthday_midnight_still_blocked_by_dnd(monkeypatch):
@@ -77,7 +88,11 @@ def test_birthday_midnight_still_blocked_by_dnd(monkeypatch):
 def test_birthday_picked_over_normal_trigger_when_both_pass_ledger(monkeypatch):
     """生日豁免 ledger、random_message 未豁免且被拒时，生日单独入选。"""
     _patch_env(monkeypatch)
-    _patch_ledger_gap_exhausted(monkeypatch)
+    calls = _patch_ledger_gap_exhausted(monkeypatch)
     picked, reason, _ = _decide("u1", [_proposal("random_message", urgency=0.9), _proposal("birthday_night")])
     assert picked is not None
     assert picked.trigger_name == "birthday_night"
+    assert calls == [
+        ("random_message", "normal", "u1"),
+        ("birthday_night", "emergency", "u1"),
+    ]

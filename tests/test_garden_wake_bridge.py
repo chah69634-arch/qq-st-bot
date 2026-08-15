@@ -238,8 +238,8 @@ def _patch_time_sensitive_gate(monkeypatch, *, user_active=False, dnd_active=Fal
     monkeypatch.setattr(gating, "get_current_state", lambda uid: state or TriggerState.CHATTING)
     monkeypatch.setattr(gating, "is_trigger_ready", lambda *args, **kwargs: True)
 
-    def can_send(trigger_name, *, priority):
-        calls.append((trigger_name, priority))
+    def can_send(trigger_name, *, priority, uid=""):
+        calls.append((trigger_name, priority, uid))
         return (priority == "emergency", "emergency_exempt" if priority == "emergency" else ledger_reason)
 
     monkeypatch.setattr(ledger, "can_send", can_send)
@@ -255,7 +255,7 @@ def test_game_turn_time_sensitive_lane_bypasses_ordinary_ledger(garden_env, monk
 
     assert picked is not None and reason == "picked_highest_urgency"
     assert picked.time_sensitive_external_turn is True
-    assert calls == [("garden_wake_hint", "emergency")]
+    assert calls == [("garden_wake_hint", "emergency", "owner-1")]
 
 
 def test_game_turn_bypasses_owner_active_and_chatting_state_but_not_dnd(garden_env, monkeypatch):
@@ -264,7 +264,7 @@ def test_game_turn_bypasses_owner_active_and_chatting_state_but_not_dnd(garden_e
     calls = _patch_time_sensitive_gate(monkeypatch, user_active=True, state=None)
     picked, reason, _ = _decide("owner-1", [_garden_proposal()])
     assert picked is not None and reason == "picked_highest_urgency"
-    assert calls == [("garden_wake_hint", "emergency")]
+    assert calls == [("garden_wake_hint", "emergency", "owner-1")]
 
     _patch_time_sensitive_gate(monkeypatch, user_active=True, dnd_active=True, state=None)
     picked, reason, _ = _decide("owner-1", [_garden_proposal()])
@@ -280,7 +280,7 @@ def test_ordinary_garden_reasons_do_not_use_time_sensitive_lane(garden_env, monk
     picked, gate_reason, _ = _decide("owner-1", [_garden_proposal(reason)])
 
     assert picked is None and gate_reason == "global_gap_filtered"
-    assert calls == [("garden_wake_hint", "normal")]
+    assert calls == [("garden_wake_hint", "normal", "owner-1")]
 
 
 @pytest.mark.parametrize("dream_guard_case", ["active", "uncertain"])

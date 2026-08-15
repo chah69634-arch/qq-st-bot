@@ -130,9 +130,14 @@ owner turn ──notify_owner_turn──→ state_machine
 sensor tick ─feed_sensor_tick───→ state_machine
                                   ↓
 loop.py tick ──gating log──→ logs/gating_shadow.jsonl
-        │      └─ winner execute_prompt() ──live──→ _pipeline_send() → 成功后 mark
+        │      └─ winner ──migrated──→ autonomy signal；compatibility──→ _pipeline_send()
         └────legacy/maintenance asyncio.gather──→ 未迁移检查或状态扫描
 ```
+
+`MIGRATED_TRIGGERS` 中的 winner 不再调用 LLM、`turn_sink` 或 channel；兼容边界
+`_pipeline_send()` 只把它转换为 autonomy signal 并返回 `None`。只有不在迁移注册表中的
+窄范围 compatibility trigger 才能走下方的 execution-only pipeline，最终是否向用户发言
+仍由 autonomy 的 `talk_owner` 或既有显式兼容调用方决定。
 
 非迁移兼容触发进入 `_pipeline_send()` 后的执行顺序（P1 gate）：
 
@@ -534,9 +539,9 @@ owner QQ 消息
     │         6. max urgency 选 winner
     │         7. release_defer(uid, winner) → defer_queue 释放 (R2-D)
     │     ↓ winner.execute(dry_run=False)
-    │         → execute_prompt() → _pipeline_send() → perceive_event gate
-    │           → conversation_lock → run_llm → record_assistant_turn
-    │           → 成功后 _mark(trigger_name)
+    │         → migrated: signal-first（不进入 pipeline）
+    │         → compatibility: execute_prompt() → _pipeline_send() → perceive_event gate
+    │           → conversation_lock → run_llm → record_assistant_turn → _mark
     └─ legacy asyncio.gather(_check_*...)
           speaking 触发器: legacy_tick_should_send()=False → 让路（no-op）
           maintenance 触发器: 正常执行（不发言，不受 gating/DND 影响）
@@ -544,7 +549,8 @@ owner QQ 消息
 
 **最终合约**：
 - 发言 trigger winner 决策 **只在** `gating._decide()`（含 POLICY_TABLE + defer_queue + DND + state）。
-- `_pipeline_send()` / `execution.execute_prompt()` **只负责** send + mark；block/defer 不调 `_mark()`。
+- migrated winner 不进入 `_pipeline_send()` 的 LLM/channel 段；compatibility 的
+  `_pipeline_send()` / `execution.execute_prompt()` **只负责** send + mark，block/defer 不调 `_mark()`。
 - maintenance tick 不受 active-window / DND / defer 误伤（不在 MIGRATED_TRIGGERS，不走发言路径）。
 - `WATCH_EXECUTE_MODE` 仅是事件到达时 live/dry-run 的 rollback/config switch；两种模式都经过统一 `gating._decide()`。
 - `policy.py` 是运行时决策权威，被 `gating.py` 通过延迟 import 引用，`loop.py` 不直接引用。
@@ -553,7 +559,7 @@ owner QQ 消息
 
 | 编号 | 执行面 | 文件 | 状态 |
 |---|---|---|---|
-| S1 | **Gating/Proposer live 路径** | `gating.py::run_shadow_tick()` → `execute_prompt()` → `_pipeline_send()` | 生产活跃；winner 通过 `execute(dry_run=False)` 真实发送 |
+| S1 | **Gating/Proposer live 路径** | `gating.py::run_shadow_tick()` → signal 或 compatibility executor | migrated winner 只入 autonomy signal；仅未迁移 compatibility trigger 进入 `_pipeline_send()` |
 | S2 | **Legacy `_check_*` gather 路径** | `loop.py::_loop()` → `asyncio.gather(_check_*...)` | 生产活跃；speaking 触发器通过 `legacy_tick_should_send()` 在 live 模式下让路，维护型触发器仍正常运行 |
 | S3 | **`legacy_tick_should_send()` 让路垫片** | `execution.py` | 当前 `EXECUTE_MODE="live"` → 返回 False，阻止 legacy speaking 触发器双发 |
 | S4 | **Watch 事件到达 adapter** | `triggers/watch.py` → `gating.decide_and_execute_event()` | `WATCH_EXECUTE_MODE` 仅切换事件到达时 live/dry-run；hr_critical/hr_high/sleep_end 均经过 `_decide()`，普通 tick 可重试缓存 proposal |
@@ -699,7 +705,8 @@ await record_assistant_turn(
 )
 ```
 
-Pipeline 未注入时降级：直接发送 prompt 原文（不经过 LLM）。
+Pipeline 未注入时，只有未迁移 compatibility trigger 才可降级直接发送 prompt 原文（不经过 LLM）。
+迁移触发器在 pipeline lookup 之前就已转为 autonomy signal，因此不会因为 pipeline 缺失而恢复旧直发。
 
 `_pipeline_send` 支持 `output_mode` 参数（默认 `"speak"`）：
 
@@ -890,6 +897,9 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 - `get_status()` → 返回所有触发器的上次触发时间、冷却剩余秒数、是否 ready
 - `manual_trigger(name)` → test-only 兼容入口，只排队一个 autonomy signal；不绕过冷却、
   talk gate 或生产 admission，也不直接发送。HTTP 响应带 `direct_delivery=false`。
+- `manual_trigger("period_reminder")` 在 owner 没有 `last_period_date` 时稳定返回
+  `missing_period_date`，不创建 signal；有日期时仍只排队 migrated autonomy opportunity，
+  不恢复旧的 direct-send 分支。
 
 当前手动测试触发覆盖：`morning_greeting`、`night_reminder`、`random_message`、`daily_journal`、
 `period_reminder`、`diary_reminder`、`diary_share_reminder`、`topic_followup`、

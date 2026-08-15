@@ -17,6 +17,7 @@ def _isolated_ledger_state(sandbox, monkeypatch):
         "daily_count": 0,
         "daily_logical_day": "",
         "recent": [],
+        "continuity_by_uid": {},
     })
     monkeypatch.setattr(ledger, "_loaded", True)  # 跳过磁盘加载，state 已就位
     monkeypatch.setattr(ledger, "_cfg", lambda: {
@@ -113,3 +114,26 @@ def test_snapshot_reflects_config_gap_and_budget(_isolated_ledger_state):
     assert snap["effective_gap_seconds"] == 10
     assert snap["daily_budget"] == 2
     assert snap["daily_count"] == 0
+
+
+def test_continuity_cap_is_scoped_to_uid_and_empty_uid_keeps_owner_fallback(_isolated_ledger_state):
+    ledger = _isolated_ledger_state
+    ledger._cfg = lambda: {
+        "global_proactive_min_gap_seconds": 0,
+        "max_daily_proactive": 8,
+        "owner_id": "owner-1",
+    }
+
+    ledger.record_send("owner_trigger", uid="owner-1")
+    ledger.record_send("other_trigger", uid="owner-2")
+    ledger.record_send("owner_trigger_2", uid="owner-1")
+
+    allowed_owner, owner_reason = ledger.can_send("owner_trigger", uid="owner-1")
+    allowed_other, other_reason = ledger.can_send("other_trigger", uid="owner-2")
+    assert not allowed_owner and owner_reason == "unanswered_cap"
+    assert allowed_other and other_reason == "ok"
+
+    # Empty uid is a deliberate legacy compatibility boundary and resolves to
+    # the configured owner rather than silently creating a global continuity row.
+    allowed_legacy, legacy_reason = ledger.can_send("legacy_trigger")
+    assert not allowed_legacy and legacy_reason == "unanswered_cap"

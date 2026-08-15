@@ -425,7 +425,11 @@ async def handle_tick() -> None:
         from core.scheduler.proactive_ledger import can_send as _ledger_can_send
         from core.scheduler.triggers.dnd import is_dnd
 
-        _ledger_ok, _ledger_reason = _ledger_can_send("sensor_aware", priority="normal")
+        _ledger_ok, _ledger_reason = _ledger_can_send(
+            "sensor_aware",
+            priority="normal",
+            uid=_owner_id(),
+        )
         if not _ledger_ok:
             # 全局间隔/预算拦截：持续状态，非转换，降 DEBUG。
             logger.debug(

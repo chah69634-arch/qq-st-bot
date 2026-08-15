@@ -189,7 +189,7 @@ async def test_execute_prompt_dry_run_still_records(monkeypatch, sandbox):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_send_high_priority_exempt_from_active_window(monkeypatch):
+async def test_pipeline_send_non_migrated_compatibility_trigger_is_execution_only(monkeypatch):
     from core.scheduler import loop
 
     recorded = []
@@ -204,7 +204,33 @@ async def test_pipeline_send_high_priority_exempt_from_active_window(monkeypatch
     monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
-    result = await loop._pipeline_send("prompt", trigger_name="hr_critical")
+    result = await loop._pipeline_send("prompt", trigger_name="compatibility_trigger")
 
     assert result == "reply"
-    assert recorded and recorded[0]["trigger_name"] == "hr_critical"
+    assert recorded and recorded[0]["trigger_name"] == "compatibility_trigger"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_send_migrated_trigger_queues_signal_without_llm(monkeypatch):
+    from core.scheduler import loop
+
+    captured = {}
+
+    def emit(uid, char_id, trigger_name, **kwargs):
+        captured.update(uid=uid, char_id=char_id, trigger_name=trigger_name, kwargs=kwargs)
+        return True, "queued"
+
+    monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "char-a")
+    monkeypatch.setattr("core.autonomy.signal_adapters.emit_trigger_signal", emit)
+    monkeypatch.setattr(
+        "core.pipeline_registry.get",
+        lambda: (_ for _ in ()).throw(AssertionError("migrated trigger must not load pipeline")),
+    )
+
+    result = await loop._pipeline_send("legacy prompt", trigger_name="hr_critical")
+
+    assert result is None
+    assert captured["uid"] == "u1"
+    assert captured["char_id"] == "char-a"
+    assert captured["trigger_name"] == "hr_critical"

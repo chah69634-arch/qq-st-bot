@@ -369,8 +369,8 @@ class TestPipelineSendR2C:
         )
 
     @pytest.mark.asyncio
-    async def test_exempt_trigger_sends_when_user_active(self, monkeypatch):
-        """hr_critical (exempt) sends via gating path even when user is active."""
+    async def test_compatibility_trigger_sends_when_user_active(self, monkeypatch):
+        """A non-migrated compatibility trigger remains execution-only."""
         import core.scheduler.loop as loop
 
         recorded = []
@@ -385,13 +385,13 @@ class TestPipelineSendR2C:
         monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
         monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
-        result = await loop._pipeline_send("prompt", trigger_name="hr_critical")
+        result = await loop._pipeline_send("prompt", trigger_name="compatibility_trigger")
         assert result == "reply"
-        assert recorded and recorded[0]["trigger_name"] == "hr_critical"
+        assert recorded and recorded[0]["trigger_name"] == "compatibility_trigger"
 
     @pytest.mark.asyncio
-    async def test_pipeline_send_does_not_block_filler_directly(self, monkeypatch):
-        """R2-C: _pipeline_send no longer blocks filler triggers — that is gating's job."""
+    async def test_pipeline_send_does_not_block_compatibility_trigger_directly(self, monkeypatch):
+        """R2-C: a compatibility trigger is not re-gated in the execution layer."""
         import core.scheduler.loop as loop
 
         recorded = []
@@ -406,9 +406,9 @@ class TestPipelineSendR2C:
         monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
         monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
-        # random_message (filler/drop) is no longer blocked by _pipeline_send;
-        # gating already filtered it before execute() was called.
-        result = await loop._pipeline_send("prompt", trigger_name="random_message")
+        # The migrated random_message path is signal-only. This test covers the
+        # separate compatibility boundary, after gating has already run.
+        result = await loop._pipeline_send("prompt", trigger_name="compatibility_trigger")
         assert result == "reply"
 
     @pytest.mark.asyncio
@@ -426,7 +426,7 @@ class TestPipelineSendR2C:
         monkeypatch.setattr(_loop, "_mark", lambda name: marks.append(name))
 
         result = await execution.execute_prompt(
-            trigger_name="random_message",
+            trigger_name="compatibility_trigger",
             prompt_factory=lambda: "prompt",
             dry_run=False,
             would_mark=["random_message"],
@@ -455,7 +455,7 @@ class TestPipelineSendR2C:
         monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 
         # _pipeline_send itself no longer checks DND; gating already did.
-        result = await loop._pipeline_send("prompt", trigger_name="morning_greeting")
+        result = await loop._pipeline_send("prompt", trigger_name="compatibility_trigger")
         assert result == "reply"
 
 
