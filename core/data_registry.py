@@ -83,7 +83,6 @@ REGISTRY: dict[str, PathMeta] = {
     "memory_index":           PathMeta("derived",   "reality",         "per_char_user", "ignore"),
     "image_cache_dir":        PathMeta("derived",   "shared",          "global",        "ignore"),
     "inbox_dir":              PathMeta("derived",   "shared",          "global",        "ignore"),
-    "memory_character_ids":   PathMeta("derived",   "reality",         "per_char",      "ignore"),
 
     # ── S6: per-user memory 新布局 ──────────────────────────────────────────────
     # user_memory_root: 每用户在 memory/{char_id}/{uid}/ 下的根目录（写入目标）

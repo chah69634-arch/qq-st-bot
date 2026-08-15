@@ -262,7 +262,7 @@ def _project_canonical_result(turn_id: object, canonical_char_id: object = None)
     if active and active not in candidates:
         candidates.append(active)
     try:
-        for char_id in get_paths().memory_character_ids():
+        for char_id in get_paths()._memory_character_ids():
             if char_id not in candidates:
                 candidates.append(char_id)
     except Exception:

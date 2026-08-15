@@ -938,7 +938,7 @@ class DataPaths:
         用于 v1 模式下枚举所有用户（各 uid 是其直接子目录）。"""
         return self._p("runtime", "memory", char_id)
 
-    def memory_character_ids(self) -> list[str]:
+    def _memory_character_ids(self) -> list[str]:
         """Return safe character directory names for metadata-only cross-character lookup."""
         root = self._p("runtime", "memory")
         try:
