@@ -195,7 +195,11 @@ async def run_dream_stage_turn(
                 ),
                 timeout=_DREAM_STAGE_TURN_TIMEOUT_S,
             )
-        except TimeoutError as exc:
+        # Python 3.10's asyncio.wait_for() raises asyncio.TimeoutError,
+        # which is only an alias of built-in TimeoutError from 3.11 onward.
+        # Catch the asyncio contract explicitly so both supported runtimes
+        # reach the same terminal-state path.
+        except asyncio.TimeoutError as exc:
             logger.warning("[dream_runtime] round state=timed_out group=%s round=%s timeout_s=%s", group_id, resolved_round_id, _DREAM_STAGE_TURN_TIMEOUT_S)
             _mark_round_finished(group_id, resolved_round_id, error="timeout")
             raise TimeoutError(f"group dream round timed out after {_DREAM_STAGE_TURN_TIMEOUT_S:g}s") from exc
