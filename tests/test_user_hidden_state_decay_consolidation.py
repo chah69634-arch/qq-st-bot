@@ -59,6 +59,31 @@ def _half_life_expected(start: float, target: float, elapsed: float, hl: float) 
 
 class TestApplyTimeDecay:
 
+    @pytest.mark.parametrize(
+        ("now", "tick"),
+        [
+            ("2026-06-07T12:00:00Z", "2026-06-02T12:00:00Z"),
+            ("2026-06-07T12:00:00+00:00", "2026-06-02T12:00:00+00:00"),
+        ],
+    )
+    def test_at00_supported_utc_timestamp_forms(self, now, tick):
+        s = _state_with_decay_tick(tick)
+        s.sensitivity.current.value = 80.0
+        s.sensitivity.baseline.value = 50.0
+
+        result = apply_time_decay(s, now)
+
+        expected = _half_life_expected(80.0, 50.0, 5.0, CURRENT_SENS_REGRESS_HL_DAYS)
+        assert result.sensitivity.current.value == pytest.approx(expected, rel=1e-4)
+
+    def test_at00_invalid_timestamp_is_fail_closed(self):
+        s = _state_with_decay_tick(NOW)
+        s.sensitivity.current.value = 80.0
+
+        result = apply_time_decay(s, "not-a-timestamp")
+
+        assert result.sensitivity.current.value == pytest.approx(80.0)
+
     def test_at01_first_run_no_value_change_tick_updated(self):
         """AT-01: last_decay_tick=None → all scalar values unchanged, last_decay_tick set."""
         s = default_hidden_state()

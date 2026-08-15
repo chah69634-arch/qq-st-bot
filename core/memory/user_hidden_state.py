@@ -345,6 +345,21 @@ def _logistic_step(x: float, center: float = SCALAR_CENTER, steepness: float = 0
     return 1.0 / (1.0 + math.exp(-steepness * (x - center)))
 
 
+def _parse_iso_timestamp(value: str) -> datetime:
+    """Parse an ISO-8601 timestamp, including the Python 3.10 UTC ``Z`` form.
+
+    ``datetime.fromisoformat`` only gained direct support for a trailing ``Z``
+    in Python 3.11.  Keep the compatibility translation in one helper so the
+    decay and afterglow readers share the same timestamp contract while
+    retaining native handling for explicit offsets and invalid input.
+    """
+    if not isinstance(value, str):
+        raise TypeError("timestamp must be a string")
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    return datetime.fromisoformat(value)
+
+
 # ── F. Update function stubs ───────────────────────────────────────────────────
 
 
@@ -368,7 +383,7 @@ def apply_time_decay(state: UserHiddenState, now: str) -> UserHiddenState:
 
     try:
         elapsed_days = (
-            datetime.fromisoformat(now) - datetime.fromisoformat(state.last_decay_tick)
+            _parse_iso_timestamp(now) - _parse_iso_timestamp(state.last_decay_tick)
         ).total_seconds() / 86400.0
     except (ValueError, TypeError):
         elapsed_days = 0.0
@@ -918,7 +933,7 @@ def read_afterglow_residue(uid: str, now: str, *, char_id: str = DEFAULT_CHAR_ID
 
     try:
         age_hours = (
-            datetime.fromisoformat(now) - datetime.fromisoformat(created_at)
+            _parse_iso_timestamp(now) - _parse_iso_timestamp(created_at)
         ).total_seconds() / 3600.0
     except (ValueError, TypeError) as exc:
         _log.warning("[afterglow] uid=%s: cannot parse timestamps (%s) — discarding", uid, exc)

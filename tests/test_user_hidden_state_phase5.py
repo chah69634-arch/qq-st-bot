@@ -350,6 +350,23 @@ class TestReadAfterglowResidue:
             result = read_afterglow_residue("p5_uid", NOW)
         assert result is None
 
+    @pytest.mark.parametrize("created_at", [
+        "2026-06-03T08:00:00Z",
+        "2026-06-03T08:00:00+00:00",
+    ])
+    def test_RR04_supported_utc_timestamp_forms(self, created_at):
+        raw = self._make_raw("comfort", created_at)
+        with patch("core.memory.user_hidden_state_store._load_afterglow_raw", return_value=raw):
+            result = read_afterglow_residue("p5_uid", NOW)
+        assert result is not None
+        assert result.age_hours == pytest.approx(2.0)
+
+    def test_RR05_invalid_timestamp_returns_none(self):
+        raw = self._make_raw("comfort", "not-a-timestamp")
+        with patch("core.memory.user_hidden_state_store._load_afterglow_raw", return_value=raw):
+            result = read_afterglow_residue("p5_uid", NOW)
+        assert result is None
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # H. Write isolation — Dream must never directly write
