@@ -9,6 +9,7 @@ Covers:
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_THIRD_CHAR_ID
 
 import pytest
 from fastapi import FastAPI
@@ -37,7 +38,7 @@ def _auth():
     return {"Authorization": f"Bearer {VALID_TOKEN}"}
 
 
-def _stage(sandbox, group_id="grp-cc04", roster=("yexuan",)):
+def _stage(sandbox, group_id="grp-cc04", roster=(TEST_CHAR_ID,)):
     from core.stage.store import create_stage
     return create_stage(group_id, "owner", list(roster))
 
@@ -46,14 +47,14 @@ def _stage(sandbox, group_id="grp-cc04", roster=("yexuan",)):
 
 def test_delete_stage_returns_true_on_success(sandbox):
     from core.stage.store import create_stage, delete_stage
-    create_stage("grp-del-1", "owner", ["yexuan"])
+    create_stage("grp-del-1", "owner", [TEST_CHAR_ID])
     assert delete_stage("grp-del-1") is True
 
 
 def test_delete_stage_removes_meta_file(sandbox):
     from core.sandbox import get_paths
     from core.stage.store import create_stage, delete_stage
-    create_stage("grp-del-2", "owner", ["yexuan"])
+    create_stage("grp-del-2", "owner", [TEST_CHAR_ID])
     delete_stage("grp-del-2")
     assert not get_paths().stage_meta(group_id="grp-del-2").exists()
 
@@ -61,7 +62,7 @@ def test_delete_stage_removes_meta_file(sandbox):
 def test_delete_stage_removes_transcript_file(sandbox):
     from core.sandbox import get_paths
     from core.stage.store import create_stage, delete_stage
-    create_stage("grp-del-3", "owner", ["yexuan"])
+    create_stage("grp-del-3", "owner", [TEST_CHAR_ID])
     delete_stage("grp-del-3")
     assert not get_paths().stage_transcript(group_id="grp-del-3").exists()
 
@@ -73,14 +74,14 @@ def test_delete_stage_returns_false_when_not_found(sandbox):
 
 def test_delete_stage_makes_load_stage_return_none(sandbox):
     from core.stage.store import create_stage, delete_stage, load_stage
-    create_stage("grp-del-4", "owner", ["yexuan"])
+    create_stage("grp-del-4", "owner", [TEST_CHAR_ID])
     delete_stage("grp-del-4")
     assert load_stage("grp-del-4") is None
 
 
 def test_delete_stage_idempotent_second_call_returns_false(sandbox):
     from core.stage.store import create_stage, delete_stage
-    create_stage("grp-del-5", "owner", ["yexuan"])
+    create_stage("grp-del-5", "owner", [TEST_CHAR_ID])
     assert delete_stage("grp-del-5") is True
     assert delete_stage("grp-del-5") is False
 
@@ -118,23 +119,23 @@ def test_delete_group_requires_auth(client, sandbox):
 # ── PATCH /group/{id}/roster ──────────────────────────────────────────────────
 
 def test_patch_roster_updates_members(client, sandbox):
-    _stage(sandbox, "grp-roster-1", roster=("yexuan",))
+    _stage(sandbox, "grp-roster-1", roster=(TEST_CHAR_ID,))
     r = client.patch(
         "/group/grp-roster-1/roster",
-        json={"roster": ["yexuan", "hongcha"]},
+        json={"roster": [TEST_CHAR_ID, TEST_THIRD_CHAR_ID]},
         headers=_auth(),
     )
     assert r.status_code == 200
     data = r.json()
     char_ids = [m["char_id"] for m in data["roster"]]
-    assert set(char_ids) == {"yexuan", "hongcha"}
+    assert set(char_ids) == {TEST_CHAR_ID, TEST_THIRD_CHAR_ID}
 
 
 def test_patch_roster_returns_summary_and_settings(client, sandbox):
     _stage(sandbox, "grp-roster-shape")
     r = client.patch(
         "/group/grp-roster-shape/roster",
-        json={"roster": ["yexuan"]},
+        json={"roster": [TEST_CHAR_ID]},
         headers=_auth(),
     )
     assert r.status_code == 200
@@ -158,7 +159,7 @@ def test_patch_roster_duplicate_members_422(client, sandbox):
     _stage(sandbox, "grp-roster-dup")
     r = client.patch(
         "/group/grp-roster-dup/roster",
-        json={"roster": ["yexuan", "yexuan"]},
+        json={"roster": [TEST_CHAR_ID, TEST_CHAR_ID]},
         headers=_auth(),
     )
     assert r.status_code == 422
@@ -177,7 +178,7 @@ def test_patch_roster_unknown_char_422(client, sandbox):
 def test_patch_roster_404_for_nonexistent_group(client, sandbox):
     r = client.patch(
         "/group/no-such/roster",
-        json={"roster": ["yexuan"]},
+        json={"roster": [TEST_CHAR_ID]},
         headers=_auth(),
     )
     assert r.status_code == 404
@@ -192,7 +193,7 @@ def test_patch_roster_clamps_max_responders(client, sandbox):
     settings = StageSettings(min_responders=1, max_responders=2)
     from core.stage.store import save_stage
     from dataclasses import replace
-    stage = create_stage("grp-roster-clamp", "owner", ["yexuan", "hongcha"])
+    stage = create_stage("grp-roster-clamp", "owner", [TEST_CHAR_ID, TEST_THIRD_CHAR_ID])
     # set max_responders=2
     from core.stage.models import now_iso
     stage2 = replace(stage, settings=StageSettings(min_responders=1, max_responders=2))
@@ -200,7 +201,7 @@ def test_patch_roster_clamps_max_responders(client, sandbox):
 
     r = client.patch(
         "/group/grp-roster-clamp/roster",
-        json={"roster": ["yexuan"]},
+        json={"roster": [TEST_CHAR_ID]},
         headers=_auth(),
     )
     assert r.status_code == 200
@@ -212,7 +213,7 @@ def test_patch_roster_requires_auth(client, sandbox):
     _stage(sandbox, "grp-roster-noauth")
     r = client.patch(
         "/group/grp-roster-noauth/roster",
-        json={"roster": ["yexuan"]},
+        json={"roster": [TEST_CHAR_ID]},
     )
     assert r.status_code in (401, 403)
 

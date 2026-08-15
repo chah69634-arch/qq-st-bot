@@ -16,6 +16,7 @@ Coverage:
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import inspect
@@ -100,7 +101,7 @@ class TestAuditLogStructuredFields(unittest.TestCase):
             trigger_name="morning_greeting",
             reply="早安",
             emotion="happy",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             event_id="evt-abc",
             dedupe_key="dk-xyz",
             gate_result="accepted",
@@ -131,7 +132,7 @@ class TestAuditLogStructuredFields(unittest.TestCase):
             trigger_name="night_reminder",
             reply=reply,
             emotion="gentle",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             event_id="evt-no-text",
             dedupe_key="dk-no-text",
             gate_result="accepted",
@@ -149,7 +150,7 @@ class TestAuditLogStructuredFields(unittest.TestCase):
             trigger_name="diary_reminder",
             reply="写日记了吗",
             emotion="neutral",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
         )
         if not record:
             return
@@ -184,7 +185,7 @@ class TestCaptureTurnAuditExtrasForwarded(unittest.TestCase):
                 reply="晚安",
                 trigger_name="night_reminder",
                 envelope=stamp_trigger(),
-                char_id="yexuan",
+                char_id=TEST_CHAR_ID,
                 audit_extras={
                     "event_id": "evt-fwd",
                     "dedupe_key": "dk-fwd",
@@ -219,7 +220,7 @@ class TestBlockUncertainWarning(unittest.TestCase):
             uid=uid,
             channel="system",
             kind="scheduled",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             payload={"trigger_name": "morning_greeting"},
         )
 

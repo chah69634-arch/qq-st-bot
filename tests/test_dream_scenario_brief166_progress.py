@@ -1,6 +1,7 @@
 """Brief 166: deterministic Scenario progress normalization and adjudication."""
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import time
@@ -213,7 +214,7 @@ def _enter(uid: str, sandbox) -> MagicMock:
         patch("core.pipeline_registry.get", return_value=pipeline),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        result = asyncio.run(enter_dream(uid, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
+        result = asyncio.run(enter_dream(uid, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"))
     assert result["ok"] is True
     return pipeline
 

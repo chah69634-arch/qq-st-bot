@@ -9,6 +9,7 @@ tests/test_event_log_salvage.py — Brief 46 §2 event_log_salvage 调度触发�
   - 抢救产物经 Brief 45 的 noop 去重：种子 profile 已含同义事实时 facts 数量不增
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -58,11 +59,11 @@ def _run_salvage():
     from core.scheduler.triggers.event_log_salvage import _check_event_log_salvage
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
-         patch("core.asset_registry.get_registry", return_value=_make_registry("yexuan")):
+         patch("core.asset_registry.get_registry", return_value=_make_registry(TEST_CHAR_ID)):
         asyncio.run(_check_event_log_salvage())
 
 
-def _salvaged_dates(uid: str, char_id: str = "yexuan") -> set:
+def _salvaged_dates(uid: str, char_id: str = TEST_CHAR_ID) -> set:
     from core.memory.fixation_pipeline import _load_fixation_state
     return set(_load_fixation_state(uid, char_id=char_id).get("salvaged_dates") or [])
 
@@ -72,7 +73,7 @@ def _salvaged_dates(uid: str, char_id: str = "yexuan") -> set:
 def test_salvage_processes_file_at_age_28_and_marks_salvaged(sandbox, fake_llm):
     uid = "u_salvage_28"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     _run_salvage()
 
@@ -85,7 +86,7 @@ def test_salvage_processes_file_at_age_28_and_marks_salvaged(sandbox, fake_llm):
 def test_salvage_second_run_is_idempotent(sandbox, fake_llm):
     uid = "u_salvage_idem"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     _run_salvage()
     assert fake_llm.chat.await_count == 1
@@ -99,7 +100,7 @@ def test_salvage_second_run_is_idempotent(sandbox, fake_llm):
 def test_salvage_skips_file_at_age_10(sandbox, fake_llm):
     uid = "u_salvage_10"
     date_str = _date_n_days_ago(10)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     _run_salvage()
 
@@ -113,9 +114,9 @@ def test_salvage_caps_at_three_files_per_run(sandbox, fake_llm):
     """需要 >3 个候选文件；用两个 uid 各放几份，凑出 5 个候选（27/28/29 天窗口内）。"""
     uid = "u_salvage_cap"
     for d in (27, 28, 29):
-        _write_day_file(sandbox, "yexuan", f"{uid}_a", _date_n_days_ago(d))
+        _write_day_file(sandbox, TEST_CHAR_ID, f"{uid}_a", _date_n_days_ago(d))
     for d in (27, 28):
-        _write_day_file(sandbox, "yexuan", f"{uid}_b", _date_n_days_ago(d))
+        _write_day_file(sandbox, TEST_CHAR_ID, f"{uid}_b", _date_n_days_ago(d))
 
     _run_salvage()
 
@@ -131,7 +132,7 @@ def test_salvage_facts_route_through_noop_dedup(sandbox, fake_llm):
 
     uid = "u_salvage_noop"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     asyncio.run(_up.update(uid, {
         "important_facts": [{"text": "喜欢喝咖啡", "tag": "pref.food", "ts": 0.0}],
@@ -155,7 +156,7 @@ def test_salvage_facts_add_op_appends_new_fact(sandbox, fake_llm):
 
     uid = "u_salvage_add"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     fake_llm.chat = AsyncMock(return_value=json.dumps([
         {"op": "add", "target_index": None, "text": "打算下个月搬家", "tag": "status.project", "ts": 1000.0},
@@ -173,7 +174,7 @@ def test_salvage_facts_add_op_appends_new_fact(sandbox, fake_llm):
 def test_salvage_llm_failure_does_not_mark_salvaged(sandbox, fake_llm):
     uid = "u_salvage_fail"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     fake_llm.chat = AsyncMock(side_effect=RuntimeError("boom"))
 
@@ -194,7 +195,7 @@ def test_salvage_skips_blocks_with_source_tag(sandbox, fake_llm):
         "## 10:00\n**用户**：我喜欢喝咖啡\n**叶瑄**：好呀\n"
         "> emotion:gentle intensity:0 speaker:assistant\n---\n"
     )
-    _write_day_file(sandbox, "yexuan", uid, date_str, content=content)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str, content=content)
 
     _run_salvage()
 
@@ -213,7 +214,7 @@ def test_salvage_all_blocks_tagged_skips_llm_and_marks_salvaged(sandbox, fake_ll
         "## 09:00\n**用户**：帮我查下天气\n**叶瑄**：查到了，明天晴\n"
         "> emotion:gentle intensity:0 speaker:assistant source:web\n---\n"
     )
-    _write_day_file(sandbox, "yexuan", uid, date_str, content=content)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str, content=content)
 
     _run_salvage()
 
@@ -225,7 +226,7 @@ def test_salvage_legacy_format_without_source_field_unaffected(sandbox, fake_llm
     """老格式日志（无 source 字段）→ salvage 行为不变（回归）。"""
     uid = "u_salvage_legacy"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)  # 默认 content 无 source 字段
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)  # 默认 content 无 source 字段
 
     _run_salvage()
 

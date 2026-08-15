@@ -23,6 +23,7 @@ scrubs again.  This is intentional defense-in-depth and is idempotent (verified 
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -96,7 +97,7 @@ def _patch_probe(monkeypatch):
     monkeypatch.setattr(_llm, "parse_tool_call_response", lambda r: [])
 
 
-def _make_pipeline(llm_reply: str = "回复", char_id: str = "yexuan"):
+def _make_pipeline(llm_reply: str = "回复", char_id: str = TEST_CHAR_ID):
     from core.memory.scope import MemoryScope
     fake = MagicMock()
     fake.character = MagicMock()
@@ -575,10 +576,10 @@ def test_b6_capture_turn_scrubs_independently(sandbox):
         "neutral",
         turn_id="r6_b6_t1",
         envelope=_env,
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
 
-    history = _st.load("test_uid_b6", char_id="yexuan")
+    history = _st.load("test_uid_b6", char_id=TEST_CHAR_ID)
     assistant_msgs = [m for m in history if m.get("role") == "assistant"]
     assert assistant_msgs, "capture_turn must write assistant message to short_term"
     written = assistant_msgs[-1].get("content", "")

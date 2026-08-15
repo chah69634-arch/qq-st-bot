@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 import asyncio
 import json
 from types import SimpleNamespace
@@ -15,7 +16,7 @@ def _settings(**overrides):
         "respond_threshold": 0.5,
         "spontaneous_threshold": 0.7,
         "transcript_limit": 200,
-        "talkativeness": {"yexuan": 1.0, "yexuanJ-5412": 0.8},
+        "talkativeness": {TEST_CHAR_ID: 1.0, TEST_PEER_CHAR_ID: 0.8},
         # Brief 85 §4 topic-seed is orthogonal to what these tests exercise and
         # uses real random.random() when unmocked — pin it off for determinism.
         "topic_seed_prob": 0.0,
@@ -30,7 +31,7 @@ def test_create_stage_persists_meta_and_empty_transcript(sandbox):
     created = create_stage(
         "group-a",
         "owner",
-        ["yexuan", "yexuanJ-5412"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID],
         settings=_settings(),
     )
 
@@ -52,7 +53,7 @@ def test_create_stage_rejects_unknown_or_duplicate_roster(sandbox):
     with pytest.raises(ValueError):
         create_stage("unknown-roster", "owner", ["ghost"], settings=_settings())
     with pytest.raises(ValueError, match="duplicate"):
-        create_stage("duplicate-roster", "owner", ["yexuan", "yexuan"], settings=_settings())
+        create_stage("duplicate-roster", "owner", [TEST_CHAR_ID, TEST_CHAR_ID], settings=_settings())
 
 
 def test_transcript_rejects_speaker_not_on_stage_and_prunes(sandbox):
@@ -62,14 +63,14 @@ def test_transcript_rejects_speaker_not_on_stage_and_prunes(sandbox):
     stage = create_stage(
         "group-prune",
         "owner",
-        ["yexuan"],
+        [TEST_CHAR_ID],
         settings=_settings(max_responders=1, transcript_limit=2),
     )
 
     with pytest.raises(ValueError, match="not present"):
         append_transcript(
             stage,
-            TranscriptEntry("yexuanJ-5412", "越界", 1, "t", "user"),
+            TranscriptEntry(TEST_PEER_CHAR_ID, "越界", 1, "t", "user"),
         )
 
     for index in range(3):
@@ -89,26 +90,26 @@ def test_arbiter_addressed_exclusive_and_recency_penalty(sandbox):
     stage = create_stage(
         "group-score",
         "owner",
-        ["yexuan", "yexuanJ-5412"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID],
         settings=_settings(addressed_exclusive=True),
     )
-    addressed = [TranscriptEntry("owner", "@yexuanJ-5412 你觉得呢", 1, "t", "user")]
+    addressed = [TranscriptEntry("owner", f'@{TEST_PEER_CHAR_ID} 你觉得呢', 1, "t", "user")]
 
     ranked = score_candidates(stage, addressed)
-    assert [item.char_id for item in ranked] == ["yexuanJ-5412"]
+    assert [item.char_id for item in ranked] == [TEST_PEER_CHAR_ID]
 
     stage2 = create_stage(
         "group-recency",
         "owner",
-        ["yexuan", "yexuanJ-5412"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID],
         settings=_settings(),
     )
     recent = [
         TranscriptEntry("owner", "继续", 1, "t", "user"),
-        TranscriptEntry("yexuan", "我刚说过。", 2, "t", "user"),
+        TranscriptEntry(TEST_CHAR_ID, "我刚说过。", 2, "t", "user"),
     ]
     ranked2 = score_candidates(stage2, recent)
-    assert ranked2[0].char_id == "yexuanJ-5412"
+    assert ranked2[0].char_id == TEST_PEER_CHAR_ID
 
 
 async def test_runner_phase_a_rescores_and_persists_shared_transcript(sandbox):
@@ -118,7 +119,7 @@ async def test_runner_phase_a_rescores_and_persists_shared_transcript(sandbox):
     create_stage(
         "group-phase-a",
         "owner",
-        ["yexuan", "yexuanJ-5412"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID],
         settings=_settings(min_responders=2, max_ai_chain_depth=0),
     )
     seen_transcript_lengths = []
@@ -139,11 +140,11 @@ async def test_runner_phase_a_rescores_and_persists_shared_transcript(sandbox):
         turn_id="turn-a",
     )
 
-    assert [item.speaker_id for item in result.replies] == ["yexuan", "yexuanJ-5412"]
-    assert seen_transcript_lengths == [("yexuan", 1, "user"), ("yexuanJ-5412", 2, "user")]
-    assert [item[0] for item in delivered] == ["yexuan", "yexuanJ-5412"]
+    assert [item.speaker_id for item in result.replies] == [TEST_CHAR_ID, TEST_PEER_CHAR_ID]
+    assert seen_transcript_lengths == [(TEST_CHAR_ID, 1, "user"), (TEST_PEER_CHAR_ID, 2, "user")]
+    assert [item[0] for item in delivered] == [TEST_CHAR_ID, TEST_PEER_CHAR_ID]
     transcript = load_transcript("group-phase-a")
-    assert [item.speaker_id for item in transcript] == ["owner", "yexuan", "yexuanJ-5412"]
+    assert [item.speaker_id for item in transcript] == ["owner", TEST_CHAR_ID, TEST_PEER_CHAR_ID]
     assert {item.turn_id for item in transcript} == {"turn-a"}
 
 
@@ -154,13 +155,13 @@ async def test_runner_phase_b_is_bounded_and_triggered_by_previous_speaker(sandb
     create_stage(
         "group-phase-b",
         "owner",
-        ["yexuan", "yexuanJ-5412"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID],
         settings=_settings(max_responders=1, max_ai_chain_depth=2),
     )
 
     async def generate(stage, speaker_id, transcript, turn_id, triggered_by):
-        if speaker_id == "yexuan":
-            return "@yexuanJ-5412 接一下"
+        if speaker_id == TEST_CHAR_ID:
+            return f'@{TEST_PEER_CHAR_ID} 接一下'
         return "我接到了。"
 
     result = await run_owner_turn(
@@ -174,9 +175,9 @@ async def test_runner_phase_b_is_bounded_and_triggered_by_previous_speaker(sandb
     # Phase B iter 1: yexuanJ-5412 replies (triggered by yexuan, peer_reply bonus applies).
     # Phase B iter 2: yexuan replies again (triggered by yexuanJ-5412, peer_reply bonus applies).
     # Chain is bounded at max_ai_chain_depth=2.
-    assert [item.speaker_id for item in result.replies] == ["yexuan", "yexuanJ-5412", "yexuan"]
-    assert result.replies[1].triggered_by == "yexuan"
-    assert result.replies[2].triggered_by == "yexuanJ-5412"
+    assert [item.speaker_id for item in result.replies] == [TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_CHAR_ID]
+    assert result.replies[1].triggered_by == TEST_CHAR_ID
+    assert result.replies[2].triggered_by == TEST_PEER_CHAR_ID
     assert result.ai_chain_depth == 2
 
 
@@ -185,8 +186,8 @@ async def test_runner_holds_one_owner_lock_for_entire_round(sandbox):
     from core.stage.store import create_stage
 
     settings = _settings(max_responders=1, max_ai_chain_depth=0)
-    create_stage("group-lock-a", "same-owner", ["yexuan"], settings=settings)
-    create_stage("group-lock-b", "same-owner", ["yexuan"], settings=settings)
+    create_stage("group-lock-a", "same-owner", [TEST_CHAR_ID], settings=settings)
+    create_stage("group-lock-b", "same-owner", [TEST_CHAR_ID], settings=settings)
 
     active = 0
     max_active = 0
@@ -210,10 +211,10 @@ async def test_runner_holds_one_owner_lock_for_entire_round(sandbox):
 def test_stage_meta_schema_is_plain_json(sandbox):
     from core.stage.store import create_stage
 
-    create_stage("group-json", "owner", ["yexuan"], settings=_settings(max_responders=1))
+    create_stage("group-json", "owner", [TEST_CHAR_ID], settings=_settings(max_responders=1))
     raw = json.loads(sandbox.stage_meta(group_id="group-json").read_text(encoding="utf-8"))
 
-    assert raw["roster"] == ["yexuan"]
+    assert raw["roster"] == [TEST_CHAR_ID]
     assert raw["domain"] == "reality"
     assert raw["settings"]["max_ai_chain_depth"] == 2
 
@@ -226,7 +227,7 @@ async def test_phase_a_empty_generation_does_not_satisfy_minimum(sandbox, monkey
     create_stage(
         "group-empty",
         "owner",
-        ["yexuan", "yexuanJ-5412"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID],
         settings=_settings(min_responders=1, max_responders=1, max_ai_chain_depth=0),
     )
     monkeypatch.setattr(
@@ -237,11 +238,11 @@ async def test_phase_a_empty_generation_does_not_satisfy_minimum(sandbox, monkey
     )
 
     async def generate(stage, speaker_id, transcript, turn_id, triggered_by):
-        return "" if speaker_id == "yexuan" else "second candidate answers"
+        return "" if speaker_id == TEST_CHAR_ID else "second candidate answers"
 
     result = await run_owner_turn("group-empty", "hello", generate_reply=generate)
 
-    assert [entry.speaker_id for entry in result.replies] == ["yexuanJ-5412"]
+    assert [entry.speaker_id for entry in result.replies] == [TEST_PEER_CHAR_ID]
 
 
 @pytest.mark.asyncio
@@ -252,7 +253,7 @@ async def test_minimum_reply_retries_best_speaker_after_all_first_attempts_empty
     create_stage(
         "group-minimum-retry",
         "owner",
-        ["yexuan"],
+        [TEST_CHAR_ID],
         settings=_settings(min_responders=1, max_responders=1, max_ai_chain_depth=0),
     )
     calls = 0

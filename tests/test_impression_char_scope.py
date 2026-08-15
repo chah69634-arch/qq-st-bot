@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_impression_char_scope.py — P0-T05: impression char_id scope isolation
 
@@ -51,7 +52,7 @@ _UID = "imp_scope_u1"
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -156,16 +157,16 @@ def test_impression_store_write_goes_to_char_id_bucket(sandbox):
     append_impression(_UID, _make_entry("我好像在梦里有种DemoUser的感觉"), char_id="character_b")
 
     character_b_entries = load_impressions(_UID, char_id="character_b")
-    yexuan_entries = load_impressions(_UID, char_id="yexuan")
+    yexuan_entries = load_impressions(_UID, char_id=TEST_CHAR_ID)
 
     assert len(character_b_entries) == 1
     assert "DemoUser" in character_b_entries[0]["impression_text"]
-    assert yexuan_entries == [], "Must not write to yexuan bucket when char_id='character_b'"
+    assert yexuan_entries == [], f"Must not write to {TEST_CHAR_ID} bucket when char_id='character_b'"
 
     # Also verify physical file locations
     safe_uid = safe_user_id(_UID)
     assert (sandbox.dreams_impressions_dir(char_id="character_b") / f"{safe_uid}.json").exists()
-    assert not (sandbox.dreams_impressions_dir(char_id="yexuan") / f"{safe_uid}.json").exists()
+    assert not (sandbox.dreams_impressions_dir(char_id=TEST_CHAR_ID) / f"{safe_uid}.json").exists()
 
 
 # ── 2. Reader isolates by char_id ─────────────────────────────────────────────
@@ -179,19 +180,19 @@ def test_impression_store_read_isolated_by_char_id(sandbox):
 
     uid = "imp_scope_u2"
 
-    append_impression(uid, _make_entry("Companion内容"), char_id="yexuan")
+    append_impression(uid, _make_entry("Companion内容"), char_id=TEST_CHAR_ID)
     append_impression(uid, _make_entry("DemoUser内容"), char_id="character_b")
 
     # load_impressions
-    y = load_impressions(uid, char_id="yexuan")
+    y = load_impressions(uid, char_id=TEST_CHAR_ID)
     h = load_impressions(uid, char_id="character_b")
-    assert any("Companion" in e["impression_text"] for e in y), "yexuan bucket missing yexuan entry"
-    assert all("DemoUser" not in e["impression_text"] for e in y), "yexuan bucket leaked character_b entry"
+    assert any("Companion" in e["impression_text"] for e in y), f'{TEST_CHAR_ID} bucket missing {TEST_CHAR_ID} entry'
+    assert all("DemoUser" not in e["impression_text"] for e in y), f'{TEST_CHAR_ID} bucket leaked character_b entry'
     assert any("DemoUser" in e["impression_text"] for e in h), "character_b bucket missing character_b entry"
-    assert all("Companion" not in e["impression_text"] for e in h), "character_b bucket leaked yexuan entry"
+    assert all("Companion" not in e["impression_text"] for e in h), f'character_b bucket leaked {TEST_CHAR_ID} entry'
 
     # get_active_impressions
-    ay = get_active_impressions(uid, char_id="yexuan")
+    ay = get_active_impressions(uid, char_id=TEST_CHAR_ID)
     ah = get_active_impressions(uid, char_id="character_b")
     assert any("Companion" in e["impression_text"] for e in ay)
     assert all("DemoUser" not in e["impression_text"] for e in ay)
@@ -199,7 +200,7 @@ def test_impression_store_read_isolated_by_char_id(sandbox):
     assert all("Companion" not in e["impression_text"] for e in ah)
 
     # load_impression_text
-    text_y = load_impression_text(uid, char_id="yexuan")
+    text_y = load_impression_text(uid, char_id=TEST_CHAR_ID)
     text_h = load_impression_text(uid, char_id="character_b")
     assert "Companion" in text_y and "DemoUser" not in text_y, (
         f"yexuan text should contain 'Companion' only, got: {text_y!r}"
@@ -223,7 +224,7 @@ def test_fetch_context_passes_char_id_to_impression_loader(
 
     captured: list[str] = []
 
-    def _spy(uid, *, char_id="yexuan", **_kwargs):
+    def _spy(uid, *, char_id=TEST_CHAR_ID, **_kwargs):
         captured.append(char_id)
         return ""
 
@@ -244,21 +245,21 @@ def test_fetch_context_impression_char_id_updates_after_switch(
     """After switching active_character yexuan→character_b, impression reader gets character_b."""
     import core.dream.impression_loader as _il
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
     _apply_base_stubs(monkeypatch)
 
     captured: list[str] = []
 
-    def _spy(uid, *, char_id="yexuan", **_kwargs):
+    def _spy(uid, *, char_id=TEST_CHAR_ID, **_kwargs):
         captured.append(char_id)
         return ""
 
     monkeypatch.setattr(_il, "load_impression_text", _spy)
 
     _run_fetch(pipeline)
-    assert captured[-1] == "yexuan", (
-        f"First call: expected char_id='yexuan', got {captured[-1]!r}"
+    assert captured[-1] == TEST_CHAR_ID, (
+        f"First call: expected char_id=TEST_CHAR_ID, got {captured[-1]!r}"
     )
 
     _write_active(sandbox, "character_b")
@@ -276,7 +277,7 @@ def test_fetch_context_invalid_active_does_not_call_impression_loader(
     """When active_character is unknown, fetch_context raises before calling impression reader."""
     import core.dream.impression_loader as _il
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "missing_id",
                     "enabled_lorebooks": [], "enabled_jailbreaks": []}),
@@ -285,7 +286,7 @@ def test_fetch_context_invalid_active_does_not_call_impression_loader(
 
     reader_called: list[bool] = []
 
-    def _spy(uid, *, char_id="yexuan", **_kwargs):
+    def _spy(uid, *, char_id=TEST_CHAR_ID, **_kwargs):
         reader_called.append(True)
         return ""
 
@@ -338,14 +339,14 @@ def test_distill_impression_writes_to_explicit_char_id_bucket(sandbox):
         asyncio.run(distill_impression(uid, dream_id, "soft", char_id="character_b"))
 
     character_b_entries = load_impressions(uid, char_id="character_b")
-    yexuan_entries = load_impressions(uid, char_id="yexuan")
+    yexuan_entries = load_impressions(uid, char_id=TEST_CHAR_ID)
 
     assert len(character_b_entries) == 1, (
         f"Expected 1 entry in character_b bucket, got {len(character_b_entries)}"
     )
     assert "DemoUser" in character_b_entries[0]["impression_text"]
     assert yexuan_entries == [], (
-        "distill_impression with char_id='character_b' must NOT write to yexuan bucket"
+        f"distill_impression with char_id='character_b' must NOT write to {TEST_CHAR_ID} bucket"
     )
 
 
@@ -362,8 +363,8 @@ def test_legacy_no_char_id_defaults_to_yexuan(sandbox):
 
     append_impression(uid, _make_entry("Companion默认内容"))
 
-    assert len(load_impressions(uid, char_id="yexuan")) == 1, (
-        "Default (no char_id) must write to yexuan bucket"
+    assert len(load_impressions(uid, char_id=TEST_CHAR_ID)) == 1, (
+        f'Default (no char_id) must write to {TEST_CHAR_ID} bucket'
     )
     assert load_impressions(uid, char_id="character_b") == [], (
         "Default write must not touch character_b bucket"

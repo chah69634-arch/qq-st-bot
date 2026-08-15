@@ -15,6 +15,7 @@ Covers:
   msg_id stays None.
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from unittest.mock import patch
 
@@ -33,8 +34,8 @@ async def test_push_companion_reply_returns_none_for_empty_text(monkeypatch):
         lambda *a, **kw: called.append((a, kw)),
     )
 
-    assert await push_companion_reply(None, char_id="yexuan") is None
-    assert await push_companion_reply("", char_id="yexuan") is None
+    assert await push_companion_reply(None, char_id=TEST_CHAR_ID) is None
+    assert await push_companion_reply("", char_id=TEST_CHAR_ID) is None
     assert called == []
 
 
@@ -49,10 +50,10 @@ async def test_push_companion_reply_forwards_to_ui_push(monkeypatch):
 
     monkeypatch.setattr("channels.ui_push.pseudo_stream_push", fake_pseudo_stream_push)
 
-    msg_id = await push_companion_reply("这步棋走得不错。", char_id="yexuan")
+    msg_id = await push_companion_reply("这步棋走得不错。", char_id=TEST_CHAR_ID)
 
     assert msg_id is not None
-    assert calls == [("这步棋走得不错。", msg_id, "yexuan")]
+    assert calls == [("这步棋走得不错。", msg_id, TEST_CHAR_ID)]
 
 
 @pytest.mark.asyncio
@@ -65,7 +66,7 @@ async def test_push_companion_reply_fail_open_on_exception(monkeypatch):
     monkeypatch.setattr("channels.ui_push.pseudo_stream_push", boom)
 
     # Must not raise, and a msg_id is still returned for the caller to use.
-    msg_id = await push_companion_reply("文本", char_id="yexuan")
+    msg_id = await push_companion_reply("文本", char_id=TEST_CHAR_ID)
     assert msg_id is not None
 
 
@@ -87,7 +88,7 @@ async def test_dream_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
     monkeypatch.setattr("core.dream.dream_pipeline.dream_turn", fake_dream_turn)
 
     class FakePipeline:
-        _active_character_id = "yexuan"
+        _active_character_id = TEST_CHAR_ID
 
     monkeypatch.setattr("core.pipeline_registry.get", lambda: FakePipeline())
 
@@ -103,7 +104,7 @@ async def test_dream_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
 
     assert result["reply"] == "梦里的风很轻。"
     assert result["msg_id"]
-    assert calls == [("梦里的风很轻。", result["msg_id"], "yexuan", "dream")]
+    assert calls == [("梦里的风很轻。", result["msg_id"], TEST_CHAR_ID, "dream")]
 
 
 @pytest.mark.asyncio
@@ -130,7 +131,7 @@ async def test_dream_chat_no_msg_id_when_reply_empty(sandbox, monkeypatch):
 
 # ── chess_chat / chess_comment ───────────────────────────────────────────────
 
-def _fake_chess_session(session_id="s1", uid="user1", char_id="yexuan"):
+def _fake_chess_session(session_id="s1", uid="user1", char_id=TEST_CHAR_ID):
     from core.activity.session import ActivitySession
 
     return ActivitySession(
@@ -145,7 +146,7 @@ async def test_chess_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
     from admin.routers import chess as chess_router
 
     session = _fake_chess_session()
-    monkeypatch.setattr(chess_router, "_active_char_id", lambda: "yexuan")
+    monkeypatch.setattr(chess_router, "_active_char_id", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(
         chess_router.activity_store, "load_session", lambda *a, **kw: session
     )
@@ -167,7 +168,7 @@ async def test_chess_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
 
     assert result["reply"] == "这步棋走得不错。"
     assert result["msg_id"]
-    assert calls == [("这步棋走得不错。", result["msg_id"], "yexuan")]
+    assert calls == [("这步棋走得不错。", result["msg_id"], TEST_CHAR_ID)]
 
 
 @pytest.mark.asyncio
@@ -176,7 +177,7 @@ async def test_chess_comment_no_push_when_comment_is_none(sandbox, monkeypatch):
     from admin.routers import chess as chess_router
 
     session = _fake_chess_session()
-    monkeypatch.setattr(chess_router, "_active_char_id", lambda: "yexuan")
+    monkeypatch.setattr(chess_router, "_active_char_id", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(
         chess_router.activity_store, "load_session", lambda *a, **kw: session
     )
@@ -204,7 +205,7 @@ async def test_chess_comment_no_push_when_comment_is_none(sandbox, monkeypatch):
 
 # ── gomoku_chat / gomoku_comment ─────────────────────────────────────────────
 
-def _fake_gomoku_session(session_id="s1", uid="user1", char_id="yexuan"):
+def _fake_gomoku_session(session_id="s1", uid="user1", char_id=TEST_CHAR_ID):
     from core.activity.session import ActivitySession
 
     return ActivitySession(
@@ -219,7 +220,7 @@ async def test_gomoku_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
     from admin.routers import gomoku as gomoku_router
 
     session = _fake_gomoku_session()
-    monkeypatch.setattr(gomoku_router, "_active_char_id", lambda: "yexuan")
+    monkeypatch.setattr(gomoku_router, "_active_char_id", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(
         gomoku_router.gomoku_store, "load_session", lambda *a, **kw: session
     )
@@ -241,7 +242,7 @@ async def test_gomoku_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
 
     assert result["reply"] == "这手棋很有意思。"
     assert result["msg_id"]
-    assert calls == [("这手棋很有意思。", result["msg_id"], "yexuan")]
+    assert calls == [("这手棋很有意思。", result["msg_id"], TEST_CHAR_ID)]
 
 
 @pytest.mark.asyncio
@@ -249,7 +250,7 @@ async def test_gomoku_comment_no_push_when_comment_is_none(sandbox, monkeypatch)
     from admin.routers import gomoku as gomoku_router
 
     session = _fake_gomoku_session()
-    monkeypatch.setattr(gomoku_router, "_active_char_id", lambda: "yexuan")
+    monkeypatch.setattr(gomoku_router, "_active_char_id", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(
         gomoku_router.gomoku_store, "load_session", lambda *a, **kw: session
     )
@@ -277,7 +278,7 @@ async def test_gomoku_comment_no_push_when_comment_is_none(sandbox, monkeypatch)
 
 # ── reading_chat ─────────────────────────────────────────────────────────────
 
-def _fake_reading_session(session_id="s1", uid="user1", char_id="yexuan"):
+def _fake_reading_session(session_id="s1", uid="user1", char_id=TEST_CHAR_ID):
     from core.activity.reading_session import ReadingSession
 
     return ReadingSession(
@@ -293,7 +294,7 @@ async def test_reading_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch)
     from admin.routers import reading as reading_router
 
     session = _fake_reading_session()
-    monkeypatch.setattr(reading_router, "_active_char_id", lambda: "yexuan")
+    monkeypatch.setattr(reading_router, "_active_char_id", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(reading_router, "_require_session", lambda char_id, uid, sid: session)
     monkeypatch.setattr(
         reading_router.activity_store, "load_page", lambda *a, **kw: None
@@ -316,4 +317,4 @@ async def test_reading_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch)
 
     assert result["reply"] == "这本书写得真好。"
     assert result["msg_id"]
-    assert calls == [("这本书写得真好。", result["msg_id"], "yexuan")]
+    assert calls == [("这本书写得真好。", result["msg_id"], TEST_CHAR_ID)]

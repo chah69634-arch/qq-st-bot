@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_admin_users_profile_scope.py — P1-0E: admin users profile char_id scope
 
@@ -34,12 +35,12 @@ def chars_tree(tmp_path):
     """Minimal characters/ tree with yexuan + character_b, plus config.yaml for user_profile."""
     # config.yaml required by user_profile._char_name() on first import
     (tmp_path / "config.yaml").write_text(
-        "character:\n  name: 测试角色\n  default: yexuan\n",
+        f'character:\n  name: 测试角色\n  default: {TEST_CHAR_ID}\n',
         encoding="utf-8",
     )
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -107,11 +108,11 @@ def test_get_profile_explicit_char_id(sandbox, registry):
     uid = "u_get_profile_explicit"
     YEXUAN_NAME = "Companion的专属内容"
 
-    _seed_profile(sandbox, uid, "yexuan", {"name": YEXUAN_NAME})
+    _seed_profile(sandbox, uid, TEST_CHAR_ID, {"name": YEXUAN_NAME})
 
-    result = asyncio.run(get_user_profile(uid, char_id="yexuan", auth="dummy"))
+    result = asyncio.run(get_user_profile(uid, char_id=TEST_CHAR_ID, auth="dummy"))
 
-    assert result["char_id"] == "yexuan"
+    assert result["char_id"] == TEST_CHAR_ID
     assert result["profile"]["name"] == YEXUAN_NAME, (
         f"yexuan profile should contain yexuan name; got {result['profile']['name']!r}"
     )
@@ -182,13 +183,13 @@ def test_put_profile_uses_active_char_when_omitted(sandbox, registry):
 
     # Verify the write landed in character_b bucket, not yexuan
     character_b_profile = _up.load(uid, char_id="character_b")
-    yexuan_profile = _up.load(uid, char_id="yexuan")
+    yexuan_profile = _up.load(uid, char_id=TEST_CHAR_ID)
 
     assert character_b_profile["occupation"] == NEW_VALUE, (
         f"character_b bucket should have new occupation; got {character_b_profile['occupation']!r}"
     )
     assert yexuan_profile["occupation"] != NEW_VALUE, (
-        "yexuan bucket must not be modified by character_b write"
+        f'{TEST_CHAR_ID} bucket must not be modified by character_b write'
     )
 
 
@@ -204,19 +205,19 @@ def test_put_profile_explicit_char_id(sandbox, registry):
     YEXUAN_LOC = "Companion住所"
 
     result = asyncio.run(
-        update_user_profile(uid, {"location": YEXUAN_LOC}, char_id="yexuan", auth="dummy")
+        update_user_profile(uid, {"location": YEXUAN_LOC}, char_id=TEST_CHAR_ID, auth="dummy")
     )
 
-    assert result["char_id"] == "yexuan"
+    assert result["char_id"] == TEST_CHAR_ID
     assert result["profile"]["location"] == YEXUAN_LOC
 
     # Verify isolation: character_b bucket untouched
-    yexuan_profile = _up.load(uid, char_id="yexuan")
+    yexuan_profile = _up.load(uid, char_id=TEST_CHAR_ID)
     character_b_profile = _up.load(uid, char_id="character_b")
 
     assert yexuan_profile["location"] == YEXUAN_LOC
     assert character_b_profile["location"] != YEXUAN_LOC, (
-        "character_b bucket must not receive yexuan write"
+        f'character_b bucket must not receive {TEST_CHAR_ID} write'
     )
 
 
@@ -231,20 +232,20 @@ def test_get_profile_content_isolation(sandbox, registry):
     YEXUAN_ONLY = "Companion专属关键词_唯一标识符XYZ"
     CHARACTER_B_ONLY = "DemoUser专属关键词_唯一标识符ABC"
 
-    _seed_profile(sandbox, uid, "yexuan", {"name": YEXUAN_ONLY})
+    _seed_profile(sandbox, uid, TEST_CHAR_ID, {"name": YEXUAN_ONLY})
     _seed_profile(sandbox, uid, "character_b", {"name": CHARACTER_B_ONLY})
 
     character_b_result = asyncio.run(get_user_profile(uid, char_id=None, auth="dummy"))
-    yexuan_result = asyncio.run(get_user_profile(uid, char_id="yexuan", auth="dummy"))
+    yexuan_result = asyncio.run(get_user_profile(uid, char_id=TEST_CHAR_ID, auth="dummy"))
 
     profile_text_character_b = json.dumps(character_b_result["profile"], ensure_ascii=False)
     profile_text_yexuan = json.dumps(yexuan_result["profile"], ensure_ascii=False)
 
     assert YEXUAN_ONLY not in profile_text_character_b, (
-        "character_b profile must not contain yexuan-only sentinel"
+        f'character_b profile must not contain {TEST_CHAR_ID}-only sentinel'
     )
     assert CHARACTER_B_ONLY not in profile_text_yexuan, (
-        "yexuan profile must not contain character_b-only sentinel"
+        f'{TEST_CHAR_ID} profile must not contain character_b-only sentinel'
     )
     assert CHARACTER_B_ONLY in profile_text_character_b
     assert YEXUAN_ONLY in profile_text_yexuan
@@ -261,12 +262,12 @@ def test_delete_memory_uses_active_char_when_omitted(sandbox, registry, monkeypa
     _seed_active(sandbox, "character_b")
     uid = "u_delete_active"
     SENTINEL_H = "草莓大福-delete-character_b"
-    SENTINEL_Y = "草莓大福-delete-yexuan"
+    SENTINEL_Y = f'草莓大福-delete-{TEST_CHAR_ID}'
 
     _st.append(uid, "user", SENTINEL_H, char_id="character_b")
-    _st.append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    _st.append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
     _seed_profile(sandbox, uid, "character_b", {"name": "character_b_name"})
-    _seed_profile(sandbox, uid, "yexuan", {"name": "yexuan_name"})
+    _seed_profile(sandbox, uid, TEST_CHAR_ID, {"name": "yexuan_name"})
 
     result = asyncio.run(delete_user_memory(uid, char_id=None, auth="dummy"))
 
@@ -275,8 +276,8 @@ def test_delete_memory_uses_active_char_when_omitted(sandbox, registry, monkeypa
     # character_b short-term cleared
     assert _st.load(uid, char_id="character_b") == [], "character_b short-term must be empty"
     # yexuan short-term untouched
-    assert any(SENTINEL_Y in m.get("content", "") for m in _st.load(uid, char_id="yexuan")), (
-        "yexuan short-term must be untouched"
+    assert any(SENTINEL_Y in m.get("content", "") for m in _st.load(uid, char_id=TEST_CHAR_ID)), (
+        f'{TEST_CHAR_ID} short-term must be untouched'
     )
 
     # character_b profile cleared (reset to default)
@@ -284,8 +285,8 @@ def test_delete_memory_uses_active_char_when_omitted(sandbox, registry, monkeypa
     assert character_b_profile["name"] is None, "character_b profile must be reset to default"
 
     # yexuan profile untouched
-    yexuan_profile = _up.load(uid, char_id="yexuan")
-    assert yexuan_profile["name"] == "yexuan_name", "yexuan profile must be untouched"
+    yexuan_profile = _up.load(uid, char_id=TEST_CHAR_ID)
+    assert yexuan_profile["name"] == "yexuan_name", f'{TEST_CHAR_ID} profile must be untouched'
 
 
 # ── 9: DELETE memory invalid char_id → 422, no clear called ──────────────────

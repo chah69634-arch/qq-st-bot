@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 Unit tests for core/memory/path_resolver.py — P1-2A.
 
@@ -231,11 +232,11 @@ def test_no_yexuan_fallback_missing_character_id_raises():
 
 
 def test_resolver_uses_scope_character_id_verbatim(sandbox):
-    """Resolver emits scope.character_id in path; no hardcoded 'yexuan' default."""
+    """Resolver emits scope.character_id in path; no hardcoded TEST_CHAR_ID default."""
     scope = MemoryScope.reality_scope("u1", "custom_char")
     p = _s(resolve_path(scope, "history"))
     assert "custom_char" in p
-    assert "yexuan" not in p
+    assert TEST_CHAR_ID not in p
 
 
 def test_resolver_with_non_default_char_id_all_reality_artifacts(sandbox):
@@ -249,7 +250,7 @@ def test_resolver_with_non_default_char_id_all_reality_artifacts(sandbox):
     for art in reality_char_uid_artifacts:
         p = _s(resolve_path(scope, art))
         assert "xchar" in p, f"char_id missing from {art} path: {p}"
-        assert "yexuan" not in p, f"yexuan default leaked into {art} path: {p}"
+        assert TEST_CHAR_ID not in p, f"yexuan default leaked into {art} path: {p}"
 
 
 # ---------------------------------------------------------------------------

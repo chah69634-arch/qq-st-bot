@@ -39,6 +39,7 @@ c2c/c2e/c2f/c4c/c9c 假设的是 adapter 直调 post_process 的旧架构，已�
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -416,7 +417,7 @@ async def test_d9_adapter_passes_raw_text_and_scrub_occurs(sandbox, monkeypatch)
     fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
-    frozen_scope = MemoryScope.reality_scope("u_test", "yexuan")
+    frozen_scope = MemoryScope.reality_scope("u_test", TEST_CHAR_ID)
     segments = ["（她低头轻轻抬起手）", "好的，我知道了。"]
 
     await _main._qq_reality_reply_adapter(
@@ -466,7 +467,7 @@ async def test_d9b_adapter_visible_keeps_actions_memory_strips_pure_action_lines
     fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
-    frozen_scope = MemoryScope.reality_scope("u_test2", "yexuan")
+    frozen_scope = MemoryScope.reality_scope("u_test2", TEST_CHAR_ID)
     # Two segments: pure action line (should be scrubbed from memory) + dialogue
     segments = ["（她抬起头，轻轻点了点）", "好的，没问题。"]
 
@@ -527,7 +528,7 @@ async def test_d9c_adapter_group_routing_preserved(sandbox, monkeypatch):
     fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
-    frozen_scope = MemoryScope.reality_scope("u_grp", "yexuan")
+    frozen_scope = MemoryScope.reality_scope("u_grp", TEST_CHAR_ID)
 
     await _main._qq_reality_reply_adapter(
         ["群里好啊！"], "u_grp", "hi", "group_123", True,
@@ -576,7 +577,7 @@ async def test_d9d_frozen_scope_forwarded_to_post_process(sandbox, monkeypatch):
     fake_pipeline.post_process_slow = AsyncMock(return_value={"turn_id": "t1", "emotion": "neutral"})
     monkeypatch.setattr(_main, "_pipeline", fake_pipeline)
 
-    frozen_scope = MemoryScope.reality_scope("u_scope", "yexuan")
+    frozen_scope = MemoryScope.reality_scope("u_scope", TEST_CHAR_ID)
 
     await _main._qq_reality_reply_adapter(
         ["こんにちは。"], "u_scope", "hi", "u_scope", False,

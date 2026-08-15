@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_session.py — Brief 38 状态机单元测试
 
@@ -18,7 +19,7 @@ from core.coplay.session import (
 )
 
 UID = "u1"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 
 
 def test_default_state_is_off(sandbox):

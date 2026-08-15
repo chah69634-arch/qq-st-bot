@@ -1,5 +1,6 @@
 """CC-05: peer_reply arbiter bonus + AI chain continuation tests."""
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_THIRD_CHAR_ID
 
 import uuid
 
@@ -16,7 +17,7 @@ def _settings(**overrides):
         "respond_threshold": 0.5,
         "spontaneous_threshold": 0.7,
         "transcript_limit": 200,
-        "talkativeness": {"yexuan": 0.5, "yexuanJ-5412": 0.5},
+        "talkativeness": {TEST_CHAR_ID: 0.5, TEST_PEER_CHAR_ID: 0.5},
         # Brief 85 §4 topic-seed is orthogonal to what these tests exercise and
         # uses real random.random() when unmocked — pin it off for determinism.
         "topic_seed_prob": 0.0,
@@ -25,7 +26,7 @@ def _settings(**overrides):
     return StageSettings(**values)
 
 
-def _stage(roster=("yexuan", "yexuanJ-5412"), **setting_overrides):
+def _stage(roster=(TEST_CHAR_ID, TEST_PEER_CHAR_ID), **setting_overrides):
     from core.stage.store import create_stage
 
     group_id = f"cc05-{uuid.uuid4().hex[:8]}"
@@ -69,9 +70,9 @@ def test_peer_reply_bonus_when_peer_spoke(sandbox):
     stage = _stage()
     transcript = [
         _entry("owner", "hello", ts=1),
-        _entry("yexuan", "something", ts=2),  # peer spoke last
+        _entry(TEST_CHAR_ID, "something", ts=2),  # peer spoke last
     ]
-    ranked = score_candidates(stage, transcript, candidates=["yexuanJ-5412"])
+    ranked = score_candidates(stage, transcript, candidates=[TEST_PEER_CHAR_ID])
     score = ranked[0]
 
     assert score.parts["peer_reply"] > 0.0
@@ -85,7 +86,7 @@ def test_peer_reply_zero_when_owner_spoke(sandbox):
 
     stage = _stage()
     transcript = [_entry("owner", "hello")]
-    ranked = score_candidates(stage, transcript, candidates=["yexuanJ-5412"])
+    ranked = score_candidates(stage, transcript, candidates=[TEST_PEER_CHAR_ID])
 
     assert ranked[0].parts["peer_reply"] == 0.0
 
@@ -97,9 +98,9 @@ def test_peer_reply_zero_when_self_spoke_last(sandbox):
     stage = _stage()
     transcript = [
         _entry("owner", "hello", ts=1),
-        _entry("yexuanJ-5412", "I just spoke", ts=2),
+        _entry(TEST_PEER_CHAR_ID, "I just spoke", ts=2),
     ]
-    ranked = score_candidates(stage, transcript, candidates=["yexuanJ-5412"])
+    ranked = score_candidates(stage, transcript, candidates=[TEST_PEER_CHAR_ID])
 
     assert ranked[0].parts["peer_reply"] == 0.0
 
@@ -109,7 +110,7 @@ def test_peer_reply_empty_transcript_has_no_bonus(sandbox):
     from core.stage.arbiter import score_candidates
 
     stage = _stage()
-    ranked = score_candidates(stage, [], candidates=["yexuanJ-5412"])
+    ranked = score_candidates(stage, [], candidates=[TEST_PEER_CHAR_ID])
 
     assert ranked[0].parts["peer_reply"] == 0.0
 
@@ -120,15 +121,15 @@ def test_addressed_still_outweighs_peer_reply_for_ranking(sandbox):
     from core.stage.arbiter import score_candidates
 
     stage = _stage()
-    name = get_char_name("yexuan")
+    name = get_char_name(TEST_CHAR_ID)
     # yexuanJ-5412 spoke last and directly addressed yexuan
-    transcript = [_entry("yexuanJ-5412", f"@{name} 你觉得呢？", ts=1)]
+    transcript = [_entry(TEST_PEER_CHAR_ID, f"@{name} 你觉得呢？", ts=1)]
     ranked = score_candidates(stage, transcript)
 
-    assert ranked[0].char_id == "yexuan"
+    assert ranked[0].char_id == TEST_CHAR_ID
     assert ranked[0].parts["addressed"] == 0.9
     # yexuanJ-5412 gets peer_reply but not addressed — should rank lower
-    other = next(s for s in ranked if s.char_id == "yexuanJ-5412")
+    other = next(s for s in ranked if s.char_id == TEST_PEER_CHAR_ID)
     assert other.parts["peer_reply"] == 0.0  # self-spoke, no bonus
 
 
@@ -138,13 +139,13 @@ def test_peer_reply_scales_with_talkativeness(sandbox):
     from core.stage.store import create_stage
     from core.stage.models import StageSettings
 
-    settings = StageSettings(talkativeness={"yexuan": 1.0, "yexuanJ-5412": 0.2})
-    stage = create_stage(f"cc05-talk-{uuid.uuid4().hex[:6]}", "owner", ["yexuan", "yexuanJ-5412"], settings=settings)
+    settings = StageSettings(talkativeness={TEST_CHAR_ID: 1.0, TEST_PEER_CHAR_ID: 0.2})
+    stage = create_stage(f"cc05-talk-{uuid.uuid4().hex[:6]}", "owner", [TEST_CHAR_ID, TEST_PEER_CHAR_ID], settings=settings)
 
     # yexuan spoke → yexuanJ-5412 (quiet) gets peer_reply
-    ranked_quiet = score_candidates(stage, [_entry("yexuan", "hi")], candidates=["yexuanJ-5412"])
+    ranked_quiet = score_candidates(stage, [_entry(TEST_CHAR_ID, "hi")], candidates=[TEST_PEER_CHAR_ID])
     # yexuanJ-5412 spoke → yexuan (talkative) gets peer_reply
-    ranked_talk = score_candidates(stage, [_entry("yexuanJ-5412", "hi")], candidates=["yexuan"])
+    ranked_talk = score_candidates(stage, [_entry(TEST_PEER_CHAR_ID, "hi")], candidates=[TEST_CHAR_ID])
 
     assert ranked_talk[0].parts["peer_reply"] > ranked_quiet[0].parts["peer_reply"]
 
@@ -156,22 +157,22 @@ def test_recency_penalty_still_reduces_peer_reply_benefit(sandbox):
     from core.stage.store import create_stage
 
     # Three-char roster: yexuan, yexuanJ-5412, hongcha. yexuanJ-5412 spoke twice recently.
-    settings = StageSettings(talkativeness={"yexuan": 0.5, "yexuanJ-5412": 0.5, "hongcha": 0.5})
+    settings = StageSettings(talkativeness={TEST_CHAR_ID: 0.5, TEST_PEER_CHAR_ID: 0.5, TEST_THIRD_CHAR_ID: 0.5})
     stage = create_stage(
         f"cc05-recency-{uuid.uuid4().hex[:6]}",
         "owner",
-        ["yexuan", "yexuanJ-5412", "hongcha"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_THIRD_CHAR_ID],
         settings=settings,
     )
     transcript = [
-        _entry("yexuan", "msg1", ts=1),
-        _entry("yexuanJ-5412", "msg2", ts=2),
-        _entry("yexuanJ-5412", "msg3", ts=3),  # spoke twice — high recency
-        _entry("hongcha", "msg4", ts=4),  # peer for both yexuan and yexuanJ-5412
+        _entry(TEST_CHAR_ID, "msg1", ts=1),
+        _entry(TEST_PEER_CHAR_ID, "msg2", ts=2),
+        _entry(TEST_PEER_CHAR_ID, "msg3", ts=3),  # spoke twice — high recency
+        _entry(TEST_THIRD_CHAR_ID, "msg4", ts=4),  # peer for both yexuan and yexuanJ-5412
     ]
-    ranked = score_candidates(stage, transcript, candidates=["yexuan", "yexuanJ-5412"])
-    yexuan_score = next(s for s in ranked if s.char_id == "yexuan")
-    heavy_score = next(s for s in ranked if s.char_id == "yexuanJ-5412")
+    ranked = score_candidates(stage, transcript, candidates=[TEST_CHAR_ID, TEST_PEER_CHAR_ID])
+    yexuan_score = next(s for s in ranked if s.char_id == TEST_CHAR_ID)
+    heavy_score = next(s for s in ranked if s.char_id == TEST_PEER_CHAR_ID)
 
     # yexuan: peer_reply applies, modest recency (1 occurrence) → higher total
     # yexuanJ-5412: peer_reply applies but heavy recency penalty (2 occurrences) → lower
@@ -190,10 +191,10 @@ async def test_phase_b_chain_continues_when_peer_spoke(sandbox):
     # With only owner speaking: base = 0.25 < threshold (0.5*0.8=0.4) → chain breaks.
     # With peer speaking: base + peer_reply = 0.25 + 0.20 = 0.45 > 0.40 → chain continues.
     settings = _settings(max_responders=1, max_ai_chain_depth=3, allow_silent_rounds=False)
-    stage = create_stage(f"cc05-chain-{uuid.uuid4().hex[:6]}", "owner", ["yexuan", "yexuanJ-5412"], settings=settings)
+    stage = create_stage(f"cc05-chain-{uuid.uuid4().hex[:6]}", "owner", [TEST_CHAR_ID, TEST_PEER_CHAR_ID], settings=settings)
 
     async def generate(stage, speaker_id, transcript, turn_id, triggered_by):
-        return "我先说说窗外的雨。" if speaker_id == "yexuan" else "我更想谈谈刚才那部电影。"
+        return "我先说说窗外的雨。" if speaker_id == TEST_CHAR_ID else "我更想谈谈刚才那部电影。"
 
     result = await run_owner_turn(
         stage.group_id,
@@ -218,9 +219,9 @@ async def test_phase_b_chain_bounded_at_max_depth(sandbox):
     settings = _settings(
         max_responders=1,
         max_ai_chain_depth=max_depth,
-        talkativeness={"yexuan": 1.0, "yexuanJ-5412": 1.0},
+        talkativeness={TEST_CHAR_ID: 1.0, TEST_PEER_CHAR_ID: 1.0},
     )
-    stage = create_stage(f"cc05-bound-{uuid.uuid4().hex[:6]}", "owner", ["yexuan", "yexuanJ-5412"], settings=settings)
+    stage = create_stage(f"cc05-bound-{uuid.uuid4().hex[:6]}", "owner", [TEST_CHAR_ID, TEST_PEER_CHAR_ID], settings=settings)
 
     async def generate(stage, speaker_id, transcript, turn_id, triggered_by):
         return f"{speaker_id}-says"
@@ -239,9 +240,9 @@ async def test_phase_b_no_chain_when_roster_has_only_one_char(sandbox):
     settings = _settings(
         max_responders=1,
         max_ai_chain_depth=3,
-        talkativeness={"yexuan": 1.0},
+        talkativeness={TEST_CHAR_ID: 1.0},
     )
-    stage = create_stage(f"cc05-solo-{uuid.uuid4().hex[:6]}", "owner", ["yexuan"], settings=settings)
+    stage = create_stage(f"cc05-solo-{uuid.uuid4().hex[:6]}", "owner", [TEST_CHAR_ID], settings=settings)
 
     async def generate(stage, speaker_id, transcript, turn_id, triggered_by):
         return "solo-reply"

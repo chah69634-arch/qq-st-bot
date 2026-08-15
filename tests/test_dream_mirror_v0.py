@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_mirror_v0.py — Dream Mirror Mode v0.1/v0.2 tests
 
@@ -155,7 +156,7 @@ def test_mirror_enter_freezes_mirror_core(sandbox):
         patch("core.pipeline_registry.get", return_value=MagicMock(character=_FAKE_CHARACTER)),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        result = asyncio.run(enter_dream(_UID, entry_reason="test", char_id="yexuan", dream_mode="mirror"))
+        result = asyncio.run(enter_dream(_UID, entry_reason="test", char_id=TEST_CHAR_ID, dream_mode="mirror"))
 
     assert result["ok"] is True
     state = read_state(_UID)
@@ -186,7 +187,7 @@ def test_mirror_snapshot_frozen_against_later_hs_changes(sandbox):
         patch("core.pipeline_registry.get", return_value=MagicMock(character=_FAKE_CHARACTER)),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        asyncio.run(enter_dream(_UID, entry_reason="test", char_id="yexuan", dream_mode="mirror"))
+        asyncio.run(enter_dream(_UID, entry_reason="test", char_id=TEST_CHAR_ID, dream_mode="mirror"))
 
     state_before = read_state(_UID)
     mc_before = state_before["mirror_core"]["snapshot_buckets"].copy()
@@ -217,7 +218,7 @@ def test_sandbox_enter_no_mirror_core(sandbox):
         patch("core.pipeline_registry.get", return_value=MagicMock(character=_FAKE_CHARACTER)),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        result = asyncio.run(enter_dream(_UID, entry_reason="test", char_id="yexuan", dream_mode="sandbox"))
+        result = asyncio.run(enter_dream(_UID, entry_reason="test", char_id=TEST_CHAR_ID, dream_mode="sandbox"))
 
     assert result["ok"] is True
     state = read_state(_UID)
@@ -243,7 +244,7 @@ def test_scenario_enter_no_mirror_core(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         result = asyncio.run(enter_dream(
-            _UID, entry_reason="test", char_id="yexuan",
+            _UID, entry_reason="test", char_id=TEST_CHAR_ID,
             dream_mode="scenario", script_id="prison_demo",
         ))
 
@@ -403,11 +404,11 @@ def test_mirror_exit_calls_afterglow_with_mirror_mode():
         patch("core.dream.distill_impression.distill_impression", new=AsyncMock()),
     ):
         asyncio.run(dream_pipeline._generate_summary_bg(
-            _UID, "dream_test_123", "soft", char_id="yexuan", dream_mode="mirror"
+            _UID, "dream_test_123", "soft", char_id=TEST_CHAR_ID, dream_mode="mirror"
         ))
 
     mock_afterglow.assert_called_once_with(
-        _UID, "dream_test_123", "soft", char_id="yexuan", mode="mirror"
+        _UID, "dream_test_123", "soft", char_id=TEST_CHAR_ID, mode="mirror"
     )
 
 
@@ -425,11 +426,11 @@ def test_mirror_exit_calls_distill_impression_with_mirror_mode():
         patch("core.dream.distill_impression.distill_impression", new=AsyncMock()) as mock_distill,
     ):
         asyncio.run(dream_pipeline._generate_summary_bg(
-            _UID, "dream_test_123", "soft", char_id="yexuan", dream_mode="mirror"
+            _UID, "dream_test_123", "soft", char_id=TEST_CHAR_ID, dream_mode="mirror"
         ))
 
     mock_distill.assert_called_once_with(
-        _UID, "dream_test_123", "soft", char_id="yexuan", mode="mirror"
+        _UID, "dream_test_123", "soft", char_id=TEST_CHAR_ID, mode="mirror"
     )
 
 
@@ -447,7 +448,7 @@ def test_scenario_exit_still_skips_afterglow_and_impression():
         patch("core.dream.distill_impression.distill_impression", new=AsyncMock()) as mock_distill,
     ):
         asyncio.run(dream_pipeline._generate_summary_bg(
-            _UID, "dream_test_456", "soft", char_id="yexuan", dream_mode="scenario"
+            _UID, "dream_test_456", "soft", char_id=TEST_CHAR_ID, dream_mode="scenario"
         ))
 
     mock_afterglow.assert_not_called()

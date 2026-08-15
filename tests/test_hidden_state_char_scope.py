@@ -14,6 +14,7 @@ Covers:
 10. legacy 默认兼容：不传 char_id 默认 yexuan
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -40,10 +41,10 @@ def test_save_hidden_state_writes_to_char_id_path(sandbox):
     save_hidden_state(_UID, state, char_id="character_b")
 
     character_b_path = sandbox.user_memory_root(_UID, char_id="character_b") / "hidden_state.json"
-    yexuan_path  = sandbox.user_memory_root(_UID, char_id="yexuan")  / "hidden_state.json"
+    yexuan_path  = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID)  / "hidden_state.json"
 
     assert character_b_path.exists(), "character_b hidden_state.json should be written"
-    assert not yexuan_path.exists(), "yexuan hidden_state.json must NOT be written"
+    assert not yexuan_path.exists(), f'{TEST_CHAR_ID} hidden_state.json must NOT be written'
 
 
 # ── 2. hidden_state store 读取指定 char_id 路径 ────────────────────────────────
@@ -59,14 +60,14 @@ def test_load_hidden_state_reads_from_char_id_path(sandbox):
     state_h = default_hidden_state()
     state_h.sensitivity.baseline.value = 77.0
 
-    save_hidden_state(_UID, state_y, char_id="yexuan")
+    save_hidden_state(_UID, state_y, char_id=TEST_CHAR_ID)
     save_hidden_state(_UID, state_h, char_id="character_b")
 
-    loaded_y = load_hidden_state(_UID, char_id="yexuan")
+    loaded_y = load_hidden_state(_UID, char_id=TEST_CHAR_ID)
     loaded_h = load_hidden_state(_UID, char_id="character_b")
 
     assert loaded_y.sensitivity.baseline.value == pytest.approx(42.0), \
-        "yexuan 桶应返回 baseline=42"
+        f'{TEST_CHAR_ID} 桶应返回 baseline=42'
     assert loaded_h.sensitivity.baseline.value == pytest.approx(77.0), \
         "character_b 桶应返回 baseline=77"
     assert loaded_y.sensitivity.baseline.value != loaded_h.sensitivity.baseline.value, \
@@ -84,10 +85,10 @@ def test_save_afterglow_residue_writes_to_char_id_path(sandbox):
     save_afterglow_residue(_UID, residue, created_at=_NOW, char_id="character_b")
 
     character_b_path = sandbox.user_memory_root(_UID, char_id="character_b") / "afterglow_residue.json"
-    yexuan_path  = sandbox.user_memory_root(_UID, char_id="yexuan")  / "afterglow_residue.json"
+    yexuan_path  = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID)  / "afterglow_residue.json"
 
     assert character_b_path.exists(), "character_b afterglow_residue.json should be written"
-    assert not yexuan_path.exists(), "yexuan afterglow_residue.json must NOT be written"
+    assert not yexuan_path.exists(), f'{TEST_CHAR_ID} afterglow_residue.json must NOT be written'
 
     data = json.loads(character_b_path.read_text(encoding="utf-8"))
     assert data.get("tone") == "calm"
@@ -105,11 +106,11 @@ def test_integrate_afterglow_and_save_passes_char_id(sandbox):
     save_calls: list[dict] = []
 
     from core.memory.user_hidden_state import default_hidden_state
-    def _mock_load(uid, *, char_id="yexuan"):
+    def _mock_load(uid, *, char_id=TEST_CHAR_ID):
         load_calls.append({"uid": uid, "char_id": char_id})
         return default_hidden_state()
 
-    def _mock_save(uid, state, *, char_id="yexuan"):
+    def _mock_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_calls.append({"uid": uid, "char_id": char_id})
         return True
 
@@ -159,7 +160,7 @@ def test_wire_afterglow_passes_char_id_to_integrator(sandbox):
 
     integrate_calls: list[dict] = []
 
-    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id="yexuan"):
+    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id=TEST_CHAR_ID):
         integrate_calls.append({"uid": uid, "char_id": char_id, "tone": residue.tone})
         return MagicMock(), MagicMock(accepted=True, rejected=False,
                                       touched_fields=[], rejected_reasons=[])
@@ -182,19 +183,19 @@ def test_wire_afterglow_passes_char_id_to_integrator(sandbox):
 # ── 6. active 切换后，旧 dream afterglow 仍写回入梦角色 ───────────────────────
 
 def test_wire_afterglow_uses_session_char_id_not_active(sandbox):
-    """afterglow 回流读取 session char_id="yexuan"，不管 active 已切到 character_b。"""
+    """afterglow 回流读取 session char_id=TEST_CHAR_ID，不管 active 已切到 character_b。"""
     import time as _time
     from core.dream.dream_exit_afterglow import wire_afterglow_from_summary
 
     dream_id = f"dream_{_UID}_session_lock"
 
     # dream 入梦时是 yexuan
-    summaries_dir = sandbox.dreams_summaries_dir(char_id="yexuan")
+    summaries_dir = sandbox.dreams_summaries_dir(char_id=TEST_CHAR_ID)
     summaries_dir.mkdir(parents=True, exist_ok=True)
     summary = {
         "dream_id": dream_id,
         "uid": _UID,
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
         "created_at": _time.time(),
         "exit_type": "soft",
         "afterglow": "gentle_residue",
@@ -210,7 +211,7 @@ def test_wire_afterglow_uses_session_char_id_not_active(sandbox):
 
     integrate_calls: list[dict] = []
 
-    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id="yexuan"):
+    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id=TEST_CHAR_ID):
         integrate_calls.append({"char_id": char_id})
         return MagicMock(), MagicMock(accepted=True, rejected=False,
                                       touched_fields=[], rejected_reasons=[])
@@ -223,11 +224,11 @@ def test_wire_afterglow_uses_session_char_id_not_active(sandbox):
          patch("core.write_envelope.stamp_dream_afterglow",
                return_value=MagicMock()):
         # char_id 来自调用方（T-05.5 锁定的 dream_state.char_id），不是 active_character
-        wire_afterglow_from_summary(_UID, dream_id, "soft", char_id="yexuan")
+        wire_afterglow_from_summary(_UID, dream_id, "soft", char_id=TEST_CHAR_ID)
 
     assert integrate_calls, "integrate_afterglow_and_save must be called"
-    assert integrate_calls[0]["char_id"] == "yexuan", \
-        "Dream 回流必须用入梦时的 char_id='yexuan'，不能改为当前 active"
+    assert integrate_calls[0]["char_id"] == TEST_CHAR_ID, \
+        "Dream 回流必须用入梦时的 char_id=TEST_CHAR_ID，不能改为当前 active"
 
 
 # ── 7. legacy dream_state 缺 char_id — WARN + fallback yexuan ─────────────────
@@ -241,11 +242,11 @@ def test_legacy_dream_state_missing_char_id_warns_and_fallbacks(caplog):
     with caplog.at_level(logging.WARNING, logger="core.dream.dream_pipeline"):
         result = _state_char_id(legacy_state, "test_handler", uid="u99", dream_id="old_dream_123")
 
-    assert result == "yexuan", f"legacy fallback must be 'yexuan', got {result!r}"
+    assert result == TEST_CHAR_ID, f"legacy fallback must be TEST_CHAR_ID, got {result!r}"
     warn_text = caplog.text.lower()
     assert any(
         kw in warn_text
-        for kw in ("legacy", "fallback", "yexuan")
+        for kw in ("legacy", "fallback", TEST_CHAR_ID)
     ), f"WARN must mention legacy/fallback/yexuan, got: {caplog.text!r}"
 
 
@@ -263,11 +264,11 @@ def test_hidden_state_decay_iterates_registered_chars(sandbox):
     load_calls: list[dict] = []
     save_calls: list[dict] = []
 
-    def _mock_load(uid, *, char_id="yexuan"):
+    def _mock_load(uid, *, char_id=TEST_CHAR_ID):
         load_calls.append({"uid": uid, "char_id": char_id})
         return default_hidden_state()
 
-    def _mock_save(uid, state, *, char_id="yexuan"):
+    def _mock_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_calls.append({"uid": uid, "char_id": char_id})
         return True
 
@@ -296,18 +297,18 @@ def test_hidden_state_decay_not_blocked_by_missing_active(sandbox):
     from core.scheduler.triggers import hidden_state_decay as _hsd
     from core.memory.user_hidden_state import default_hidden_state
 
-    uid_dir = sandbox.memory_char_root(char_id="yexuan") / "owner1"
+    uid_dir = sandbox.memory_char_root(char_id=TEST_CHAR_ID) / "owner1"
     uid_dir.mkdir(parents=True, exist_ok=True)
     (uid_dir / "hidden_state.json").write_text("{}", encoding="utf-8")
 
     save_called = []
 
-    def _spy_save(uid, state, *, char_id="yexuan"):
+    def _spy_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_called.append(char_id)
         return True
 
     mock_reg = MagicMock()
-    mock_reg.list_all.return_value = [MagicMock(id="yexuan")]
+    mock_reg.list_all.return_value = [MagicMock(id=TEST_CHAR_ID)]
 
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
@@ -320,7 +321,7 @@ def test_hidden_state_decay_not_blocked_by_missing_active(sandbox):
         asyncio.run(_hsd._check_hidden_state_decay())
 
     assert save_called, "save MUST be called — missing active must NOT block decay"
-    assert save_called[0] == "yexuan"
+    assert save_called[0] == TEST_CHAR_ID
 
 
 # ── 9. 隔离验收：yexuan afterglow 不写入 character_b 桶 ────────────────────────────
@@ -345,7 +346,7 @@ def test_afterglow_isolation_yexuan_does_not_pollute_character_b(sandbox):
     # 预置两桶 baseline 不同，方便验证隔离
     state_y = default_hidden_state()
     state_y.sensitivity.current.value = 50.0
-    save_hidden_state(_UID, state_y, char_id="yexuan")
+    save_hidden_state(_UID, state_y, char_id=TEST_CHAR_ID)
 
     state_h = default_hidden_state()
     state_h.sensitivity.current.value = 50.0
@@ -355,20 +356,20 @@ def test_afterglow_isolation_yexuan_does_not_pollute_character_b(sandbox):
     residue = AfterglowResidueInput(
         emotional_tags=["warm"], tone="comfort", age_hours=0.0
     )
-    save_afterglow_residue(_UID, residue, created_at=_NOW, char_id="yexuan")
+    save_afterglow_residue(_UID, residue, created_at=_NOW, char_id=TEST_CHAR_ID)
 
     # yexuan integrate（comfort tone → sensitivity.current 上涨）
     envelope = stamp_dream_afterglow()
-    integrate_afterglow_and_save(_UID, residue, envelope, _NOW, char_id="yexuan")
+    integrate_afterglow_and_save(_UID, residue, envelope, _NOW, char_id=TEST_CHAR_ID)
 
     # character_b 桶应当未被写入
     character_b_after = load_hidden_state(_UID, char_id="character_b")
-    yexuan_after  = load_hidden_state(_UID, char_id="yexuan")
+    yexuan_after  = load_hidden_state(_UID, char_id=TEST_CHAR_ID)
 
     assert character_b_after.sensitivity.current.value == pytest.approx(50.0), \
-        "character_b 桶 sensitivity.current 不应被 yexuan afterglow 改动"
+        f'character_b 桶 sensitivity.current 不应被 {TEST_CHAR_ID} afterglow 改动'
     assert yexuan_after.sensitivity.current.value > 50.0, \
-        "yexuan 桶 sensitivity.current 应已被 afterglow 上调"
+        f'{TEST_CHAR_ID} 桶 sensitivity.current 应已被 afterglow 上调'
 
 
 # ── 10. legacy 默认兼容：不传 char_id 默认 yexuan ─────────────────────────────
@@ -388,8 +389,8 @@ def test_legacy_call_without_char_id_defaults_to_yexuan(sandbox):
     save_hidden_state(_UID, state)
     loaded = load_hidden_state(_UID)
 
-    yexuan_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "hidden_state.json"
-    assert yexuan_path.exists(), "legacy 默认应写入 yexuan 桶"
+    yexuan_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "hidden_state.json"
+    assert yexuan_path.exists(), f'legacy 默认应写入 {TEST_CHAR_ID} 桶'
     assert loaded.sensitivity.baseline.value == pytest.approx(55.0)
 
 
@@ -410,5 +411,5 @@ def test_production_path_with_explicit_char_id_writes_correct_bucket(sandbox):
 
     assert loaded.sensitivity.baseline.value == pytest.approx(88.0)
     # 确认未污染 yexuan
-    yexuan_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "hidden_state.json"
-    assert not yexuan_path.exists(), "生产路径不应写入 yexuan 桶"
+    yexuan_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "hidden_state.json"
+    assert not yexuan_path.exists(), f'生产路径不应写入 {TEST_CHAR_ID} 桶'

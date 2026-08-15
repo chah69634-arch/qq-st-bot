@@ -13,6 +13,7 @@ Covers:
 9.  consolidate 也遍历所有注册角色（_check_hidden_state_consolidate）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import logging
@@ -45,7 +46,7 @@ def test_decay_covers_both_registered_chars(sandbox):
     """_check_hidden_state_decay 必须遍历所有注册角色，不只处理 yexuan。"""
     from core.scheduler.triggers import hidden_state_decay as _hsd
 
-    for char_id in ("yexuan", "character_b"):
+    for char_id in (TEST_CHAR_ID, "character_b"):
         uid_dir = sandbox.memory_char_root(char_id=char_id) / "u1"
         uid_dir.mkdir(parents=True, exist_ok=True)
         (uid_dir / "hidden_state.json").write_text("{}", encoding="utf-8")
@@ -53,27 +54,27 @@ def test_decay_covers_both_registered_chars(sandbox):
     load_char_ids: list[str] = []
     save_char_ids: list[str] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         load_char_ids.append(char_id)
         return _make_default_state()
 
-    def _spy_save(uid, state, *, char_id="yexuan"):
+    def _spy_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_char_ids.append(char_id)
         return True
 
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
          patch("core.asset_registry.get_registry",
-               return_value=_make_registry("yexuan", "character_b")), \
+               return_value=_make_registry(TEST_CHAR_ID, "character_b")), \
          patch("core.memory.user_hidden_state_store.load_hidden_state", _spy_load), \
          patch("core.memory.user_hidden_state_store.save_hidden_state", _spy_save), \
          patch("core.memory.user_hidden_state.apply_time_decay",
                side_effect=lambda s, _n: s):
         asyncio.run(_hsd._check_hidden_state_decay())
 
-    assert "yexuan" in load_char_ids, "yexuan must be processed"
+    assert TEST_CHAR_ID in load_char_ids, f'{TEST_CHAR_ID} must be processed'
     assert "character_b" in load_char_ids, "character_b must be processed"
-    assert "yexuan" in save_char_ids
+    assert TEST_CHAR_ID in save_char_ids
     assert "character_b" in save_char_ids
 
 
@@ -83,7 +84,7 @@ def test_decay_calls_load_and_save_for_each_char(sandbox):
     """每个 (char_id, uid) 对都触发一次 load + save，不多不少。"""
     from core.scheduler.triggers import hidden_state_decay as _hsd
 
-    for char_id in ("yexuan", "character_b"):
+    for char_id in (TEST_CHAR_ID, "character_b"):
         uid_dir = sandbox.memory_char_root(char_id=char_id) / "u1"
         uid_dir.mkdir(parents=True, exist_ok=True)
         (uid_dir / "hidden_state.json").write_text("{}", encoding="utf-8")
@@ -91,18 +92,18 @@ def test_decay_calls_load_and_save_for_each_char(sandbox):
     load_calls: list[tuple[str, str]] = []
     save_calls: list[tuple[str, str]] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         load_calls.append((uid, char_id))
         return _make_default_state()
 
-    def _spy_save(uid, state, *, char_id="yexuan"):
+    def _spy_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_calls.append((uid, char_id))
         return True
 
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
          patch("core.asset_registry.get_registry",
-               return_value=_make_registry("yexuan", "character_b")), \
+               return_value=_make_registry(TEST_CHAR_ID, "character_b")), \
          patch("core.memory.user_hidden_state_store.load_hidden_state", _spy_load), \
          patch("core.memory.user_hidden_state_store.save_hidden_state", _spy_save), \
          patch("core.memory.user_hidden_state.apply_time_decay",
@@ -111,7 +112,7 @@ def test_decay_calls_load_and_save_for_each_char(sandbox):
 
     assert len(load_calls) == 2, f"expected 2 load calls, got {load_calls}"
     assert len(save_calls) == 2, f"expected 2 save calls, got {save_calls}"
-    assert ("u1", "yexuan") in load_calls
+    assert ("u1", TEST_CHAR_ID) in load_calls
     assert ("u1", "character_b") in load_calls
 
 
@@ -127,11 +128,11 @@ def test_decay_passes_correct_char_id_to_store(sandbox):
 
     received: list[dict] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         received.append({"op": "load", "uid": uid, "char_id": char_id})
         return _make_default_state()
 
-    def _spy_save(uid, state, *, char_id="yexuan"):
+    def _spy_save(uid, state, *, char_id=TEST_CHAR_ID):
         received.append({"op": "save", "uid": uid, "char_id": char_id})
         return True
 
@@ -161,20 +162,20 @@ def test_decay_not_blocked_by_missing_active_character(sandbox):
     """active_prompt_assets.json 缺失或 active_character 为空不影响多角色 decay。"""
     from core.scheduler.triggers import hidden_state_decay as _hsd
 
-    uid_dir = sandbox.memory_char_root(char_id="yexuan") / "u_active_test"
+    uid_dir = sandbox.memory_char_root(char_id=TEST_CHAR_ID) / "u_active_test"
     uid_dir.mkdir(parents=True, exist_ok=True)
     (uid_dir / "hidden_state.json").write_text("{}", encoding="utf-8")
 
     save_called = []
 
-    def _spy_save(uid, state, *, char_id="yexuan"):
+    def _spy_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_called.append(char_id)
         return True
 
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
          patch("core.asset_registry.get_registry",
-               return_value=_make_registry("yexuan")), \
+               return_value=_make_registry(TEST_CHAR_ID)), \
          patch("core.memory.user_hidden_state_store.load_hidden_state",
                return_value=_make_default_state()), \
          patch("core.memory.user_hidden_state_store.save_hidden_state", _spy_save), \
@@ -183,7 +184,7 @@ def test_decay_not_blocked_by_missing_active_character(sandbox):
         asyncio.run(_hsd._check_hidden_state_decay())
 
     assert save_called, "decay MUST run even when active_character is unavailable"
-    assert save_called[0] == "yexuan"
+    assert save_called[0] == TEST_CHAR_ID
 
 
 # ── Test 5: 某角色 runtime 目录不存在时跳过，不报错 ──────────────────────────
@@ -193,20 +194,20 @@ def test_decay_skips_missing_char_dir_without_error(sandbox):
     from core.scheduler.triggers import hidden_state_decay as _hsd
 
     # 只创建 yexuan 目录，character_b 目录不创建
-    uid_dir = sandbox.memory_char_root(char_id="yexuan") / "u1"
+    uid_dir = sandbox.memory_char_root(char_id=TEST_CHAR_ID) / "u1"
     uid_dir.mkdir(parents=True, exist_ok=True)
     (uid_dir / "hidden_state.json").write_text("{}", encoding="utf-8")
 
     save_char_ids: list[str] = []
 
-    def _spy_save(uid, state, *, char_id="yexuan"):
+    def _spy_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_char_ids.append(char_id)
         return True
 
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
          patch("core.asset_registry.get_registry",
-               return_value=_make_registry("yexuan", "character_b")), \
+               return_value=_make_registry(TEST_CHAR_ID, "character_b")), \
          patch("core.memory.user_hidden_state_store.load_hidden_state",
                return_value=_make_default_state()), \
          patch("core.memory.user_hidden_state_store.save_hidden_state", _spy_save), \
@@ -214,7 +215,7 @@ def test_decay_skips_missing_char_dir_without_error(sandbox):
                side_effect=lambda s, _n: s):
         asyncio.run(_hsd._check_hidden_state_decay())
 
-    assert save_char_ids == ["yexuan"], \
+    assert save_char_ids == [TEST_CHAR_ID], \
         f"only yexuan should be processed (character_b dir absent), got {save_char_ids}"
 
 
@@ -254,7 +255,7 @@ def test_decay_yexuan_state_not_applied_to_character_b(sandbox):
     # 预置 yexuan baseline=10, character_b baseline=20
     state_y = default_hidden_state()
     state_y.sensitivity.baseline.value = 10.0
-    save_hidden_state("u1", state_y, char_id="yexuan")
+    save_hidden_state("u1", state_y, char_id=TEST_CHAR_ID)
 
     state_h = default_hidden_state()
     state_h.sensitivity.baseline.value = 20.0
@@ -264,7 +265,7 @@ def test_decay_yexuan_state_not_applied_to_character_b(sandbox):
 
     real_load = load_hidden_state
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         state = real_load(uid, char_id=char_id)
         loaded_for_char[char_id] = state.sensitivity.baseline.value
         return state
@@ -272,7 +273,7 @@ def test_decay_yexuan_state_not_applied_to_character_b(sandbox):
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
          patch("core.asset_registry.get_registry",
-               return_value=_make_registry("yexuan", "character_b")), \
+               return_value=_make_registry(TEST_CHAR_ID, "character_b")), \
          patch("core.memory.user_hidden_state_store.load_hidden_state", _spy_load), \
          patch("core.memory.user_hidden_state_store.save_hidden_state",
                return_value=True), \
@@ -280,10 +281,10 @@ def test_decay_yexuan_state_not_applied_to_character_b(sandbox):
                side_effect=lambda s, _n: s):
         asyncio.run(_hsd._check_hidden_state_decay())
 
-    assert loaded_for_char.get("yexuan") == pytest.approx(10.0), \
-        "yexuan decay must load from yexuan bucket (baseline=10)"
+    assert loaded_for_char.get(TEST_CHAR_ID) == pytest.approx(10.0), \
+        f'{TEST_CHAR_ID} decay must load from {TEST_CHAR_ID} bucket (baseline=10)'
     assert loaded_for_char.get("character_b") == pytest.approx(20.0), \
-        "character_b decay must load from character_b bucket (baseline=20), not yexuan's"
+        f"character_b decay must load from character_b bucket (baseline=20), not {TEST_CHAR_ID}'s"
 
 
 # ── Test 8: 新逻辑不触碰 legacy uid-only hidden_state 路径 ───────────────────
@@ -299,20 +300,20 @@ def test_decay_does_not_touch_legacy_uid_only_path(sandbox):
 
     # Registry 只注册 yexuan，不包含 "legacy_uid_as_char"
     # 如果新代码只按 registry char_ids 扫，legacy 路径永远不会被访问
-    uid_dir = sandbox.memory_char_root(char_id="yexuan") / "u1"
+    uid_dir = sandbox.memory_char_root(char_id=TEST_CHAR_ID) / "u1"
     uid_dir.mkdir(parents=True, exist_ok=True)
     (uid_dir / "hidden_state.json").write_text("{}", encoding="utf-8")
 
     processed_char_ids: list[str] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         processed_char_ids.append(char_id)
         return _make_default_state()
 
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
          patch("core.asset_registry.get_registry",
-               return_value=_make_registry("yexuan")), \
+               return_value=_make_registry(TEST_CHAR_ID)), \
          patch("core.memory.user_hidden_state_store.load_hidden_state", _spy_load), \
          patch("core.memory.user_hidden_state_store.save_hidden_state",
                return_value=True), \
@@ -320,7 +321,7 @@ def test_decay_does_not_touch_legacy_uid_only_path(sandbox):
                side_effect=lambda s, _n: s):
         asyncio.run(_hsd._check_hidden_state_decay())
 
-    assert processed_char_ids == ["yexuan"], \
+    assert processed_char_ids == [TEST_CHAR_ID], \
         f"must only process registered char_ids, got {processed_char_ids}"
     assert "legacy_uid_as_char" not in processed_char_ids, \
         "legacy uid-only path must not be processed"
@@ -332,21 +333,21 @@ def test_consolidate_covers_both_registered_chars(sandbox):
     """_check_hidden_state_consolidate 也必须遍历所有注册角色，与 decay 行为一致。"""
     from core.scheduler.triggers import hidden_state_decay as _hsd
 
-    for char_id in ("yexuan", "character_b"):
+    for char_id in (TEST_CHAR_ID, "character_b"):
         uid_dir = sandbox.memory_char_root(char_id=char_id) / "u1"
         uid_dir.mkdir(parents=True, exist_ok=True)
         (uid_dir / "hidden_state.json").write_text("{}", encoding="utf-8")
 
     save_char_ids: list[str] = []
 
-    def _spy_save(uid, state, *, char_id="yexuan"):
+    def _spy_save(uid, state, *, char_id=TEST_CHAR_ID):
         save_char_ids.append(char_id)
         return True
 
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
          patch("core.asset_registry.get_registry",
-               return_value=_make_registry("yexuan", "character_b")), \
+               return_value=_make_registry(TEST_CHAR_ID, "character_b")), \
          patch("core.memory.user_hidden_state_store.load_hidden_state",
                return_value=_make_default_state()), \
          patch("core.memory.user_hidden_state_store.save_hidden_state", _spy_save), \
@@ -354,7 +355,7 @@ def test_consolidate_covers_both_registered_chars(sandbox):
                side_effect=lambda s, _n: s):
         asyncio.run(_hsd._check_hidden_state_consolidate())
 
-    assert "yexuan" in save_char_ids, "yexuan must be consolidated"
+    assert TEST_CHAR_ID in save_char_ids, f'{TEST_CHAR_ID} must be consolidated'
     assert "character_b" in save_char_ids, "character_b must be consolidated"
 
 

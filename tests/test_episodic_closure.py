@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import json
 import time
 
@@ -12,7 +13,7 @@ from core.memory.fixation_pipeline import (
 
 
 UID = "episodic_closure_user"
-CHAR_ID = "yexuan"
+CHAR_ID = TEST_CHAR_ID
 
 
 def _episode(

@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_pipeline_user_facts_wiring.py
 =========================================
@@ -47,7 +48,7 @@ import core.memory.user_facts
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -142,8 +143,8 @@ def test_fetch_context_calls_user_facts_format_for_prompt(chars_tree, sandbox, r
     calls = []
     monkeypatch.setattr(_uf, "format_for_prompt", lambda uid: calls.append(uid) or "")
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     asyncio.get_event_loop().run_until_complete(
         pipeline.fetch_context("u99", "hello")
@@ -158,8 +159,8 @@ def test_fetch_context_returns_user_facts_text_key(chars_tree, sandbox, registry
     """fetch_context must return 'user_facts_text' in the context dict."""
     _apply_fetch_stubs(monkeypatch, user_facts_return="preferred_language: zh-CN")
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     ctx = asyncio.get_event_loop().run_until_complete(
         pipeline.fetch_context("u1", "hello")
@@ -185,8 +186,8 @@ def test_build_prompt_passes_user_facts_text(chars_tree, sandbox, registry, monk
     # prompt_builder is a lazy import inside build_prompt; patch the module directly.
     monkeypatch.setattr(_pb, "build", _capturing_build)
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     context = {
         "history": [],
@@ -231,13 +232,13 @@ def test_profile_path_scoped_by_char_id(sandbox):
     """Reality-scoped profile path differs by char_id; isolation unchanged."""
     from core.memory.path_resolver import resolve_path
 
-    scope_y = MemoryScope.reality_scope("u1", "yexuan")
+    scope_y = MemoryScope.reality_scope("u1", TEST_CHAR_ID)
     scope_h = MemoryScope.reality_scope("u1", "character_b")
     p_y = str(resolve_path(scope_y, "profile")).replace("\\", "/")
     p_h = str(resolve_path(scope_h, "profile")).replace("\\", "/")
 
     assert p_y != p_h
-    assert "yexuan" in p_y
+    assert TEST_CHAR_ID in p_y
     assert "character_b" in p_h
 
 
@@ -278,7 +279,7 @@ def test_no_user_facts_empty_text_no_layer_51(sandbox):
         profile={},
         group_context=[],
         user_facts_text="",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
     layers = [m.get("_layer") for m in messages]
     assert "5.1_user_facts" not in layers
@@ -308,7 +309,7 @@ def test_user_facts_present_layer_51_in_build(sandbox):
         profile={},
         group_context=[],
         user_facts_text="preferred_language: en\ndevice_os: Windows",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
     layer_msgs = [m for m in messages if m.get("_layer") == "5.1_user_facts"]
     assert layer_msgs, "5.1_user_facts layer not found in messages"
@@ -326,7 +327,7 @@ def test_user_facts_path_is_global_no_char_id(sandbox):
     scope = MemoryScope.global_scope("u_global")
     p = str(resolve_path(scope, "user_facts")).replace("\\", "/")
 
-    assert "yexuan" not in p
+    assert TEST_CHAR_ID not in p
     assert "character_b" not in p
     assert "u_global" in p
     # Confirm it ends with user_facts.json

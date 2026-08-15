@@ -13,6 +13,7 @@ Brief 27 · 工具动作痕迹层测试。
   7. peek_screen_content 敏感回归
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import importlib
 import time
@@ -218,7 +219,7 @@ def _apply_build_stubs(monkeypatch):
     monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda *, char_id="": "")
-    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id="yexuan": "")
+    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(_anr, "get_current_note", lambda paths=None, char_id=None: "")
     monkeypatch.setattr(_cl, "get_config", lambda: {"chat": {}})
@@ -233,7 +234,7 @@ def _build_minimal(monkeypatch, *, action_trace_entries=None, tool_result=None):
     messages, meta = _pb.build(
         character=char, user_id="u_test", user_message="你好",
         history=[], relation={"role": "friend"}, profile={}, group_context=[],
-        tool_result=tool_result, char_id="yexuan",
+        tool_result=tool_result, char_id=TEST_CHAR_ID,
         action_trace_entries=action_trace_entries,
     )
     return messages, meta

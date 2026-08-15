@@ -10,6 +10,7 @@ Covers:
 6. 空 registry → warning + 不调用 LLM
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -48,7 +49,7 @@ def _run_weekly():
     from core.scheduler.triggers.storyline_weekly import _check_storyline_weekly
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
-         patch("core.asset_registry.get_registry", return_value=_make_registry("yexuan")):
+         patch("core.asset_registry.get_registry", return_value=_make_registry(TEST_CHAR_ID)):
         asyncio.run(_check_storyline_weekly())
 
 
@@ -87,10 +88,10 @@ def test_skips_when_not_ready(fake_llm):
 def test_no_new_material_skips_llm_call(sandbox, fake_llm):
     uid = "u_empty"
     # 只需要 episodic.json 存在以进入遍历（write_episode 即建文件），但 timestamp 早于 last_aggregated_at
-    _write_episode(uid, "yexuan", "很久以前的事", ts=1.0)
+    _write_episode(uid, TEST_CHAR_ID, "很久以前的事", ts=1.0)
 
     from core.memory import storyline as sl
-    sl.save_meta(uid, char_id="yexuan", last_aggregated_at=time.time(), event_log_cursor="")
+    sl.save_meta(uid, char_id=TEST_CHAR_ID, last_aggregated_at=time.time(), event_log_cursor="")
 
     _run_weekly()
 
@@ -101,11 +102,11 @@ def test_no_new_material_skips_llm_call(sandbox, fake_llm):
 
 def test_valid_ops_applied_and_cursor_advances(sandbox, fake_llm):
     uid = "u_valid"
-    _write_episode(uid, "yexuan", "决定转行做程序员", ts=time.time())
+    _write_episode(uid, TEST_CHAR_ID, "决定转行做程序员", ts=time.time())
 
     from core.memory import storyline as sl
     sl.append_to_inbox(uid, [{"id": "old1", "summary": "旧碎片", "ts": time.time(), "strength": 0.3}],
-                        char_id="yexuan")
+                        char_id=TEST_CHAR_ID)
 
     fake_llm.chat = AsyncMock(return_value=json.dumps([
         {"op": "open_arc", "title": "职业转型", "tags": ["topic.learning"]},
@@ -115,29 +116,29 @@ def test_valid_ops_applied_and_cursor_advances(sandbox, fake_llm):
 
     _run_weekly()
 
-    data = sl.load(uid, char_id="yexuan")
+    data = sl.load(uid, char_id=TEST_CHAR_ID)
     assert len(data["arcs"]) == 1
     arc = data["arcs"][0]
     assert arc["title"] == "职业转型"
     assert len(arc["nodes"]) == 1
     assert data["meta"]["last_aggregated_at"] > 0
-    assert sl.load_inbox(uid, char_id="yexuan") == []
+    assert sl.load_inbox(uid, char_id=TEST_CHAR_ID) == []
 
 
 # ── 4. 非法 JSON → fail-open，不动 cursor ────────────────────────────────────
 
 def test_invalid_llm_output_does_not_advance_cursor(sandbox, fake_llm):
     uid = "u_invalid"
-    _write_episode(uid, "yexuan", "某件事", ts=time.time())
+    _write_episode(uid, TEST_CHAR_ID, "某件事", ts=time.time())
 
     from core.memory import storyline as sl
-    before = sl.load(uid, char_id="yexuan")["meta"]["last_aggregated_at"]
+    before = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]["last_aggregated_at"]
 
     fake_llm.chat = AsyncMock(return_value="不是JSON也不是数组")
 
     _run_weekly()  # 不应抛异常
 
-    after = sl.load(uid, char_id="yexuan")["meta"]["last_aggregated_at"]
+    after = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]["last_aggregated_at"]
     assert after == before, "LLM 输出不合法时不应推进 last_aggregated_at"
 
 
@@ -145,7 +146,7 @@ def test_invalid_llm_output_does_not_advance_cursor(sandbox, fake_llm):
 
 def test_event_log_source_tagged_blocks_filtered_from_llm_input(sandbox, fake_llm):
     uid = "u_source_filter"
-    _write_episode(uid, "yexuan", "触发遍历用", ts=time.time())
+    _write_episode(uid, TEST_CHAR_ID, "触发遍历用", ts=time.time())
 
     date_str = (datetime.now().date() - timedelta(days=1)).strftime("%Y-%m-%d")
     content = (
@@ -154,7 +155,7 @@ def test_event_log_source_tagged_blocks_filtered_from_llm_input(sandbox, fake_ll
         "## 10:00\n**用户**：我决定辞职去学画画\n**叶瑄**：好呀，我支持你\n"
         "> emotion:gentle intensity:0 speaker:assistant\n---\n"
     )
-    _write_day_file(sandbox, "yexuan", uid, date_str, content)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str, content)
 
     _run_weekly()
 

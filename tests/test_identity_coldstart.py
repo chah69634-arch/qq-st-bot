@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_identity_coldstart.py
 
@@ -150,7 +151,7 @@ def test_consolidate_logs_first_valid_identity_dimension(sandbox):
     from core.memory.fixation_pipeline import consolidate_to_identity
 
     uid = f"{_UID_PREFIX}_first_valid"
-    char_id = "yexuan"
+    char_id = TEST_CHAR_ID
     _seed_episode(uid, char_id)
     for i in range(3):
         event_log.append(uid, "user", f"消息{i}", char_id=char_id, turn_id=f"ic_{i}")
@@ -176,7 +177,7 @@ def test_consolidate_low_confidence_does_not_log_coldstart(sandbox):
     from core.memory.fixation_pipeline import consolidate_to_identity
 
     uid = f"{_UID_PREFIX}_low_conf"
-    char_id = "yexuan"
+    char_id = TEST_CHAR_ID
     _seed_episode(uid, char_id)
 
     llm = MagicMock()
@@ -197,7 +198,7 @@ def test_consolidate_does_not_relog_once_already_valid(sandbox):
     from core.memory.fixation_pipeline import consolidate_to_identity
 
     uid = f"{_UID_PREFIX}_already_valid"
-    char_id = "yexuan"
+    char_id = TEST_CHAR_ID
     _seed_episode(uid, char_id, ep_id="ep1")
 
     llm = MagicMock()
@@ -224,7 +225,7 @@ def test_fixation_status_endpoint_includes_coldstart_record(sandbox, monkeypatch
     from core.memory.fixation_pipeline import consolidate_to_identity
 
     uid = f"{_UID_PREFIX}_endpoint"
-    char_id = "yexuan"
+    char_id = TEST_CHAR_ID
     monkeypatch.setattr(memory_router, "_resolve_char_id", lambda cid: char_id)
     _seed_episode(uid, char_id)
 
@@ -243,7 +244,7 @@ def test_identity_coldstart_summary_endpoint_aggregates_samples(sandbox):
     from admin.routers import memory as memory_router
     from core.memory.fixation_pipeline import consolidate_to_identity
 
-    char_id = "yexuan"
+    char_id = TEST_CHAR_ID
     llm = MagicMock()
     llm.chat = AsyncMock(return_value=_identity_llm_response(confidence=0.7, evidence_count=10))
 

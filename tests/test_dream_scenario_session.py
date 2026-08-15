@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_scenario_session.py — Scenario Mode 会话生命周期契约
 
@@ -64,7 +65,7 @@ def test_scenario_session_created_ok(sandbox):
         result = asyncio.run(enter_dream(
             _UID,
             entry_reason="test",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             dream_mode="scenario",
             script_id="prison_demo",
         ))
@@ -93,7 +94,7 @@ def test_dream_mode_frozen_in_state(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
 
     state = read_state(_UID)
@@ -222,7 +223,7 @@ def test_guard_blocks_mode_switch_during_active_session(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         r1 = asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
     assert r1.get("ok") is True
 
@@ -231,7 +232,7 @@ def test_guard_blocks_mode_switch_during_active_session(sandbox):
         patch("core.dream.dream_context.build_snapshot", new=AsyncMock(return_value=fake_snapshot)),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        r2 = asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="sandbox"))
+        r2 = asyncio.run(enter_dream(_UID, char_id=TEST_CHAR_ID, dream_mode="sandbox"))
     assert r2.get("ok") is False
     assert "mode" in r2.get("error", "").lower()
 
@@ -249,7 +250,7 @@ def test_guard_blocks_script_id_replace_during_active_session(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         r1 = asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
     assert r1.get("ok") is True
 
@@ -259,7 +260,7 @@ def test_guard_blocks_script_id_replace_during_active_session(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         r2 = asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="other_script"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="other_script"
         ))
     assert r2.get("ok") is False
     assert "script_id" in r2.get("error", "").lower()
@@ -279,7 +280,7 @@ def test_guard_allows_reenter_after_state_cleared(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         r1 = asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
     assert r1.get("ok") is True
 
@@ -296,6 +297,6 @@ def test_guard_allows_reenter_after_state_cleared(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         r2 = asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
     assert r2.get("ok") is True

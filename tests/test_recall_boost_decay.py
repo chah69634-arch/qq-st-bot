@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_recall_boost_decay.py — Brief 47 §1 验收
 
@@ -14,7 +15,7 @@ import core.memory.episodic_memory as em
 from core.memory.episodic_memory import retrieve, write_episode, _load_memories
 
 _UID = "boost_decay_uid"
-_CHAR = "yexuan"
+_CHAR = TEST_CHAR_ID
 _START = 1_700_000_000.0
 
 

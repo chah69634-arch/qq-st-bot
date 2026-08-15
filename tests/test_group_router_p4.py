@@ -16,6 +16,7 @@ Covers:
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import pytest
@@ -73,12 +74,12 @@ async def test_push_stream_start_includes_char_id_and_round_id(monkeypatch):
         return True
 
     monkeypatch.setattr(desktop_ws, "_send_json", fake_send)
-    await desktop_ws.push_stream_start("msg-1", char_id="yexuan", round_id="round-001")
+    await desktop_ws.push_stream_start("msg-1", char_id=TEST_CHAR_ID, round_id="round-001")
 
     frame = sent[0]
     assert frame["type"] == "message_stream_start"
     assert frame["msg_id"] == "msg-1"
-    assert frame["char_id"] == "yexuan"
+    assert frame["char_id"] == TEST_CHAR_ID
     assert frame["round_id"] == "round-001"
 
 
@@ -109,11 +110,11 @@ async def test_push_message_includes_round_id(monkeypatch):
         return True
 
     monkeypatch.setattr(desktop_ws, "_send_json", fake_send)
-    await desktop_ws.push_message("hello", msg_id="msg-1", char_id="yexuan", round_id="round-001")
+    await desktop_ws.push_message("hello", msg_id="msg-1", char_id=TEST_CHAR_ID, round_id="round-001")
 
     frame = sent[0]
     assert frame["type"] == "channel_message"
-    assert frame["char_id"] == "yexuan"
+    assert frame["char_id"] == TEST_CHAR_ID
     assert frame["round_id"] == "round-001"
 
 
@@ -159,7 +160,7 @@ def _auth():
     return {"Authorization": f"Bearer {VALID_TOKEN}"}
 
 
-def _stage(sandbox, group_id="grp-test", roster=("yexuan",)):
+def _stage(sandbox, group_id="grp-test", roster=(TEST_CHAR_ID,)):
     from core.stage.store import create_stage
     return create_stage(group_id, "owner", list(roster))
 
@@ -192,7 +193,7 @@ def test_list_groups_requires_auth(client):
 def test_create_group_returns_detail(client):
     r = client.post(
         "/group/create",
-        json={"group_id": "grp-create", "roster": ["yexuan"]},
+        json={"group_id": "grp-create", "roster": [TEST_CHAR_ID]},
         headers=_auth(),
     )
     assert r.status_code == 200
@@ -200,7 +201,7 @@ def test_create_group_returns_detail(client):
     assert data["group_id"] == "grp-create"
     assert data["domain"] == "reality"
     assert len(data["roster"]) == 1
-    assert data["roster"][0]["char_id"] == "yexuan"
+    assert data["roster"][0]["char_id"] == TEST_CHAR_ID
     assert "settings" in data
     assert "recent" in data
 
@@ -217,7 +218,7 @@ def test_create_group_empty_roster_422(client):
 def test_create_group_dream_domain_rejected(client):
     r = client.post(
         "/group/create",
-        json={"group_id": "grp-dream", "roster": ["yexuan"], "domain": "dream"},
+        json={"group_id": "grp-dream", "roster": [TEST_CHAR_ID], "domain": "dream"},
         headers=_auth(),
     )
     assert r.status_code == 422
@@ -233,7 +234,7 @@ def test_create_group_unknown_roster_422(client):
 
 
 def test_create_group_requires_auth(client):
-    r = client.post("/group/create", json={"roster": ["yexuan"]})
+    r = client.post("/group/create", json={"roster": [TEST_CHAR_ID]})
     assert r.status_code in (401, 403)
 
 
@@ -420,7 +421,7 @@ async def test_runtime_pushes_round_start_and_end(sandbox, monkeypatch):
     from core.stage.store import create_stage
     from core.stage.runtime import run_reality_stage_turn
 
-    create_stage("grp-lifecycle", "owner", ["yexuan"])
+    create_stage("grp-lifecycle", "owner", [TEST_CHAR_ID])
 
     ws_frames = []
 

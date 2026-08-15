@@ -30,6 +30,7 @@ Chess Activity P0 验收测试 (24 tests)
 24. 不接 Stockfish / 外部 API / LLM
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import chess as _chess_lib
 import pytest
@@ -43,7 +44,7 @@ from core.activity.chess import STARTING_FEN, apply_move, legal_moves_uci, make_
 # helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _make_chess_session(sandbox, uid: str = "user1", char_id: str = "yexuan",
+def _make_chess_session(sandbox, uid: str = "user1", char_id: str = TEST_CHAR_ID,
                         fen: str | None = None):
     state = make_initial_state(fen)
     return activity_store.create_session(uid, char_id, "chess", state)
@@ -333,20 +334,20 @@ def test_move_history_correct(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def test_uid_char_id_isolation(sandbox):
-    s1 = _make_chess_session(sandbox, uid="user1", char_id="yexuan")
-    s2 = _make_chess_session(sandbox, uid="user2", char_id="yexuan")
+    s1 = _make_chess_session(sandbox, uid="user1", char_id=TEST_CHAR_ID)
+    s2 = _make_chess_session(sandbox, uid="user2", char_id=TEST_CHAR_ID)
 
     d1 = sandbox.activity_session_dir(
-        char_id="yexuan", uid="user1", activity_type="chess", session_id=s1.session_id
+        char_id=TEST_CHAR_ID, uid="user1", activity_type="chess", session_id=s1.session_id
     )
     d2 = sandbox.activity_session_dir(
-        char_id="yexuan", uid="user2", activity_type="chess", session_id=s2.session_id
+        char_id=TEST_CHAR_ID, uid="user2", activity_type="chess", session_id=s2.session_id
     )
     assert d1 != d2
 
     # user1 active → visible
-    active1 = activity_store.find_active_session("yexuan", "user1", "chess")
-    active2 = activity_store.find_active_session("yexuan", "user2", "chess")
+    active1 = activity_store.find_active_session(TEST_CHAR_ID, "user1", "chess")
+    active2 = activity_store.find_active_session(TEST_CHAR_ID, "user2", "chess")
     assert active1.session_id == s1.session_id
     assert active2.session_id == s2.session_id
 
@@ -356,26 +357,26 @@ def test_uid_char_id_isolation(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def test_different_chars_not_shared(sandbox):
-    sy = _make_chess_session(sandbox, uid="user1", char_id="yexuan")
+    sy = _make_chess_session(sandbox, uid="user1", char_id=TEST_CHAR_ID)
     sh = _make_chess_session(sandbox, uid="user1", char_id="character_b")
 
     assert sy.session_id != sh.session_id
 
-    ay = activity_store.find_active_session("yexuan", "user1", "chess")
+    ay = activity_store.find_active_session(TEST_CHAR_ID, "user1", "chess")
     ah = activity_store.find_active_session("character_b", "user1", "chess")
     assert ay is not None and ah is not None
-    assert ay.char_id == "yexuan"
+    assert ay.char_id == TEST_CHAR_ID
     assert ah.char_id == "character_b"
     assert ay.session_id != ah.session_id
 
     # Paths must not overlap
     dy = sandbox.activity_session_dir(
-        char_id="yexuan", uid="user1", activity_type="chess", session_id=sy.session_id
+        char_id=TEST_CHAR_ID, uid="user1", activity_type="chess", session_id=sy.session_id
     )
     dh = sandbox.activity_session_dir(
         char_id="character_b", uid="user1", activity_type="chess", session_id=sh.session_id
     )
-    assert "yexuan" in str(dy)
+    assert TEST_CHAR_ID in str(dy)
     assert "character_b" in str(dh)
     assert dy != dh
 
@@ -386,15 +387,15 @@ def test_different_chars_not_shared(sandbox):
 
 def test_close_hides_active_session(sandbox):
     session = _make_chess_session(sandbox)
-    active_before = activity_store.find_active_session("yexuan", "user1", "chess")
+    active_before = activity_store.find_active_session(TEST_CHAR_ID, "user1", "chess")
     assert active_before is not None
 
-    activity_store.close_session("yexuan", "user1", "chess", session.session_id)
+    activity_store.close_session(TEST_CHAR_ID, "user1", "chess", session.session_id)
 
-    active_after = activity_store.find_active_session("yexuan", "user1", "chess")
+    active_after = activity_store.find_active_session(TEST_CHAR_ID, "user1", "chess")
     assert active_after is None
 
-    loaded = activity_store.load_session("yexuan", "user1", "chess", session.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "chess", session.session_id)
     assert loaded is not None
     assert loaded.status == "closed"
 
@@ -407,22 +408,22 @@ def test_no_side_effect_writes(sandbox):
     session = _make_chess_session(sandbox)
     state = session.state
     s1 = apply_move(state, "e2e4")
-    activity_store.update_state("yexuan", "user1", "chess", session.session_id, s1)
+    activity_store.update_state(TEST_CHAR_ID, "user1", "chess", session.session_id, s1)
 
     # No history directory write
     history_dir = sandbox._p("history")
-    chars_history = sandbox._p("chars", "yexuan", "history")
+    chars_history = sandbox._p("chars", TEST_CHAR_ID, "history")
     for p in (history_dir, chars_history):
         if p.exists():
             assert list(p.iterdir()) == [], f"unexpected write in {p}"
 
     # No user_hidden_state write
-    hidden = sandbox._p("runtime", "memory", "yexuan", "user1", "user_hidden_state.json")
+    hidden = sandbox._p("runtime", "memory", TEST_CHAR_ID, "user1", "user_hidden_state.json")
     assert not hidden.exists()
 
     # Session data is only in activity directory
     session_dir = sandbox.activity_session_dir(
-        char_id="yexuan", uid="user1", activity_type="chess", session_id=session.session_id
+        char_id=TEST_CHAR_ID, uid="user1", activity_type="chess", session_id=session.session_id
     )
     assert (session_dir / "session.json").exists()
 
@@ -443,7 +444,7 @@ def test_no_side_effect_writes(sandbox):
 def test_session_id_no_path_traversal(sandbox, evil_id):
     with pytest.raises((ValueError, Exception)):
         sandbox.activity_session_dir(
-            char_id="yexuan", uid="user1", activity_type="chess", session_id=evil_id
+            char_id=TEST_CHAR_ID, uid="user1", activity_type="chess", session_id=evil_id
         )
 
 

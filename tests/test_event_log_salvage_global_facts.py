@@ -5,6 +5,7 @@ tests/test_event_log_salvage_global_facts.py — Brief 89 §1: event_log_salvage
 主产物零回归（含旧裸数组格式兼容）。
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -55,7 +56,7 @@ def _run_salvage():
     from core.scheduler.triggers.event_log_salvage import _check_event_log_salvage
     with patch("core.scheduler.loop._is_ready", return_value=True), \
          patch("core.scheduler.loop._mark"), \
-         patch("core.asset_registry.get_registry", return_value=_make_registry("yexuan")):
+         patch("core.asset_registry.get_registry", return_value=_make_registry(TEST_CHAR_ID)):
         asyncio.run(_check_event_log_salvage())
 
 
@@ -65,7 +66,7 @@ def test_salvage_applies_global_facts_object_format(sandbox, fake_llm):
 
     uid = f"{UID_PREFIX}_ok"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     fake_llm.chat = AsyncMock(return_value=json.dumps({
         "important_facts_ops": [
@@ -77,7 +78,7 @@ def test_salvage_applies_global_facts_object_format(sandbox, fake_llm):
     _run_salvage()
 
     assert uf.load_user_facts(uid).get("preferred_language") == "zh-CN"
-    records = provenance_log.query(uid, "yexuan", artifact="user_facts")
+    records = provenance_log.query(uid, TEST_CHAR_ID, artifact="user_facts")
     assert any(r["field"] == "preferred_language" for r in records)
 
 
@@ -88,7 +89,7 @@ def test_salvage_legacy_bare_list_still_works_no_global_facts(sandbox, fake_llm)
 
     uid = f"{UID_PREFIX}_legacy"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     fake_llm.chat = AsyncMock(return_value=json.dumps([
         {"op": "add", "target_index": None, "text": "打算下个月搬家", "tag": "status.project", "ts": 1000.0},
@@ -107,7 +108,7 @@ def test_salvage_malformed_global_facts_does_not_break_ops(sandbox, fake_llm):
 
     uid = f"{UID_PREFIX}_badgf"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     fake_llm.chat = AsyncMock(return_value=json.dumps({
         "important_facts_ops": [
@@ -127,7 +128,7 @@ def test_salvage_denied_global_facts_key_rejected(sandbox, fake_llm):
 
     uid = f"{UID_PREFIX}_denied"
     date_str = _date_n_days_ago(28)
-    _write_day_file(sandbox, "yexuan", uid, date_str)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, date_str)
 
     fake_llm.chat = AsyncMock(return_value=json.dumps({
         "important_facts_ops": [],

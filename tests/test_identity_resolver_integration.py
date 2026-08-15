@@ -16,6 +16,7 @@ Covers:
 9.  format_for_prompt reads character_b bucket, not yexuan bucket
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import pytest
 import yaml
@@ -115,9 +116,9 @@ def test_identity_path_equals_legacy_sandbox_path_character_b(sandbox):
 
 
 def test_identity_path_equals_legacy_sandbox_path_yexuan(sandbox):
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     resolver_path = resolve_path(scope, "identity")
-    legacy_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "identity.yaml"
+    legacy_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "identity.yaml"
     assert resolver_path == legacy_path, (
         f"Resolver path diverged from legacy:\n  resolver: {resolver_path}\n  legacy:   {legacy_path}"
     )
@@ -193,16 +194,16 @@ async def test_save_identity_empty_char_id_raises(sandbox):
 async def test_yexuan_character_b_identity_isolated(sandbox):
     import core.memory.user_identity as _ui
 
-    await _ui.save(_UID, _YEXUAN_DIM, char_id="yexuan")
+    await _ui.save(_UID, _YEXUAN_DIM, char_id=TEST_CHAR_ID)
     await _ui.save(_UID, _CHARACTER_B_DIM, char_id="character_b")
 
-    y = await _ui.load(_UID, char_id="yexuan")
+    y = await _ui.load(_UID, char_id=TEST_CHAR_ID)
     h = await _ui.load(_UID, char_id="character_b")
 
     assert y["trust_pattern"]["text"] == "Companion-专属-信任模式"
     assert h["trust_pattern"]["text"] == "DemoUser-专属-信任模式"
 
-    y_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "identity.yaml"
+    y_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "identity.yaml"
     h_path = sandbox.user_memory_root(_UID, char_id="character_b") / "identity.yaml"
     assert y_path.exists()
     assert h_path.exists()
@@ -214,8 +215,8 @@ async def test_save_character_b_does_not_pollute_yexuan_bucket(sandbox):
 
     await _ui.save(_UID, _CHARACTER_B_DIM, char_id="character_b")
 
-    yexuan_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "identity.yaml"
-    assert not yexuan_path.exists(), "writing character_b identity must not create yexuan bucket file"
+    yexuan_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "identity.yaml"
+    assert not yexuan_path.exists(), f'writing character_b identity must not create {TEST_CHAR_ID} bucket file'
 
 
 # ---------------------------------------------------------------------------
@@ -225,11 +226,11 @@ async def test_save_character_b_does_not_pollute_yexuan_bucket(sandbox):
 async def test_format_for_prompt_character_b_no_yexuan_text(sandbox):
     import core.memory.user_identity as _ui
 
-    await _ui.save(_UID, _YEXUAN_DIM, char_id="yexuan")
+    await _ui.save(_UID, _YEXUAN_DIM, char_id=TEST_CHAR_ID)
     await _ui.save(_UID, _CHARACTER_B_DIM, char_id="character_b")
 
     h_text = await _ui.format_for_prompt(_UID, char_id="character_b")
-    y_text = await _ui.format_for_prompt(_UID, char_id="yexuan")
+    y_text = await _ui.format_for_prompt(_UID, char_id=TEST_CHAR_ID)
 
     assert "DemoUser-专属-信任模式" in h_text
     assert "Companion-专属-信任模式" not in h_text

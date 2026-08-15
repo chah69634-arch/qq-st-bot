@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_THIRD_CHAR_ID
 import asyncio
 import collections
 import importlib
@@ -23,16 +24,16 @@ async def test_device_ws_envelopes_match_desktop_format(monkeypatch):
     monkeypatch.setattr(device_ws, "_out_queue", collections.deque())
     monkeypatch.setattr(device_ws, "_out_queue_event", asyncio.Event())
 
-    await desktop_ws.push_message("hello", msg_id="turn-1", char_id="hongcha")
-    await device_ws.push_message("hello", msg_id="turn-1", char_id="hongcha")
+    await desktop_ws.push_message("hello", msg_id="turn-1", char_id=TEST_THIRD_CHAR_ID)
+    await device_ws.push_message("hello", msg_id="turn-1", char_id=TEST_THIRD_CHAR_ID)
     vsent = list(device_ws._out_queue)
     assert dsent[0] == vsent[0]
 
     await desktop_ws.push_segments(
-        "hello", [{"type": "say", "text": "hello"}], msg_id="turn-1", char_id="hongcha"
+        "hello", [{"type": "say", "text": "hello"}], msg_id="turn-1", char_id=TEST_THIRD_CHAR_ID
     )
     await device_ws.push_segments(
-        "hello", [{"type": "say", "text": "hello"}], msg_id="turn-1", char_id="hongcha"
+        "hello", [{"type": "say", "text": "hello"}], msg_id="turn-1", char_id=TEST_THIRD_CHAR_ID
     )
     vsent = list(device_ws._out_queue)
     assert dsent[1] == vsent[1]

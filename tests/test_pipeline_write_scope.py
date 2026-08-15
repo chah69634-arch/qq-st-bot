@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_pipeline_write_scope.py
 
@@ -32,7 +33,7 @@ def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
 
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -88,7 +89,7 @@ def test_capture_turn_passes_char_id_to_short_term(sandbox):
 
     original_st_append = _st.append
 
-    def _spy_st(user_id, role, content, turn_id=None, *, char_id="yexuan"):
+    def _spy_st(user_id, role, content, turn_id=None, *, char_id=TEST_CHAR_ID):
         st_char_ids.append(char_id)
         return True
 
@@ -117,7 +118,7 @@ def test_capture_turn_passes_char_id_to_event_log(sandbox):
 
     el_char_ids: list[str] = []
 
-    def _spy_el(user_id, role, content, emotion="neutral", intensity=0, turn_id=None, trigger_name="", *, char_id="yexuan", source=""):
+    def _spy_el(user_id, role, content, emotion="neutral", intensity=0, turn_id=None, trigger_name="", *, char_id=TEST_CHAR_ID, source=""):
         el_char_ids.append(char_id)
         return True
 
@@ -150,7 +151,7 @@ async def test_post_process_passes_active_char_id_to_capture_turn(
 
     original_ct = _fp.capture_turn
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id="yexuan", audit_extras=None, source=""):
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None, source=""):
         captured_char_ids.append(char_id)
         return turn_id or f"{uid}_spy"
 
@@ -190,12 +191,12 @@ async def test_post_process_uses_new_char_id_after_switch(
     import core.memory.fixation_pipeline as _fp
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     captured_char_ids: list[str] = []
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id="yexuan", audit_extras=None, source=""):
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None, source=""):
         captured_char_ids.append(char_id)
         return turn_id or f"{uid}_spy"
 
@@ -215,7 +216,7 @@ async def test_post_process_uses_new_char_id_after_switch(
     ):
         # First turn: yexuan
         await pipeline.post_process("u1", "你好", "在的", envelope=env)
-        assert captured_char_ids[-1] == "yexuan", (
+        assert captured_char_ids[-1] == TEST_CHAR_ID, (
             f"First turn must use yexuan, got {captured_char_ids[-1]!r}"
         )
 
@@ -243,7 +244,7 @@ async def test_post_process_invalid_active_does_not_write(
     import core.memory.event_log as _el
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     # Pipeline currently has yexuan; active_prompt_assets changes to unknown
     sandbox.active_prompt_assets().write_text(
@@ -280,7 +281,7 @@ async def test_post_process_invalid_active_does_not_write(
 
 def test_capture_turn_content_isolation_by_char_id(sandbox):
     """
-    capture_turn with char_id='yexuan' and char_id='character_b' write to separate buckets.
+    capture_turn with char_id=TEST_CHAR_ID and char_id='character_b' write to separate buckets.
     short_term.load_for_prompt(uid, char_id=...) shows different content per bucket.
     Does NOT drain slow_queue — T-02 only tests immediate short_term writes.
     """
@@ -293,22 +294,22 @@ def test_capture_turn_content_isolation_by_char_id(sandbox):
     uid = "t02_isolation_uid"
 
     # Write a turn for yexuan
-    capture_turn(uid, "草莓大福-T02用户", "草莓大福-T02回复", char_id="yexuan", envelope=env)
+    capture_turn(uid, "草莓大福-T02用户", "草莓大福-T02回复", char_id=TEST_CHAR_ID, envelope=env)
 
     # Write a turn for character_b
     capture_turn(uid, "XYZ动画-T02用户", "XYZ动画-T02回复", char_id="character_b", envelope=env)
 
-    yexuan_hist = load_for_prompt(uid, char_id="yexuan")
+    yexuan_hist = load_for_prompt(uid, char_id=TEST_CHAR_ID)
     character_b_hist = load_for_prompt(uid, char_id="character_b")
 
     yexuan_texts = " ".join(m.get("content", "") for m in yexuan_hist)
     character_b_texts = " ".join(m.get("content", "") for m in character_b_hist)
 
-    assert "草莓大福-T02" in yexuan_texts, "yexuan bucket must contain 草莓大福-T02 turn"
-    assert "XYZ动画-T02" not in yexuan_texts, "yexuan bucket must NOT contain character_b's turn"
+    assert "草莓大福-T02" in yexuan_texts, f'{TEST_CHAR_ID} bucket must contain 草莓大福-T02 turn'
+    assert "XYZ动画-T02" not in yexuan_texts, f"{TEST_CHAR_ID} bucket must NOT contain character_b's turn"
 
     assert "XYZ动画-T02" in character_b_texts, "character_b bucket must contain XYZ动画-T02 turn"
-    assert "草莓大福-T02" not in character_b_texts, "character_b bucket must NOT contain yexuan's turn"
+    assert "草莓大福-T02" not in character_b_texts, f"character_b bucket must NOT contain {TEST_CHAR_ID}'s turn"
 
 
 # ── 7. T-01 regression: fetch_context read path still uses active char_id ─────
@@ -384,7 +385,7 @@ def test_fetch_context_t01_regression_char_id_still_passes(
 
     captured: list[str] = []
 
-    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id="yexuan"):
+    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return []
 

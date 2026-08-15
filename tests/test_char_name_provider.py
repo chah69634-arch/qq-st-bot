@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_THIRD_CHAR_ID
 """
 tests/test_char_name_provider.py
 
@@ -29,8 +30,8 @@ class TestGetActiveCharName:
 
         with patch("core.character_loader.load") as mock_load:
             mock_load.return_value.name = "红茶"
-            assert get_char_name("hongcha") == "红茶"
-            mock_load.assert_called_once_with("hongcha")
+            assert get_char_name(TEST_THIRD_CHAR_ID) == "红茶"
+            mock_load.assert_called_once_with(TEST_THIRD_CHAR_ID)
 
     def test_explicit_unknown_char_id_does_not_fall_back_to_active(self):
         from core.character_name_provider import get_char_name
@@ -52,8 +53,8 @@ class TestGetActiveCharName:
         assert result == "(角色未加载)"
         # must not be any known private character name
         assert "叶瑄" not in result
-        assert "yexuan" not in result
-        assert "hongcha" not in result
+        assert TEST_CHAR_ID not in result
+        assert TEST_THIRD_CHAR_ID not in result
 
     def test_returns_placeholder_when_character_is_none(self):
         from core.character_name_provider import get_active_char_name

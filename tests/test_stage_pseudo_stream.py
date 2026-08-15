@@ -13,6 +13,7 @@ core.stage.runtime.run_reality_stage_turn()'s deliver() now:
 4. never lets a pseudo-stream failure block the canonical delivery (fail-open).
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import pytest
 
@@ -35,10 +36,10 @@ async def test_deliver_shares_msg_id_between_pseudo_stream_and_canonical_push(
     from core.stage.runner import StageTurnResult
     from core.stage.runtime import run_reality_stage_turn
 
-    stage = Stage("runtime-ps-1", "actual-owner", ("yexuan",), settings=_settings())
+    stage = Stage("runtime-ps-1", "actual-owner", (TEST_CHAR_ID,), settings=_settings())
 
     async def fake_run(group_id, owner_content, *, generate_reply, deliver_reply, turn_id):
-        await deliver_reply("yexuan", "今天天气不错，我们去散步吧！", "t")
+        await deliver_reply(TEST_CHAR_ID, "今天天气不错，我们去散步吧！", "t")
         return StageTurnResult(group_id, "t", (), 0)
 
     monkeypatch.setattr("core.stage.runtime.load_stage", lambda group_id: stage)
@@ -77,8 +78,8 @@ async def test_deliver_shares_msg_id_between_pseudo_stream_and_canonical_push(
     # pseudo-stream frames precede the canonical replacement.
     assert stream_start["msg_id"] == canonical["msg_id"] == stream_end["msg_id"]
     assert ws_sent.index(stream_end) < ws_sent.index(canonical)
-    assert stream_start["char_id"] == "yexuan"
-    assert canonical["char_id"] == "yexuan"
+    assert stream_start["char_id"] == TEST_CHAR_ID
+    assert canonical["char_id"] == TEST_CHAR_ID
 
 
 @pytest.mark.asyncio
@@ -88,10 +89,10 @@ async def test_deliver_device_channel_shares_msg_id_with_stream_frames(sandbox, 
     from core.stage.runner import StageTurnResult
     from core.stage.runtime import run_reality_stage_turn
 
-    stage = Stage("runtime-ps-2", "actual-owner", ("yexuan",), settings=_settings())
+    stage = Stage("runtime-ps-2", "actual-owner", (TEST_CHAR_ID,), settings=_settings())
 
     async def fake_run(group_id, owner_content, *, generate_reply, deliver_reply, turn_id):
-        await deliver_reply("yexuan", "今天天气不错，我们去散步吧！", "t")
+        await deliver_reply(TEST_CHAR_ID, "今天天气不错，我们去散步吧！", "t")
         return StageTurnResult(group_id, "t", (), 0)
 
     monkeypatch.setattr("core.stage.runtime.load_stage", lambda group_id: stage)
@@ -150,10 +151,10 @@ async def test_deliver_mobile_channel_unaffected_no_msg_id_passed(sandbox, monke
     from core.stage.runner import StageTurnResult
     from core.stage.runtime import run_reality_stage_turn
 
-    stage = Stage("runtime-ps-3", "actual-owner", ("yexuan",), settings=_settings())
+    stage = Stage("runtime-ps-3", "actual-owner", (TEST_CHAR_ID,), settings=_settings())
 
     async def fake_run(group_id, owner_content, *, generate_reply, deliver_reply, turn_id):
-        await deliver_reply("yexuan", "reply", "t")
+        await deliver_reply(TEST_CHAR_ID, "reply", "t")
         return StageTurnResult(group_id, "t", (), 0)
 
     monkeypatch.setattr("core.stage.runtime.load_stage", lambda group_id: stage)
@@ -178,7 +179,7 @@ async def test_deliver_mobile_channel_unaffected_no_msg_id_passed(sandbox, monke
 
     await run_reality_stage_turn("runtime-ps-3", "hello")
 
-    assert non_desktop_sent == [("reply", "actual-owner", "yexuan", {})]
+    assert non_desktop_sent == [("reply", "actual-owner", TEST_CHAR_ID, {})]
 
 
 @pytest.mark.asyncio
@@ -189,10 +190,10 @@ async def test_deliver_pseudo_stream_failure_does_not_block_canonical_push(
     from core.stage.runner import StageTurnResult
     from core.stage.runtime import run_reality_stage_turn
 
-    stage = Stage("runtime-ps-4", "actual-owner", ("yexuan",), settings=_settings())
+    stage = Stage("runtime-ps-4", "actual-owner", (TEST_CHAR_ID,), settings=_settings())
 
     async def fake_run(group_id, owner_content, *, generate_reply, deliver_reply, turn_id):
-        await deliver_reply("yexuan", "reply text", "t")
+        await deliver_reply(TEST_CHAR_ID, "reply text", "t")
         return StageTurnResult(group_id, "t", (), 0)
 
     monkeypatch.setattr("core.stage.runtime.load_stage", lambda group_id: stage)

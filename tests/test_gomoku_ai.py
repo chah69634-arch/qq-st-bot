@@ -21,6 +21,7 @@ P34. opponent=yexuan_ai 不写 short_term / user_hidden_state
 P35. start 接口 P0 兼容（不传 opponent/ai_style 时默认字段正确）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import pytest
 
@@ -31,7 +32,7 @@ from core.activity.gomoku_ai import choose_gomoku_ai_move
 
 # ── 工厂助手 ──────────────────────────────────────────────────────────────────
 
-def _start_ai(sandbox, uid="user1", char_id="yexuan", ai_style="serious"):
+def _start_ai(sandbox, uid="user1", char_id=TEST_CHAR_ID, ai_style="serious"):
     return G.start_game(uid, char_id, opponent="yexuan_ai", ai_style=ai_style)
 
 
@@ -57,8 +58,8 @@ def _make_board():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_human_opponent_no_ai_automove(sandbox):
-    session = G.start_game("user1", "yexuan")  # opponent="human" by default
-    result = G.make_move("user1", "yexuan", session.session_id, 7, 7)
+    session = G.start_game("user1", TEST_CHAR_ID)  # opponent="human" by default
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
     assert result["current_turn"] == "white"
     assert len(result["move_history"]) == 1
     assert result["move_history"][0]["player"] == "black"
@@ -70,7 +71,7 @@ def test_human_opponent_no_ai_automove(sandbox):
 
 def test_ai_auto_moves_after_user(sandbox):
     session = _start_ai(sandbox)
-    result = G.make_move("user1", "yexuan", session.session_id, 7, 7)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
     assert len(result["move_history"]) == 2
     assert result["move_history"][0]["player"] == "black"
     assert result["move_history"][1]["player"] == "white"
@@ -80,10 +81,10 @@ def test_ai_auto_moves_after_user(sandbox):
 def test_legacy_opponent_value_normalized_to_character_ai(sandbox):
     """Brief 25 §3 P2: opponent="yexuan_ai" (legacy input) is accepted, but the
     session is persisted and returned under the new canonical value "character_ai"."""
-    session = G.start_game("user1", "yexuan", opponent="yexuan_ai")
+    session = G.start_game("user1", TEST_CHAR_ID, opponent="yexuan_ai")
     assert session.state["opponent"] == "character_ai"
 
-    reloaded = G.get_active_session("user1", "yexuan")
+    reloaded = G.get_active_session("user1", TEST_CHAR_ID)
     assert reloaded.state["opponent"] == "character_ai"
 
 
@@ -93,7 +94,7 @@ def test_legacy_opponent_value_normalized_to_character_ai(sandbox):
 
 def test_ai_move_is_valid(sandbox):
     session = _start_ai(sandbox)
-    result = G.make_move("user1", "yexuan", session.session_id, 7, 7)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
     ai_mv = result["move_history"][-1]
     ax, ay = ai_mv["x"], ai_mv["y"]
     assert 0 <= ax < 15
@@ -108,7 +109,7 @@ def test_ai_move_is_valid(sandbox):
 
 def test_ai_move_history_has_source_style(sandbox):
     session = _start_ai(sandbox, ai_style="balanced")
-    result = G.make_move("user1", "yexuan", session.session_id, 7, 7)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
     ai_mv = result["move_history"][-1]
     assert ai_mv["source"] == "ai"
     assert ai_mv["style"] == "balanced"
@@ -142,7 +143,7 @@ def test_ai_takes_winning_move(sandbox):
     ]
     _inject_board(session, board, current_turn="black", move_history=history)
 
-    result = G.make_move("user1", "yexuan", session.session_id, 7, 7)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
     assert result["winner"] == "white"
     assert result["status"] == "completed"
     ai_mv = result["move_history"][-1]
@@ -175,7 +176,7 @@ def test_ai_blocks_opponent_win(sandbox):
     ]
     _inject_board(session, board, current_turn="black", move_history=history)
 
-    result = G.make_move("user1", "yexuan", session.session_id, 14, 14)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 14, 14)
     ai_mv = result["move_history"][-1]
     assert ai_mv["x"] == 4 and ai_mv["y"] == 0
 
@@ -270,7 +271,7 @@ def test_user_wins_ai_does_not_move(sandbox):
     ]
     _inject_board(session, board, current_turn="black", move_history=history)
 
-    result = G.make_move("user1", "yexuan", session.session_id, 4, 0)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 4, 0)
     assert result["winner"] == "black"
     assert result["status"] == "completed"
     # AI 不追加落子：最后一条是用户的黑棋
@@ -302,7 +303,7 @@ def test_ai_wins_status_completed(sandbox):
     ]
     _inject_board(session, board, current_turn="black", move_history=history)
 
-    result = G.make_move("user1", "yexuan", session.session_id, 7, 7)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
     assert result["status"] == "completed"
     assert result["winner"] == "white"
     assert "win_line" in result
@@ -331,9 +332,9 @@ def test_no_move_after_ai_wins(sandbox):
     ]
     _inject_board(session, board, current_turn="black", move_history=history)
 
-    G.make_move("user1", "yexuan", session.session_id, 7, 7)  # AI 赢
+    G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)  # AI 赢
     with pytest.raises(ValueError, match="已结束"):
-        G.make_move("user1", "yexuan", session.session_id, 0, 1)
+        G.make_move("user1", TEST_CHAR_ID, session.session_id, 0, 1)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -342,16 +343,16 @@ def test_no_move_after_ai_wins(sandbox):
 
 def test_ai_mode_no_short_term_written(sandbox):
     session = _start_ai(sandbox, ai_style="serious")
-    G.make_move("user1", "yexuan", session.session_id, 7, 7)
-    G.make_move("user1", "yexuan", session.session_id, 6, 6)
+    G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
+    G.make_move("user1", TEST_CHAR_ID, session.session_id, 6, 6)
 
     history_dir = sandbox._p("history")
-    chars_history = sandbox._p("chars", "yexuan", "history")
+    chars_history = sandbox._p("chars", TEST_CHAR_ID, "history")
     for p in (history_dir, chars_history):
         if p.exists():
             assert list(p.iterdir()) == [], f"unexpected write in {p}"
 
-    hidden = sandbox._p("runtime", "memory", "yexuan", "user1", "user_hidden_state.json")
+    hidden = sandbox._p("runtime", "memory", TEST_CHAR_ID, "user1", "user_hidden_state.json")
     assert not hidden.exists()
 
 
@@ -360,7 +361,7 @@ def test_ai_mode_no_short_term_written(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_start_p0_compat_default_fields(sandbox):
-    session = G.start_game("user1", "yexuan")
+    session = G.start_game("user1", TEST_CHAR_ID)
     assert session.state["opponent"] == "human"
     assert session.state["ai_player"] == "white"
     assert session.state["ai_style"] == "balanced"

@@ -32,6 +32,7 @@ T23. generate_reply 返回 3-tuple (reply, control, grounding)
 T24. grounding 包含 last_user_move_facts 和 last_ai_move_facts 字段
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -49,11 +50,11 @@ from core.activity.gomoku_grounding import build_gomoku_grounding_facts
 
 # ── 工具 ──────────────────────────────────────────────────────────────────────
 
-def _start_ai(sandbox, uid="user1", char_id="yexuan"):
+def _start_ai(sandbox, uid="user1", char_id=TEST_CHAR_ID):
     return G.start_game(uid, char_id, opponent="yexuan_ai", ai_style="balanced")
 
 
-def _start_human(sandbox, uid="user1", char_id="yexuan"):
+def _start_human(sandbox, uid="user1", char_id=TEST_CHAR_ID):
     return G.start_game(uid, char_id, opponent="human")
 
 
@@ -267,7 +268,7 @@ async def test_chat_does_not_modify_winner_or_status(sandbox, monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_load_session_returns_none_for_nonexistent(sandbox):
-    result = activity_store.load_session("yexuan", "user1", "gomoku", "nonexistent-session-id")
+    result = activity_store.load_session(TEST_CHAR_ID, "user1", "gomoku", "nonexistent-session-id")
     assert result is None, "load_session should return None for a session that was never created"
 
 
@@ -311,7 +312,7 @@ def test_long_message_raises_422(sandbox):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_load_recent_respects_limit(sandbox):
-    char_id, uid, session_id = "yexuan", "user1", "testsession1"
+    char_id, uid, session_id = TEST_CHAR_ID, "user1", "testsession1"
     for i in range(10):
         TR.append_entry(char_id, uid, "gomoku", session_id, {
             "type": "user_chat", "text": f"msg{i}", "ts": "2026-01-01T00:00:00",

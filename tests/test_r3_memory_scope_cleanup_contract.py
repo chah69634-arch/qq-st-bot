@@ -22,6 +22,7 @@ Allowlist categories:
   _MIGRATION_TARGETS — files with known violations scheduled for future cleanup.
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from pathlib import Path
 
@@ -37,7 +38,7 @@ from tests.test_r3_scope_lint import (
 # Categorised char_id allowlist
 # ---------------------------------------------------------------------------
 
-# Files whose char_id="yexuan" defaults are correct BY DESIGN and will not be
+# Files whose char_id=TEST_CHAR_ID defaults are correct BY DESIGN and will not be
 # removed — they are the canonical path authority or intentional compat layers.
 _CHAR_ID_FOREVER: frozenset[str] = frozenset({
     "core/data_paths.py",  # canonical path authority — char_id defaults are by design
@@ -64,7 +65,7 @@ _DATA_PATH_MIGRATION_TARGETS: frozenset[str] = DATA_PATH_ALLOWLIST - _DATA_PATH_
 
 def test_char_id_migration_targets_still_have_violations():
     """
-    Each MIGRATION_TARGET must still contain char_id='yexuan' function defaults.
+    Each MIGRATION_TARGET must still contain char_id=TEST_CHAR_ID function defaults.
     When this test fails for file X, X has been cleaned up — remove it from
     CHAR_ID_DEFAULT_ALLOWLIST in test_r3_scope_lint.py.
     """
@@ -79,7 +80,7 @@ def test_char_id_migration_targets_still_have_violations():
             already_clean.append(rel)
 
     assert not already_clean, (
-        "These migration-target files no longer have char_id='yexuan' defaults.\n"
+        "These migration-target files no longer have char_id=TEST_CHAR_ID defaults.\n"
         "Please remove them from CHAR_ID_DEFAULT_ALLOWLIST in tests/test_r3_scope_lint.py:\n"
         + "\n".join(f"  {f}" for f in already_clean)
     )
@@ -109,7 +110,7 @@ def test_data_path_migration_targets_still_have_violations():
 
 
 # ---------------------------------------------------------------------------
-# Admin routes: no char_id="yexuan" function-parameter defaults
+# Admin routes: no char_id=TEST_CHAR_ID function-parameter defaults
 # ---------------------------------------------------------------------------
 
 _ADMIN_ROOT = PROJECT_ROOT / "admin"
@@ -117,7 +118,7 @@ _ADMIN_ROOT = PROJECT_ROOT / "admin"
 
 def test_admin_no_char_id_defaults():
     """
-    No file under admin/ may define char_id='yexuan' as a function-parameter default.
+    No file under admin/ may define char_id=TEST_CHAR_ID as a function-parameter default.
     Admin routes must resolve char_id from active_prompt_assets or require explicit
     caller input; they must never silently fallback to a hardcoded character.
     """
@@ -130,7 +131,7 @@ def test_admin_no_char_id_defaults():
             violations[rel] = hits
 
     assert not violations, (
-        "char_id='yexuan' function defaults found in admin/.\n"
+        "char_id=TEST_CHAR_ID function defaults found in admin/.\n"
         "Admin routes must resolve char_id from active_prompt_assets or require it "
         "as an explicit query parameter.\n"
         f"Violations: {violations}"
@@ -142,11 +143,11 @@ def test_admin_no_char_id_defaults():
 # ---------------------------------------------------------------------------
 
 def test_detector_does_not_flag_test_fixture_call_kwarg():
-    """Call-site char_id='yexuan' kwargs in test fixtures must not be flagged."""
+    """Call-site char_id=TEST_CHAR_ID kwargs in test fixtures must not be flagged."""
     src = """\
 def test_isolation(sandbox):
-    s1 = _make_session(sandbox, uid="user1", char_id="yexuan")
-    s2 = _make_session(sandbox, uid="user2", char_id="yexuan")
+    s1 = _make_session(sandbox, uid="user1", char_id=TEST_CHAR_ID)
+    s2 = _make_session(sandbox, uid="user2", char_id=TEST_CHAR_ID)
     assert s1 != s2
 """
     assert _find_yexuan_defaults(src) == [], (
@@ -174,7 +175,7 @@ def test_detector_does_not_flag_test_files_for_data_path():
     # Simulate a test that asserts a path contains "data/runtime/..."
     src = """\
 def test_path_shape(sandbox):
-    p = sandbox.user_memory_root("uid1", char_id="yexuan")
+    p = sandbox.user_memory_root("uid1", char_id=TEST_CHAR_ID)
     assert "data/runtime/memory" in str(p)
 """
     # The detector would flag this if the file were in core/ (it contains "data/" in a string),

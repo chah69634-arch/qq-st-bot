@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_state_projection.py — Brief 94 §2: GET /dream/state 结构化状态透出
 
@@ -180,7 +181,7 @@ def test_full_transition_idle_dreaming_cooldown(sandbox):
             "mid_term_context": "",
             "profile_impression": "",
         })):
-            enter_result = asyncio.run(enter_dream(uid, char_id="yexuan"))
+            enter_result = asyncio.run(enter_dream(uid, char_id=TEST_CHAR_ID))
         assert enter_result.get("ok") is True
 
         mid = asyncio.run(dream_state_get())

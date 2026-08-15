@@ -13,6 +13,7 @@ T6. chess/gomoku _build_messages include activity_persona / activity_main_chat_r
     and omit them when empty (backward compatible with existing callers).
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import chess
 import pytest
@@ -29,7 +30,7 @@ from core.activity.companion_context import (
 # ── load_persona_brief ──────────────────────────────────────────────────────────
 
 def test_load_persona_brief_real_character(sandbox):
-    brief = load_persona_brief("yexuan")
+    brief = load_persona_brief(TEST_CHAR_ID)
     assert isinstance(brief, str)
     assert brief
     assert len(brief) <= 300
@@ -42,16 +43,16 @@ def test_load_persona_brief_unknown_character_fails_open(sandbox):
 # ── load_main_chat_recall ────────────────────────────────────────────────────────
 
 def test_load_main_chat_recall_empty_when_no_history(sandbox):
-    assert load_main_chat_recall("recall_user_empty", "yexuan") == ""
+    assert load_main_chat_recall("recall_user_empty", TEST_CHAR_ID) == ""
 
 
 def test_load_main_chat_recall_formats_lines(sandbox):
     from core.memory import short_term
 
-    short_term.append("recall_user_1", "user", "你好呀", char_id="yexuan")
-    short_term.append("recall_user_1", "assistant", "嗯，我在。", char_id="yexuan")
+    short_term.append("recall_user_1", "user", "你好呀", char_id=TEST_CHAR_ID)
+    short_term.append("recall_user_1", "assistant", "嗯，我在。", char_id=TEST_CHAR_ID)
 
-    recall = load_main_chat_recall("recall_user_1", "yexuan")
+    recall = load_main_chat_recall("recall_user_1", TEST_CHAR_ID)
     assert "用户：你好呀" in recall
     assert "嗯，我在。" in recall
 
@@ -60,7 +61,7 @@ def test_load_main_chat_recall_fails_open_on_error(sandbox, monkeypatch):
     def _raise(*a, **kw):
         raise RuntimeError("boom")
     monkeypatch.setattr("core.memory.short_term.get_history", _raise)
-    assert load_main_chat_recall("recall_user_err", "yexuan") == ""
+    assert load_main_chat_recall("recall_user_err", TEST_CHAR_ID) == ""
 
 
 # ── _build_messages layer wiring ─────────────────────────────────────────────────
@@ -144,9 +145,9 @@ async def test_chess_generate_reply_reads_but_does_not_write_short_term(sandbox,
     monkeypatch.setattr("core.llm_client.chat", _chat)
 
     from core.memory import short_term
-    short_term.append("readonly_user", "user", "早上好", char_id="yexuan")
+    short_term.append("readonly_user", "user", "早上好", char_id=TEST_CHAR_ID)
 
-    await CC.generate_reply("yexuan", "readonly_user", "sessRO", _chess_state(), "你好")
+    await CC.generate_reply(TEST_CHAR_ID, "readonly_user", "sessRO", _chess_state(), "你好")
 
-    history_after = short_term.get_history("readonly_user", char_id="yexuan")
+    history_after = short_term.get_history("readonly_user", char_id=TEST_CHAR_ID)
     assert len(history_after) == 1, "activity chat must not append to main short_term history"

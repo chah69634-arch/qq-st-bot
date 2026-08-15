@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 验证 main.py 冷启动路径中 LoreEngine 的加载顺序：
   正确：LoreEngine() → load() → load_entries(world_book)
@@ -34,7 +35,7 @@ def _write_lorebook(sandbox, entries):
     apa = sandbox._base / "runtime" / "active_prompt_assets.json"
     apa.parent.mkdir(parents=True, exist_ok=True)
     apa.write_text(
-        _json.dumps({"active_character": "yexuan", "enabled_lorebooks": ["base"], "enabled_jailbreaks": []}),
+        _json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": ["base"], "enabled_jailbreaks": []}),
         encoding="utf-8",
     )
 

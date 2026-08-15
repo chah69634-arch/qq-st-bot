@@ -10,6 +10,7 @@ tests/test_diary_context_freshness.py — P0.5-1 验收
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 import time
@@ -20,7 +21,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 _UID = "diary_fresh_uid"
-_CHAR = "yexuan"
+_CHAR = TEST_CHAR_ID
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ class TestSchedulerClearOnEmpty:
         _calls = []
         orig_save = save
 
-        def _mock_save(uid, text, *, char_id="yexuan"):
+        def _mock_save(uid, text, *, char_id=TEST_CHAR_ID):
             _calls.append((uid, text))
             orig_save(uid, text, char_id=char_id)
 

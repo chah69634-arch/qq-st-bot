@@ -24,6 +24,7 @@ Covers:
   N. source scan: core/scheduler/last_mentioned.py no longer contains event_log direct path
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -46,13 +47,13 @@ import core.memory.user_profile as _up_preimport  # noqa: F401
 def chars_tree(tmp_path):
     """Minimal project tree: yexuan + character_b characters + config.yaml."""
     (tmp_path / "config.yaml").write_text(
-        "character:\n  name: 测试角色\n  default: yexuan\n"
+        f'character:\n  name: 测试角色\n  default: {TEST_CHAR_ID}\n'
         "scheduler:\n  owner_id: '10000'\n",
         encoding="utf-8",
     )
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -143,16 +144,16 @@ def test_chat_log_explicit_char_id_reads_correct_bucket(sandbox, registry, monke
 
     _seed_active(sandbox, "character_b")
     # Only yexuan has a log file
-    _seed_event_log_day(sandbox, _TEST_OWNER, "yexuan", "2026-06-05", "## 09:00\n**用户**：Companion内容\n")
+    _seed_event_log_day(sandbox, _TEST_OWNER, TEST_CHAR_ID, "2026-06-05", "## 09:00\n**用户**：Companion内容\n")
 
-    result_yexuan = asyncio.run(list_dates(char_id="yexuan", auth="dummy"))
+    result_yexuan = asyncio.run(list_dates(char_id=TEST_CHAR_ID, auth="dummy"))
     result_character_b = asyncio.run(list_dates(char_id=None, auth="dummy"))
 
     assert "2026-06-05" in result_yexuan["dates"], (
         f"yexuan bucket must contain 2026-06-05; got {result_yexuan['dates']}"
     )
     assert "2026-06-05" not in result_character_b["dates"], (
-        "character_b bucket must NOT contain yexuan-only log date"
+        f'character_b bucket must NOT contain {TEST_CHAR_ID}-only log date'
     )
 
 
@@ -237,12 +238,12 @@ def test_user_talked_today_empty_file_returns_false(sandbox, registry):
 
     uid = "10002"
     today = datetime.now().strftime("%Y-%m-%d")
-    scope = MemoryScope.reality_scope(uid, "yexuan")
+    scope = MemoryScope.reality_scope(uid, TEST_CHAR_ID)
     log_dir = resolve_path(scope, "event_log")
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / f"{today}.md").write_text("tiny", encoding="utf-8")
 
-    assert _user_talked_today(uid, char_id="yexuan") is False
+    assert _user_talked_today(uid, char_id=TEST_CHAR_ID) is False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -277,7 +278,7 @@ def test_user_talked_today_explicit_char_id_bypasses_active(sandbox, registry, m
     from core.memory.scope import MemoryScope
 
     active_called = []
-    monkeypatch.setattr(_loop, "_active_char_id_or_none", lambda: active_called.append(1) or "yexuan")
+    monkeypatch.setattr(_loop, "_active_char_id_or_none", lambda: active_called.append(1) or TEST_CHAR_ID)
 
     uid = "10004"
     today = datetime.now().strftime("%Y-%m-%d")
@@ -335,7 +336,7 @@ def test_recall_last_mentioned_bucket_isolation(sandbox, registry):
     YEXUAN_ONLY = "Companion专属事件日志内容XYZ"
 
     # Write only to yexuan bucket
-    scope = MemoryScope.reality_scope(uid, "yexuan")
+    scope = MemoryScope.reality_scope(uid, TEST_CHAR_ID)
     log_dir = resolve_path(scope, "event_log")
     log_dir.mkdir(parents=True, exist_ok=True)
     (log_dir / f"{date_str}.md").write_text(
@@ -348,7 +349,7 @@ def test_recall_last_mentioned_bucket_isolation(sandbox, registry):
 
     # character_b bucket has no logs → must return None
     assert topic_character_b is None, (
-        "recall_last_mentioned for character_b must not read yexuan bucket"
+        f'recall_last_mentioned for character_b must not read {TEST_CHAR_ID} bucket'
     )
 
 
@@ -383,7 +384,7 @@ def test_recall_last_mentioned_explicit_char_id_bypasses_active(sandbox, registr
     from core.memory.scope import MemoryScope
 
     active_called = []
-    monkeypatch.setattr(_lm, "_active_char_id_or_none", lambda: active_called.append(1) or "yexuan")
+    monkeypatch.setattr(_lm, "_active_char_id_or_none", lambda: active_called.append(1) or TEST_CHAR_ID)
 
     uid = "20004"
     date_str = "2026-06-05"

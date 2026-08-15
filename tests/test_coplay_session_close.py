@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_session_close.py — Brief 42: session 收尾链
 （summarizer + game_log + provenance_log + afterglow + close_session）。
@@ -15,7 +16,7 @@ from core.coplay import afterglow, game_state, observer, session, session_close
 from core.coplay.observer import GameMoment
 
 UID = "u1"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 GAME_ID = "steam:123"
 GAME_NAME = "黑暗之魂"
 

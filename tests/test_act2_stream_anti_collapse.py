@@ -10,6 +10,7 @@ tests/test_act2_stream_anti_collapse.py — cc-tasks/105 · ACT-2
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import itertools
 
@@ -37,8 +38,8 @@ def test_note_then_consume_roundtrip(sandbox):
         note_stream_collapse_signal,
     )
     uid = _fresh_uid()
-    note_stream_collapse_signal(uid, "嗯。", char_id="yexuan")
-    assert consume_stream_collapse_signal(uid, char_id="yexuan") == "嗯。"
+    note_stream_collapse_signal(uid, "嗯。", char_id=TEST_CHAR_ID)
+    assert consume_stream_collapse_signal(uid, char_id=TEST_CHAR_ID) == "嗯。"
 
 
 def test_consume_is_one_shot(sandbox):
@@ -48,9 +49,9 @@ def test_consume_is_one_shot(sandbox):
         note_stream_collapse_signal,
     )
     uid = _fresh_uid()
-    note_stream_collapse_signal(uid, "现在，", char_id="yexuan")
-    first = consume_stream_collapse_signal(uid, char_id="yexuan")
-    second = consume_stream_collapse_signal(uid, char_id="yexuan")
+    note_stream_collapse_signal(uid, "现在，", char_id=TEST_CHAR_ID)
+    first = consume_stream_collapse_signal(uid, char_id=TEST_CHAR_ID)
+    second = consume_stream_collapse_signal(uid, char_id=TEST_CHAR_ID)
     assert first == "现在，"
     assert second is None
 
@@ -71,8 +72,8 @@ def test_signal_persisted_via_sandbox_path(sandbox):
     """落盘位置必须经 sandbox.get_paths()，落在 tmp_path 隔离目录下而非硬编码真实路径。"""
     from core.memory.short_term import note_stream_collapse_signal
     uid = _fresh_uid()
-    note_stream_collapse_signal(uid, "嗯。", char_id="yexuan")
-    path = sandbox.stream_collapse_signal(uid, char_id="yexuan")
+    note_stream_collapse_signal(uid, "嗯。", char_id=TEST_CHAR_ID)
+    path = sandbox.stream_collapse_signal(uid, char_id=TEST_CHAR_ID)
     assert path.exists()
     assert str(sandbox._base) in str(path)
 
@@ -111,13 +112,13 @@ async def test_stream_collapse_hit_does_not_interrupt_output(monkeypatch, sandbo
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
     pieces = await _collect(
-        pipeline.run_llm_stream(messages, char_id="yexuan", user_id=uid)
+        pipeline.run_llm_stream(messages, char_id=TEST_CHAR_ID, user_id=uid)
     )
 
     assert "".join(pieces) == "嗯。这次还是这样开头"
 
     from core.memory.short_term import consume_stream_collapse_signal
-    assert consume_stream_collapse_signal(uid, char_id="yexuan") == "嗯。"
+    assert consume_stream_collapse_signal(uid, char_id=TEST_CHAR_ID) == "嗯。"
 
 
 @pytest.mark.asyncio
@@ -133,12 +134,12 @@ async def test_stream_no_collapse_writes_no_signal(monkeypatch, sandbox):
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
     pieces = await _collect(
-        pipeline.run_llm_stream(messages, char_id="yexuan", user_id=uid)
+        pipeline.run_llm_stream(messages, char_id=TEST_CHAR_ID, user_id=uid)
     )
     assert "".join(pieces) == "全新的开口方式"
 
     from core.memory.short_term import consume_stream_collapse_signal
-    assert consume_stream_collapse_signal(uid, char_id="yexuan") is None
+    assert consume_stream_collapse_signal(uid, char_id=TEST_CHAR_ID) is None
 
 
 @pytest.mark.asyncio
@@ -152,7 +153,7 @@ async def test_stream_without_user_id_skips_detection(monkeypatch, sandbox):
 
     monkeypatch.setattr("core.llm_client.chat_stream", _fake_chat_stream)
 
-    pieces = await _collect(pipeline.run_llm_stream(messages, char_id="yexuan"))
+    pieces = await _collect(pipeline.run_llm_stream(messages, char_id=TEST_CHAR_ID))
     assert "".join(pieces) == "嗯。还是这样开头"
 
 
@@ -170,13 +171,13 @@ def _apply_build_stubs(monkeypatch):
     monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda *, char_id="": "")
-    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id="yexuan": "")
+    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(_anr, "get_current_note", lambda paths=None, char_id=None: "")
     monkeypatch.setattr(_cl, "get_config", lambda: {"chat": {}})
 
 
-def _build_messages(uid: str, char_id: str = "yexuan") -> list[dict]:
+def _build_messages(uid: str, char_id: str = TEST_CHAR_ID) -> list[dict]:
     import core.prompt_builder as _pb
     from core.character_loader import Character
 
@@ -203,7 +204,7 @@ def test_build_injects_stream_collapse_hint_when_signal_present(monkeypatch, san
     from core.memory.short_term import note_stream_collapse_signal
 
     uid = _fresh_uid()
-    note_stream_collapse_signal(uid, "嗯。", char_id="yexuan")
+    note_stream_collapse_signal(uid, "嗯。", char_id=TEST_CHAR_ID)
 
     messages = _build_messages(uid)
     hint_msg = _find_layer(messages, "stream_collapse_hint")
@@ -218,7 +219,7 @@ def test_build_injects_literal_hint_for_non_filler_prefix(monkeypatch, sandbox):
     from core.memory.short_term import note_stream_collapse_signal
 
     uid = _fresh_uid()
-    note_stream_collapse_signal(uid, "现在，", char_id="yexuan")
+    note_stream_collapse_signal(uid, "现在，", char_id=TEST_CHAR_ID)
 
     messages = _build_messages(uid)
     hint_msg = _find_layer(messages, "stream_collapse_hint")
@@ -239,7 +240,7 @@ def test_build_consumes_signal_once_next_round_clean(monkeypatch, sandbox):
     from core.memory.short_term import note_stream_collapse_signal
 
     uid = _fresh_uid()
-    note_stream_collapse_signal(uid, "嗯。", char_id="yexuan")
+    note_stream_collapse_signal(uid, "嗯。", char_id=TEST_CHAR_ID)
 
     round2 = _build_messages(uid)
     assert _find_layer(round2, "stream_collapse_hint") is not None

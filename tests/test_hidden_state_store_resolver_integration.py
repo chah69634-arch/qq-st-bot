@@ -17,6 +17,7 @@ Covers:
 10. load_dream_snapshot delegates to correct char_id path
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 from datetime import datetime, timezone
@@ -107,9 +108,9 @@ def test_hidden_state_path_equals_legacy_sandbox_path(sandbox):
 
 def test_afterglow_path_equals_legacy_sandbox_path(sandbox):
     """resolve_path("afterglow_residue") must equal sandbox.user_memory_root / afterglow_residue.json."""
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     resolver_path = resolve_path(scope, "afterglow_residue")
-    legacy_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "afterglow_residue.json"
+    legacy_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "afterglow_residue.json"
     assert resolver_path == legacy_path, (
         f"Resolver path diverged from legacy:\n  resolver: {resolver_path}\n  legacy:   {legacy_path}"
     )
@@ -167,20 +168,20 @@ def test_save_and_load_two_chars_isolated(sandbox):
 
     state_y = default_hidden_state()
     state_y.sensitivity.baseline.value = 10.0
-    save_hidden_state(_UID, state_y, char_id="yexuan")
+    save_hidden_state(_UID, state_y, char_id=TEST_CHAR_ID)
 
     state_h = default_hidden_state()
     state_h.sensitivity.baseline.value = 90.0
     save_hidden_state(_UID, state_h, char_id="character_b")
 
-    loaded_y = load_hidden_state(_UID, char_id="yexuan")
+    loaded_y = load_hidden_state(_UID, char_id=TEST_CHAR_ID)
     loaded_h = load_hidden_state(_UID, char_id="character_b")
 
     assert loaded_y.sensitivity.baseline.value == pytest.approx(10.0)
     assert loaded_h.sensitivity.baseline.value == pytest.approx(90.0)
 
     # Ensure file-level isolation
-    y_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "hidden_state.json"
+    y_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "hidden_state.json"
     h_path = sandbox.user_memory_root(_UID, char_id="character_b") / "hidden_state.json"
     assert y_path.exists()
     assert h_path.exists()
@@ -192,10 +193,10 @@ def test_afterglow_isolation(sandbox):
     from core.memory.user_hidden_state_store import save_afterglow_residue
 
     r_y = AfterglowResidueInput(emotional_tags=["warm"], tone="comfort", age_hours=0.0)
-    save_afterglow_residue(_UID, r_y, _NOW, char_id="yexuan")
+    save_afterglow_residue(_UID, r_y, _NOW, char_id=TEST_CHAR_ID)
 
     character_b_path = sandbox.user_memory_root(_UID, char_id="character_b") / "afterglow_residue.json"
-    assert not character_b_path.exists(), "yexuan afterglow must not pollute character_b bucket"
+    assert not character_b_path.exists(), f'{TEST_CHAR_ID} afterglow must not pollute character_b bucket'
 
 
 # ---------------------------------------------------------------------------
@@ -235,12 +236,12 @@ def test_int_uid_save_and_load(sandbox):
     int_uid = 9988776655
     state = default_hidden_state()
     state.sensitivity.baseline.value = 44.0
-    save_hidden_state(int_uid, state, char_id="yexuan")
+    save_hidden_state(int_uid, state, char_id=TEST_CHAR_ID)
 
-    loaded = load_hidden_state(int_uid, char_id="yexuan")
+    loaded = load_hidden_state(int_uid, char_id=TEST_CHAR_ID)
     assert loaded.sensitivity.baseline.value == pytest.approx(44.0)
 
-    expected = sandbox.user_memory_root(int_uid, char_id="yexuan") / "hidden_state.json"
+    expected = sandbox.user_memory_root(int_uid, char_id=TEST_CHAR_ID) / "hidden_state.json"
     assert expected.exists()
 
 
@@ -258,5 +259,5 @@ def test_load_dream_snapshot_uses_char_id_path(sandbox):
     snapshot = load_dream_snapshot(_UID, _NOW, char_id="character_b")
     assert isinstance(snapshot, dict)
     # character_b path exists; yexuan path was never written
-    yexuan_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "hidden_state.json"
+    yexuan_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "hidden_state.json"
     assert not yexuan_path.exists()

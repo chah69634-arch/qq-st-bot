@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 """
 tests/test_character_switch.py
 
@@ -5,7 +6,7 @@ Reality character-card asset-switching pipeline tests.
 
 Covers:
 1.  character_b.json registry: id="character_b", label="DemoUser", not hidden
-2.  yexuanJ-5412.json registry: id="yexuanJ-5412", not hidden
+2.  yexuanJ-5412.json registry: id=TEST_PEER_CHAR_ID, not hidden
 3.  GET /settings/prompt-assets returns character_b in characters list
 4.  PATCH active_character=character_b writes character_b to active_prompt_assets.json
 5.  character_loader.load("character_b") loads the character_b character correctly
@@ -34,7 +35,7 @@ def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
 
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -43,7 +44,7 @@ def chars_tree(tmp_path):
         encoding="utf-8",
     )
     # yexuanJ-5412 also present
-    (chars / "yexuanJ-5412.json").write_text(
+    (chars / f'{TEST_PEER_CHAR_ID}.json').write_text(
         json.dumps({"name": "CompanionJ-5412", "description": "j5412 test", "world_book": []}),
         encoding="utf-8",
     )
@@ -86,15 +87,15 @@ def test_character_b_label_is_chinese(registry):
 # ── 2. yexuanJ-5412 registry entry ───────────────────────────────────────────
 
 def test_j5412_registry_entry(registry):
-    entry = registry.resolve("yexuanJ-5412", "character")
-    assert entry.id == "yexuanJ-5412"
+    entry = registry.resolve(TEST_PEER_CHAR_ID, "character")
+    assert entry.id == TEST_PEER_CHAR_ID
     assert entry.label == "CompanionJ-5412"
     assert not entry.hidden
 
 
 def test_j5412_appears_in_ui_list(registry):
     visible_ids = [e.id for e in registry.list_ui("character")]
-    assert "yexuanJ-5412" in visible_ids
+    assert TEST_PEER_CHAR_ID in visible_ids
 
 
 # ── 3. GET /settings/prompt-assets returns character_b ────────────────────────────
@@ -126,7 +127,7 @@ def test_patch_active_character_writes_json(chars_tree, monkeypatch, sandbox):
     # Seed active_prompt_assets.json with yexuan
     assets_path = sandbox.active_prompt_assets()
     assets_path.write_text(
-        json.dumps({"active_character": "yexuan", "enabled_lorebooks": [],
+        json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [],
                     "enabled_jailbreaks": ["base"]}),
         encoding="utf-8",
     )
@@ -201,10 +202,10 @@ def test_pipeline_refresh_swaps_character(chars_tree, monkeypatch, sandbox):
     from core.pipeline import Pipeline
 
     # Start pipeline with yexuan
-    yexuan = _load("yexuan")
-    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id="yexuan")
+    yexuan = _load(TEST_CHAR_ID)
+    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id=TEST_CHAR_ID)
     assert pipeline.character.name == "Companion"
-    assert pipeline._active_character_id == "yexuan"
+    assert pipeline._active_character_id == TEST_CHAR_ID
 
     # Switch active_prompt_assets.json to character_b
     sandbox.active_prompt_assets().write_text(
@@ -231,12 +232,12 @@ def test_pipeline_refresh_no_swap_when_same(chars_tree, monkeypatch, sandbox):
     from core.character_loader import load as _load
     from core.pipeline import Pipeline
 
-    yexuan = _load("yexuan")
-    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id="yexuan")
+    yexuan = _load(TEST_CHAR_ID)
+    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id=TEST_CHAR_ID)
     original_char = pipeline.character
 
     sandbox.active_prompt_assets().write_text(
-        json.dumps({"active_character": "yexuan", "enabled_lorebooks": [],
+        json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [],
                     "enabled_jailbreaks": []}),
         encoding="utf-8",
     )
@@ -263,7 +264,7 @@ def test_active_prompt_assets_overrides_config_default(chars_tree, monkeypatch, 
 
     # config.yaml default says yexuan (mock)
     from unittest.mock import patch as _patch
-    with _patch("core.config_loader.get_config", return_value={"character": {"default": "yexuan"}}):
+    with _patch("core.config_loader.get_config", return_value={"character": {"default": TEST_CHAR_ID}}):
         from core.sandbox import get_paths
         import json as _json
         active_data = _json.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
@@ -296,8 +297,8 @@ def test_empty_active_character_raises_in_pipeline(
     from core.character_loader import load as _load
     from core.pipeline import Pipeline
 
-    yexuan = _load("yexuan")
-    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id="yexuan")
+    yexuan = _load(TEST_CHAR_ID)
+    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id=TEST_CHAR_ID)
 
     # active_prompt_assets.json has empty active_character — invalid state
     sandbox.active_prompt_assets().write_text(
@@ -310,7 +311,7 @@ def test_empty_active_character_raises_in_pipeline(
 
     # Pipeline character must not have changed
     assert pipeline.character.name == "Companion", "Character must remain unchanged on empty active_character"
-    assert pipeline._active_character_id == "yexuan"
+    assert pipeline._active_character_id == TEST_CHAR_ID
 
 
 # ── 8. Unknown active_character → fail-loud ───────────────────────────────────
@@ -332,8 +333,8 @@ def test_pipeline_refresh_fail_loud_on_unknown_id(chars_tree, monkeypatch, sandb
     from core.character_loader import load as _load
     from core.pipeline import Pipeline
 
-    yexuan = _load("yexuan")
-    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id="yexuan")
+    yexuan = _load(TEST_CHAR_ID)
+    pipeline = Pipeline(yexuan, lore_engine=None, active_character_id=TEST_CHAR_ID)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "ghost_character", "enabled_lorebooks": [],
@@ -353,7 +354,7 @@ def test_pipeline_refresh_fail_loud_on_unknown_id(chars_tree, monkeypatch, sandb
         "Pipeline character must stay as original (Companion) after failed swap"
     )
     # active_character_id must NOT have been updated to the bad id
-    assert pipeline._active_character_id == "yexuan"
+    assert pipeline._active_character_id == TEST_CHAR_ID
 
 
 # ── 9. Startup: active_prompt_assets absent → auto-created ───────────────────
@@ -368,5 +369,5 @@ def test_active_prompt_assets_autocreated_on_first_access(tmp_path):
     assert p.exists(), "active_prompt_assets.json must be auto-created"
     data = json.loads(p.read_text(encoding="utf-8"))
     assert "active_character" in data
-    # Value must come from config.default (currently "yexuan"), never a hardcoded fallback
+    # Value must come from config.default (currently TEST_CHAR_ID), never a hardcoded fallback
     assert data["active_character"], "active_character must be non-empty after init"

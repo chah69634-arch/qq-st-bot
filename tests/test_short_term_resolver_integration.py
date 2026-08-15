@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_short_term_resolver_integration.py — P1-2G
 
@@ -129,7 +130,7 @@ def test_load_for_prompt_reads_from_resolver_path(sandbox):
 def test_history_physical_path_matches_old_layout(sandbox):
     """Resolver 'history' path == user_memory_root(uid, char_id=...) / 'history.json'."""
     uid = "u_p2g_layout"
-    for char_id in ("yexuan", "character_b", "custom_char"):
+    for char_id in (TEST_CHAR_ID, "character_b", "custom_char"):
         scope = MemoryScope.reality_scope(safe_user_id(uid), char_id)
         resolver_path = resolve_path(scope, "history")
         old_path = _expected_path(uid, char_id)
@@ -214,22 +215,22 @@ def test_yexuan_character_b_buckets_isolated(sandbox):
     from core.memory.short_term import append, load
 
     uid = "u_p2g_iso"
-    SENTINEL_Y = "p2g-yexuan-unique-茉莉"
+    SENTINEL_Y = f'p2g-{TEST_CHAR_ID}-unique-茉莉'
     SENTINEL_H = "p2g-character_b-unique-荔枝"
 
-    append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
     append(uid, "user", SENTINEL_H, char_id="character_b")
 
-    yexuan = load(uid, char_id="yexuan")
+    yexuan = load(uid, char_id=TEST_CHAR_ID)
     character_b = load(uid, char_id="character_b")
 
-    assert any(SENTINEL_Y in m.get("content", "") for m in yexuan), "yexuan bucket missing yexuan sentinel"
-    assert not any(SENTINEL_H in m.get("content", "") for m in yexuan), "yexuan bucket leaked character_b sentinel"
+    assert any(SENTINEL_Y in m.get("content", "") for m in yexuan), f'{TEST_CHAR_ID} bucket missing {TEST_CHAR_ID} sentinel'
+    assert not any(SENTINEL_H in m.get("content", "") for m in yexuan), f'{TEST_CHAR_ID} bucket leaked character_b sentinel'
     assert any(SENTINEL_H in m.get("content", "") for m in character_b), "character_b bucket missing character_b sentinel"
-    assert not any(SENTINEL_Y in m.get("content", "") for m in character_b), "character_b bucket leaked yexuan sentinel"
+    assert not any(SENTINEL_Y in m.get("content", "") for m in character_b), f'character_b bucket leaked {TEST_CHAR_ID} sentinel'
 
     # Confirm paths are different files
-    scope_y = MemoryScope.reality_scope(safe_user_id(uid), "yexuan")
+    scope_y = MemoryScope.reality_scope(safe_user_id(uid), TEST_CHAR_ID)
     scope_h = MemoryScope.reality_scope(safe_user_id(uid), "character_b")
     assert resolve_path(scope_y, "history") != resolve_path(scope_h, "history")
 
@@ -243,11 +244,11 @@ def test_load_for_prompt_character_b_excludes_yexuan_token(sandbox):
     from core.memory.short_term import append, load_for_prompt
 
     uid = "u_p2g_lfp_iso"
-    YEXUAN_UNIQUE = "p2g-lfp-yexuan-茉莉花开"
+    YEXUAN_UNIQUE = f'p2g-lfp-{TEST_CHAR_ID}-茉莉花开'
     CHARACTER_B_UNIQUE = "p2g-lfp-character_b-荔枝飘香"
 
-    append(uid, "user", YEXUAN_UNIQUE, char_id="yexuan")
-    append(uid, "assistant", "replied", char_id="yexuan")
+    append(uid, "user", YEXUAN_UNIQUE, char_id=TEST_CHAR_ID)
+    append(uid, "assistant", "replied", char_id=TEST_CHAR_ID)
     append(uid, "user", CHARACTER_B_UNIQUE, char_id="character_b")
     append(uid, "assistant", "replied", char_id="character_b")
 

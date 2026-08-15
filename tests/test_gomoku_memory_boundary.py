@@ -23,6 +23,7 @@ T16. 返回值在 move_count>12 时包含 summary_text 字符串
 T17. 返回值在 move_count<=12 时 summary 为 None
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import pytest
 
@@ -32,7 +33,7 @@ from core.activity import store as activity_store
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
-def _start(uid="user1", char_id="yexuan", opponent="human"):
+def _start(uid="user1", char_id=TEST_CHAR_ID, opponent="human"):
     return G.start_game(uid, char_id, opponent=opponent)
 
 
@@ -77,11 +78,11 @@ def _inject_state(
 
 def test_no_summary_at_threshold(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=12)
-    closed, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=12)
+    closed, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert closed is not None
     assert summary is None
-    loaded = activity_store.load_summary("yexuan", "user1", "gomoku", session.session_id)
+    loaded = activity_store.load_summary(TEST_CHAR_ID, "user1", "gomoku", session.session_id)
     assert loaded is None
 
 
@@ -91,8 +92,8 @@ def test_no_summary_at_threshold(sandbox):
 
 def test_no_summary_below_threshold(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=6)
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=6)
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is None
 
 
@@ -102,9 +103,9 @@ def test_no_summary_below_threshold(sandbox):
 
 def test_no_summary_zero_moves(sandbox):
     session = _start()
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is None
-    loaded = activity_store.load_summary("yexuan", "user1", "gomoku", session.session_id)
+    loaded = activity_store.load_summary(TEST_CHAR_ID, "user1", "gomoku", session.session_id)
     assert loaded is None
 
 
@@ -114,8 +115,8 @@ def test_no_summary_zero_moves(sandbox):
 
 def test_summary_generated_above_threshold(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=13)
-    closed, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=13)
+    closed, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert closed is not None
     assert summary is not None
     assert isinstance(summary, str)
@@ -128,11 +129,11 @@ def test_summary_generated_above_threshold(sandbox):
 
 def test_summary_json_persisted(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=20)
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=20)
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
 
-    loaded = activity_store.load_summary("yexuan", "user1", "gomoku", session.session_id)
+    loaded = activity_store.load_summary(TEST_CHAR_ID, "user1", "gomoku", session.session_id)
     assert loaded is not None
     assert loaded["text"] == summary
     assert loaded["move_count"] == 20
@@ -144,8 +145,8 @@ def test_summary_json_persisted(sandbox):
 
 def test_summary_no_full_move_record(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=15)
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=15)
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     # 棋谱坐标形如 "x": 7  或  "(7, 7)"
     assert '"x"' not in summary
@@ -159,8 +160,8 @@ def test_summary_no_full_move_record(sandbox):
 
 def test_summary_no_bracket_list(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=14)
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14)
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     assert "[" not in summary
     assert "]" not in summary
@@ -172,8 +173,8 @@ def test_summary_no_bracket_list(sandbox):
 
 def test_human_mode_no_yexuan_reference(sandbox):
     session = _start(opponent="human")
-    _inject_state("user1", "yexuan", session.session_id, move_count=14, opponent="human")
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14, opponent="human")
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     assert "执白" not in summary
 
@@ -184,8 +185,8 @@ def test_human_mode_no_yexuan_reference(sandbox):
 
 def test_yexuan_ai_mode_mentions_yexuan_white(sandbox):
     session = _start(opponent="yexuan_ai")
-    _inject_state("user1", "yexuan", session.session_id, move_count=14, opponent="yexuan_ai")
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14, opponent="yexuan_ai")
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     assert "执白" in summary
 
@@ -196,8 +197,8 @@ def test_yexuan_ai_mode_mentions_yexuan_white(sandbox):
 
 def test_summary_contains_move_count(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=18)
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=18)
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     assert "18" in summary
 
@@ -208,8 +209,8 @@ def test_summary_contains_move_count(sandbox):
 
 def test_summary_winner_black(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=14, winner="black")
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14, winner="black")
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     assert "黑棋获胜" in summary
 
@@ -220,8 +221,8 @@ def test_summary_winner_black(sandbox):
 
 def test_summary_winner_white(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=14, winner="white")
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14, winner="white")
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     assert "白棋获胜" in summary
 
@@ -232,8 +233,8 @@ def test_summary_winner_white(sandbox):
 
 def test_summary_no_winner(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=14, winner=None)
-    _, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14, winner=None)
+    _, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert summary is not None
     assert "未分胜负" in summary
 
@@ -244,11 +245,11 @@ def test_summary_no_winner(sandbox):
 
 def test_no_short_term_written_after_close_with_summary(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=14)
-    G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14)
+    G.close_game("user1", TEST_CHAR_ID, session.session_id)
 
     history_dir = sandbox._p("history")
-    chars_history = sandbox._p("chars", "yexuan", "history")
+    chars_history = sandbox._p("chars", TEST_CHAR_ID, "history")
     for p in (history_dir, chars_history):
         if p.exists():
             assert list(p.iterdir()) == [], f"unexpected write in {p}"
@@ -260,10 +261,10 @@ def test_no_short_term_written_after_close_with_summary(sandbox):
 
 def test_no_hidden_state_written_after_close_with_summary(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=14)
-    G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=14)
+    G.close_game("user1", TEST_CHAR_ID, session.session_id)
 
-    hidden = sandbox._p("runtime", "memory", "yexuan", "user1", "user_hidden_state.json")
+    hidden = sandbox._p("runtime", "memory", TEST_CHAR_ID, "user1", "user_hidden_state.json")
     assert not hidden.exists()
 
 
@@ -273,8 +274,8 @@ def test_no_hidden_state_written_after_close_with_summary(sandbox):
 
 def test_return_value_summary_text_above_threshold(sandbox):
     session = _start(opponent="yexuan_ai")
-    _inject_state("user1", "yexuan", session.session_id, move_count=15, opponent="yexuan_ai")
-    closed, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=15, opponent="yexuan_ai")
+    closed, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert closed is not None
     assert closed.status == "closed"
     assert isinstance(summary, str)
@@ -287,7 +288,7 @@ def test_return_value_summary_text_above_threshold(sandbox):
 
 def test_return_value_none_below_threshold(sandbox):
     session = _start()
-    _inject_state("user1", "yexuan", session.session_id, move_count=10)
-    closed, summary = G.close_game("user1", "yexuan", session.session_id)
+    _inject_state("user1", TEST_CHAR_ID, session.session_id, move_count=10)
+    closed, summary = G.close_game("user1", TEST_CHAR_ID, session.session_id)
     assert closed is not None
     assert summary is None

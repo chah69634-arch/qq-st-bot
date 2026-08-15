@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_garden_mood_char_scope.py
 
@@ -5,7 +6,7 @@ P1-0F: garden manager mood_state char_id 隔离验收测试
 
 Covers:
 1. force_water(char_id="character_b") 读取 character_b mood，不读 yexuan mood
-2. force_water(char_id="yexuan") 读取 yexuan mood，不读 character_b mood
+2. force_water(char_id=TEST_CHAR_ID) 读取 yexuan mood，不读 character_b mood
 3. auto_water_tick(char_id="character_b") 读取 character_b mood
 4. get_state(char_id="character_b") 使用 character_b 花园路径，不接触 yexuan 路径
 5. water() 写入 char_id 对应花园路径，不写另一角色路径
@@ -49,7 +50,7 @@ def test_force_water_character_b_reads_character_b_mood(sandbox):
     # character_b mood → calm slot (matches neutral-ish moods)
     # yexuan mood → different slot
     _seed_mood(sandbox, "character_b", "neutral")
-    _seed_mood(sandbox, "yexuan", "yandere")
+    _seed_mood(sandbox, TEST_CHAR_ID, "yandere")
 
     captured = []
 
@@ -57,7 +58,7 @@ def test_force_water_character_b_reads_character_b_mood(sandbox):
         "core.memory.mood_state", fromlist=["get_current"]
     ).get_current
 
-    def spy_get_current(*, char_id="yexuan"):
+    def spy_get_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return real_get_current(char_id=char_id)
 
@@ -73,8 +74,8 @@ def test_force_water_character_b_reads_character_b_mood(sandbox):
 # ── 2. force_water reads yexuan mood, not character_b ────────────────────────────
 
 def test_force_water_yexuan_reads_yexuan_mood(sandbox):
-    """force_water(char_id='yexuan') must use yexuan mood, not character_b's."""
-    _seed_mood(sandbox, "yexuan", "neutral")
+    """force_water(char_id=TEST_CHAR_ID) must use yexuan mood, not character_b's."""
+    _seed_mood(sandbox, TEST_CHAR_ID, "neutral")
     _seed_mood(sandbox, "character_b", "yandere")
 
     captured = []
@@ -82,15 +83,15 @@ def test_force_water_yexuan_reads_yexuan_mood(sandbox):
         "core.memory.mood_state", fromlist=["get_current"]
     ).get_current
 
-    def spy_get_current(*, char_id="yexuan"):
+    def spy_get_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return real_get_current(char_id=char_id)
 
     with patch("core.memory.mood_state.get_current", side_effect=spy_get_current):
-        garden_manager.force_water(char_id="yexuan")
+        garden_manager.force_water(char_id=TEST_CHAR_ID)
 
-    assert all(cid == "yexuan" for cid in captured), (
-        f"force_water(char_id='yexuan') must call get_current(char_id='yexuan'), got {captured}"
+    assert all(cid == TEST_CHAR_ID for cid in captured), (
+        f"force_water(char_id=TEST_CHAR_ID) must call get_current(char_id=TEST_CHAR_ID), got {captured}"
     )
 
 
@@ -107,7 +108,7 @@ def test_auto_water_tick_passes_char_id_to_mood(sandbox, monkeypatch):
         "core.memory.mood_state", fromlist=["get_current"]
     ).get_current
 
-    def spy_get_current(*, char_id="yexuan"):
+    def spy_get_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return real_get_current(char_id=char_id)
 
@@ -127,10 +128,10 @@ def test_get_state_uses_char_id_path(sandbox):
     state = garden_manager.get_state(char_id="character_b")
 
     character_b_plants = sandbox.garden(char_id="character_b") / "plants.json"
-    yexuan_plants  = sandbox.garden(char_id="yexuan") / "plants.json"
+    yexuan_plants  = sandbox.garden(char_id=TEST_CHAR_ID) / "plants.json"
 
     assert character_b_plants.exists(), "get_state must bootstrap character_b plants.json"
-    assert not yexuan_plants.exists(), "get_state(char_id='character_b') must NOT create yexuan plants.json"
+    assert not yexuan_plants.exists(), f"get_state(char_id='character_b') must NOT create {TEST_CHAR_ID} plants.json"
 
     assert "slots" in state
 
@@ -142,11 +143,11 @@ def test_water_writes_to_char_id_path_only(sandbox):
     result = garden_manager.water("calm", reason="test", char_id="character_b")
 
     character_b_plants = sandbox.garden(char_id="character_b") / "plants.json"
-    yexuan_plants  = sandbox.garden(char_id="yexuan") / "plants.json"
+    yexuan_plants  = sandbox.garden(char_id=TEST_CHAR_ID) / "plants.json"
 
     assert result["ok"] is True
     assert character_b_plants.exists(), "water must write character_b plants.json"
-    assert not yexuan_plants.exists(), "water(char_id='character_b') must not create yexuan plants.json"
+    assert not yexuan_plants.exists(), f"water(char_id='character_b') must not create {TEST_CHAR_ID} plants.json"
 
     data = json.loads(character_b_plants.read_text(encoding="utf-8"))
     assert data["slots"]["calm"]["growth"] > 0
@@ -162,7 +163,7 @@ async def test_water_garden_tool_passes_active_char_id(sandbox, character_b_regi
     captured_char_ids = []
     real_force_water = garden_manager.force_water
 
-    def spy_force_water(mood=None, *, char_id="yexuan"):
+    def spy_force_water(mood=None, *, char_id=TEST_CHAR_ID):
         captured_char_ids.append(char_id)
         return {"ok": False, "reason": "no_slot_for_mood", "mood": "neutral"}
 
@@ -186,7 +187,7 @@ async def test_garden_admin_route_passes_active_char_id(sandbox, character_b_reg
     captured = []
     real_get_state = garden_manager.get_state
 
-    def spy_get_state(*, char_id="yexuan"):
+    def spy_get_state(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return real_get_state(char_id=char_id)
 
@@ -204,14 +205,14 @@ async def test_garden_admin_route_passes_active_char_id(sandbox, character_b_reg
 def test_explicit_char_id_reads_correct_mood_path(sandbox):
     """force_water(char_id='yexuan_j5412') reads j5412 mood bucket, not base yexuan."""
     _seed_mood(sandbox, "yexuan_j5412", "happy")
-    _seed_mood(sandbox, "yexuan", "sleepy")
+    _seed_mood(sandbox, TEST_CHAR_ID, "sleepy")
 
     captured = []
     real_get_current = __import__(
         "core.memory.mood_state", fromlist=["get_current"]
     ).get_current
 
-    def spy_get_current(*, char_id="yexuan"):
+    def spy_get_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return real_get_current(char_id=char_id)
 
@@ -230,13 +231,13 @@ def test_two_char_garden_isolation(sandbox):
     """Watering character_b and yexuan gardens must be completely independent."""
     # Water yexuan 3 times
     for _ in range(3):
-        garden_manager.water("calm", reason="test", char_id="yexuan")
+        garden_manager.water("calm", reason="test", char_id=TEST_CHAR_ID)
 
     # Water character_b 1 time
     garden_manager.water("calm", reason="test", char_id="character_b")
 
-    yexuan_data  = json.loads((sandbox.garden(char_id="yexuan") / "plants.json").read_text())
+    yexuan_data  = json.loads((sandbox.garden(char_id=TEST_CHAR_ID) / "plants.json").read_text())
     character_b_data = json.loads((sandbox.garden(char_id="character_b") / "plants.json").read_text())
 
-    assert yexuan_data["slots"]["calm"]["growth"] == 30, "yexuan calm growth must be 30"
+    assert yexuan_data["slots"]["calm"]["growth"] == 30, f'{TEST_CHAR_ID} calm growth must be 30'
     assert character_b_data["slots"]["calm"]["growth"] == 10, "character_b calm growth must be 10"

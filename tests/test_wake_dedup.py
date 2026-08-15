@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 验收测试：desktop_wake 重复显示修复
 
@@ -141,7 +142,7 @@ async def test_desktop_wake_path_a_returns_canonical_ids(sandbox, monkeypatch):
 
     class _FakeAPA:
         def read_text(self, encoding="utf-8"):
-            return json.dumps({"active_character": "yexuan"})
+            return json.dumps({"active_character": TEST_CHAR_ID})
 
     monkeypatch.setattr("core.sandbox.DataPaths.active_prompt_assets", lambda self: _FakeAPA())
     monkeypatch.setattr(
@@ -174,7 +175,7 @@ async def test_desktop_wake_path_a_replay_is_at_most_once(sandbox, monkeypatch):
 
     class _FakeAPA:
         def read_text(self, encoding="utf-8"):
-            return json.dumps({"active_character": "yexuan"})
+            return json.dumps({"active_character": TEST_CHAR_ID})
 
     monkeypatch.setattr("core.sandbox.DataPaths.active_prompt_assets", lambda self: _FakeAPA())
     now = time.time()
@@ -212,7 +213,7 @@ async def test_desktop_wake_path_a_concurrent_replay_is_at_most_once(sandbox, mo
 
     class _FakeAPA:
         def read_text(self, encoding="utf-8"):
-            return json.dumps({"active_character": "yexuan"})
+            return json.dumps({"active_character": TEST_CHAR_ID})
 
     monkeypatch.setattr("core.sandbox.DataPaths.active_prompt_assets", lambda self: _FakeAPA())
     now = time.time()

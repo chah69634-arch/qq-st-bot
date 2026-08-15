@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_reality_output_guard.py — P2.2 shared reality output guard
 
@@ -225,7 +226,7 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
         character = _FakeCharacter()
 
         def _current_reality_scope(self, uid):
-            return type("Scope", (), {"character_id": "yexuan"})()
+            return type("Scope", (), {"character_id": TEST_CHAR_ID})()
 
         async def fetch_context(self, uid, message, group_id=None, **kwargs):
             return {}
@@ -272,7 +273,7 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     # Stub tool probe to skip (must be async — the real function is a coroutine)
     import admin.routers.chat as _chat
 
-    async def _noop_probe(msg, uid, *, char_id="yexuan", provenance_channel=None):
+    async def _noop_probe(msg, uid, *, char_id=TEST_CHAR_ID, provenance_channel=None):
         return None
 
     monkeypatch.setattr(_chat, "_probe_and_execute_tools", _noop_probe)

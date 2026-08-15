@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_THIRD_CHAR_ID
 """
 tests/test_admin_mood_active_char_fail_loud.py
 
@@ -7,11 +8,11 @@ Covers:
 1.  active 缺失时 admin mood route 返回 HTTP 503，不调用 mood_state.load
 2.  active 读取失败时返回 HTTP 503，不调用 mood_state.load
 3.  active 非法时返回 HTTP 422，不调用 mood_state.load
-4.  active=hongcha 时 _active_char_id 返回 "hongcha"
-5.  GET /state active=hongcha → mood_state.load 收到 char_id="hongcha"
-6.  active=yexuan 时 _active_char_id 返回 "yexuan"（合法路径，非 fallback）
+4.  active=hongcha 时 _active_char_id 返回 TEST_THIRD_CHAR_ID
+5.  GET /state active=hongcha → mood_state.load 收到 char_id=TEST_THIRD_CHAR_ID
+6.  active=yexuan 时 _active_char_id 返回 TEST_CHAR_ID（合法路径，非 fallback）
 7.  失败路径不 fallback yexuan（empty + invalid 各自验证）
-8.  源文件中不再存在 active 失败 fallback "yexuan" 字符串
+8.  源文件中不再存在 active 失败 fallback TEST_CHAR_ID 字符串
 """
 
 import json
@@ -103,23 +104,23 @@ def test_mood_invalid_active_raises_422(sandbox):
     assert called == [], "mood_state.load must not be called when active_character is unknown"
 
 
-# ── 4. active=hongcha → _active_char_id returns "hongcha" ────────────────────
+# ── 4. active=hongcha → _active_char_id returns TEST_THIRD_CHAR_ID ────────────────────
 
 def test_mood_active_hongcha_returns_hongcha(sandbox):
-    """_active_char_id with active=hongcha must return 'hongcha'."""
-    _write_active(sandbox, "hongcha")
+    """_active_char_id with active=hongcha must return TEST_THIRD_CHAR_ID."""
+    _write_active(sandbox, TEST_THIRD_CHAR_ID)
 
     from admin.routers.mood import _active_char_id
     result = _active_char_id()
-    assert result == "hongcha", f"expected 'hongcha', got {result!r}"
+    assert result == TEST_THIRD_CHAR_ID, f"expected TEST_THIRD_CHAR_ID, got {result!r}"
 
 
-# ── 5. GET /state active=hongcha → mood_state.load(char_id="hongcha") ────────
+# ── 5. GET /state active=hongcha → mood_state.load(char_id=TEST_THIRD_CHAR_ID) ────────
 
 @pytest.mark.asyncio
 async def test_mood_get_state_passes_hongcha_to_load(sandbox):
-    """GET /state with active=hongcha must call mood_state.load(char_id='hongcha')."""
-    _write_active(sandbox, "hongcha")
+    """GET /state with active=hongcha must call mood_state.load(char_id=TEST_THIRD_CHAR_ID)."""
+    _write_active(sandbox, TEST_THIRD_CHAR_ID)
 
     captured = []
 
@@ -131,30 +132,30 @@ async def test_mood_get_state_passes_hongcha_to_load(sandbox):
         from admin.routers.mood import get_mood_state
         await get_mood_state()
 
-    assert captured == ["hongcha"], f"expected char_id='hongcha', got {captured}"
+    assert captured == [TEST_THIRD_CHAR_ID], f"expected char_id=TEST_THIRD_CHAR_ID, got {captured}"
 
 
-# ── 6. active=yexuan → _active_char_id returns "yexuan" (valid path, not fallback) ──
+# ── 6. active=yexuan → _active_char_id returns TEST_CHAR_ID (valid path, not fallback) ──
 
 def test_mood_active_yexuan_returns_yexuan(sandbox):
-    """_active_char_id with active=yexuan must return 'yexuan' (valid active, not hardcoded fallback)."""
-    _write_active(sandbox, "yexuan")
+    """_active_char_id with active=yexuan must return TEST_CHAR_ID (valid active, not hardcoded fallback)."""
+    _write_active(sandbox, TEST_CHAR_ID)
 
     from admin.routers.mood import _active_char_id
     result = _active_char_id()
-    assert result == "yexuan", f"expected 'yexuan', got {result!r}"
+    assert result == TEST_CHAR_ID, f"expected TEST_CHAR_ID, got {result!r}"
 
 
 # ── 7a. empty active → never fallback to yexuan ──────────────────────────────
 
 def test_no_yexuan_fallback_on_empty_active(sandbox):
-    """Empty active_character must raise, never call load(char_id='yexuan')."""
+    """Empty active_character must raise, never call load(char_id=TEST_CHAR_ID)."""
     _write_active_empty(sandbox)
 
     yexuan_calls = []
 
     def spy_load(**kw):
-        if kw.get("char_id") == "yexuan":
+        if kw.get("char_id") == TEST_CHAR_ID:
             yexuan_calls.append(kw)
         return {}
 
@@ -163,19 +164,19 @@ def test_no_yexuan_fallback_on_empty_active(sandbox):
         with pytest.raises(HTTPException):
             _active_char_id()
 
-    assert yexuan_calls == [], "load must never be called with fallback char_id='yexuan' on empty active"
+    assert yexuan_calls == [], "load must never be called with fallback char_id=TEST_CHAR_ID on empty active"
 
 
 # ── 7b. invalid active → never fallback to yexuan ────────────────────────────
 
 def test_no_yexuan_fallback_on_invalid_active(sandbox):
-    """Invalid active_character must raise 422, never call load(char_id='yexuan')."""
+    """Invalid active_character must raise 422, never call load(char_id=TEST_CHAR_ID)."""
     _write_active(sandbox, "ghost_char_xyz")
 
     yexuan_calls = []
 
     def spy_load(**kw):
-        if kw.get("char_id") == "yexuan":
+        if kw.get("char_id") == TEST_CHAR_ID:
             yexuan_calls.append(kw)
         return {}
 
@@ -184,17 +185,17 @@ def test_no_yexuan_fallback_on_invalid_active(sandbox):
         with pytest.raises(HTTPException):
             _active_char_id()
 
-    assert yexuan_calls == [], "load must never be called with fallback char_id='yexuan' on invalid active"
+    assert yexuan_calls == [], "load must never be called with fallback char_id=TEST_CHAR_ID on invalid active"
 
 
-# ── 8. 源文件中不含 active 失败 fallback "yexuan" ─────────────────────────────
+# ── 8. 源文件中不含 active 失败 fallback TEST_CHAR_ID ─────────────────────────────
 
 def test_mood_router_source_no_fallback_yexuan():
-    """admin/routers/mood.py must not contain the active-failure fallback to 'yexuan'."""
+    """admin/routers/mood.py must not contain the active-failure fallback to TEST_CHAR_ID."""
     src = (
         pathlib.Path(__file__).parent.parent / "admin" / "routers" / "mood.py"
     ).read_text(encoding="utf-8")
 
-    assert '"yexuan"' not in src, (
-        'admin/routers/mood.py must not contain a hardcoded "yexuan" fallback string'
+    assert 'TEST_CHAR_ID' not in src, (
+        'admin/routers/mood.py must not contain a hardcoded TEST_CHAR_ID fallback string'
     )

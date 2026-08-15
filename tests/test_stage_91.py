@@ -5,6 +5,7 @@
 修复：闸门改为 `allow_silent_rounds and is_low_information(owner_content)`。
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 import uuid
 
@@ -18,14 +19,14 @@ def _settings(**overrides):
         "min_responders": 1,
         "max_responders": 2,
         "respond_threshold": 0.5,
-        "talkativeness": {"yexuan": 0.5, "yexuanJ-5412": 0.5},
+        "talkativeness": {TEST_CHAR_ID: 0.5, TEST_PEER_CHAR_ID: 0.5},
         "topic_seed_prob": 0.0,
     }
     values.update(overrides)
     return StageSettings(**values)
 
 
-def _stage(roster=("yexuan", "yexuanJ-5412"), **setting_overrides):
+def _stage(roster=(TEST_CHAR_ID, TEST_PEER_CHAR_ID), **setting_overrides):
     from core.stage.store import create_stage
 
     group_id = f"cc91-{uuid.uuid4().hex[:8]}"
@@ -105,7 +106,7 @@ async def test_vocative_never_silent(sandbox):
     from core.stage.runner import run_owner_turn
 
     stage = _stage()
-    name = get_char_name("yexuan")
+    name = get_char_name(TEST_CHAR_ID)
     result = await run_owner_turn(
         stage.group_id,
         f"@{name} 在吗",

@@ -26,6 +26,7 @@ Gomoku Activity P0 验收测试（20 用例）
 20. close 后 state 不再返回 active session
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import pytest
 
@@ -35,7 +36,7 @@ from core.activity import store as activity_store
 
 # ── 工厂助手 ──────────────────────────────────────────────────────────────────
 
-def _start(sandbox, uid="user1", char_id="yexuan", board_size=15):
+def _start(sandbox, uid="user1", char_id=TEST_CHAR_ID, board_size=15):
     return G.start_game(uid, char_id, board_size)
 
 
@@ -62,9 +63,9 @@ def test_start_creates_session(sandbox):
     assert session.activity_type == "gomoku"
     assert session.status == "active"
     assert session.uid == "user1"
-    assert session.char_id == "yexuan"
+    assert session.char_id == TEST_CHAR_ID
 
-    loaded = activity_store.load_session("yexuan", "user1", "gomoku", session.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "gomoku", session.session_id)
     assert loaded is not None
     assert loaded.session_id == session.session_id
 
@@ -97,7 +98,7 @@ def test_black_goes_first(sandbox):
 def test_legal_move_updates_board(sandbox):
     session = _start(sandbox)
     sid = session.session_id
-    result = _move("user1", "yexuan", sid, 7, 7)
+    result = _move("user1", TEST_CHAR_ID, sid, 7, 7)
     assert result["board"][7][7] == "black"
     assert result["last_move"] == {"x": 7, "y": 7, "player": "black", "move_no": 1}
 
@@ -109,10 +110,10 @@ def test_legal_move_updates_board(sandbox):
 def test_current_turn_switches_after_move(sandbox):
     session = _start(sandbox)
     sid = session.session_id
-    r1 = _move("user1", "yexuan", sid, 7, 7)
+    r1 = _move("user1", TEST_CHAR_ID, sid, 7, 7)
     assert r1["current_turn"] == "white"
 
-    r2 = _move("user1", "yexuan", sid, 0, 0)
+    r2 = _move("user1", TEST_CHAR_ID, sid, 0, 0)
     assert r2["current_turn"] == "black"
 
 
@@ -123,11 +124,11 @@ def test_current_turn_switches_after_move(sandbox):
 def test_duplicate_move_raises(sandbox):
     session = _start(sandbox)
     sid = session.session_id
-    _move("user1", "yexuan", sid, 7, 7)  # black
-    _move("user1", "yexuan", sid, 0, 0)  # white
+    _move("user1", TEST_CHAR_ID, sid, 7, 7)  # black
+    _move("user1", TEST_CHAR_ID, sid, 0, 0)  # white
 
     with pytest.raises(ValueError, match="已有棋子"):
-        _move("user1", "yexuan", sid, 7, 7)  # occupied
+        _move("user1", TEST_CHAR_ID, sid, 7, 7)  # occupied
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -140,7 +141,7 @@ def test_duplicate_move_raises(sandbox):
 def test_out_of_bounds_raises(sandbox, x, y):
     session = _start(sandbox)
     with pytest.raises(ValueError, match="超出棋盘范围"):
-        _move("user1", "yexuan", session.session_id, x, y)
+        _move("user1", TEST_CHAR_ID, session.session_id, x, y)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -150,9 +151,9 @@ def test_out_of_bounds_raises(sandbox, x, y):
 def test_closed_session_cannot_move(sandbox):
     session = _start(sandbox)
     sid = session.session_id
-    G.close_game("user1", "yexuan", sid)
+    G.close_game("user1", TEST_CHAR_ID, sid)
     with pytest.raises(ValueError, match="已关闭"):
-        _move("user1", "yexuan", sid, 7, 7)
+        _move("user1", TEST_CHAR_ID, sid, 7, 7)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -171,7 +172,7 @@ def test_horizontal_win(sandbox):
         (3, 0), (3, 14),
         (4, 0),  # black wins
     ]
-    result = _play_sequence("user1", "yexuan", sid, moves)
+    result = _play_sequence("user1", TEST_CHAR_ID, sid, moves)
     assert result["status"] == "completed"
     assert result["winner"] == "black"
     assert "win_line" in result
@@ -194,7 +195,7 @@ def test_vertical_win(sandbox):
         (7, 3), (3, 14),
         (7, 4),
     ]
-    result = _play_sequence("user1", "yexuan", sid, moves)
+    result = _play_sequence("user1", TEST_CHAR_ID, sid, moves)
     assert result["status"] == "completed"
     assert result["winner"] == "black"
     win_cells = {(c["x"], c["y"]) for c in result["win_line"]}
@@ -216,7 +217,7 @@ def test_diagonal_down_right_win(sandbox):
         (3, 3), (3, 14),
         (4, 4),
     ]
-    result = _play_sequence("user1", "yexuan", sid, moves)
+    result = _play_sequence("user1", TEST_CHAR_ID, sid, moves)
     assert result["status"] == "completed"
     assert result["winner"] == "black"
     win_cells = {(c["x"], c["y"]) for c in result["win_line"]}
@@ -238,7 +239,7 @@ def test_diagonal_down_left_win(sandbox):
         (1, 3), (3, 14),
         (0, 4),
     ]
-    result = _play_sequence("user1", "yexuan", sid, moves)
+    result = _play_sequence("user1", TEST_CHAR_ID, sid, moves)
     assert result["status"] == "completed"
     assert result["winner"] == "black"
     win_cells = {(c["x"], c["y"]) for c in result["win_line"]}
@@ -260,7 +261,7 @@ def test_winner_is_correct_player(sandbox):
         (13, 14), (0, 3),
         (2,  0),  (0, 4),   # white wins col 0, y=0..4
     ]
-    result = _play_sequence("user1", "yexuan", sid, moves)
+    result = _play_sequence("user1", TEST_CHAR_ID, sid, moves)
     assert result["winner"] == "white"
     assert result["status"] == "completed"
 
@@ -279,10 +280,10 @@ def test_no_move_after_win(sandbox):
         (3, 0), (3, 14),
         (4, 0),   # black wins
     ]
-    _play_sequence("user1", "yexuan", sid, moves)
+    _play_sequence("user1", TEST_CHAR_ID, sid, moves)
 
     with pytest.raises(ValueError, match="已结束"):
-        _move("user1", "yexuan", sid, 5, 0)
+        _move("user1", TEST_CHAR_ID, sid, 5, 0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -294,9 +295,9 @@ def test_move_history_order(sandbox):
     sid = session.session_id
     coords = [(7, 7), (8, 8), (6, 6)]
     for i, (x, y) in enumerate(coords):
-        _move("user1", "yexuan", sid, x, y)
+        _move("user1", TEST_CHAR_ID, sid, x, y)
 
-    loaded = activity_store.load_session("yexuan", "user1", "gomoku", sid)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "gomoku", sid)
     history = loaded.state["move_history"]
     assert len(history) == 3
     for i, (x, y) in enumerate(coords):
@@ -313,16 +314,16 @@ def test_move_history_order(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_uid_char_id_isolation(sandbox):
-    s1 = G.start_game("user1", "yexuan")
-    s2 = G.start_game("user2", "yexuan")
+    s1 = G.start_game("user1", TEST_CHAR_ID)
+    s2 = G.start_game("user2", TEST_CHAR_ID)
     s3 = G.start_game("user1", "character_b")
 
     # 三个 session_id 互不相同
     assert len({s1.session_id, s2.session_id, s3.session_id}) == 3
 
     # find_active_session 按 char_id + uid 返回各自的 session
-    a1 = G.get_active_session("user1", "yexuan")
-    a2 = G.get_active_session("user2", "yexuan")
+    a1 = G.get_active_session("user1", TEST_CHAR_ID)
+    a2 = G.get_active_session("user2", TEST_CHAR_ID)
     a3 = G.get_active_session("user1", "character_b")
 
     assert a1 is not None and a1.session_id == s1.session_id
@@ -335,17 +336,17 @@ def test_uid_char_id_isolation(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_yexuan_character_b_independent_sessions(sandbox):
-    sy = G.start_game("owner", "yexuan")
+    sy = G.start_game("owner", TEST_CHAR_ID)
     sh = G.start_game("owner", "character_b")
 
-    assert sy.char_id == "yexuan"
+    assert sy.char_id == TEST_CHAR_ID
     assert sh.char_id == "character_b"
     assert sy.session_id != sh.session_id
 
     # 对 yexuan 落子，不影响 character_b
-    _move("owner", "yexuan", sy.session_id, 7, 7)
+    _move("owner", TEST_CHAR_ID, sy.session_id, 7, 7)
 
-    loaded_y = activity_store.load_session("yexuan", "owner", "gomoku", sy.session_id)
+    loaded_y = activity_store.load_session(TEST_CHAR_ID, "owner", "gomoku", sy.session_id)
     loaded_h = activity_store.load_session("character_b", "owner", "gomoku", sh.session_id)
 
     assert loaded_y.state["board"][7][7] == "black"
@@ -357,20 +358,20 @@ def test_yexuan_character_b_independent_sessions(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_no_short_term_or_hidden_state_written(sandbox):
-    session = G.start_game("user1", "yexuan")
+    session = G.start_game("user1", TEST_CHAR_ID)
     sid = session.session_id
-    _move("user1", "yexuan", sid, 7, 7)
-    _move("user1", "yexuan", sid, 0, 0)
+    _move("user1", TEST_CHAR_ID, sid, 7, 7)
+    _move("user1", TEST_CHAR_ID, sid, 0, 0)
 
     # history 目录不得有任何文件
     history_dir = sandbox._p("history")
-    chars_history = sandbox._p("chars", "yexuan", "history")
+    chars_history = sandbox._p("chars", TEST_CHAR_ID, "history")
     for p in (history_dir, chars_history):
         if p.exists():
             assert list(p.iterdir()) == [], f"unexpected write in {p}"
 
     # user_hidden_state.json 不得存在
-    hidden = sandbox._p("runtime", "memory", "yexuan", "user1", "user_hidden_state.json")
+    hidden = sandbox._p("runtime", "memory", TEST_CHAR_ID, "user1", "user_hidden_state.json")
     assert not hidden.exists()
 
 
@@ -389,14 +390,14 @@ def test_evil_session_id_no_path_escape(sandbox, evil_id):
     # load_session 对沙盒拒绝的路径应返回 None 或抛 ValueError
     # make_move 在 session is None 时抛 ValueError
     with pytest.raises((ValueError, Exception)):
-        G.make_move("user1", "yexuan", evil_id, 7, 7)
+        G.make_move("user1", TEST_CHAR_ID, evil_id, 7, 7)
 
 
 def test_valid_hex_session_id_accepted(sandbox):
-    session = G.start_game("user1", "yexuan")
+    session = G.start_game("user1", TEST_CHAR_ID)
     assert session.session_id  # hex string, accepted without error
     # 能成功落子
-    result = G.make_move("user1", "yexuan", session.session_id, 7, 7)
+    result = G.make_move("user1", TEST_CHAR_ID, session.session_id, 7, 7)
     assert result["board"][7][7] == "black"
 
 
@@ -405,16 +406,16 @@ def test_valid_hex_session_id_accepted(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_close_removes_active_session(sandbox):
-    session = G.start_game("user1", "yexuan")
+    session = G.start_game("user1", TEST_CHAR_ID)
     sid = session.session_id
-    _move("user1", "yexuan", sid, 7, 7)
+    _move("user1", TEST_CHAR_ID, sid, 7, 7)
 
-    G.close_game("user1", "yexuan", sid)
+    G.close_game("user1", TEST_CHAR_ID, sid)
 
-    active = G.get_active_session("user1", "yexuan")
+    active = G.get_active_session("user1", TEST_CHAR_ID)
     assert active is None
 
     # session 本身仍可加载，status=closed
-    loaded = activity_store.load_session("yexuan", "user1", "gomoku", sid)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "gomoku", sid)
     assert loaded is not None
     assert loaded.status == "closed"

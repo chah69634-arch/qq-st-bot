@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """/phone_control/status 和 /phone_control/debug/start 两个只读诊断 + 调试端点。
 
 - status：手机端能力页用来判断"角色是否已授权 phone_control 工具"+"视觉模型是否已配置"，
@@ -31,7 +32,7 @@ def _patch_default_exposure(monkeypatch):
 async def test_status_reports_enabled_when_category_present(monkeypatch):
     _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: "yexuan",
+        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
     )
     monkeypatch.setattr(
         "core.character_loader.load",
@@ -48,7 +49,7 @@ async def test_status_reports_enabled_when_category_present(monkeypatch):
         "path_a_enabled": False,
         "path_c_enabled": True,
         "vision_configured": True,
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
     }
 
 
@@ -56,7 +57,7 @@ async def test_status_reports_enabled_when_category_present(monkeypatch):
 async def test_status_reports_disabled_when_category_missing(monkeypatch):
     _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: "yexuan",
+        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
     )
     monkeypatch.setattr(
         "core.character_loader.load",
@@ -73,7 +74,7 @@ async def test_status_reports_disabled_when_category_missing(monkeypatch):
         "path_a_enabled": False,
         "path_c_enabled": False,
         "vision_configured": False,
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
     }
 
 
@@ -81,7 +82,7 @@ async def test_status_reports_disabled_when_category_missing(monkeypatch):
 async def test_status_handles_character_load_failure(monkeypatch):
     _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: "yexuan",
+        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
     )
 
     def _raise(char_id):
@@ -149,7 +150,7 @@ async def test_debug_start_calls_real_wrapper_in_danger_mode(monkeypatch):
 
     monkeypatch.setattr(td, "_current_mode", lambda: "danger")
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: "yexuan",
+        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
     )
 
     captured = {}
@@ -166,7 +167,7 @@ async def test_debug_start_calls_real_wrapper_in_danger_mode(monkeypatch):
         body={"task": "帮我点杯奶茶", "user_id": "u1"}, auth=None,
     )
     assert result == {"ok": True, "message": "已经把任务派给手机了"}
-    assert captured == {"task": "帮我点杯奶茶", "user_id": "u1", "char_id": "yexuan"}
+    assert captured == {"task": "帮我点杯奶茶", "user_id": "u1", "char_id": TEST_CHAR_ID}
 
 
 @pytest.mark.asyncio
@@ -175,7 +176,7 @@ async def test_debug_start_falls_back_to_owner_id_when_missing(monkeypatch):
 
     monkeypatch.setattr(td, "_current_mode", lambda: "danger")
     monkeypatch.setattr(
-        "admin.routers.character._active_character_id", lambda: "yexuan",
+        "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
     )
     monkeypatch.setattr(
         "core.config_loader.get_config",

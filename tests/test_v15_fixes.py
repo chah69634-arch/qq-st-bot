@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 V1.5 三处修复验证测试
 
@@ -89,7 +90,7 @@ def test_trait_state_reads_old_writes_new(tmp_path):
     from core.sandbox import for_read
 
     old_path = tmp_path / "yexuan_inner" / "trait_state.json"
-    new_path = tmp_path / "characters" / "yexuan" / "inner" / "trait_state.json"
+    new_path = tmp_path / "characters" / TEST_CHAR_ID / "inner" / "trait_state.json"
     old_path.parent.mkdir(parents=True, exist_ok=True)
     new_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -150,7 +151,7 @@ def test_dream_settings_fallback_to_legacy(tmp_path, monkeypatch):
     old_path.write_text(json.dumps(old_settings), encoding="utf-8")
 
     # v1 新路径不存在：dreams/yexuan/settings/{uid}.json
-    new_path = tmp_path / "dreams" / "yexuan" / "settings" / f"{uid}.json"
+    new_path = tmp_path / "dreams" / TEST_CHAR_ID / "settings" / f"{uid}.json"
     assert not new_path.exists()
 
     loaded = ds.load(uid)

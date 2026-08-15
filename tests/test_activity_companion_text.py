@@ -12,6 +12,7 @@ T6.  正常对话文本不受影响
 T7-T9. 三个 companion 的 generate_reply 落盘 transcript 文本已清洗（mock 脏文本）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 from pathlib import Path
@@ -118,8 +119,8 @@ def _assistant_text(sandbox, char_id, uid, activity_type, session_id) -> str:
 async def test_chess_companion_transcript_is_cleaned(sandbox, monkeypatch):
     dirty = "这步稳（他敲了敲桌子）继续吧"
     monkeypatch.setattr("core.llm_client.chat", _fake_llm(dirty))
-    await CC.generate_reply("yexuan", "user1", "sess_clean_chess", _chess_state(), "你好")
-    text = _assistant_text(sandbox, "yexuan", "user1", "chess", "sess_clean_chess")
+    await CC.generate_reply(TEST_CHAR_ID, "user1", "sess_clean_chess", _chess_state(), "你好")
+    text = _assistant_text(sandbox, TEST_CHAR_ID, "user1", "chess", "sess_clean_chess")
     assert "（" not in text and "）" not in text
 
 
@@ -127,8 +128,8 @@ async def test_chess_companion_transcript_is_cleaned(sandbox, monkeypatch):
 async def test_gomoku_companion_transcript_is_cleaned(sandbox, monkeypatch):
     dirty = "这手不错（他向前倾身看棋盘）该你了"
     monkeypatch.setattr("core.llm_client.chat", _fake_llm(dirty))
-    await GC.generate_reply("yexuan", "user1", "sess_clean_gomoku", _gomoku_state(), "你好")
-    text = _assistant_text(sandbox, "yexuan", "user1", "gomoku", "sess_clean_gomoku")
+    await GC.generate_reply(TEST_CHAR_ID, "user1", "sess_clean_gomoku", _gomoku_state(), "你好")
+    text = _assistant_text(sandbox, TEST_CHAR_ID, "user1", "gomoku", "sess_clean_gomoku")
     assert "（" not in text and "）" not in text
 
 
@@ -137,7 +138,7 @@ async def test_reading_companion_transcript_is_cleaned(sandbox, monkeypatch):
     dirty = "这段挺有意思（他翻了翻书页）你觉得呢"
     monkeypatch.setattr("core.llm_client.chat", _fake_llm(dirty))
     await RC.generate_reply(
-        "yexuan", "user1", "sess_clean_reading", 1, 10, "book.pdf", "示例正文", "你好"
+        TEST_CHAR_ID, "user1", "sess_clean_reading", 1, 10, "book.pdf", "示例正文", "你好"
     )
-    text = _assistant_text(sandbox, "yexuan", "user1", "reading", "sess_clean_reading")
+    text = _assistant_text(sandbox, TEST_CHAR_ID, "user1", "reading", "sess_clean_reading")
     assert "（" not in text and "）" not in text

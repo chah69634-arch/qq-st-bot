@@ -10,6 +10,7 @@ call_tool 超时/异常→重连一次→再失败按失败处理、断线重连
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -879,7 +880,7 @@ class TestMcpServerErrorPassthrough:
         result, confirm = await td.execute(
             "mcp__cedar_toy__play", {"game": "fishing", "action": "cast"},
             "owner", "owner", False, _NoConfirmSession(),
-            origin="assistant_loop", char_id="yexuan",
+            origin="assistant_loop", char_id=TEST_CHAR_ID,
         )
 
         assert confirm is None
@@ -894,7 +895,7 @@ class TestMcpServerErrorPassthrough:
         result, confirm = await td.execute(
             "mcp__cedar_toy__play", {"game": "fishing", "action": "cast"},
             "owner", "owner", False, _NoConfirmSession(),
-            origin="assistant_loop", char_id="yexuan",
+            origin="assistant_loop", char_id=TEST_CHAR_ID,
         )
 
         assert confirm is None

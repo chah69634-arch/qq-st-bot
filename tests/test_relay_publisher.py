@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import asyncio
 import json
 
@@ -49,7 +50,7 @@ async def test_enqueue_publishes_signal_without_private_message_fields(
         "get_config",
         lambda: {
             "relay_base_url": "https://relay.example",
-            "relay_topic": "yexuan/owner/device",
+            "relay_topic": f'{TEST_CHAR_ID}/owner/device',
             "relay_token": "publish-secret",
         },
     )
@@ -103,7 +104,7 @@ async def test_relay_5xx_retries_three_times_without_affecting_queue(
         "get_config",
         lambda: {
             "relay_base_url": "https://relay.example",
-            "relay_topic": "yexuan/owner/device",
+            "relay_topic": f'{TEST_CHAR_ID}/owner/device',
             "relay_token": "publish-secret",
         },
     )

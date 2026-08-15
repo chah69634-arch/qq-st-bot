@@ -9,6 +9,7 @@ T1-T3. generate_reply for chess/gomoku/reading writes a snapshot into
 T4.    messages passed to capture() carry _layer fields (not "unknown").
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import chess
 import pytest
@@ -56,7 +57,7 @@ def _gomoku_state() -> dict:
 @pytest.mark.asyncio
 async def test_chess_chat_captures_snapshot(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("好的，轮到你了。"))
-    await CC.generate_reply("yexuan", "capture_user_chess", "sess1", _chess_state(), "你好")
+    await CC.generate_reply(TEST_CHAR_ID, "capture_user_chess", "sess1", _chess_state(), "你好")
     snaps = prompt_capture.get_snapshots("capture_user_chess")
     assert snaps
     snap = snaps[-1]
@@ -69,7 +70,7 @@ async def test_chess_chat_captures_snapshot(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_gomoku_chat_captures_snapshot(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("我看看局面。"))
-    await GC.generate_reply("yexuan", "capture_user_gomoku", "sess1", _gomoku_state(), "你好")
+    await GC.generate_reply(TEST_CHAR_ID, "capture_user_gomoku", "sess1", _gomoku_state(), "你好")
     snaps = prompt_capture.get_snapshots("capture_user_gomoku")
     assert snaps
     snap = snaps[-1]
@@ -82,7 +83,7 @@ async def test_gomoku_chat_captures_snapshot(sandbox, monkeypatch):
 async def test_reading_chat_captures_snapshot(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("这段挺有意思。"))
     await RC.generate_reply(
-        "yexuan", "capture_user_reading", "sess1", 1, 10, "book.pdf", "示例正文", "你好"
+        TEST_CHAR_ID, "capture_user_reading", "sess1", 1, 10, "book.pdf", "示例正文", "你好"
     )
     snaps = prompt_capture.get_snapshots("capture_user_reading")
     assert snaps
@@ -95,7 +96,7 @@ async def test_reading_chat_captures_snapshot(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_captured_layers_are_named(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("好的。"))
-    await CC.generate_reply("yexuan", "capture_user_layers", "sess1", _chess_state(), "你好")
+    await CC.generate_reply(TEST_CHAR_ID, "capture_user_layers", "sess1", _chess_state(), "你好")
     snap = prompt_capture.get_snapshots("capture_user_layers")[-1]
     layers = {l["layer"] for l in snap["layers"]}
     assert "unknown" not in layers

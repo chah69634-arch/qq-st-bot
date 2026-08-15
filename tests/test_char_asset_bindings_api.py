@@ -8,6 +8,7 @@ tests/test_char_asset_bindings_api.py — 角色资产路由 API（茶茶 2026-0
 与 test_char_model_routing_api.py 同构（复用同一套 chars_tree/registry fixture 思路）。
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -28,7 +29,7 @@ def _clear_pipeline_registry():
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "叶瑄", "presence_ext": {}, "world_book": []}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -76,9 +77,9 @@ def test_get_unknown_char_404(registry):
 
 def test_get_undeclared_char_returns_all_none(registry):
     from admin.routers.character import get_character_asset_bindings
-    result = asyncio.run(get_character_asset_bindings("yexuan", auth="dummy"))
+    result = asyncio.run(get_character_asset_bindings(TEST_CHAR_ID, auth="dummy"))
     assert result == {
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
         "tts_preset": None, "tts_preset_resolved": None,
         "sticker_pack": None, "live2d_model": None, "model_3d": None,
     }
@@ -140,16 +141,16 @@ def test_patch_writes_new_bindings_onto_undeclared_char(registry, chars_tree):
 
     asyncio.run(
         set_character_asset_bindings(
-            "yexuan",
-            AssetBindingsUpdate(live2d_model="yexuan.model3.json", model_3d="yexuan.glb"),
+            TEST_CHAR_ID,
+            AssetBindingsUpdate(live2d_model=f'{TEST_CHAR_ID}.model3.json', model_3d=f'{TEST_CHAR_ID}.glb'),
             auth="dummy",
         )
     )
-    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / "yexuan.json").read_text(encoding="utf-8"))
-    assert saved["presence_ext"]["live2d_model"] == "yexuan.model3.json"
-    assert saved["presence_ext"]["model_3d"] == "yexuan.glb"
+    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / f'{TEST_CHAR_ID}.json').read_text(encoding="utf-8"))
+    assert saved["presence_ext"]["live2d_model"] == f'{TEST_CHAR_ID}.model3.json'
+    assert saved["presence_ext"]["model_3d"] == f'{TEST_CHAR_ID}.glb'
     assert "tts_preset" not in saved["presence_ext"]
-    legacy = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    legacy = json.loads((chars_tree / "characters" / f'{TEST_CHAR_ID}.json').read_text(encoding="utf-8"))
     assert legacy["presence_ext"] == {}
 
 

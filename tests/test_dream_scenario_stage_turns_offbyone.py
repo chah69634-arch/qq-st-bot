@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_scenario_stage_turns_offbyone.py — v0.7.1 stage_turns off-by-one 审计
 
@@ -93,7 +94,7 @@ def test_v071_normal_turn_increments_stage_turns(sandbox):
         patch("core.pipeline_registry.get", return_value=fake_pipeline),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
+        asyncio.run(enter_dream(_UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"))
 
     _run_dream_turn(_UID, fake_pipeline, _NOT_CLOSE_REPLY)
 
@@ -117,7 +118,7 @@ def test_v071_first_satisfied_no_advance_increments_turns(sandbox):
         patch("core.pipeline_registry.get", return_value=fake_pipeline),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
+        asyncio.run(enter_dream(_UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"))
 
     _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
 
@@ -146,7 +147,7 @@ def test_v071_second_satisfied_new_stage_starts_at_zero(sandbox):
         patch("core.pipeline_registry.get", return_value=fake_pipeline),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
+        asyncio.run(enter_dream(_UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"))
 
     # Turn 1: satisfied — immediately advances to negotiation.
     _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
@@ -179,7 +180,7 @@ def test_v071_first_turn_in_new_stage_increments_to_one(sandbox):
         patch("core.pipeline_registry.get", return_value=fake_pipeline),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
+        asyncio.run(enter_dream(_UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"))
 
     # Turn 1: trigger advance to negotiation (stage_turns=0 on arrival)
     _run_dream_turn(_UID, fake_pipeline, _SATISFIED_REPLY)
@@ -216,7 +217,7 @@ def test_v071_mark_completed_does_not_increment_stage_turns(sandbox):
         patch("core.pipeline_registry.get", return_value=fake_pipeline),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        asyncio.run(enter_dream(_UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"))
+        asyncio.run(enter_dream(_UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"))
 
     # Manually jump to last stage (fracture) with satisfied_streak=1 and stage_turns=3
     state = read_state(_UID)

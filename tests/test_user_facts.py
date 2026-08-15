@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_user_facts.py
 ========================
@@ -28,7 +29,7 @@ from core.memory import user_facts as uf
 
 
 UID = "testuser42"
-CHAR_A = "yexuan"
+CHAR_A = TEST_CHAR_ID
 CHAR_B = "character_b"
 
 
@@ -63,7 +64,7 @@ def test_user_facts_path_no_yexuan_fallback(sandbox):
     p = resolve_path(scope, "user_facts")
     # Check the relative portion under the sandbox base — not the tmp dir name
     rel = _s(p.relative_to(sandbox._base))
-    assert "yexuan" not in rel
+    assert TEST_CHAR_ID not in rel
 
 
 def test_user_facts_path_ends_with_user_facts_json(sandbox):

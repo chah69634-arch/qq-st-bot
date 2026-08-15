@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_episodic_fallback_cooldown.py — P0-4 验收
 
@@ -21,7 +22,7 @@ import core.memory.episodic_memory as em
 from core.memory.episodic_memory import retrieve_fallback, write_episode
 
 _UID = "fallback_cd_uid"
-_CHAR = "yexuan"
+_CHAR = TEST_CHAR_ID
 _NOW = 1_700_000_000.0
 
 

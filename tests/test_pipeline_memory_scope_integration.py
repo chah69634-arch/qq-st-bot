@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_pipeline_memory_scope_integration.py
 
@@ -53,7 +54,7 @@ import core.memory.fixation_pipeline   # noqa: F401
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -137,8 +138,8 @@ def _apply_fetch_stubs(monkeypatch):
 # ── 1. _current_reality_scope uid == str(user_id) ────────────────────────────
 
 def test_current_reality_scope_uid_equals_user_id(chars_tree, sandbox, registry):
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     scope = pipeline._current_reality_scope("u42")
 
@@ -161,8 +162,8 @@ def test_current_reality_scope_character_id_equals_active(chars_tree, sandbox, r
 # ── 3. _current_reality_scope domain == "reality" ────────────────────────────
 
 def test_current_reality_scope_domain_is_reality(chars_tree, sandbox, registry):
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     scope = pipeline._current_reality_scope("u1")
 
@@ -172,7 +173,7 @@ def test_current_reality_scope_domain_is_reality(chars_tree, sandbox, registry):
 # ── 4. _current_reality_scope raises on invalid active (no yexuan fallback) ───
 
 def test_current_reality_scope_raises_on_invalid_active(chars_tree, sandbox, registry):
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "nonexistent_char", "enabled_lorebooks": [],
                     "enabled_jailbreaks": []}),
@@ -198,7 +199,7 @@ def test_fetch_context_stores_receive_scope_char_id(chars_tree, monkeypatch, san
 
     received_char_ids: list[str] = []
 
-    def _spy(user_id, *, budget_rounds=None, near_k=5, char_id="yexuan"):
+    def _spy(user_id, *, budget_rounds=None, near_k=5, char_id=TEST_CHAR_ID):
         received_char_ids.append(char_id)
         return []
 
@@ -220,13 +221,13 @@ def test_fetch_context_scope_uid_forwarded_to_stores(chars_tree, monkeypatch, sa
     """
     import core.memory.short_term as _st
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
     _apply_fetch_stubs(monkeypatch)
 
     received_uids: list[str] = []
 
-    def _spy(user_id, *, budget_rounds=None, near_k=5, char_id="yexuan"):
+    def _spy(user_id, *, budget_rounds=None, near_k=5, char_id=TEST_CHAR_ID):
         received_uids.append(user_id)
         return []
 
@@ -251,20 +252,20 @@ def test_fetch_context_scope_char_id_follows_char_switch(
     """
     import core.memory.short_term as _st
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
     _apply_fetch_stubs(monkeypatch)
 
     received: list[str] = []
 
-    def _spy(user_id, *, budget_rounds=None, near_k=5, char_id="yexuan"):
+    def _spy(user_id, *, budget_rounds=None, near_k=5, char_id=TEST_CHAR_ID):
         received.append(char_id)
         return []
 
     monkeypatch.setattr(_st, "load_for_prompt", _spy)
 
     asyncio.run(pipeline.fetch_context(user_id="u1", content="hello"))
-    assert received and received[-1] == "yexuan", (
+    assert received and received[-1] == TEST_CHAR_ID, (
         f"First call must use yexuan, got {received}"
     )
 
@@ -476,7 +477,7 @@ async def test_post_process_invalid_active_raises_no_enqueue(
     """
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "nonexistent_char",
                     "enabled_lorebooks": [], "enabled_jailbreaks": []}),
@@ -518,7 +519,7 @@ def test_regression_fetch_context_char_id_forwarding(
 
     received: list[str] = []
 
-    def _spy(user_id, *, char_id="yexuan"):
+    def _spy(user_id, *, char_id=TEST_CHAR_ID):
         received.append(char_id)
         return {}
 
@@ -547,7 +548,7 @@ async def test_regression_post_process_char_id_forwarding(
     captured: list[str] = []
 
     def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None,
-                trigger_name="", envelope=None, *, char_id="yexuan", audit_extras=None,
+                trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None,
                 source=""):
         captured.append(char_id)
         return turn_id or f"{uid}_spy"

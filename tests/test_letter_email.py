@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import asyncio
 from datetime import date
 import json
@@ -285,7 +286,7 @@ def test_sample_style_returns_empty_when_dir_absent(monkeypatch, tmp_path):
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
-    texts, names = letter_reference.sample_style("yexuan")
+    texts, names = letter_reference.sample_style(TEST_CHAR_ID)
     assert texts == []
     assert names == []
 
@@ -302,7 +303,7 @@ def test_sample_style_picks_from_available_files(monkeypatch, tmp_path):
     fake_paths = _fake_letter_paths(samples_dir, tmp_path / "knowledge", tmp_path / "sent.json")
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
-    texts, names = letter_reference.sample_style("yexuan", n=2)
+    texts, names = letter_reference.sample_style(TEST_CHAR_ID, n=2)
     assert len(texts) == 2
     assert all(t in ("信件A内容", "信件B内容", "信件C内容") for t in texts)
 
@@ -319,7 +320,7 @@ def test_sample_style_avoids_recently_used(monkeypatch, tmp_path):
     fake_paths = _fake_letter_paths(samples_dir, tmp_path / "knowledge", tmp_path / "sent.json")
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
-    texts, names = letter_reference.sample_style("yexuan", n=1, exclude_names=["a.txt", "b.txt"])
+    texts, names = letter_reference.sample_style(TEST_CHAR_ID, n=1, exclude_names=["a.txt", "b.txt"])
     assert names == ["c.txt"]
 
 
@@ -331,7 +332,7 @@ def test_sample_reference_returns_empty_when_dir_absent(monkeypatch, tmp_path):
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
-    assert letter_reference.sample_reference("yexuan") == ""
+    assert letter_reference.sample_reference(TEST_CHAR_ID) == ""
 
 
 def test_sample_reference_returns_paragraph(monkeypatch, tmp_path):
@@ -344,7 +345,7 @@ def test_sample_reference_returns_paragraph(monkeypatch, tmp_path):
     fake_paths = _fake_letter_paths(tmp_path / "samples", k_dir, tmp_path / "sent.json")
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
-    ref = letter_reference.sample_reference("yexuan")
+    ref = letter_reference.sample_reference(TEST_CHAR_ID)
     assert ref in ("第一段文字内容。", "第二段文字内容。")
 
 
@@ -356,10 +357,10 @@ def test_append_and_load_sent_letters(monkeypatch, tmp_path):
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
-    letter_reference.append_sent_letter("u1", "yexuan", "第一封信的正文")
-    letter_reference.append_sent_letter("u1", "yexuan", "第二封信的正文")
+    letter_reference.append_sent_letter("u1", TEST_CHAR_ID, "第一封信的正文")
+    letter_reference.append_sent_letter("u1", TEST_CHAR_ID, "第二封信的正文")
 
-    loaded = letter_reference.load_sent_letters("u1", "yexuan", limit=3)
+    loaded = letter_reference.load_sent_letters("u1", TEST_CHAR_ID, limit=3)
     assert "第一封信的正文" in loaded
     assert "第二封信的正文" in loaded
 
@@ -372,7 +373,7 @@ def test_load_sent_letters_returns_empty_when_file_absent(monkeypatch, tmp_path)
     )
     monkeypatch.setattr("core.sandbox._instance", fake_paths)
 
-    assert letter_reference.load_sent_letters("u1", "yexuan") == []
+    assert letter_reference.load_sent_letters("u1", TEST_CHAR_ID) == []
 
 
 def test_build_letter_context_is_failsoft(monkeypatch):
@@ -386,7 +387,7 @@ def test_build_letter_context_is_failsoft(monkeypatch):
         import core.memory.episodic_memory as ep_mod
         monkeypatch.setattr(ep_mod, "_load_memories", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
         monkeypatch.setattr(ref_mod, "sample_style", lambda *a, **kw: ((_ for _ in ()).throw(RuntimeError("fail"))))
-        return await letter_writer._build_letter_context("u1", "测试缘由", char_id="yexuan")
+        return await letter_writer._build_letter_context("u1", "测试缘由", char_id=TEST_CHAR_ID)
 
     # Should not raise even with broken sources
     try:
@@ -425,7 +426,7 @@ def test_sent_letter_archived_after_successful_send(monkeypatch, tmp_path):
     monkeypatch.setattr(letter_reference, "append_sent_letter", fake_append)
 
     result = asyncio.run(
-        letter_writer._send_letter_if_worthy("u1", "yexuan", "理由", dry_run=False)
+        letter_writer._send_letter_if_worthy("u1", TEST_CHAR_ID, "理由", dry_run=False)
     )
 
     assert result.sent is True

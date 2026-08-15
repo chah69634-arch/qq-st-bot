@@ -17,6 +17,7 @@ T10. gomoku: key moment (created_chain>=3) always comments
 T11. gomoku: non-key moment respects probability/cooldown same as chess
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import chess
 import pytest
@@ -87,7 +88,7 @@ async def test_chess_key_moment_is_check_always_comments(sandbox, monkeypatch):
         "move_no": 2, "uci": "d8h4", "san": "Qh4#", "player": "black", "fen_after": board.fen(),
     })
 
-    comment, grounding = await CC.maybe_generate_move_comment("yexuan", "user1", "sessKM1", state)
+    comment, grounding = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessKM1", state)
     assert comment is not None
     assert llm.calls["n"] == 1
 
@@ -110,7 +111,7 @@ async def test_chess_key_moment_captured_piece_always_comments(sandbox, monkeypa
     ]
     state = _chess_state(fen=board.fen(), move_history=history, last_move=history[-1])
 
-    comment, grounding = await CC.maybe_generate_move_comment("yexuan", "user1", "sessKM2", state)
+    comment, grounding = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessKM2", state)
     assert comment is not None
     assert grounding["captured_piece"]
     assert llm.calls["n"] == 1
@@ -123,7 +124,7 @@ async def test_chess_key_moment_completed_always_comments(sandbox, monkeypatch):
     monkeypatch.setattr("random.random", lambda: 0.99)
 
     state = _chess_state(status="completed", result="1-0", termination="checkmate")
-    comment, _ = await CC.maybe_generate_move_comment("yexuan", "user1", "sessKM3", state)
+    comment, _ = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessKM3", state)
     assert comment is not None
     assert llm.calls["n"] == 1
 
@@ -139,10 +140,10 @@ async def test_chess_non_key_probability_fails_no_comment(sandbox, monkeypatch):
     state = _chess_state(move_history=[
         {"move_no": 1, "uci": "e2e4", "san": "e4", "player": "white", "fen_after": "x"},
     ])
-    comment, grounding = await CC.maybe_generate_move_comment("yexuan", "user1", "sessNK1", state)
+    comment, grounding = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessNK1", state)
     assert comment is None
     assert llm.calls["n"] == 0
-    p = TR._path("yexuan", "user1", "chess", "sessNK1")
+    p = TR._path(TEST_CHAR_ID, "user1", "chess", "sessNK1")
     assert not p.exists()
 
 
@@ -153,14 +154,14 @@ async def test_chess_non_key_probability_passes_cooldown_blocks(sandbox, monkeyp
     monkeypatch.setattr("random.random", lambda: 0.05)  # < 0.2 -> passes probability
 
     # Simulate a prior proactive comment 1 move ago (cooldown needs >=2).
-    TR.append_entry("yexuan", "user1", "chess", "sessNK2", {
+    TR.append_entry(TEST_CHAR_ID, "user1", "chess", "sessNK2", {
         "type": "assistant_chat", "text": "刚评论过。", "ts": "2026-07-11T00:00:00+00:00",
         "proactive": True, "at_move": 0,
     })
     state = _chess_state(move_history=[
         {"move_no": 1, "uci": "e2e4", "san": "e4", "player": "white", "fen_after": "x"},
     ])
-    comment, _ = await CC.maybe_generate_move_comment("yexuan", "user1", "sessNK2", state)
+    comment, _ = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessNK2", state)
     assert comment is None
     assert llm.calls["n"] == 0
 
@@ -171,7 +172,7 @@ async def test_chess_non_key_probability_and_cooldown_satisfied_comments(sandbox
     monkeypatch.setattr("core.llm_client.chat", llm)
     monkeypatch.setattr("random.random", lambda: 0.05)
 
-    TR.append_entry("yexuan", "user1", "chess", "sessNK3", {
+    TR.append_entry(TEST_CHAR_ID, "user1", "chess", "sessNK3", {
         "type": "assistant_chat", "text": "很久之前评论过。", "ts": "2026-07-11T00:00:00+00:00",
         "proactive": True, "at_move": 0,
     })
@@ -179,7 +180,7 @@ async def test_chess_non_key_probability_and_cooldown_satisfied_comments(sandbox
         {"move_no": 1, "uci": "e2e4", "san": "e4", "player": "white", "fen_after": "x"},
         {"move_no": 1, "uci": "e7e5", "san": "e5", "player": "black", "fen_after": "y"},
     ])  # move_count=2, gap from at_move=0 is 2 -> cooldown satisfied
-    comment, _ = await CC.maybe_generate_move_comment("yexuan", "user1", "sessNK3", state)
+    comment, _ = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessNK3", state)
     assert comment is not None
     assert llm.calls["n"] == 1
 
@@ -206,11 +207,11 @@ async def test_chess_comment_writes_proactive_entry_only(sandbox, monkeypatch):
         },
     )
 
-    comment, _ = await CC.maybe_generate_move_comment("yexuan", "user1", "sessProactive", state)
+    comment, _ = await CC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessProactive", state)
     assert comment is not None
 
     import json
-    p = TR._path("yexuan", "user1", "chess", "sessProactive")
+    p = TR._path(TEST_CHAR_ID, "user1", "chess", "sessProactive")
     lines = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert len(lines) == 1, "only assistant_chat should be written, no user_chat"
     entry = lines[0]
@@ -230,7 +231,7 @@ async def test_gomoku_key_moment_winner_always_comments(sandbox, monkeypatch):
     state = _gomoku_state(status="completed", winner="black", move_history=[
         {"x": 7, "y": 7, "player": "black", "move_no": 1},
     ])
-    comment, _ = await GC.maybe_generate_move_comment("yexuan", "user1", "sessGKM1", state)
+    comment, _ = await GC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessGKM1", state)
     assert comment is not None
     assert llm.calls["n"] == 1
 
@@ -251,7 +252,7 @@ async def test_gomoku_key_moment_created_chain_always_comments(sandbox, monkeypa
         {"x": 9, "y": 7, "player": "black", "move_no": 3},
     ], last_move={"x": 9, "y": 7, "player": "black", "move_no": 3})
 
-    comment, grounding = await GC.maybe_generate_move_comment("yexuan", "user1", "sessGKM2", state)
+    comment, grounding = await GC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessGKM2", state)
     assert comment is not None
     assert llm.calls["n"] == 1
 
@@ -268,6 +269,6 @@ async def test_gomoku_non_key_moment_respects_probability(sandbox, monkeypatch):
         {"x": 0, "y": 0, "player": "black", "move_no": 1},
     ], last_move={"x": 0, "y": 0, "player": "black", "move_no": 1})
 
-    comment, _ = await GC.maybe_generate_move_comment("yexuan", "user1", "sessGNK1", state)
+    comment, _ = await GC.maybe_generate_move_comment(TEST_CHAR_ID, "user1", "sessGNK1", state)
     assert comment is None
     assert llm.calls["n"] == 0

@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_n2b_mood_envelope_lock.py — N2-B 验收测试
 
@@ -76,7 +77,7 @@ class TestSleepyHelperEnvelopeGating:
             mock_dt.now.return_value.hour = 2  # 深夜
             with patch("core.memory.mood_state.update") as mock_update:
                 result = await maybe_mark_sleepy_from_time(
-                    uid="test_uid", char_id="yexuan", envelope=envelope_block
+                    uid="test_uid", char_id=TEST_CHAR_ID, envelope=envelope_block
                 )
         assert result is False
         mock_update.assert_not_called()
@@ -96,11 +97,11 @@ class TestSleepyHelperEnvelopeGating:
                     with patch("core.memory.mood_state.get_current", return_value="neutral"):
                         with patch("core.memory.mood_state.update") as mock_update:
                             result = await maybe_mark_sleepy_from_time(
-                                uid="test_uid", char_id="yexuan", envelope=envelope_allow
+                                uid="test_uid", char_id=TEST_CHAR_ID, envelope=envelope_allow
                             )
         assert result is True
         mock_update.assert_called_once_with(
-            "sleepy", source="schedule", char_id="yexuan", force=True
+            "sleepy", source="schedule", char_id=TEST_CHAR_ID, force=True
         )
 
     @pytest.mark.asyncio
@@ -116,7 +117,7 @@ class TestSleepyHelperEnvelopeGating:
                 with patch("core.memory.mood_state.get_current", return_value="neutral"):
                     with patch("core.memory.mood_state.update") as mock_update:
                         result = await maybe_mark_sleepy_from_time(
-                            uid="test_uid", char_id="yexuan", envelope=None
+                            uid="test_uid", char_id=TEST_CHAR_ID, envelope=None
                         )
         assert result is True
         mock_update.assert_called_once()
@@ -129,7 +130,7 @@ class TestSleepyHelperEnvelopeGating:
             mock_dt.now.return_value.hour = 14  # 下午2点
             with patch("core.memory.mood_state.update") as mock_update:
                 result = await maybe_mark_sleepy_from_time(
-                    uid="test_uid", char_id="yexuan", envelope=envelope_allow
+                    uid="test_uid", char_id=TEST_CHAR_ID, envelope=envelope_allow
                 )
         assert result is False
         mock_update.assert_not_called()
@@ -147,7 +148,7 @@ class TestSleepyHelperEnvelopeGating:
                 with patch("core.memory.mood_state.get_current", return_value="yandere"):
                     with patch("core.memory.mood_state.update") as mock_update:
                         result = await maybe_mark_sleepy_from_time(
-                            uid="test_uid", char_id="yexuan", envelope=envelope_allow
+                            uid="test_uid", char_id=TEST_CHAR_ID, envelope=envelope_allow
                         )
         assert result is False
         mock_update.assert_not_called()
@@ -165,7 +166,7 @@ class TestThinkingHelperEnvelopeGating:
         from core.mood_helpers import mark_tool_thinking_mood
         with patch("core.memory.mood_state.update") as mock_update:
             result = await mark_tool_thinking_mood(
-                uid="test_uid", char_id="yexuan", envelope=envelope_block
+                uid="test_uid", char_id=TEST_CHAR_ID, envelope=envelope_block
             )
         assert result is False
         mock_update.assert_not_called()
@@ -180,11 +181,11 @@ class TestThinkingHelperEnvelopeGating:
         with patch("core.memory.locks.global_lock", return_value=mock_lock):
             with patch("core.memory.mood_state.update") as mock_update:
                 result = await mark_tool_thinking_mood(
-                    uid="test_uid", char_id="yexuan", envelope=envelope_allow
+                    uid="test_uid", char_id=TEST_CHAR_ID, envelope=envelope_allow
                 )
         assert result is True
         mock_update.assert_called_once_with(
-            "thinking", source="trigger", char_id="yexuan", force=True
+            "thinking", source="trigger", char_id=TEST_CHAR_ID, force=True
         )
 
     @pytest.mark.asyncio
@@ -197,7 +198,7 @@ class TestThinkingHelperEnvelopeGating:
         with patch("core.memory.locks.global_lock", return_value=mock_lock):
             with patch("core.memory.mood_state.update") as mock_update:
                 result = await mark_tool_thinking_mood(
-                    uid="test_uid", char_id="yexuan", envelope=None
+                    uid="test_uid", char_id=TEST_CHAR_ID, envelope=None
                 )
         assert result is True
         mock_update.assert_called_once()
@@ -214,13 +215,13 @@ class TestHelperBoolReturn:
         from core.mood_helpers import maybe_mark_sleepy_from_time
         with patch("core.mood_helpers.datetime") as mock_dt:
             mock_dt.now.return_value.hour = 14
-            result = await maybe_mark_sleepy_from_time("u", "yexuan", envelope_allow)
+            result = await maybe_mark_sleepy_from_time("u", TEST_CHAR_ID, envelope_allow)
         assert isinstance(result, bool)
 
     @pytest.mark.asyncio
     async def test_thinking_returns_bool_type(self, envelope_block):
         from core.mood_helpers import mark_tool_thinking_mood
-        result = await mark_tool_thinking_mood("u", "yexuan", envelope_block)
+        result = await mark_tool_thinking_mood("u", TEST_CHAR_ID, envelope_block)
         assert isinstance(result, bool)
 
 
@@ -257,7 +258,7 @@ class TestPostProcessEnvelopePassThrough:
         from unittest.mock import patch as _patch
         with _patch("core.mood_helpers.maybe_mark_sleepy_from_time", side_effect=_fake_sleepy):
             # We just verify the envelope gate logic works correctly via fake helper
-            result = await _fake_sleepy(uid="u", char_id="yexuan", envelope=env)
+            result = await _fake_sleepy(uid="u", char_id=TEST_CHAR_ID, envelope=env)
 
         assert result is False
         assert len(sleepy_calls) == 0
@@ -275,7 +276,7 @@ class TestPostProcessEnvelopePassThrough:
             sleepy_calls.append(1)
             return True
 
-        result = await _fake_sleepy(uid="u", char_id="yexuan", envelope=env)
+        result = await _fake_sleepy(uid="u", char_id=TEST_CHAR_ID, envelope=env)
         assert result is True
         assert len(sleepy_calls) == 1
 

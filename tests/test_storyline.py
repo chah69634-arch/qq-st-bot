@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_storyline.py — Brief 80 §1 storyline 存储层验收
 
@@ -30,7 +31,7 @@ def _scope(uid, char_id):
 # ── 1. open_arc 幂等 + tag 过滤 ──────────────────────────────────────────────
 
 def test_open_arc_idempotent_by_title(sandbox):
-    uid, char_id = "u1", "yexuan"
+    uid, char_id = "u1", TEST_CHAR_ID
     id1 = sl.open_arc(uid, char_id=char_id, title="职业方向转变", tags=["topic.learning"])
     id2 = sl.open_arc(uid, char_id=char_id, title="职业方向转变", tags=["topic.writing"])
     assert id1 == id2
@@ -39,7 +40,7 @@ def test_open_arc_idempotent_by_title(sandbox):
 
 
 def test_open_arc_filters_invalid_tags(sandbox):
-    uid, char_id = "u2", "yexuan"
+    uid, char_id = "u2", TEST_CHAR_ID
     arc_id = sl.open_arc(uid, char_id=char_id, title="弧线A", tags=["topic.learning", "not_a_real_tag"])
     data = sl.load(uid, char_id=char_id)
     arc = next(a for a in data["arcs"] if a["arc_id"] == arc_id)
@@ -49,7 +50,7 @@ def test_open_arc_filters_invalid_tags(sandbox):
 # ── 2. append_node 正常追加 ──────────────────────────────────────────────────
 
 def test_append_node_basic(sandbox):
-    uid, char_id = "u3", "yexuan"
+    uid, char_id = "u3", TEST_CHAR_ID
     arc_id = sl.open_arc(uid, char_id=char_id, title="弧线B", tags=[])
     now = time.time()
     nid = sl.append_node(uid, char_id=char_id, arc_id=arc_id, summary="第一阶段", ts=now)
@@ -63,7 +64,7 @@ def test_append_node_basic(sandbox):
 # ── 3. append-only：拒绝 ts 回退 ─────────────────────────────────────────────
 
 def test_append_node_rejects_ts_regression(sandbox):
-    uid, char_id = "u4", "yexuan"
+    uid, char_id = "u4", TEST_CHAR_ID
     arc_id = sl.open_arc(uid, char_id=char_id, title="弧线C", tags=[])
     now = time.time()
     sl.append_node(uid, char_id=char_id, arc_id=arc_id, summary="节点1", ts=now)
@@ -77,7 +78,7 @@ def test_append_node_rejects_ts_regression(sandbox):
 # ── 4. append-only：拒绝重复 node_id ─────────────────────────────────────────
 
 def test_append_node_rejects_duplicate_node_id(sandbox):
-    uid, char_id = "u5", "yexuan"
+    uid, char_id = "u5", TEST_CHAR_ID
     arc_id = sl.open_arc(uid, char_id=char_id, title="弧线D", tags=[])
     now = time.time()
     sl.append_node(uid, char_id=char_id, arc_id=arc_id, summary="节点1", ts=now, node_id="n_fixed")
@@ -91,7 +92,7 @@ def test_append_node_rejects_duplicate_node_id(sandbox):
 # ── 5. 节点上限 ──────────────────────────────────────────────────────────────
 
 def test_append_node_rejects_when_arc_at_node_cap(sandbox):
-    uid, char_id = "u6", "yexuan"
+    uid, char_id = "u6", TEST_CHAR_ID
     arc_id = sl.open_arc(uid, char_id=char_id, title="弧线E", tags=[])
     now = time.time()
     for i in range(sl.MAX_NODES_PER_ARC):
@@ -107,7 +108,7 @@ def test_append_node_rejects_when_arc_at_node_cap(sandbox):
 # ── 6. set_arc_status ────────────────────────────────────────────────────────
 
 def test_set_arc_status_updates(sandbox):
-    uid, char_id = "u7", "yexuan"
+    uid, char_id = "u7", TEST_CHAR_ID
     arc_id = sl.open_arc(uid, char_id=char_id, title="弧线F", tags=[])
     ok = sl.set_arc_status(uid, char_id=char_id, arc_id=arc_id, status="dormant")
     assert ok is True
@@ -117,21 +118,21 @@ def test_set_arc_status_updates(sandbox):
 
 
 def test_set_arc_status_invalid_raises(sandbox):
-    uid, char_id = "u8", "yexuan"
+    uid, char_id = "u8", TEST_CHAR_ID
     arc_id = sl.open_arc(uid, char_id=char_id, title="弧线G", tags=[])
     with pytest.raises(ValueError):
         sl.set_arc_status(uid, char_id=char_id, arc_id=arc_id, status="not_a_status")
 
 
 def test_set_arc_status_unknown_arc_returns_false(sandbox):
-    uid, char_id = "u9", "yexuan"
+    uid, char_id = "u9", TEST_CHAR_ID
     assert sl.set_arc_status(uid, char_id=char_id, arc_id="arc_nonexistent", status="closed") is False
 
 
 # ── 7. 总 arcs 超限淘汰 ──────────────────────────────────────────────────────
 
 def test_total_arcs_eviction_archives_oldest_closed(sandbox):
-    uid, char_id = "u10", "yexuan"
+    uid, char_id = "u10", TEST_CHAR_ID
     arc_ids = []
     for i in range(sl.MAX_TOTAL_ARCS):
         aid = sl.open_arc(uid, char_id=char_id, title=f"弧线{i}", tags=[])
@@ -154,7 +155,7 @@ def test_total_arcs_eviction_archives_oldest_closed(sandbox):
 
 
 def test_arcs_over_limit_without_closed_skips_eviction(sandbox):
-    uid, char_id = "u11", "yexuan"
+    uid, char_id = "u11", TEST_CHAR_ID
     for i in range(sl.MAX_TOTAL_ARCS + 1):
         sl.open_arc(uid, char_id=char_id, title=f"活跃弧线{i}", tags=[])
     data = sl.load(uid, char_id=char_id)
@@ -176,7 +177,7 @@ def test_no_public_api_to_mutate_existing_node(sandbox):
 # ── list_recallable_arcs：closed 弧线不参与召回 ─────────────────────────────
 
 def test_list_recallable_arcs_excludes_closed(sandbox):
-    uid, char_id = "u13", "yexuan"
+    uid, char_id = "u13", TEST_CHAR_ID
     active_id = sl.open_arc(uid, char_id=char_id, title="活跃弧线", tags=[])
     closed_id = sl.open_arc(uid, char_id=char_id, title="已完结弧线", tags=[])
     sl.set_arc_status(uid, char_id=char_id, arc_id=closed_id, status="closed")
@@ -190,7 +191,7 @@ def test_list_recallable_arcs_excludes_closed(sandbox):
 # ── 9. 路径一致性 ────────────────────────────────────────────────────────────
 
 def test_storyline_path_matches_resolver(sandbox):
-    uid, char_id = "u12", "yexuan"
+    uid, char_id = "u12", TEST_CHAR_ID
     sl.open_arc(uid, char_id=char_id, title="路径测试", tags=[])
     expected = resolve_path(_scope(uid, char_id), "storyline")
     assert expected.exists()

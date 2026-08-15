@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_full_matrix_isolation.py — 全开档矩阵下的现实隔离与退出契约
 
@@ -94,7 +95,7 @@ def test_full_matrix_mood_state_not_touched(sandbox):
     _setup_full_matrix_dream(uid)
 
     # Dream pipeline runs as yexuan; check reality mood_state is not written.
-    mood_path = sandbox.mood_state(char_id="yexuan")
+    mood_path = sandbox.mood_state(char_id=TEST_CHAR_ID)
     assert not mood_path.exists(), "mood_state.json should not exist before test"
 
     async def run_dream():

@@ -12,6 +12,7 @@
   9. 观测端点返回 transcript 尾部 + 鉴权
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_THIRD_CHAR_ID
 
 from datetime import datetime
 
@@ -22,7 +23,7 @@ from fastapi.testclient import TestClient
 import core.scheduler.triggers.private_exchange as pe_trigger
 import core.stage.private_exchange as pe_store
 
-_A, _B = "yexuan", "yexuanJ-5412"
+_A, _B = TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 
 def _mock_config(**private_exchange_overrides):
@@ -70,22 +71,22 @@ async def test_check_skips_outside_window(sandbox, monkeypatch):
 def test_select_pair_prefers_low_interaction_and_long_gap(sandbox):
     from core.stage.char_relations import _empty_relation, _save_relation
 
-    warm = _empty_relation(_A, "hongcha")
+    warm = _empty_relation(_A, TEST_THIRD_CHAR_ID)
     warm["interaction_count"] = 5
     assert _save_relation(warm)
-    pe_store.append_entry(_A, "hongcha", speaker_id=_A, content="刚聊过")
+    pe_store.append_entry(_A, TEST_THIRD_CHAR_ID, speaker_id=_A, content="刚聊过")
 
     cold = _empty_relation(_A, _B)
     cold["interaction_count"] = 0
     assert _save_relation(cold)
     # never privately exchanged → last_exchange_ts()==0 → huge hours_since
 
-    picked = pe_trigger.select_pair([_A, _B, "hongcha"])
+    picked = pe_trigger.select_pair([_A, _B, TEST_THIRD_CHAR_ID])
     assert picked == tuple(sorted((_A, _B)))
 
 
 def test_select_pair_none_without_candidates(sandbox):
-    assert pe_trigger.select_pair([_A, _B, "hongcha"]) is None
+    assert pe_trigger.select_pair([_A, _B, TEST_THIRD_CHAR_ID]) is None
 
 
 # ── 私下语域框定层 ─────────────────────────────────────────────────────────────

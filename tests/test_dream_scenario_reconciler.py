@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 from unittest.mock import AsyncMock, patch
@@ -19,7 +20,7 @@ def _request(uid: str, version: int) -> dict:
     return {
         "uid": uid,
         "dream_id": "dream-reconcile",
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
         "turn_index": 0,
         "assistant_turn_id": "dream-reconcile:assistant:1",
         "state_version": version,

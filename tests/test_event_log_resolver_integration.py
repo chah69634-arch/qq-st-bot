@@ -20,6 +20,7 @@ Covers:
 13.  get_recent_days yexuan and character_b return different content
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 from datetime import datetime, timedelta
@@ -100,9 +101,9 @@ def test_event_log_dir_path_equals_legacy_sandbox_path(sandbox):
 
 
 def test_event_log_dir_path_equals_legacy_sandbox_path_yexuan(sandbox):
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     resolver_dir = resolve_path(scope, "event_log")
-    legacy_dir = sandbox.user_memory_root(_UID, char_id="yexuan") / "event_log"
+    legacy_dir = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "event_log"
     assert resolver_dir == legacy_dir
 
 
@@ -138,10 +139,10 @@ def test_append_char_id_none_returns_false_no_yexuan_write(sandbox):
     result = el.append(_UID, "user", "test", char_id=None)  # type: ignore[arg-type]
     assert result is False, "append() with char_id=None must return False"
     # verify nothing was written to yexuan bucket
-    y_dir = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "event_log")
+    y_dir = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "event_log")
     today = datetime.now().strftime("%Y-%m-%d")
     assert not (y_dir / f"{today}.md").exists(), (
-        "no yexuan fallback write must happen when char_id=None"
+        f'no {TEST_CHAR_ID} fallback write must happen when char_id=None'
     )
 
 
@@ -166,10 +167,10 @@ def test_append_empty_char_id_returns_false_no_yexuan_write(sandbox):
 
     result = el.append(_UID, "user", "test", char_id="")
     assert result is False, "append() with char_id='' must return False"
-    y_dir = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "event_log")
+    y_dir = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "event_log")
     today = datetime.now().strftime("%Y-%m-%d")
     assert not (y_dir / f"{today}.md").exists(), (
-        "no yexuan fallback write must happen when char_id=''"
+        f"no {TEST_CHAR_ID} fallback write must happen when char_id=''"
     )
 
 
@@ -192,13 +193,13 @@ async def test_search_empty_char_id_raises(sandbox):
 def test_yexuan_character_b_event_log_isolated(sandbox):
     import core.memory.event_log as el
 
-    el.append(_UID, "user", "Companion专属词YEXUAN_ONLY", char_id="yexuan")
+    el.append(_UID, "user", "Companion专属词YEXUAN_ONLY", char_id=TEST_CHAR_ID)
     el.append(_UID, "user", "DemoUser专属词CHARACTER_B_ONLY", char_id="character_b")
 
-    y_dir = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "event_log")
+    y_dir = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "event_log")
     h_dir = resolve_path(MemoryScope.reality_scope(_UID, "character_b"), "event_log")
 
-    assert y_dir != h_dir, "yexuan and character_b must have different event_log dirs"
+    assert y_dir != h_dir, f'{TEST_CHAR_ID} and character_b must have different event_log dirs'
     assert y_dir.exists()
     assert h_dir.exists()
 
@@ -219,12 +220,12 @@ def test_yexuan_character_b_event_log_isolated(sandbox):
 async def test_search_character_b_excludes_yexuan_content(sandbox):
     import core.memory.event_log as el
 
-    el.append(_UID2, "user", "Companion独有词YEXUAN_SENTINEL_XYZ", char_id="yexuan")
+    el.append(_UID2, "user", "Companion独有词YEXUAN_SENTINEL_XYZ", char_id=TEST_CHAR_ID)
     el.append(_UID2, "user", "DemoUser普通内容", char_id="character_b")
 
     result = await el.search(_UID2, "YEXUAN_SENTINEL_XYZ", char_id="character_b")
     assert "YEXUAN_SENTINEL_XYZ" not in result, (
-        "character_b search must not find yexuan-bucket content"
+        f'character_b search must not find {TEST_CHAR_ID}-bucket content'
     )
 
 
@@ -295,10 +296,10 @@ def test_event_log_resolver_exact_layout(sandbox):
 def test_get_recent_days_yexuan_character_b_isolated(sandbox):
     import core.memory.event_log as el
 
-    el.append(_UID, "user", "Companion日志内容YEXUAN_LOG", char_id="yexuan")
+    el.append(_UID, "user", "Companion日志内容YEXUAN_LOG", char_id=TEST_CHAR_ID)
     el.append(_UID, "user", "DemoUser日志内容CHARACTER_B_LOG", char_id="character_b")
 
-    y_text = el.get_recent_days(_UID, days=1, char_id="yexuan")
+    y_text = el.get_recent_days(_UID, days=1, char_id=TEST_CHAR_ID)
     h_text = el.get_recent_days(_UID, days=1, char_id="character_b")
 
     assert "Companion日志内容YEXUAN_LOG" in y_text

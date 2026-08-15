@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import asyncio
 import json
 
@@ -184,7 +185,7 @@ async def test_toy_tools_reject_non_owner_and_group(monkeypatch):
             is_group=is_group,
             session_state=FakeState(),
             origin="user_live",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
         )
         assert result == "硬件控制只允许 owner 私聊触发"
         assert confirm is None
@@ -216,7 +217,7 @@ async def test_toy_tool_executes_for_owner_private_turn(monkeypatch):
         is_group=False,
         session_state=FakeState(),
         origin="user_live",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
     assert result == "工具已执行：toy_stop，结果：已停止"
     assert confirm is None
@@ -235,7 +236,7 @@ async def test_toy_tool_direct_dispatch_rejected_while_frozen(monkeypatch):
     })
     result, confirm = await tool_dispatcher.execute(
         "toy_stop", {}, user_id="owner", target_id="owner", is_group=False,
-        session_state=FakeState(), origin="user_live", char_id="yexuan",
+        session_state=FakeState(), origin="user_live", char_id=TEST_CHAR_ID,
     )
     assert result == "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
     assert confirm is None

@@ -22,6 +22,7 @@ Covers:
   D. trigger_counts 观测（get_trigger_counts）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -106,7 +107,7 @@ class TestAffectionExpressedEvent:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 UID = "u_reality_88"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 
 
 def _load(uid=UID, char_id=CHAR):

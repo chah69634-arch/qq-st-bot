@@ -8,6 +8,7 @@ Covers channels/ui_push.pseudo_stream_push():
 - max_duration_ms cap scales the per-block interval down for long text
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_THIRD_CHAR_ID
 
 import asyncio
 
@@ -85,13 +86,13 @@ async def test_pseudo_stream_push_sends_start_delta_end_in_order(monkeypatch):
     await ui_push.pseudo_stream_push(
         "今天天气不错，我们去散步吧！你说好不好呢？",
         msg_id="msg-1",
-        char_id="hongcha",
+        char_id=TEST_THIRD_CHAR_ID,
         round_id="round-1",
     )
 
     assert sent, "expected at least one frame when connected with splittable text"
     assert sent[0]["type"] == "message_stream_start"
-    assert sent[0]["char_id"] == "hongcha"
+    assert sent[0]["char_id"] == TEST_THIRD_CHAR_ID
     assert sent[0]["round_id"] == "round-1"
     assert sent[-1]["type"] == "message_stream_end"
     deltas = [f for f in sent[1:-1] if f["type"] == "message_stream_delta"]

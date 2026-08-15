@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_episodic_resolver_integration.py
 
@@ -69,14 +70,14 @@ def _scope(uid: str, char_id: str) -> MemoryScope:
 # ---------------------------------------------------------------------------
 
 def test_mem_read_file_matches_resolver(sandbox):
-    uid, char_id = "u1", "yexuan"
+    uid, char_id = "u1", TEST_CHAR_ID
     store_path = _mem_read_file(uid, char_id=char_id)
     resolver_path = resolve_path(_scope(uid, char_id), "episodic")
     assert store_path == resolver_path
 
 
 def test_mem_write_file_matches_resolver(sandbox):
-    uid, char_id = "u1", "yexuan"
+    uid, char_id = "u1", TEST_CHAR_ID
     store_path = _mem_write_file(uid, char_id=char_id)
     resolver_path = resolve_path(_scope(uid, char_id), "episodic")
     assert store_path == resolver_path
@@ -87,14 +88,14 @@ def test_mem_write_file_matches_resolver(sandbox):
 # ---------------------------------------------------------------------------
 
 def test_index_read_file_matches_resolver(sandbox):
-    uid, char_id = "u1", "yexuan"
+    uid, char_id = "u1", TEST_CHAR_ID
     store_path = _index_read_file(uid, char_id=char_id)
     resolver_path = resolve_path(_scope(uid, char_id), "memory_index")
     assert store_path == resolver_path
 
 
 def test_index_write_file_matches_resolver(sandbox):
-    uid, char_id = "u1", "yexuan"
+    uid, char_id = "u1", TEST_CHAR_ID
     store_path = _index_write_file(uid, char_id=char_id)
     resolver_path = resolve_path(_scope(uid, char_id), "memory_index")
     assert store_path == resolver_path
@@ -107,7 +108,7 @@ def test_index_write_file_matches_resolver(sandbox):
 def test_episodic_physical_path_equals_legacy_layout(sandbox):
     """resolver 返回的路径 == user_memory_root(uid, char_id) / 'episodic.json'"""
     from core.sandbox import get_paths, safe_user_id
-    uid, char_id = "u42", "yexuan"
+    uid, char_id = "u42", TEST_CHAR_ID
     expected = get_paths().user_memory_root(safe_user_id(uid), char_id=char_id) / "episodic.json"
     actual = resolve_path(_scope(uid, char_id), "episodic")
     assert actual == expected
@@ -115,8 +116,8 @@ def test_episodic_physical_path_equals_legacy_layout(sandbox):
 
 def test_episodic_physical_path_layout_contains_runtime_memory(sandbox):
     """路径格式包含 runtime/memory/{char_id}/{uid}/episodic.json"""
-    p = str(resolve_path(_scope("u99", "yexuan"), "episodic")).replace("\\", "/")
-    assert "runtime/memory/yexuan/u99/episodic.json" in p
+    p = str(resolve_path(_scope("u99", TEST_CHAR_ID), "episodic")).replace("\\", "/")
+    assert f'runtime/memory/{TEST_CHAR_ID}/u99/episodic.json' in p
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +127,7 @@ def test_episodic_physical_path_layout_contains_runtime_memory(sandbox):
 def test_memory_index_physical_path_equals_legacy_layout(sandbox):
     """resolver 返回的路径 == user_memory_root(uid, char_id) / 'memory_index.json'"""
     from core.sandbox import get_paths, safe_user_id
-    uid, char_id = "u42", "yexuan"
+    uid, char_id = "u42", TEST_CHAR_ID
     expected = get_paths().user_memory_root(safe_user_id(uid), char_id=char_id) / "memory_index.json"
     actual = resolve_path(_scope(uid, char_id), "memory_index")
     assert actual == expected
@@ -134,8 +135,8 @@ def test_memory_index_physical_path_equals_legacy_layout(sandbox):
 
 def test_memory_index_physical_path_layout_contains_runtime_memory(sandbox):
     """路径格式包含 runtime/memory/{char_id}/{uid}/memory_index.json"""
-    p = str(resolve_path(_scope("u99", "yexuan"), "memory_index")).replace("\\", "/")
-    assert "runtime/memory/yexuan/u99/memory_index.json" in p
+    p = str(resolve_path(_scope("u99", TEST_CHAR_ID), "memory_index")).replace("\\", "/")
+    assert f'runtime/memory/{TEST_CHAR_ID}/u99/memory_index.json' in p
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +196,10 @@ def test_yexuan_character_b_episodic_buckets_isolated(sandbox):
     ep_y = _ep("ep_y1", "叶萱独有的记忆片段", tags=["叶萱专属"])
     ep_h = _ep("ep_h1", "DemoUser独有的记忆片段", tags=["DemoUser专属"])
 
-    write_episode(uid, ep_y, char_id="yexuan")
+    write_episode(uid, ep_y, char_id=TEST_CHAR_ID)
     write_episode(uid, ep_h, char_id="character_b")
 
-    mems_y = _load_memories(uid, char_id="yexuan")
+    mems_y = _load_memories(uid, char_id=TEST_CHAR_ID)
     mems_h = _load_memories(uid, char_id="character_b")
 
     ids_y = {m["id"] for m in mems_y}
@@ -220,7 +221,7 @@ def test_character_b_retrieve_does_not_surface_yexuan_content(sandbox):
     ep_y = _ep("ep_y2", f"{unique_word}只在叶萱桶里", tags=["叶萱独享"])
     ep_h = _ep("ep_h2", "DemoUser自己的回忆", tags=["DemoUser回忆"])
 
-    write_episode(uid, ep_y, char_id="yexuan")
+    write_episode(uid, ep_y, char_id=TEST_CHAR_ID)
     write_episode(uid, ep_h, char_id="character_b")
 
     results = retrieve(uid, topic="叶萱独享", top_k=5, char_id="character_b")
@@ -239,8 +240,8 @@ def test_rebuild_index_character_b_does_not_touch_yexuan_index(sandbox):
 
     _rebuild_index(uid, memories_h, char_id="character_b")
 
-    idx_y_path = resolve_path(_scope(uid, "yexuan"), "memory_index")
-    assert not idx_y_path.exists(), "写入 character_b index 不应创建 yexuan index 文件"
+    idx_y_path = resolve_path(_scope(uid, TEST_CHAR_ID), "memory_index")
+    assert not idx_y_path.exists(), f'写入 character_b index 不应创建 {TEST_CHAR_ID} index 文件'
 
     idx_h = _load_index(uid, char_id="character_b")
     assert "标签A" in idx_h
@@ -252,7 +253,7 @@ def test_rebuild_index_character_b_does_not_touch_yexuan_index(sandbox):
 # ---------------------------------------------------------------------------
 
 def test_write_episode_creates_file_in_correct_location(sandbox):
-    uid, char_id = "u4", "yexuan"
+    uid, char_id = "u4", TEST_CHAR_ID
     ep = _ep("ep_rt1", "往事如烟", tags=["往事"])
     write_episode(uid, ep, char_id=char_id)
 

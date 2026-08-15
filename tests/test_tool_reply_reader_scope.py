@@ -1,8 +1,9 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_tool_reply_reader_scope.py — P1-0A: _reply_with_tool_result reader char_id scope
 
 Verifies that _reply_with_tool_result reads short_term and user_profile using the
-active character's bucket (not the default "yexuan" fallback).
+active character's bucket (not the default TEST_CHAR_ID fallback).
 
 Covers:
   1. short_term.load_for_prompt receives active char_id
@@ -147,7 +148,7 @@ async def test_character_switch_reader_follows(sandbox, monkeypatch):
     monkeypatch.setattr(_st, "load_for_prompt", _st_load)
 
     # First call: yexuan
-    monkeypatch.setattr(_main, "_pipeline", _make_pipeline("yexuan"))
+    monkeypatch.setattr(_main, "_pipeline", _make_pipeline(TEST_CHAR_ID))
     await _main._reply_with_tool_result("tool_data", "u1", "u1", False)
 
     # Second call: character_b
@@ -155,7 +156,7 @@ async def test_character_switch_reader_follows(sandbox, monkeypatch):
     await _main._reply_with_tool_result("tool_data", "u1", "u1", False)
 
     assert len(received_chars) == 2, f"expected 2 reader calls, got {received_chars}"
-    assert received_chars[0] == "yexuan", f"first call expected yexuan, got {received_chars[0]}"
+    assert received_chars[0] == TEST_CHAR_ID, f"first call expected yexuan, got {received_chars[0]}"
     assert received_chars[1] == "character_b", (
         f"second call expected character_b (not yexuan), got {received_chars[1]}"
     )
@@ -209,10 +210,10 @@ async def test_content_isolation_yexuan_not_in_character_b_context(sandbox, monk
     SENTINEL = "草莓大福-tool"
 
     def _st_load(uid, **kw):
-        return [{"role": "user", "content": SENTINEL}] if kw.get("char_id") == "yexuan" else []
+        return [{"role": "user", "content": SENTINEL}] if kw.get("char_id") == TEST_CHAR_ID else []
 
     def _up_load(uid, **kw):
-        return {"marker": SENTINEL} if kw.get("char_id") == "yexuan" else {}
+        return {"marker": SENTINEL} if kw.get("char_id") == TEST_CHAR_ID else {}
 
     monkeypatch.setattr(_st, "load_for_prompt", _st_load)
     monkeypatch.setattr(_up, "load", _up_load)

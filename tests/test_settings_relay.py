@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_settings_relay.py — W5: relay 中继唤醒设置接口
 
@@ -40,7 +41,7 @@ def test_get_relay_settings_masks_token(monkeypatch):
         sr, "get_config",
         lambda: {
             "relay_base_url": "https://relay.example",
-            "relay_topic": "yexuan-wake-a1b2c3",
+            "relay_topic": f'{TEST_CHAR_ID}-wake-a1b2c3',
             "relay_token": "supersecrettoken123",
         },
     )
@@ -54,7 +55,7 @@ def test_get_relay_settings_masks_token(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["relay_base_url"] == "https://relay.example"
-    assert data["relay_topic"] == "yexuan-wake-a1b2c3"
+    assert data["relay_topic"] == f'{TEST_CHAR_ID}-wake-a1b2c3'
     assert data["relay_token"] != "supersecrettoken123"
     assert data["relay_token"].startswith("supe")
     assert "supersecrettoken123" not in data["relay_token"]
@@ -83,7 +84,7 @@ def test_put_relay_settings_writes_top_level_keys(admin_client):
         "/settings/relay",
         json={
             "relay_base_url": "https://ntfy.example.com",
-            "relay_topic": "yexuan-wake-xyz",
+            "relay_topic": f'{TEST_CHAR_ID}-wake-xyz',
             "relay_token": "tok12345678",
         },
         headers=_auth(),
@@ -92,7 +93,7 @@ def test_put_relay_settings_writes_top_level_keys(admin_client):
 
     saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
     assert saved["relay_base_url"] == "https://ntfy.example.com"
-    assert saved["relay_topic"] == "yexuan-wake-xyz"
+    assert saved["relay_topic"] == f'{TEST_CHAR_ID}-wake-xyz'
     assert saved["relay_token"] == "tok12345678"
 
     body = resp.json()

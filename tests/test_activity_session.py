@@ -16,6 +16,7 @@ ActivitySession P0 骨架验收测试
 10. session_id 不允许路径逃逸
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from pathlib import Path
 
@@ -31,16 +32,16 @@ from core.activity.types import ALLOWED_ACTIVITY_TYPES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_create_reading_session(sandbox):
-    s = activity_store.create_session("user1", "yexuan", "reading")
+    s = activity_store.create_session("user1", TEST_CHAR_ID, "reading")
     assert s.activity_type == "reading"
     assert s.status == "active"
     assert s.uid == "user1"
-    assert s.char_id == "yexuan"
+    assert s.char_id == TEST_CHAR_ID
     assert s.session_id
     assert s.created_at
     assert s.updated_at
 
-    loaded = activity_store.load_session("yexuan", "user1", "reading", s.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "reading", s.session_id)
     assert loaded is not None
     assert loaded.session_id == s.session_id
     assert loaded.status == "active"
@@ -51,12 +52,12 @@ def test_create_reading_session(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_create_gomoku_session(sandbox):
-    s = activity_store.create_session("user1", "yexuan", "gomoku", {"board": []})
+    s = activity_store.create_session("user1", TEST_CHAR_ID, "gomoku", {"board": []})
     assert s.activity_type == "gomoku"
     assert s.status == "active"
     assert s.state == {"board": []}
 
-    loaded = activity_store.load_session("yexuan", "user1", "gomoku", s.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "gomoku", s.session_id)
     assert loaded is not None
     assert loaded.state == {"board": []}
 
@@ -66,12 +67,12 @@ def test_create_gomoku_session(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_create_chess_session(sandbox):
-    s = activity_store.create_session("user1", "yexuan", "chess", {"fen": "startpos"})
+    s = activity_store.create_session("user1", TEST_CHAR_ID, "chess", {"fen": "startpos"})
     assert s.activity_type == "chess"
     assert s.status == "active"
     assert s.state == {"fen": "startpos"}
 
-    loaded = activity_store.load_session("yexuan", "user1", "chess", s.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "chess", s.session_id)
     assert loaded is not None
     assert loaded.state["fen"] == "startpos"
 
@@ -81,27 +82,27 @@ def test_create_chess_session(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_uid_char_id_path_isolation(sandbox):
-    s1 = activity_store.create_session("user1", "yexuan", "gomoku")
-    s2 = activity_store.create_session("user2", "yexuan", "gomoku")
+    s1 = activity_store.create_session("user1", TEST_CHAR_ID, "gomoku")
+    s2 = activity_store.create_session("user2", TEST_CHAR_ID, "gomoku")
     s3 = activity_store.create_session("user1", "character_b", "gomoku")
 
-    d1 = sandbox.activity_session_dir(char_id="yexuan", uid="user1", activity_type="gomoku", session_id=s1.session_id)
-    d2 = sandbox.activity_session_dir(char_id="yexuan", uid="user2", activity_type="gomoku", session_id=s2.session_id)
+    d1 = sandbox.activity_session_dir(char_id=TEST_CHAR_ID, uid="user1", activity_type="gomoku", session_id=s1.session_id)
+    d2 = sandbox.activity_session_dir(char_id=TEST_CHAR_ID, uid="user2", activity_type="gomoku", session_id=s2.session_id)
     d3 = sandbox.activity_session_dir(char_id="character_b", uid="user1", activity_type="gomoku", session_id=s3.session_id)
 
     assert d1 != d2 != d3
-    assert "yexuan" in str(d1)
+    assert TEST_CHAR_ID in str(d1)
     assert "character_b" in str(d3)
     assert "user1" in str(d1)
     assert "user2" in str(d2)
 
     # 跨 char_id 不可见
-    yexuan_active = activity_store.find_active_session("yexuan", "user1", "gomoku")
+    yexuan_active = activity_store.find_active_session(TEST_CHAR_ID, "user1", "gomoku")
     character_b_active = activity_store.find_active_session("character_b", "user1", "gomoku")
     assert yexuan_active is not None
     assert character_b_active is not None
     assert yexuan_active.session_id != character_b_active.session_id
-    assert yexuan_active.char_id == "yexuan"
+    assert yexuan_active.char_id == TEST_CHAR_ID
     assert character_b_active.char_id == "character_b"
 
 
@@ -110,20 +111,20 @@ def test_uid_char_id_path_isolation(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_find_active_session(sandbox):
-    s = activity_store.create_session("owner", "yexuan", "chess")
-    found = activity_store.find_active_session("yexuan", "owner", "chess")
+    s = activity_store.create_session("owner", TEST_CHAR_ID, "chess")
+    found = activity_store.find_active_session(TEST_CHAR_ID, "owner", "chess")
     assert found is not None
     assert found.session_id == s.session_id
     assert found.status == "active"
 
 
 def test_update_state_and_reload(sandbox):
-    s = activity_store.create_session("owner", "yexuan", "gomoku", {"moves": []})
-    updated = activity_store.update_state("yexuan", "owner", "gomoku", s.session_id, {"moves": [1, 2, 3]})
+    s = activity_store.create_session("owner", TEST_CHAR_ID, "gomoku", {"moves": []})
+    updated = activity_store.update_state(TEST_CHAR_ID, "owner", "gomoku", s.session_id, {"moves": [1, 2, 3]})
     assert updated is not None
     assert updated.state["moves"] == [1, 2, 3]
 
-    reloaded = activity_store.load_session("yexuan", "owner", "gomoku", s.session_id)
+    reloaded = activity_store.load_session(TEST_CHAR_ID, "owner", "gomoku", s.session_id)
     assert reloaded is not None
     assert reloaded.state["moves"] == [1, 2, 3]
 
@@ -133,21 +134,21 @@ def test_update_state_and_reload(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_close_session_not_active(sandbox):
-    s = activity_store.create_session("user1", "yexuan", "gomoku")
-    activity_store.close_session("yexuan", "user1", "gomoku", s.session_id)
+    s = activity_store.create_session("user1", TEST_CHAR_ID, "gomoku")
+    activity_store.close_session(TEST_CHAR_ID, "user1", "gomoku", s.session_id)
 
-    found = activity_store.find_active_session("yexuan", "user1", "gomoku")
+    found = activity_store.find_active_session(TEST_CHAR_ID, "user1", "gomoku")
     assert found is None
 
-    loaded = activity_store.load_session("yexuan", "user1", "gomoku", s.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "gomoku", s.session_id)
     assert loaded is not None
     assert loaded.status == "closed"
 
 
 def test_close_session_is_idempotent(sandbox):
-    s = activity_store.create_session("user1", "yexuan", "chess")
-    r1 = activity_store.close_session("yexuan", "user1", "chess", s.session_id)
-    r2 = activity_store.close_session("yexuan", "user1", "chess", s.session_id)
+    s = activity_store.create_session("user1", TEST_CHAR_ID, "chess")
+    r1 = activity_store.close_session(TEST_CHAR_ID, "user1", "chess", s.session_id)
+    r2 = activity_store.close_session(TEST_CHAR_ID, "user1", "chess", s.session_id)
     assert r1 is not None and r1.status == "closed"
     assert r2 is not None and r2.status == "closed"
 
@@ -157,28 +158,28 @@ def test_close_session_is_idempotent(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_duplicate_start_closes_old_session(sandbox):
-    old = activity_store.create_session("user1", "yexuan", "chess")
-    new = activity_store.create_session("user1", "yexuan", "chess")
+    old = activity_store.create_session("user1", TEST_CHAR_ID, "chess")
+    new = activity_store.create_session("user1", TEST_CHAR_ID, "chess")
 
     assert new.session_id != old.session_id
     assert new.status == "active"
 
-    old_loaded = activity_store.load_session("yexuan", "user1", "chess", old.session_id)
+    old_loaded = activity_store.load_session(TEST_CHAR_ID, "user1", "chess", old.session_id)
     assert old_loaded is not None
     assert old_loaded.status == "closed"
 
-    active = activity_store.find_active_session("yexuan", "user1", "chess")
+    active = activity_store.find_active_session(TEST_CHAR_ID, "user1", "chess")
     assert active is not None
     assert active.session_id == new.session_id
 
 
 def test_duplicate_start_different_types_independent(sandbox):
     """不同 activity_type 互不影响。"""
-    chess = activity_store.create_session("user1", "yexuan", "chess")
-    gomoku = activity_store.create_session("user1", "yexuan", "gomoku")
+    chess = activity_store.create_session("user1", TEST_CHAR_ID, "chess")
+    gomoku = activity_store.create_session("user1", TEST_CHAR_ID, "gomoku")
 
-    assert activity_store.find_active_session("yexuan", "user1", "chess").session_id == chess.session_id
-    assert activity_store.find_active_session("yexuan", "user1", "gomoku").session_id == gomoku.session_id
+    assert activity_store.find_active_session(TEST_CHAR_ID, "user1", "chess").session_id == chess.session_id
+    assert activity_store.find_active_session(TEST_CHAR_ID, "user1", "gomoku").session_id == gomoku.session_id
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -186,19 +187,19 @@ def test_duplicate_start_different_types_independent(sandbox):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_no_short_term_or_hidden_state_write(sandbox):
-    activity_store.create_session("user1", "yexuan", "reading", {"page": 1})
-    activity_store.create_session("user1", "yexuan", "gomoku", {"board": []})
-    activity_store.create_session("user1", "yexuan", "chess", {})
+    activity_store.create_session("user1", TEST_CHAR_ID, "reading", {"page": 1})
+    activity_store.create_session("user1", TEST_CHAR_ID, "gomoku", {"board": []})
+    activity_store.create_session("user1", TEST_CHAR_ID, "chess", {})
 
     # history ディレクトリが作られていないこと
     history_dir = sandbox._p("history")
-    chars_history = sandbox._p("chars", "yexuan", "history")
+    chars_history = sandbox._p("chars", TEST_CHAR_ID, "history")
     for p in (history_dir, chars_history):
         if p.exists():
             assert list(p.iterdir()) == [], f"unexpected write in {p}"
 
     # user_hidden_state.json が書かれていないこと
-    hidden = sandbox._p("runtime", "memory", "yexuan", "user1", "user_hidden_state.json")
+    hidden = sandbox._p("runtime", "memory", TEST_CHAR_ID, "user1", "user_hidden_state.json")
     assert not hidden.exists()
 
 
@@ -209,13 +210,13 @@ def test_no_short_term_or_hidden_state_write(sandbox):
 @pytest.mark.parametrize("bad_type", ["mahjong", "unknown", "", "READING", "Chess"])
 def test_invalid_activity_type_rejected_on_create(sandbox, bad_type):
     with pytest.raises(ValueError):
-        activity_store.create_session("user1", "yexuan", bad_type)
+        activity_store.create_session("user1", TEST_CHAR_ID, bad_type)
 
 
 @pytest.mark.parametrize("bad_type", ["mahjong", "unknown", "", "GOMOKU"])
 def test_invalid_activity_type_rejected_on_find(sandbox, bad_type):
     with pytest.raises(ValueError):
-        activity_store.find_active_session("yexuan", "user1", bad_type)
+        activity_store.find_active_session(TEST_CHAR_ID, "user1", bad_type)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -232,7 +233,7 @@ def test_invalid_activity_type_rejected_on_find(sandbox, bad_type):
 def test_session_id_no_path_traversal(sandbox, evil_id):
     with pytest.raises((ValueError, Exception)):
         sandbox.activity_session_dir(
-            char_id="yexuan", uid="user1", activity_type="chess", session_id=evil_id
+            char_id=TEST_CHAR_ID, uid="user1", activity_type="chess", session_id=evil_id
         )
 
 
@@ -240,7 +241,7 @@ def test_session_id_valid_hex_accepted(sandbox):
     """正常的 hex session_id 不应报错。"""
     sid = "a1b2c3d4e5f6789012345678abcdef01"
     p = sandbox.activity_session_dir(
-        char_id="yexuan", uid="user1", activity_type="chess", session_id=sid
+        char_id=TEST_CHAR_ID, uid="user1", activity_type="chess", session_id=sid
     )
     assert sid in str(p)
     assert str(p).startswith(str(sandbox._base))

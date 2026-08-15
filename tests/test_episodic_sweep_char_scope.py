@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_episodic_sweep_char_scope.py
 
@@ -53,7 +54,7 @@ async def test_sweep_uid_loads_mt_with_explicit_char_id(sandbox):
 
     captured: list[tuple[str, str]] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         captured.append((uid, char_id))
         return []
 
@@ -107,7 +108,7 @@ async def test_check_sweep_covers_both_chars(sandbox):
     from core.scheduler.triggers.episodic_sweep import _check_episodic_sweep
 
     # 为 yexuan 和 character_b 各创建一个用户目录及 mid_term.json
-    for char_id in ("yexuan", "character_b"):
+    for char_id in (TEST_CHAR_ID, "character_b"):
         uid_dir = sandbox.memory_char_root(char_id=char_id) / "u1"
         uid_dir.mkdir(parents=True, exist_ok=True)
         (uid_dir / "mid_term.json").write_text("{}", encoding="utf-8")
@@ -115,12 +116,12 @@ async def test_check_sweep_covers_both_chars(sandbox):
     loaded_calls: list[tuple[str, str]] = []
     enqueued: list[tuple[str, dict]] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         loaded_calls.append((uid, char_id))
         return [_aged_event(f"mt_{char_id}")]
 
     with (
-        patch("core.asset_registry.get_registry", return_value=_make_registry("yexuan", "character_b")),
+        patch("core.asset_registry.get_registry", return_value=_make_registry(TEST_CHAR_ID, "character_b")),
         patch.object(_mt, "load", side_effect=_spy_load),
         patch.object(sq, "enqueue", side_effect=lambda t, p: enqueued.append((t, p))),
         patch("core.scheduler.loop._is_ready", return_value=True),
@@ -129,11 +130,11 @@ async def test_check_sweep_covers_both_chars(sandbox):
         await _check_episodic_sweep()
 
     loaded_char_ids = {c for _, c in loaded_calls}
-    assert "yexuan" in loaded_char_ids, "yexuan 的 mid_term 应被加载"
+    assert TEST_CHAR_ID in loaded_char_ids, f'{TEST_CHAR_ID} 的 mid_term 应被加载'
     assert "character_b" in loaded_char_ids, "character_b 的 mid_term 应被加载"
 
     enqueued_char_ids = {p.get("char_id") for _, p in enqueued}
-    assert "yexuan" in enqueued_char_ids, "yexuan 任务应入队"
+    assert TEST_CHAR_ID in enqueued_char_ids, f'{TEST_CHAR_ID} 任务应入队'
     assert "character_b" in enqueued_char_ids, "character_b 任务应入队"
 
 
@@ -141,7 +142,7 @@ async def test_check_sweep_covers_both_chars(sandbox):
 
 @pytest.mark.asyncio
 async def test_sweep_character_b_does_not_read_yexuan_bucket(sandbox):
-    """sweep character_b 时，_mt.load 不应以 char_id='yexuan' 被调用。"""
+    """sweep character_b 时，_mt.load 不应以 char_id=TEST_CHAR_ID 被调用。"""
     import core.memory.mid_term as _mt
     import core.post_process.slow_queue as sq
     from core.scheduler.triggers.episodic_sweep import _check_episodic_sweep
@@ -153,7 +154,7 @@ async def test_sweep_character_b_does_not_read_yexuan_bucket(sandbox):
 
     loaded_calls: list[tuple[str, str]] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         loaded_calls.append((uid, char_id))
         return []
 
@@ -168,7 +169,7 @@ async def test_sweep_character_b_does_not_read_yexuan_bucket(sandbox):
 
     for uid, char_id in loaded_calls:
         assert char_id == "character_b", (
-            f"sweep character_b 时 _mt.load 不应使用 char_id='yexuan'，实际: (uid={uid!r}, char_id={char_id!r})"
+            f"sweep character_b 时 _mt.load 不应使用 char_id=TEST_CHAR_ID，实际: (uid={uid!r}, char_id={char_id!r})"
         )
     assert loaded_calls, "_mt.load 应被调用至少一次"
 
@@ -184,7 +185,7 @@ async def test_sweep_nonexistent_char_dir_no_error(sandbox):
     enqueued: list = []
 
     with (
-        patch("core.asset_registry.get_registry", return_value=_make_registry("yexuan", "character_b")),
+        patch("core.asset_registry.get_registry", return_value=_make_registry(TEST_CHAR_ID, "character_b")),
         patch.object(sq, "enqueue", side_effect=lambda t, p: enqueued.append((t, p))),
         patch("core.scheduler.loop._is_ready", return_value=True),
         patch("core.scheduler.loop._mark"),
@@ -200,21 +201,21 @@ async def test_sweep_nonexistent_char_dir_no_error(sandbox):
 async def test_unregistered_char_dir_not_swept_no_yexuan_fallback(sandbox):
     """
     yexuan 目录存在但不在 registry 中时，yexuan 不被扫描，
-    不会生成任何 char_id='yexuan' 的 payload。
+    不会生成任何 char_id=TEST_CHAR_ID 的 payload。
     """
     import core.memory.mid_term as _mt
     import core.post_process.slow_queue as sq
     from core.scheduler.triggers.episodic_sweep import _check_episodic_sweep
 
     # 创建 yexuan 和 character_b 目录，但 registry 只含 character_b
-    for char_id in ("yexuan", "character_b"):
+    for char_id in (TEST_CHAR_ID, "character_b"):
         uid_dir = sandbox.memory_char_root(char_id=char_id) / "u3"
         uid_dir.mkdir(parents=True, exist_ok=True)
         (uid_dir / "mid_term.json").write_text("{}", encoding="utf-8")
 
     enqueued: list[tuple[str, dict]] = []
 
-    def _spy_load(uid, *, char_id="yexuan"):
+    def _spy_load(uid, *, char_id=TEST_CHAR_ID):
         return [_aged_event(f"mt_{char_id}_x")]
 
     with (
@@ -227,8 +228,8 @@ async def test_unregistered_char_dir_not_swept_no_yexuan_fallback(sandbox):
         await _check_episodic_sweep()
 
     for _, payload in enqueued:
-        assert payload.get("char_id") != "yexuan", (
-            f"yexuan 不在 registry 中，不应生成 char_id='yexuan' payload，实际: {payload!r}"
+        assert payload.get("char_id") != TEST_CHAR_ID, (
+            f"yexuan 不在 registry 中，不应生成 char_id=TEST_CHAR_ID payload，实际: {payload!r}"
         )
     assert all(p.get("char_id") == "character_b" for _, p in enqueued), (
         f"所有入队 payload 应有 char_id='character_b'，实际: {[p for _, p in enqueued]!r}"

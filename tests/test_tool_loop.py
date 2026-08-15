@@ -8,6 +8,7 @@ LLM 全 mock：core.llm_client.chat_turn / chat / chat_stream 按脚本吐结果
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 
@@ -109,7 +110,7 @@ async def test_per_turn_exclude_tools_hides_only_completed_fast_path_tool(monkey
     result = await _make_pipeline().run_agentic_loop(
         [{"role": "user", "content": "what time is it"}],
         uid="u1",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
         session_state=object(),
         exclude_tools={"get_time"},
     )
@@ -141,7 +142,7 @@ async def test_without_per_turn_exclusion_native_fc_can_call_get_time(monkeypatc
     result = await _make_pipeline().run_agentic_loop(
         [{"role": "user", "content": "what time is it"}],
         uid="u1",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
         session_state=object(),
         exclude_tools=set(),
     )
@@ -169,7 +170,7 @@ async def test_natural_termination_no_tool(monkeypatch):
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "你好"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == "直接回答，不用工具"
@@ -191,7 +192,7 @@ async def test_empty_natural_termination_falls_back_to_tool_free_final(monkeypat
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "你好"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == "降级后的正常回复"
@@ -222,7 +223,7 @@ async def test_two_step_natural_termination_with_tool_includes_reanchor(monkeypa
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "今天天气"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "今天天气"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == "今天挺晴朗的～"
@@ -267,7 +268,7 @@ async def test_steps_exhausted_forces_closing(monkeypatch):
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "查两次"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "查两次"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == "收尾回复"
@@ -293,7 +294,7 @@ async def test_exclude_tools_filtered_from_schema(monkeypatch):
 
     pipeline = _make_pipeline()
     await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "hi"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "hi"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     tool_names = {t["function"]["name"] for t in chat_turn_calls[0]["tools"]}
@@ -325,7 +326,7 @@ async def test_single_tool_exception_does_not_abort_loop(monkeypatch):
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "查一下"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == "收尾"
@@ -354,7 +355,7 @@ async def test_ask_confirm_forces_immediate_stop(monkeypatch):
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "关机"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "关机"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == ask_text
@@ -462,7 +463,7 @@ async def test_stream_tool_step_nonstream_final_streamed(monkeypatch):
 
     pipeline = _make_pipeline()
     gen = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "查一下"}], uid="u1", char_id="yexuan",
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
     chunks = [piece async for piece in gen]
@@ -492,7 +493,7 @@ async def test_stream_empty_natural_termination_falls_back_to_tool_free_stream(m
 
     pipeline = _make_pipeline()
     gen = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "你好"}], uid="u1", char_id="yexuan",
+        [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
 
@@ -532,7 +533,7 @@ async def test_action_trace_recorded_per_step(monkeypatch, sandbox):
     from core.session_state import SessionState
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "帮我做点事"}], uid="u1", char_id="yexuan",
+        [{"role": "user", "content": "帮我做点事"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=SessionState(),
     )
 
@@ -540,7 +541,7 @@ async def test_action_trace_recorded_per_step(monkeypatch, sandbox):
     assert len(chat_turn_calls) == 2
 
     from core.memory import action_trace
-    entries = action_trace.recent("u1", "yexuan")
+    entries = action_trace.recent("u1", TEST_CHAR_ID)
     assert any(
         e.get("tool") == "loop_probe_tool" and e.get("origin") == "assistant_loop"
         for e in entries
@@ -587,7 +588,7 @@ async def test_nudge_hint_teaches_tail_brace_convention(monkeypatch):
 
     pipeline = _make_pipeline()
     await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "hi"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "hi"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     nudge = next(m for m in chat_turn_calls[0]["messages"] if m.get("_layer") == "11.5_tool_nudge")
@@ -614,7 +615,7 @@ async def test_nudge_hint_forbids_narrating_tool_call_as_dialogue(monkeypatch):
 
     pipeline = _make_pipeline()
     await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "去调用工具玩一下"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "去调用工具玩一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     nudge = next(m for m in chat_turn_calls[0]["messages"] if m.get("_layer") == "11.5_tool_nudge")
@@ -714,7 +715,7 @@ async def test_tail_brace_relay_triggers_second_tool_call(monkeypatch):
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "陪我钓鱼"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "陪我钓鱼"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == "今天挺晴朗的～"
@@ -769,7 +770,7 @@ async def test_tail_brace_relay_unresolved_falls_back_to_natural_text(monkeypatc
 
     pipeline = _make_pipeline()
     result = await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "帮我个忙"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "帮我个忙"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert result == "这个我不太确定"
@@ -852,7 +853,7 @@ async def test_relay_prompt_covers_current_loop_categories_including_mcp(monkeyp
 
     pipeline = _make_pipeline()
     await pipeline.run_agentic_loop(
-        [{"role": "user", "content": "陪我玩海龟汤"}], uid="u1", char_id="yexuan", session_state=object(),
+        [{"role": "user", "content": "陪我玩海龟汤"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
     )
 
     assert execute_calls[0]["tool_name"] == "mcp__turtle_soup__ask"

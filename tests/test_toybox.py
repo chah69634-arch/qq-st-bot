@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """Whitelisted toy-file sandbox contracts."""
 
 import json
@@ -92,7 +93,7 @@ async def test_toybox_tools_follow_safe_and_danger_mode_gate(sandbox, monkeypatc
     args = {"file_key": "wishlist", "content": "一起去看海"}
 
     result, confirm = await tool_dispatcher.execute(
-        "write_toy_file", args, "u1", "u1", False, _Session(), origin="user_live", char_id="yexuan"
+        "write_toy_file", args, "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID
     )
     assert "安全模式" in result
     assert confirm is None
@@ -100,7 +101,7 @@ async def test_toybox_tools_follow_safe_and_danger_mode_gate(sandbox, monkeypatc
 
     _write_danger_mode(sandbox)
     result, confirm = await tool_dispatcher.execute(
-        "write_toy_file", args, "u1", "u1", False, _Session(), origin="user_live", char_id="yexuan"
+        "write_toy_file", args, "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID
     )
     assert result == "工具已执行：write_toy_file，结果：玩具文件写好了。"
     assert confirm is None
@@ -113,7 +114,7 @@ async def test_toybox_tools_follow_safe_and_danger_mode_gate(sandbox, monkeypatc
         False,
         _Session(),
         origin="user_live",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
     assert result == "工具已执行：read_toy_file，结果：一起去看海"
     assert confirm is None

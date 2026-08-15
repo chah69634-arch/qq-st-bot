@@ -18,6 +18,7 @@ Naming: F-prefix = R6-final specific guard.
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -445,7 +446,7 @@ def test_f6e_assistant_turn_sink_mentions_r1d():
 # F7. Behavioral: QQ full chain — both paths produce scrubbed memory via adapter
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _make_pipeline_f7(llm_reply: str = "回复", char_id: str = "yexuan"):
+def _make_pipeline_f7(llm_reply: str = "回复", char_id: str = TEST_CHAR_ID):
     from core.memory.scope import MemoryScope
     fake = MagicMock()
     fake.character = MagicMock()

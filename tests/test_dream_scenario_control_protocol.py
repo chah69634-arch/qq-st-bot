@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_scenario_control_protocol.py — <scenario_control> 输出协议契约
 
@@ -181,7 +182,7 @@ def test_dream_turn_saves_progress_signal(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
 
     llm_response = (
@@ -298,7 +299,7 @@ def test_scenario_control_stripped_from_reply_and_log(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
 
     llm_response = (

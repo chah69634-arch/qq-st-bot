@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 """
 tests/test_character_avatar_binding.py
 
@@ -41,13 +42,13 @@ def char_dir(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
 
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion"}), encoding="utf-8"
     )
     (chars / "character_b.json").write_text(
         json.dumps({"name": "DemoUser"}), encoding="utf-8"
     )
-    (chars / "yexuanJ-5412.json").write_text(
+    (chars / f'{TEST_PEER_CHAR_ID}.json').write_text(
         json.dumps({"name": "J5412"}), encoding="utf-8"
     )
 
@@ -58,7 +59,7 @@ def char_dir(tmp_path):
     # Authored avatars dir — only yexuan has one
     avatars = chars / "reality" / "avatars"
     avatars.mkdir(parents=True)
-    (avatars / "yexuan.png").write_bytes(b"\x89PNG\r\n\x1a\n")  # minimal PNG header
+    (avatars / f'{TEST_CHAR_ID}.png').write_bytes(b"\x89PNG\r\n\x1a\n")  # minimal PNG header
 
     return tmp_path
 
@@ -96,14 +97,14 @@ def client_with_avatars(char_dir, monkeypatch):
 # ── 1. Character with authored avatar returns correct avatar_url ──────────────
 
 def test_yexuan_has_avatar_url(registry):
-    entry = registry.resolve("yexuan", "character")
+    entry = registry.resolve(TEST_CHAR_ID, "character")
     assert entry.avatar_url is not None
-    assert entry.avatar_url.startswith("/settings/character-avatar/yexuan")
+    assert entry.avatar_url.startswith(f'/settings/character-avatar/{TEST_CHAR_ID}')
 
 
 def test_avatar_url_contains_version(registry):
     """Authored avatar URL includes ?v=<mtime> for cache-busting."""
-    entry = registry.resolve("yexuan", "character")
+    entry = registry.resolve(TEST_CHAR_ID, "character")
     assert "?v=" in (entry.avatar_url or "")
 
 
@@ -115,17 +116,17 @@ def test_character_b_no_avatar_returns_none(registry):
 
 
 def test_j5412_no_avatar_returns_none(registry):
-    entry = registry.resolve("yexuanJ-5412", "character")
+    entry = registry.resolve(TEST_PEER_CHAR_ID, "character")
     assert entry.avatar_url is None
 
 
 # ── 3. as_ui_dict() includes avatar_url and has_runtime_avatar ────────────────
 
 def test_as_ui_dict_includes_avatar_url_when_present(registry):
-    d = registry.resolve("yexuan", "character").as_ui_dict()
+    d = registry.resolve(TEST_CHAR_ID, "character").as_ui_dict()
     assert "avatar_url" in d
     assert d["avatar_url"] is not None
-    assert d["avatar_url"].startswith("/settings/character-avatar/yexuan")
+    assert d["avatar_url"].startswith(f'/settings/character-avatar/{TEST_CHAR_ID}')
 
 
 def test_as_ui_dict_includes_avatar_url_none_when_absent(registry):
@@ -135,7 +136,7 @@ def test_as_ui_dict_includes_avatar_url_none_when_absent(registry):
 
 
 def test_as_ui_dict_includes_has_runtime_avatar(registry):
-    d = registry.resolve("yexuan", "character").as_ui_dict()
+    d = registry.resolve(TEST_CHAR_ID, "character").as_ui_dict()
     assert "has_runtime_avatar" in d
     assert d["has_runtime_avatar"] is False  # authored only, no runtime yet
 
@@ -150,21 +151,21 @@ def test_unknown_char_id_raises_value_error(registry):
 # ── 5. Avatar URL is id-based, not derived from label or filename ─────────────
 
 def test_avatar_url_uses_id_not_label(registry):
-    """The avatar_url path segment must equal the id ('yexuan'), not the label ('Companion')."""
-    entry = registry.resolve("yexuan", "character")
+    """The avatar_url path segment must equal the id (TEST_CHAR_ID), not the label ('Companion')."""
+    entry = registry.resolve(TEST_CHAR_ID, "character")
     assert "Companion" not in (entry.avatar_url or "")
-    assert "yexuan" in (entry.avatar_url or "")
+    assert TEST_CHAR_ID in (entry.avatar_url or "")
 
 
 def test_avatar_url_uses_id_not_filename(registry):
     """The avatar_url path segment must equal the id, not include the .json extension."""
-    entry = registry.resolve("yexuan", "character")
+    entry = registry.resolve(TEST_CHAR_ID, "character")
     assert ".json" not in (entry.avatar_url or "")
 
 
 def test_no_cross_character_avatar_fallback(registry):
     """character_b must not receive yexuan's avatar_url even though yexuan has one."""
-    yexuan_url = registry.resolve("yexuan", "character").avatar_url
+    yexuan_url = registry.resolve(TEST_CHAR_ID, "character").avatar_url
     character_b_url = registry.resolve("character_b", "character").avatar_url
     assert character_b_url is None
     assert character_b_url != yexuan_url
@@ -173,7 +174,7 @@ def test_no_cross_character_avatar_fallback(registry):
 # ── 6 & 7. HTTP GET endpoint ──────────────────────────────────────────────────
 
 def test_avatar_endpoint_returns_image_for_existing(client_with_avatars):
-    resp = client_with_avatars.get("/settings/character-avatar/yexuan")
+    resp = client_with_avatars.get(f'/settings/character-avatar/{TEST_CHAR_ID}')
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("image/")
 
@@ -190,8 +191,8 @@ def test_avatar_endpoint_404_for_unknown_char_id(client_with_avatars):
 
 def test_avatar_endpoint_404_not_fallback_to_other_character(client_with_avatars):
     """j5412 has no avatar; must not fall back to yexuan's avatar."""
-    resp_j5412 = client_with_avatars.get("/settings/character-avatar/yexuanJ-5412")
-    resp_yexuan = client_with_avatars.get("/settings/character-avatar/yexuan")
+    resp_j5412 = client_with_avatars.get(f'/settings/character-avatar/{TEST_PEER_CHAR_ID}')
+    resp_yexuan = client_with_avatars.get(f'/settings/character-avatar/{TEST_CHAR_ID}')
     assert resp_j5412.status_code == 404
     assert resp_yexuan.status_code == 200
     assert resp_j5412.content != resp_yexuan.content
@@ -205,7 +206,7 @@ def test_avatar_endpoint_does_not_accept_label(client_with_avatars):
 
 def test_avatar_endpoint_does_not_accept_filename(client_with_avatars):
     """Passing 'yexuan.json' as char_id must 404 (not found in registry)."""
-    resp = client_with_avatars.get("/settings/character-avatar/yexuan.json")
+    resp = client_with_avatars.get(f'/settings/character-avatar/{TEST_CHAR_ID}.json')
     assert resp.status_code == 404
 
 
@@ -219,17 +220,17 @@ def test_upload_character_b_creates_only_character_b_file(char_dir, client_with_
     assert resp.status_code == 200
 
     character_b_path = char_dir / "data" / "runtime" / "characters" / "character_b" / "avatar.png"
-    yexuan_path  = char_dir / "data" / "runtime" / "characters" / "yexuan"  / "avatar.png"
+    yexuan_path  = char_dir / "data" / "runtime" / "characters" / TEST_CHAR_ID  / "avatar.png"
 
     assert character_b_path.exists(), "character_b runtime avatar must be created"
-    assert not yexuan_path.exists(), "yexuan runtime avatar must NOT be touched"
+    assert not yexuan_path.exists(), f'{TEST_CHAR_ID} runtime avatar must NOT be touched'
 
 
 # ── 9. Upload does not touch other characters ─────────────────────────────────
 
 def test_upload_does_not_touch_yexuan_when_uploading_character_b(char_dir, client_with_avatars):
     # Pre-create yexuan runtime avatar to verify it's not modified
-    yexuan_rt = char_dir / "data" / "runtime" / "characters" / "yexuan"
+    yexuan_rt = char_dir / "data" / "runtime" / "characters" / TEST_CHAR_ID
     yexuan_rt.mkdir(parents=True, exist_ok=True)
     sentinel = b"YEXUAN_SENTINEL"
     (yexuan_rt / "avatar.png").write_bytes(sentinel)
@@ -240,7 +241,7 @@ def test_upload_does_not_touch_yexuan_when_uploading_character_b(char_dir, clien
     )
 
     assert (yexuan_rt / "avatar.png").read_bytes() == sentinel, \
-        "yexuan runtime avatar must be unchanged after uploading character_b avatar"
+        f'{TEST_CHAR_ID} runtime avatar must be unchanged after uploading character_b avatar'
 
 
 # ── 10. Priority: runtime override served before authored default ─────────────
@@ -248,11 +249,11 @@ def test_upload_does_not_touch_yexuan_when_uploading_character_b(char_dir, clien
 def test_runtime_override_served_instead_of_authored(char_dir, client_with_avatars):
     runtime_bytes = b"RUNTIME_AVATAR_BYTES"
     client_with_avatars.post(
-        "/settings/characters/yexuan/avatar",
+        f'/settings/characters/{TEST_CHAR_ID}/avatar',
         files={"file": ("avatar.png", runtime_bytes, "image/png")},
     )
 
-    resp = client_with_avatars.get("/settings/character-avatar/yexuan")
+    resp = client_with_avatars.get(f'/settings/character-avatar/{TEST_CHAR_ID}')
     assert resp.status_code == 200
     assert resp.content == runtime_bytes
 
@@ -280,30 +281,30 @@ def test_after_upload_has_runtime_avatar_is_true(char_dir, monkeypatch):
 
 
 def test_authored_only_has_runtime_avatar_false(registry):
-    entry = registry.resolve("yexuan", "character")
+    entry = registry.resolve(TEST_CHAR_ID, "character")
     assert entry.has_runtime_avatar is False
 
 
 # ── 12. DELETE removes runtime override; authored default served again ─────────
 
 def test_delete_removes_runtime_and_falls_back_to_authored(char_dir, client_with_avatars):
-    authored_bytes = (char_dir / "characters" / "reality" / "avatars" / "yexuan.png").read_bytes()
+    authored_bytes = (char_dir / "characters" / "reality" / "avatars" / f'{TEST_CHAR_ID}.png').read_bytes()
 
     # Upload an override
     client_with_avatars.post(
-        "/settings/characters/yexuan/avatar",
+        f'/settings/characters/{TEST_CHAR_ID}/avatar',
         files={"file": ("avatar.png", b"OVERRIDE", "image/png")},
     )
     # Verify override is active
-    assert client_with_avatars.get("/settings/character-avatar/yexuan").content == b"OVERRIDE"
+    assert client_with_avatars.get(f'/settings/character-avatar/{TEST_CHAR_ID}').content == b"OVERRIDE"
 
     # Delete override
-    resp = client_with_avatars.delete("/settings/characters/yexuan/avatar")
+    resp = client_with_avatars.delete(f'/settings/characters/{TEST_CHAR_ID}/avatar')
     assert resp.status_code == 200
     assert resp.json()["deleted"] is True
 
     # Authored default restored
-    resp2 = client_with_avatars.get("/settings/character-avatar/yexuan")
+    resp2 = client_with_avatars.get(f'/settings/character-avatar/{TEST_CHAR_ID}')
     assert resp2.status_code == 200
     assert resp2.content == authored_bytes
 

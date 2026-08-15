@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import json
 import random
 
@@ -67,10 +68,10 @@ async def test_stage_phase_b_does_not_echo_cut_against_owner(sandbox, monkeypatc
     from core.stage.runner import run_owner_turn
     from core.stage.store import create_stage
 
-    candidate = type("Candidate", (), {"char_id": "yexuan", "total": 1.0, "parts": {}})()
+    candidate = type("Candidate", (), {"char_id": TEST_CHAR_ID, "total": 1.0, "parts": {}})()
     monkeypatch.setattr("core.stage.runner._rank_candidates", lambda *args, **kwargs: [candidate])
 
-    create_stage("brief70-stage", "owner", ["yexuan"], settings=StageSettings(min_responders=0, max_responders=0, max_ai_chain_depth=1))
+    create_stage("brief70-stage", "owner", [TEST_CHAR_ID], settings=StageSettings(min_responders=0, max_responders=0, max_ai_chain_depth=1))
 
     async def generate(_stage, _speaker, _transcript, _turn_id, _triggered_by):
         return "请认真看看这句话"

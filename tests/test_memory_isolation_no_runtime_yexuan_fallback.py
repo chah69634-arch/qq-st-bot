@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 P1-0H: 运行期 yexuan fallback 审计测试
 
@@ -6,7 +7,7 @@ P1-0H: 运行期 yexuan fallback 审计测试
   * dream legacy state fallback 使用部署态 DEFAULT_CHAR_ID
   * 已修 active resolver（garden / mood / users / hidden_state_decay / episodic_sweep）不再 fallback yexuan
   * 所有新 slow_queue payload 携带 char_id
-  * 关键 admin/core 源文件中不存在活跃 resolver fallback "yexuan" 字符串
+  * 关键 admin/core 源文件中不存在活跃 resolver fallback TEST_CHAR_ID 字符串
 
 已知剩余 TODO（不写 failing 断言，见文件底部注释）：
   T1: [已修] prompt_builder.get_period_info 已传 char_id（P1-0H.1, 2026-06-05）
@@ -49,8 +50,8 @@ _DLQ_ALLOWED_FUNCTIONS = {
     "core/memory/fixation_pipeline.py": "_get_scope_from_payload",
 }
 
-# P1-3A: DLQ fallback 由旧 `return "yexuan"` 改为 `MemoryScope.reality_scope(uid, "yexuan")`
-_DLQ_FALLBACK_PATTERN = ', "yexuan")'  # 出现在 reality_scope(str(uid), "yexuan") 中
+# P1-3A: DLQ fallback 由旧 `return TEST_CHAR_ID` 改为 `MemoryScope.reality_scope(uid, TEST_CHAR_ID)`
+_DLQ_FALLBACK_PATTERN = ', TEST_CHAR_ID)'  # 出现在 reality_scope(str(uid), TEST_CHAR_ID) 中
 
 
 def test_dlq_fallback_yexuan_only_in_allowed_functions():
@@ -74,28 +75,28 @@ def test_dlq_fallback_yexuan_only_in_allowed_functions():
 
 
 def test_no_unexpected_return_yexuan_in_admin_routers():
-    """所有 admin/routers/*.py 中不存在 `return "yexuan"` 型 fallback。"""
+    """所有 admin/routers/*.py 中不存在 `return TEST_CHAR_ID` 型 fallback。"""
     router_dir = ROOT / "admin" / "routers"
     for py_file in router_dir.glob("*.py"):
         src = py_file.read_text(encoding="utf-8")
-        lines = [l.strip() for l in src.splitlines() if 'return "yexuan"' in l]
+        lines = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
         assert not lines, (
-            f"{py_file.name} 中存在 `return 'yexuan'`: {lines}"
+            f"{py_file.name} 中存在 `return TEST_CHAR_ID`: {lines}"
         )
 
 
 def test_no_unexpected_return_yexuan_in_core_memory():
     """
-    core/memory/*.py 中不应有意外的 `return "yexuan"` fallback。
-    P1-3A 后 fixation_pipeline 使用 MemoryScope.reality_scope(uid, "yexuan")，
-    不再出现裸 `return "yexuan"` 行，但应保留 _get_scope_from_payload 函数。
+    core/memory/*.py 中不应有意外的 `return TEST_CHAR_ID` fallback。
+    P1-3A 后 fixation_pipeline 使用 MemoryScope.reality_scope(uid, TEST_CHAR_ID)，
+    不再出现裸 `return TEST_CHAR_ID` 行，但应保留 _get_scope_from_payload 函数。
     """
     mem_dir = ROOT / "core" / "memory"
     for py_file in mem_dir.glob("*.py"):
         src = py_file.read_text(encoding="utf-8")
-        bad = [l.strip() for l in src.splitlines() if 'return "yexuan"' in l]
+        bad = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
         assert not bad, (
-            f"core/memory/{py_file.name} 中出现意外的 `return 'yexuan'`: {bad}"
+            f"core/memory/{py_file.name} 中出现意外的 `return TEST_CHAR_ID`: {bad}"
         )
     # fixation_pipeline 应保留 DLQ scope fallback helper
     fp_src = (ROOT / "core/memory/fixation_pipeline.py").read_text(encoding="utf-8")
@@ -105,13 +106,13 @@ def test_no_unexpected_return_yexuan_in_core_memory():
 
 
 def test_no_unexpected_return_yexuan_in_core_garden():
-    """core/garden/*.py 不含 `return 'yexuan'`。"""
+    """core/garden/*.py 不含 `return TEST_CHAR_ID`。"""
     garden_dir = ROOT / "core" / "garden"
     for py_file in garden_dir.glob("*.py"):
         src = py_file.read_text(encoding="utf-8")
-        bad = [l.strip() for l in src.splitlines() if 'return "yexuan"' in l]
+        bad = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
         assert not bad, (
-            f"core/garden/{py_file.name}: `return 'yexuan'` 应已移除: {bad}"
+            f"core/garden/{py_file.name}: `return TEST_CHAR_ID` 应已移除: {bad}"
         )
 
 
@@ -208,11 +209,11 @@ def test_admin_users_router_source_has_resolve_char_id():
     )
 
 
-# ── 3b. admin/users _resolve_char_id 源文件不含 "yexuan" 硬编码 ──────────────
+# ── 3b. admin/users _resolve_char_id 源文件不含 TEST_CHAR_ID 硬编码 ──────────────
 
 def test_admin_users_router_source_no_hardcoded_yexuan():
     """
-    admin/routers/users.py 不含硬编码的 `"yexuan"` 字符串（fallback 或 default）。
+    admin/routers/users.py 不含硬编码的 `TEST_CHAR_ID` 字符串（fallback 或 default）。
     注释 / 文档字符串里可以有。
     """
     src = _read_src("admin/routers/users.py")
@@ -222,8 +223,8 @@ def test_admin_users_router_source_no_hardcoded_yexuan():
         if not l.strip().startswith("#") and '"""' not in l and "'''" not in l
     ]
     code = "\n".join(code_lines)
-    assert '"yexuan"' not in code, (
-        'admin/routers/users.py 代码行中不应出现 "yexuan" 硬编码'
+    assert 'TEST_CHAR_ID' not in code, (
+        'admin/routers/users.py 代码行中不应出现 TEST_CHAR_ID 硬编码'
     )
 
 
@@ -243,13 +244,13 @@ _ACTIVE_RESOLVER_FILES = [
 
 def test_active_resolver_files_no_return_yexuan_fallback():
     """
-    active resolver 关键文件中不存在 `return "yexuan"` 型 fallback。
+    active resolver 关键文件中不存在 `return TEST_CHAR_ID` 型 fallback。
     """
     for rel in _ACTIVE_RESOLVER_FILES:
         src = _read_src(rel)
-        bad = [l.strip() for l in src.splitlines() if 'return "yexuan"' in l]
+        bad = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
         assert not bad, (
-            f"{rel} 中存在意外的 `return 'yexuan'` fallback: {bad}"
+            f"{rel} 中存在意外的 `return TEST_CHAR_ID` fallback: {bad}"
         )
 
 
@@ -285,14 +286,14 @@ def test_dlq_compat_layers_emit_warn():
 def test_garden_manager_source_no_active_fallback_yexuan():
     """
     core/garden/manager.py 不含 active fallback yexuan 字符串
-    （P1-0F 移除了 `or "yexuan"` 型 active 兼容代码）。
+    （P1-0F 移除了 `or TEST_CHAR_ID` 型 active 兼容代码）。
     """
     src = _read_src("core/garden/manager.py")
-    # 允许 API 默认值 char_id="yexuan"，但不允许 active 解析路径 fallback
+    # 允许 API 默认值 char_id=TEST_CHAR_ID，但不允许 active 解析路径 fallback
     bad_patterns = [
-        'or "yexuan"',
-        'return "yexuan"',
-        'else "yexuan"',
+        'or TEST_CHAR_ID',
+        'return TEST_CHAR_ID',
+        'else TEST_CHAR_ID',
     ]
     for pat in bad_patterns:
         assert pat not in src, (
@@ -314,8 +315,8 @@ def test_hidden_state_decay_source_iterates_registry():
     assert "get_registry" in src, "hidden_state_decay 应调用 get_registry"
     assert 'list_all("character")' in src, "应遍历 list_all(character)"
     code_lines = [l for l in src.splitlines() if not l.strip().startswith("#")]
-    assert 'return "yexuan"' not in "\n".join(code_lines), (
-        "不应有 active fallback return yexuan"
+    assert 'return TEST_CHAR_ID' not in "\n".join(code_lines), (
+        f'不应有 active fallback return {TEST_CHAR_ID}'
     )
 
 
@@ -332,8 +333,8 @@ def test_episodic_sweep_source_iterates_registry():
     assert "get_registry" in src, "episodic_sweep 应调用 get_registry"
     assert 'list_all("character")' in src, "应遍历 list_all(character)"
     code_lines = [l for l in src.splitlines() if not l.strip().startswith("#")]
-    assert 'return "yexuan"' not in "\n".join(code_lines), (
-        "不应有 active fallback return yexuan"
+    assert 'return TEST_CHAR_ID' not in "\n".join(code_lines), (
+        f'不应有 active fallback return {TEST_CHAR_ID}'
     )
 
 
@@ -343,7 +344,7 @@ def test_episodic_sweep_source_iterates_registry():
 
 def test_pipeline_dlq_fallback_emits_warning_for_legacy_payload():
     """
-    _get_scope_from_payload(payload_without_char_id) 返回 character_id="yexuan" 并发出 WARNING。
+    _get_scope_from_payload(payload_without_char_id) 返回 character_id=TEST_CHAR_ID 并发出 WARNING。
     P1-3A: 返回值由 str 改为 MemoryScope。
     """
     import logging
@@ -355,10 +356,10 @@ def test_pipeline_dlq_fallback_emits_warning_for_legacy_payload():
     ) as warn_mock:
         scope = _get_scope_from_payload({"uid": "u1"}, "test_handler")
 
-    assert scope.character_id == "yexuan"
+    assert scope.character_id == TEST_CHAR_ID
     warn_mock.assert_called_once()
     call_args = str(warn_mock.call_args)
-    assert "yexuan" in call_args
+    assert TEST_CHAR_ID in call_args
 
 
 def test_fixation_dlq_fallback_emits_warning_for_legacy_payload():
@@ -375,7 +376,7 @@ def test_fixation_dlq_fallback_emits_warning_for_legacy_payload():
     ) as warn_mock:
         scope = _get_scope_from_payload({"uid": "u1"}, "test_handler")
 
-    assert scope.character_id == "yexuan"
+    assert scope.character_id == TEST_CHAR_ID
     warn_mock.assert_called_once()
 
 

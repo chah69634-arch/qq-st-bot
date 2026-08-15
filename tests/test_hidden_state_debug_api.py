@@ -12,6 +12,7 @@ Tests cover:
   F  只读验证 — 调用后无文件写入         (1)   RO-01
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 from datetime import datetime, timezone
@@ -218,7 +219,7 @@ def test_ro01_no_files_written(sandbox):
     apa = sandbox._base / "runtime" / "active_prompt_assets.json"
     apa.parent.mkdir(parents=True, exist_ok=True)
     apa.write_text(
-        _json.dumps({"active_character": "yexuan", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
+        _json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [], "enabled_jailbreaks": []}),
         encoding="utf-8",
     )
     save_hidden_state(_UID, default_hidden_state())

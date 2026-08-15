@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import asyncio
 
 
@@ -18,7 +19,7 @@ def _eligible(monkeypatch, *, mood="sad", last_owner_turn_ts=1_000.0, now_ts=5_0
     monkeypatch.setattr("core.config_loader.get_config", lambda: _enabled_config())
     monkeypatch.setattr(loop, "_is_ready", lambda name: True)
     monkeypatch.setattr(loop, "_owner_id", lambda: "owner")
-    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "yexuan")
+    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(
         "core.scheduler.state_machine.snapshot",
         lambda uid: {"last_owner_turn_ts": last_owner_turn_ts},
@@ -34,7 +35,7 @@ def test_presence_nag_default_off(monkeypatch):
     from core.scheduler.triggers import presence_nag
 
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {}})
-    assert presence_nag.propose({"uid": "owner", "char_id": "yexuan"}) is None
+    assert presence_nag.propose({"uid": "owner", "char_id": TEST_CHAR_ID}) is None
 
 
 def test_presence_nag_requires_high_activity_negative_mood_and_silence(monkeypatch):
@@ -45,7 +46,7 @@ def test_presence_nag_requires_high_activity_negative_mood_and_silence(monkeypat
         lambda: _enabled_config(activity_level="low"),
     )
     from core.scheduler.triggers import presence_nag
-    assert presence_nag.propose({"uid": "owner", "char_id": "yexuan", "now_ts": 5_000.0}) is None
+    assert presence_nag.propose({"uid": "owner", "char_id": TEST_CHAR_ID, "now_ts": 5_000.0}) is None
 
 
 def test_presence_nag_rejects_positive_mood_recent_or_unknown_interaction(monkeypatch):
@@ -61,7 +62,7 @@ def test_presence_nag_proposal_is_quiet_only(monkeypatch):
 
     assert proposal.trigger_name == "presence_nag"
     assert proposal.requires_state == [TriggerState.QUIET]
-    assert proposal.char_id == "yexuan"
+    assert proposal.char_id == TEST_CHAR_ID
 
 
 def test_presence_nag_execute_aligns_action_name_and_uses_llm_reply(monkeypatch):
@@ -75,18 +76,18 @@ def test_presence_nag_execute_aligns_action_name_and_uses_llm_reply(monkeypatch)
         captured.update(kwargs)
         return "你终于肯看我一眼了吗？"
 
-    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "yexuan")
+    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr("core.scheduler.loop._pipeline_send", fake_pipeline_send)
     monkeypatch.setattr("core.scheduler.loop._mark", lambda *args, **kwargs: None)
 
-    result = asyncio.run(presence_nag._make_execute(72.4, "yexuan")(dry_run=False))
+    result = asyncio.run(presence_nag._make_execute(72.4, TEST_CHAR_ID)(dry_run=False))
 
     assert result.sent is True
     assert captured["fanout"] == ["desktop"]
     action = captured["behavior_factory"]("你终于肯看我一眼了吗？")
     assert action == {
         "action_type": "presence_nag",
-        "params": {"text": "你终于肯看我一眼了吗？", "avatar": "yexuan"},
+        "params": {"text": "你终于肯看我一眼了吗？", "avatar": TEST_CHAR_ID},
     }
     assert "72 分钟" in captured["prompt"]
     assert "只说一句" in captured["prompt"]

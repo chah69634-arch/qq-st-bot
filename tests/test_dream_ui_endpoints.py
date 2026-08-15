@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_ui_endpoints.py — Dream UI read/settings endpoint contract tests
 
@@ -72,7 +73,7 @@ def test_state_get_mood_state_unchanged(sandbox):
     from admin.routers.dream import dream_state_get
 
     # Dream endpoints test yexuan reality isolation.
-    mood_path = sandbox.mood_state(char_id="yexuan")
+    mood_path = sandbox.mood_state(char_id=TEST_CHAR_ID)
     assert not mood_path.exists(), "Precondition: mood_state.json should not exist"
 
     with patch("admin.routers.dream._owner_uid", return_value=_UID):

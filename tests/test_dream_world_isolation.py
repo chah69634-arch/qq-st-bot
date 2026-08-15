@@ -314,10 +314,12 @@ def test_mes_example_isolation(world_id, real_dream_worlds):
     world = load_world(world_id)
     assert world.mes_example, f"[world={world_id}] mes_example is empty"
 
-    # Reality character card mes_example (from Companion.json)
+    # Reality character card mes_example (from the public fixture card)
     try:
         char_data = json.loads(
-            Path("characters/Companion.json").read_text(encoding="utf-8")
+            Path("tests/fixtures/characters/cards/fixture_character.json").read_text(
+                encoding="utf-8"
+            )
         )
         reality_mes = char_data.get("mes_example", "")
     except Exception:

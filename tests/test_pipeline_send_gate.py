@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_pipeline_send_gate.py — _pipeline_send perceive_event gate + conversation_lock
 
@@ -88,7 +89,7 @@ def _make_fake_pipeline(llm_fn=None):
     return _FakePipeline()
 
 
-def _setup_pipeline_send(monkeypatch, owner_id="owner1", char_id="yexuan", pipeline=None):
+def _setup_pipeline_send(monkeypatch, owner_id="owner1", char_id=TEST_CHAR_ID, pipeline=None):
     """Patch all _pipeline_send runtime dependencies."""
     import core.scheduler.loop as _loop
 
@@ -136,7 +137,7 @@ async def test_two_pipeline_sends_same_uid_serialize(monkeypatch):
 
     fp = _make_fake_pipeline(checking_llm)
     _allow_dream_guard(monkeypatch)
-    _setup_pipeline_send(monkeypatch, owner_id="owner2", char_id="yexuan", pipeline=fp)
+    _setup_pipeline_send(monkeypatch, owner_id="owner2", char_id=TEST_CHAR_ID, pipeline=fp)
 
     import core.scheduler.loop as _loop
 
@@ -309,7 +310,7 @@ async def test_duplicate_scheduler_event_no_llm_no_post_process(monkeypatch):
         "core.config_loader.get_config",
         lambda: {"scheduler": {"owner_id": "owner7"}, "character": {"name": "Companion"}},
     )
-    monkeypatch.setattr(_loop, "_active_char_id_or_none", lambda: "yexuan")
+    monkeypatch.setattr(_loop, "_active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
     import core.pipeline_registry as _preg
     _preg.register(fp)
@@ -339,7 +340,7 @@ async def test_duplicate_scheduler_event_no_llm_no_post_process(monkeypatch):
             uid="owner7",
             channel="system",
             kind="scheduled",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             payload={"trigger_name": "legacy_duplicate"},
             created_at=created_at,
         )
@@ -374,7 +375,7 @@ async def test_pipeline_send_logs_perceive_event_true(monkeypatch, caplog):
 
     fp = _make_fake_pipeline()
     _allow_dream_guard(monkeypatch)
-    _setup_pipeline_send(monkeypatch, owner_id="owner8", char_id="yexuan", pipeline=fp)
+    _setup_pipeline_send(monkeypatch, owner_id="owner8", char_id=TEST_CHAR_ID, pipeline=fp)
 
     import core.scheduler.loop as _loop
 

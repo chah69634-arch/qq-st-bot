@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_echo_skip.py — Brief 38 验收：coplay_echo=True 的轮次不得
 触发 mid_term/episodic/identity 主链（与既有 dream_echo/web_echo 同款跳过通路）。
@@ -12,7 +13,7 @@ from core.memory.fixation_pipeline import handler_summarize_to_midterm
 _BASE_PAYLOAD = {
     "turn_id": "t1",
     "uid": "u1",
-    "char_id": "yexuan",
+    "char_id": TEST_CHAR_ID,
     "user_content": "今天打了个游戏",
     "reply": "好玩吗",
 }

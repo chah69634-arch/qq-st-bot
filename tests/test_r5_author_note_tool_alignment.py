@@ -13,6 +13,7 @@ Fable R5: Author's Note 工具能力对齐检查
   6. 回归：read_diary 工具在 registry 内且可执行路径完整。
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import importlib
 import pathlib
@@ -52,7 +53,7 @@ def _apply_build_stubs(monkeypatch):
     monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda *, char_id="": "")
-    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id="yexuan": "")
+    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(_anr, "get_current_note", lambda paths=None, char_id=None: "")
     monkeypatch.setattr(_cl, "get_config", lambda: {"chat": {}})
@@ -92,7 +93,7 @@ def _build_minimal(
         tool_result=tool_result,
         tool_result_status=tool_result_status,
         tool_result_generated_at=tool_result_generated_at,
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
     return messages, meta
 

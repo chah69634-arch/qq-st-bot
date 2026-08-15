@@ -1,8 +1,9 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_tool_probe_reader_scope.py — P1-0B: handle_message probe reader char_id scope
 
 Verifies that the probe path in handle_message reads user_profile using the
-active character's bucket (not the default "yexuan" fallback).
+active character's bucket (not the default TEST_CHAR_ID fallback).
 
 Covers:
   1. probe calls user_profile.load with char_id="character_b"
@@ -129,14 +130,14 @@ async def test_char_switch_probe_follows_new_bucket(sandbox, monkeypatch):
 
     monkeypatch.setattr(_up, "load", _capture_load)
 
-    monkeypatch.setattr(_main, "_pipeline", _make_pipeline("yexuan"))
+    monkeypatch.setattr(_main, "_pipeline", _make_pipeline(TEST_CHAR_ID))
     await _main.handle_message(_MSG)
 
     monkeypatch.setattr(_main, "_pipeline", _make_pipeline("character_b"))
     await _main.handle_message(_MSG)
 
     assert len(received) >= 2, f"expected at least 2 load calls, got {received}"
-    assert received[0] == "yexuan", f"first probe expected yexuan, got {received[0]}"
+    assert received[0] == TEST_CHAR_ID, f"first probe expected yexuan, got {received[0]}"
     assert received[1] == "character_b", (
         f"second probe expected character_b (not yexuan), got {received[1]}"
     )
@@ -178,10 +179,10 @@ async def test_content_isolation_yexuan_sentinel_not_in_probe(sandbox, monkeypat
 
     _patch_env(monkeypatch)
 
-    YEXUAN_SENTINEL = "杭州-yexuan-unique-location"
+    YEXUAN_SENTINEL = f'杭州-{TEST_CHAR_ID}-unique-location'
 
     def _fake_load(uid, **kw):
-        if kw.get("char_id") == "yexuan":
+        if kw.get("char_id") == TEST_CHAR_ID:
             return {"location": YEXUAN_SENTINEL}
         return {"location": "绍兴"}
 
@@ -217,7 +218,7 @@ async def test_probe_path_intact_for_valid_active(sandbox, monkeypatch):
     _patch_env(monkeypatch)
     monkeypatch.setattr(_up, "load", lambda uid, **kw: {"location": "杭州"})
 
-    fake = _make_pipeline("yexuan")
+    fake = _make_pipeline(TEST_CHAR_ID)
     monkeypatch.setattr(_main, "_pipeline", fake)
 
     await _main.handle_message(_MSG)

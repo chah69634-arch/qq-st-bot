@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_character_loader.py
 
@@ -38,7 +39,7 @@ def chars_dir(tmp_path):
     """
     d = tmp_path / "characters"
     d.mkdir()
-    (d / "yexuan.json").write_text(
+    (d / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({
             "name": "Companion",
             "description": "测试描述",
@@ -63,10 +64,10 @@ def registry_from(chars_dir, monkeypatch):
     return reg
 
 
-# ── 1. Normal: id "yexuan" loads yexuan.json ─────────────────────────────────
+# ── 1. Normal: id TEST_CHAR_ID loads yexuan.json ─────────────────────────────────
 
 def test_load_by_id(registry_from):
-    char = load("yexuan")
+    char = load(TEST_CHAR_ID)
     assert char.name == "Companion"
     assert isinstance(char, Character)
 
@@ -83,13 +84,13 @@ def test_load_caches_unchanged_card_but_reloads_after_mtime_change(registry_from
         return original_load(*args, **kwargs)
 
     monkeypatch.setattr(loader.json, "load", _counting_load)
-    assert loader.load("yexuan").personality == "温柔"
-    assert loader.load("yexuan").personality == "温柔"
+    assert loader.load(TEST_CHAR_ID).personality == "温柔"
+    assert loader.load(TEST_CHAR_ID).personality == "温柔"
     assert read_count == 1
 
-    card = Path("characters/yexuan.json")
+    card = Path(f'characters/{TEST_CHAR_ID}.json')
     card.write_text(json.dumps({"name": "Companion", "personality": "克制"}), encoding="utf-8")
-    assert loader.load("yexuan").personality == "克制"
+    assert loader.load(TEST_CHAR_ID).personality == "克制"
     assert read_count == 2
 
 
@@ -105,8 +106,8 @@ def test_load_logs_only_the_active_character_not_routed_cards(registry_from, mon
     monkeypatch.setattr(_cl_mod, "_last_logged_active_signature", None)
 
     with caplog.at_level(logging.DEBUG, logger="core.character_loader"):
-        load("yexuan")
-        load("yexuan")
+        load(TEST_CHAR_ID)
+        load(TEST_CHAR_ID)
 
     records = [
         record for record in caplog.records
@@ -120,15 +121,15 @@ def test_load_logs_active_character_once_until_its_card_changes(registry_from, m
     import core.pipeline_registry as pipeline_registry
 
     class _Pipeline:
-        _active_character_id = "yexuan"
+        _active_character_id = TEST_CHAR_ID
 
     monkeypatch.setattr(pipeline_registry, "get", lambda: _Pipeline())
     monkeypatch.setattr(_cl_mod, "_last_logged_active_asset_id", None)
     monkeypatch.setattr(_cl_mod, "_last_logged_active_signature", None)
 
     with caplog.at_level(logging.DEBUG, logger="core.character_loader"):
-        load("yexuan")
-        load("yexuan")
+        load(TEST_CHAR_ID)
+        load(TEST_CHAR_ID)
 
     records = [
         record for record in caplog.records
@@ -140,7 +141,7 @@ def test_load_logs_active_character_once_until_its_card_changes(registry_from, m
 # ── 2. Legacy: filename "yexuan.json" normalizes to id and loads ──────────────
 
 def test_load_by_legacy_filename(registry_from):
-    char = load("yexuan.json")
+    char = load(f'{TEST_CHAR_ID}.json')
     assert char.name == "Companion"
 
 
@@ -167,10 +168,10 @@ def test_file_missing_raises_file_not_found(chars_dir, monkeypatch):
     monkeypatch.setattr(_reg_mod, "_registry", reg)
 
     # Delete the file after the registry scanned it
-    (chars_dir / "characters" / "yexuan.json").unlink()
+    (chars_dir / "characters" / f'{TEST_CHAR_ID}.json').unlink()
 
-    with pytest.raises(FileNotFoundError, match="yexuan"):
-        load("yexuan")
+    with pytest.raises(FileNotFoundError, match=TEST_CHAR_ID):
+        load(TEST_CHAR_ID)
 
 
 # ── 6. Corrupt JSON → json.JSONDecodeError (fail-loud) ───────────────────────
@@ -180,12 +181,12 @@ def test_corrupt_json_raises_decode_error(chars_dir, monkeypatch):
     reg = AssetRegistry()
     monkeypatch.setattr(_reg_mod, "_registry", reg)
 
-    (chars_dir / "characters" / "yexuan.json").write_text(
+    (chars_dir / "characters" / f'{TEST_CHAR_ID}.json').write_text(
         "{broken json", encoding="utf-8"
     )
 
     with pytest.raises(json.JSONDecodeError):
-        load("yexuan")
+        load(TEST_CHAR_ID)
 
 
 # ── 7. load() never returns Character(name="AI") silently ────────────────────
@@ -250,10 +251,10 @@ def test_authored_asset_missing_raises_not_silently_skipped(chars_dir, monkeypat
     monkeypatch.setattr(_reg_mod, "_registry", reg)
 
     # Remove the authored asset after registry scan
-    (chars_dir / "characters" / "yexuan.json").unlink()
+    (chars_dir / "characters" / f'{TEST_CHAR_ID}.json').unlink()
 
     with pytest.raises(FileNotFoundError):
-        load("yexuan")
+        load(TEST_CHAR_ID)
     # Contrast: runtime file missing (test 9) returns a path, not raises
 
 
@@ -267,5 +268,5 @@ def test_chinese_label_with_extension(registry_from):
 # ── 12. World-book field is a list ────────────────────────────────────────────
 
 def test_world_book_field_is_list(registry_from):
-    char = load("yexuan")
+    char = load(TEST_CHAR_ID)
     assert isinstance(char.world_book, list)

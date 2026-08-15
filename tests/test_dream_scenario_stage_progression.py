@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_scenario_stage_progression.py — stage_turns 计数 + satisfied
 streak 推进逻辑
@@ -77,7 +78,7 @@ def test_dream_turn_increments_scenario_stage_turns(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         r = asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
     assert r.get("ok") is True
 
@@ -125,7 +126,7 @@ def test_dream_turn_stage_turns_increments_twice(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="scenario", script_id="prison_demo"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id="prison_demo"
         ))
 
     fake_msgs = [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}]
@@ -294,7 +295,7 @@ def test_sandbox_dream_turn_not_affected_by_scenario_logic(sandbox):
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
         r = asyncio.run(enter_dream(
-            _UID, char_id="yexuan", dream_mode="sandbox"
+            _UID, char_id=TEST_CHAR_ID, dream_mode="sandbox"
         ))
     assert r.get("ok") is True
 

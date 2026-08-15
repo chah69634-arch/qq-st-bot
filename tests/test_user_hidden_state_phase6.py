@@ -12,6 +12,7 @@ Tests cover:
   F  Isolation guarantees        (4)   IG-01–IG-04
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 import time
@@ -322,7 +323,7 @@ class TestIsolationGuarantees:
         _write_summary(sandbox, _DREAM_ID, _make_gentle_summary(weight=0.8))
         captured_envelopes: list = []
 
-        def _capture(uid, residue, write_envelope, now, *, char_id="yexuan"):
+        def _capture(uid, residue, write_envelope, now, *, char_id=TEST_CHAR_ID):
             captured_envelopes.append(write_envelope)
             return default_hidden_state(), MagicMock(
                 accepted=False, rejected=False, rejected_reasons=[], touched_fields=[]

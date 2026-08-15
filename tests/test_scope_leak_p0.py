@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_scope_leak_p0.py
 
@@ -112,7 +113,7 @@ def test_prompt_builder_mood_isolation(sandbox):
     angry  @ 0.8 → "很紧，克制着"
     sleepy @ 0.8 → "撑不住了，快睡着了"
     """
-    _write_mood(sandbox, "yexuan", "angry", intensity=0.8)   # 很紧，克制着
+    _write_mood(sandbox, TEST_CHAR_ID, "angry", intensity=0.8)   # 很紧，克制着
     _write_mood(sandbox, "character_b", "sleepy", intensity=0.8)  # 撑不住了，快睡着了
 
     with (
@@ -134,7 +135,7 @@ def test_prompt_builder_mood_isolation(sandbox):
 
 def test_prompt_builder_activity_isolation(sandbox):
     """character_b build must not read yexuan activity_snapshot."""
-    _write_activity(sandbox, "yexuan", "打游戏")
+    _write_activity(sandbox, TEST_CHAR_ID, "打游戏")
     # character_b has no activity_snapshot
 
     with (
@@ -157,7 +158,7 @@ def test_prompt_builder_style_hint_isolation(sandbox):
     yexuan_obs = [
         json.dumps({"text": "用户最近很忙，压力很大", "inserted_at": "2026-06-01T10:00:00"}),
     ]
-    _write_observations(sandbox, "yexuan", yexuan_obs)
+    _write_observations(sandbox, TEST_CHAR_ID, yexuan_obs)
     # character_b has no observations
 
     with (
@@ -184,7 +185,7 @@ def test_scheduler_obs_compaction_scoped(sandbox):
         json.dumps({"text": f"obs_{i}", "inserted_at": f"2026-06-0{i+1}T00:00:00", "weight": 1})
         for i in range(5)
     ]
-    _write_observations(sandbox, "yexuan", entries)
+    _write_observations(sandbox, TEST_CHAR_ID, entries)
     _write_observations(sandbox, "character_b", entries)
 
     # Record original character_b content before compacting only yexuan
@@ -194,17 +195,17 @@ def test_scheduler_obs_compaction_scoped(sandbox):
     # _all_observation_paths should see both files
     paths = _all_observation_paths()
     path_strs = [str(p) for p in paths]
-    assert any("yexuan" in s for s in path_strs), "must include yexuan observations"
+    assert any(TEST_CHAR_ID in s for s in path_strs), f'must include {TEST_CHAR_ID} observations'
     assert any("character_b" in s for s in path_strs), "must include character_b observations"
 
     # Compact only yexuan (simulate single-char maintenance)
-    yexuan_path = sandbox.observations(char_id="yexuan")
+    yexuan_path = sandbox.observations(char_id=TEST_CHAR_ID)
     compact_observations(yexuan_path, max_raw=3)
 
     # character_b must be untouched
     character_b_after = character_b_path.read_text(encoding="utf-8")
     assert character_b_before == character_b_after, (
-        "character_b observations must be unchanged after compacting yexuan"
+        f'character_b observations must be unchanged after compacting {TEST_CHAR_ID}'
     )
 
     # Verify yexuan was actually compacted
@@ -223,7 +224,7 @@ def test_all_observation_paths_returns_per_char(sandbox):
     # No files yet → empty
     assert _all_observation_paths() == []
 
-    _write_observations(sandbox, "yexuan", [json.dumps({"text": "a"})])
+    _write_observations(sandbox, TEST_CHAR_ID, [json.dumps({"text": "a"})])
     paths_1 = _all_observation_paths()
     assert len(paths_1) == 1
 
@@ -232,5 +233,5 @@ def test_all_observation_paths_returns_per_char(sandbox):
     assert len(paths_2) == 2
 
     names = {p.parent.parent.name for p in paths_2}  # runtime/characters/{char_id}/inner/obs.jsonl
-    assert "yexuan" in names
+    assert TEST_CHAR_ID in names
     assert "character_b" in names

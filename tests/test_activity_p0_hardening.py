@@ -1,5 +1,6 @@
 """Focused regression coverage for Activity P0 persistence and turn ownership."""
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import pytest
 
@@ -11,7 +12,7 @@ from core.activity import store
 from core.activity.reading_session import ReadingSession, new_session_id, now_iso
 
 
-def _reading_session(uid: str, *, char_id: str = "yexuan") -> ReadingSession:
+def _reading_session(uid: str, *, char_id: str = TEST_CHAR_ID) -> ReadingSession:
     now = now_iso()
     return ReadingSession(
         session_id=new_session_id(), uid=uid, char_id=char_id,
@@ -39,7 +40,7 @@ def test_chess_rejects_regular_move_on_pending_or_ai_turn() -> None:
 
 
 def test_gomoku_rejects_regular_move_on_pending_or_ai_turn(sandbox) -> None:
-    session = gomoku.start_game("user1", "yexuan", opponent="character_ai", ai_response_mode="pending")
+    session = gomoku.start_game("user1", TEST_CHAR_ID, opponent="character_ai", ai_response_mode="pending")
     gomoku.make_move(session.uid, session.char_id, session.session_id, 7, 7)
     with pytest.raises(ValueError, match="AI 回合.*ai_move"):
         gomoku.make_move(session.uid, session.char_id, session.session_id, 6, 6)
@@ -55,20 +56,20 @@ def test_gomoku_rejects_regular_move_on_pending_or_ai_turn(sandbox) -> None:
 
 
 def test_generic_store_write_failures_do_not_return_success(sandbox, monkeypatch) -> None:
-    session = store.create_session("user1", "yexuan", "gomoku")
+    session = store.create_session("user1", TEST_CHAR_ID, "gomoku")
     monkeypatch.setattr(store, "safe_write_json", lambda *_args, **_kwargs: False)
     with pytest.raises(store.ActivityPersistenceError):
-        store.update_state("yexuan", "user1", "gomoku", session.session_id, {"moves": [1]})
+        store.update_state(TEST_CHAR_ID, "user1", "gomoku", session.session_id, {"moves": [1]})
     with pytest.raises(store.ActivityPersistenceError):
-        store.close_session("yexuan", "user1", "gomoku", session.session_id)
+        store.close_session(TEST_CHAR_ID, "user1", "gomoku", session.session_id)
 
 
 def test_generic_store_does_not_close_old_session_before_failed_replacement(sandbox, monkeypatch) -> None:
-    old = store.create_session("user1", "yexuan", "chess")
+    old = store.create_session("user1", TEST_CHAR_ID, "chess")
     monkeypatch.setattr(store, "safe_write_json", lambda *_args, **_kwargs: False)
     with pytest.raises(store.ActivityPersistenceError):
-        store.create_session("user1", "yexuan", "chess")
-    assert store.load_session("yexuan", "user1", "chess", old.session_id).status == "active"
+        store.create_session("user1", TEST_CHAR_ID, "chess")
+    assert store.load_session(TEST_CHAR_ID, "user1", "chess", old.session_id).status == "active"
 
 
 def test_reading_store_failures_are_not_silent(sandbox, monkeypatch) -> None:
@@ -101,6 +102,6 @@ def test_reading_exact_uid_loading_never_scans_other_users(sandbox) -> None:
     second.session_id = first.session_id
     activity_store.save_session(first)
     activity_store.save_session(second)
-    assert activity_store.load_session("yexuan", "user-a", first.session_id).uid == "user-a"
-    assert activity_store.load_session("yexuan", "user-b", first.session_id).uid == "user-b"
-    assert activity_store.load_session("yexuan", "other-user", first.session_id) is None
+    assert activity_store.load_session(TEST_CHAR_ID, "user-a", first.session_id).uid == "user-a"
+    assert activity_store.load_session(TEST_CHAR_ID, "user-b", first.session_id).uid == "user-b"
+    assert activity_store.load_session(TEST_CHAR_ID, "other-user", first.session_id) is None

@@ -16,6 +16,7 @@ tests/test_reading_activity.py
 10. 文件名路径安全（恶意文件名不逃逸 runtime 目录）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 from pathlib import Path
@@ -46,7 +47,7 @@ from admin.routers.reading import _sanitize_filename
 def _make_session(
     sandbox,
     uid: str = "user1",
-    char_id: str = "yexuan",
+    char_id: str = TEST_CHAR_ID,
     filename: str = "book.pdf",
     total_pages: int = 3,
     current_page: int = 1,
@@ -95,7 +96,7 @@ def test_create_session_text_pdf(sandbox):
     session = ReadingSession(
         session_id=new_session_id(),
         uid="user1",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
         file_id=make_file_id("novel.pdf"),
         filename="novel.pdf",
         total_pages=info.total_pages,
@@ -105,9 +106,9 @@ def test_create_session_text_pdf(sandbox):
         status="active",
     )
     activity_store.save_session(session)
-    activity_store.save_pages("yexuan", "user1", session.session_id, pages)
+    activity_store.save_pages(TEST_CHAR_ID, "user1", session.session_id, pages)
 
-    loaded = activity_store.load_session("yexuan", "user1", session.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "user1", session.session_id)
     assert loaded is not None
     assert loaded.status == "active"
     assert loaded.filename == "novel.pdf"
@@ -122,14 +123,14 @@ def test_metadata_fields_correct(sandbox):
     session = _make_session(
         sandbox,
         uid="owner",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
         filename="test_book.pdf",
         total_pages=10,
         current_page=1,
     )
-    loaded = activity_store.load_session("yexuan", "owner", session.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, "owner", session.session_id)
     assert loaded.uid == "owner"
-    assert loaded.char_id == "yexuan"
+    assert loaded.char_id == TEST_CHAR_ID
     assert loaded.filename == "test_book.pdf"
     assert loaded.total_pages == 10
     assert loaded.current_page == 1
@@ -148,7 +149,7 @@ def test_metadata_fields_correct(sandbox):
 def test_read_first_page(sandbox):
     """load_page(page=1) 返回第一页文本，内容与写入时一致。"""
     session = _make_session(sandbox, total_pages=5)
-    text = activity_store.load_page("yexuan", session.uid, session.session_id, 1)
+    text = activity_store.load_page(TEST_CHAR_ID, session.uid, session.session_id, 1)
     assert text == "第1页正文内容"
 
 
@@ -163,7 +164,7 @@ def test_turn_page_next_updates_current_page(sandbox):
     session.updated_at = now_iso()
     activity_store.save_session(session)
 
-    loaded = activity_store.load_session("yexuan", session.uid, session.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, session.uid, session.session_id)
     assert loaded.current_page == 3
 
 
@@ -174,7 +175,7 @@ def test_turn_page_prev_updates_current_page(sandbox):
     session.updated_at = now_iso()
     activity_store.save_session(session)
 
-    text = activity_store.load_page("yexuan", session.uid, session.session_id, 2)
+    text = activity_store.load_page(TEST_CHAR_ID, session.uid, session.session_id, 2)
     assert text == "第2页正文内容"
 
 
@@ -185,8 +186,8 @@ def test_turn_page_prev_updates_current_page(sandbox):
 def test_page_out_of_range_returns_none(sandbox):
     """load_page 对越界页码返回 None（调用方应报错，不静默返回空）。"""
     session = _make_session(sandbox, total_pages=3)
-    assert activity_store.load_page("yexuan", session.uid, session.session_id, 0) is None
-    assert activity_store.load_page("yexuan", session.uid, session.session_id, 4) is None
+    assert activity_store.load_page(TEST_CHAR_ID, session.uid, session.session_id, 0) is None
+    assert activity_store.load_page(TEST_CHAR_ID, session.uid, session.session_id, 4) is None
 
 
 def test_start_page_out_of_range_raises_in_router(sandbox):
@@ -243,7 +244,7 @@ def test_close_session_sets_status_closed(sandbox):
     session.updated_at = now_iso()
     activity_store.save_session(session)
 
-    loaded = activity_store.load_session("yexuan", session.uid, session.session_id)
+    loaded = activity_store.load_session(TEST_CHAR_ID, session.uid, session.session_id)
     assert loaded.status == "closed"
 
 
@@ -254,7 +255,7 @@ def test_closed_session_not_returned_as_active(sandbox):
     session.updated_at = now_iso()
     activity_store.save_session(session)
 
-    found = activity_store.find_active_session("yexuan", "owner2")
+    found = activity_store.find_active_session(TEST_CHAR_ID, "owner2")
     assert found is None
 
 
@@ -264,7 +265,7 @@ def test_closed_session_not_returned_as_active(sandbox):
 
 def test_reading_does_not_write_short_term(sandbox):
     """reading session 操作全程不创建 history / short_term 文件。"""
-    session = _make_session(sandbox, uid="user1", char_id="yexuan", total_pages=5)
+    session = _make_session(sandbox, uid="user1", char_id=TEST_CHAR_ID, total_pages=5)
     # 翻几页
     for pg in (2, 3):
         session.current_page = pg
@@ -275,7 +276,7 @@ def test_reading_does_not_write_short_term(sandbox):
 
     # history / chars/yexuan/history / short_term 均不存在
     history_dir = sandbox._p("history")
-    chars_history = sandbox._p("chars", "yexuan", "history")
+    chars_history = sandbox._p("chars", TEST_CHAR_ID, "history")
     for p in (history_dir, chars_history):
         if p.exists():
             files = list(p.iterdir())
@@ -284,10 +285,10 @@ def test_reading_does_not_write_short_term(sandbox):
 
 def test_reading_does_not_write_user_hidden_state(sandbox):
     """reading session 不写 user_hidden_state 相关目录。"""
-    session = _make_session(sandbox, uid="user1", char_id="yexuan", total_pages=3)
+    session = _make_session(sandbox, uid="user1", char_id=TEST_CHAR_ID, total_pages=3)
     activity_store.save_session(session)
 
-    hidden_state_pattern = sandbox._p("runtime", "memory", "yexuan")
+    hidden_state_pattern = sandbox._p("runtime", "memory", TEST_CHAR_ID)
     if hidden_state_pattern.exists():
         # runtime/memory/yexuan/{uid}/ 下不应有 user_hidden_state.json
         for uid_dir in hidden_state_pattern.iterdir():
@@ -301,22 +302,22 @@ def test_reading_does_not_write_user_hidden_state(sandbox):
 
 def test_char_id_isolation_yexuan_vs_character_b(sandbox):
     """yexuan 和 character_b 的 reading session 使用不同目录，互不可见。"""
-    yexuan_session = _make_session(sandbox, uid="user1", char_id="yexuan")
+    yexuan_session = _make_session(sandbox, uid="user1", char_id=TEST_CHAR_ID)
     character_b_session = _make_session(sandbox, uid="user1", char_id="character_b")
 
     # 路径不同
     yexuan_dir = sandbox.reading_session_dir(
-        char_id="yexuan", uid="user1", session_id=yexuan_session.session_id
+        char_id=TEST_CHAR_ID, uid="user1", session_id=yexuan_session.session_id
     )
     character_b_dir = sandbox.reading_session_dir(
         char_id="character_b", uid="user1", session_id=character_b_session.session_id
     )
     assert yexuan_dir != character_b_dir
-    assert "yexuan" in str(yexuan_dir)
+    assert TEST_CHAR_ID in str(yexuan_dir)
     assert "character_b" in str(character_b_dir)
 
     # yexuan 视角看不到 character_b session
-    found_from_yexuan = activity_store.find_active_session("yexuan", "user1")
+    found_from_yexuan = activity_store.find_active_session(TEST_CHAR_ID, "user1")
     found_from_character_b = activity_store.find_active_session("character_b", "user1")
     assert found_from_yexuan.session_id == yexuan_session.session_id
     assert found_from_character_b.session_id == character_b_session.session_id
@@ -325,14 +326,14 @@ def test_char_id_isolation_yexuan_vs_character_b(sandbox):
 
 def test_load_session_by_id_scoped_to_char(sandbox):
     """load_session_by_id 跨 char_id 不混用：yexuan session 不出现在 character_b 查询中。"""
-    yexuan_session = _make_session(sandbox, uid="user1", char_id="yexuan")
+    yexuan_session = _make_session(sandbox, uid="user1", char_id=TEST_CHAR_ID)
 
     result = activity_store.load_session_by_id("character_b", yexuan_session.session_id)
     assert result is None  # character_b 域找不到 yexuan 的 session
 
-    result2 = activity_store.load_session_by_id("yexuan", yexuan_session.session_id)
+    result2 = activity_store.load_session_by_id(TEST_CHAR_ID, yexuan_session.session_id)
     assert result2 is not None
-    assert result2.char_id == "yexuan"
+    assert result2.char_id == TEST_CHAR_ID
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -370,11 +371,11 @@ def test_sanitize_filename_no_path_traversal():
 def test_session_dir_sandbox_contains_path(sandbox):
     """reading_session_dir 路径必须在 sandbox 根目录内。"""
     p = sandbox.reading_session_dir(
-        char_id="yexuan", uid="user1", session_id="abc123"
+        char_id=TEST_CHAR_ID, uid="user1", session_id="abc123"
     )
     # 路径解析后在 sandbox._base 内
     assert str(p).startswith(str(sandbox._base))
-    assert "yexuan" in str(p)
+    assert TEST_CHAR_ID in str(p)
     assert "user1" in str(p)
     assert "abc123" in str(p)
 

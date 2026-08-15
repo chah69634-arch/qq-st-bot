@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_memory_list_endpoints.py — W4: memory/{uid} list 读接口
 
@@ -21,7 +22,7 @@ from core.asset_registry import AssetRegistry
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -85,11 +86,11 @@ def test_list_episodic_scoped_by_char_id(sandbox, registry):
         "id": "ep_b", "timestamp": 1000.0, "narrative_summary": "character_b 专属",
     }, char_id="character_b")
     episodic_memory.write_episode(uid, {
-        "id": "ep_y", "timestamp": 1000.0, "narrative_summary": "yexuan 专属",
-    }, char_id="yexuan")
+        "id": "ep_y", "timestamp": 1000.0, "narrative_summary": f'{TEST_CHAR_ID} 专属',
+    }, char_id=TEST_CHAR_ID)
 
     result_b = asyncio.run(list_episodic(uid, char_id="character_b", auth="dummy"))
-    result_y = asyncio.run(list_episodic(uid, char_id="yexuan", auth="dummy"))
+    result_y = asyncio.run(list_episodic(uid, char_id=TEST_CHAR_ID, auth="dummy"))
 
     assert [e["id"] for e in result_b["entries"]] == ["ep_b"]
     assert [e["id"] for e in result_y["entries"]] == ["ep_y"]
@@ -132,10 +133,10 @@ def test_list_mid_term_scoped_by_char_id(sandbox, registry):
 
     uid = "u_mid_scope"
     mid_term.append(uid, "character_b 的事", mid_id="mid_b", char_id="character_b")
-    mid_term.append(uid, "yexuan 的事", mid_id="mid_y", char_id="yexuan")
+    mid_term.append(uid, f'{TEST_CHAR_ID} 的事', mid_id="mid_y", char_id=TEST_CHAR_ID)
 
     result_b = asyncio.run(list_mid_term(uid, char_id="character_b", auth="dummy"))
-    result_y = asyncio.run(list_mid_term(uid, char_id="yexuan", auth="dummy"))
+    result_y = asyncio.run(list_mid_term(uid, char_id=TEST_CHAR_ID, auth="dummy"))
 
     assert [e["mid_id"] for e in result_b["events"]] == ["mid_b"]
     assert [e["mid_id"] for e in result_y["events"]] == ["mid_y"]
@@ -189,7 +190,7 @@ def test_list_event_log_days_scoped_by_char_id(sandbox, registry):
     event_log.append(uid, "user", "character_b 的日志", char_id="character_b")
 
     result_b = asyncio.run(list_event_log_days(uid, char_id="character_b", auth="dummy"))
-    result_y = asyncio.run(list_event_log_days(uid, char_id="yexuan", auth="dummy"))
+    result_y = asyncio.run(list_event_log_days(uid, char_id=TEST_CHAR_ID, auth="dummy"))
 
     assert result_b["count"] == 1
     assert result_y["count"] == 0

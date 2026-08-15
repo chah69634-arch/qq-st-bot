@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import json
 from concurrent.futures import ThreadPoolExecutor
 
@@ -20,7 +21,7 @@ def test_get_state_bootstrap_uses_safe_write_and_round_trips(sandbox, monkeypatc
 
     monkeypatch.setattr(manager, "safe_write_json", spy_safe_write_json)
 
-    state = manager.get_state(char_id="yexuan")
+    state = manager.get_state(char_id=TEST_CHAR_ID)
 
     assert len(state["slots"]) == len(manager.FLOWERS)
     assert state["harvest_count"] == 0
@@ -49,7 +50,7 @@ def test_water_and_daily_check_keep_existing_transitions(sandbox, monkeypatch):
     monkeypatch.setattr(manager.time, "time", lambda: now)
 
     for expected_growth in (10, 20, 30):
-        result = manager.water("calm", reason="force", char_id="yexuan")
+        result = manager.water("calm", reason="force", char_id=TEST_CHAR_ID)
         assert result["ok"] is True
         assert result["slot_key"] == "calm"
         assert result["stage"] == "seed"
@@ -74,7 +75,7 @@ def test_water_and_daily_check_keep_existing_transitions(sandbox, monkeypatch):
         },
     )
 
-    events = manager.daily_check(char_id="yexuan")
+    events = manager.daily_check(char_id=TEST_CHAR_ID)
     assert [event["type"] for event in events] == ["harvest_expired", "vase_wilted"]
 
     storage = _read_json(sandbox.garden() / "storage.json")
@@ -82,7 +83,7 @@ def test_water_and_daily_check_keep_existing_transitions(sandbox, monkeypatch):
     assert storage["vase"] == []
     assert [item["status"] for item in storage["history"]] == ["expired", "wilted"]
 
-    assert manager.daily_check(char_id="yexuan") == []
+    assert manager.daily_check(char_id=TEST_CHAR_ID) == []
 
 
 def test_repeated_concurrent_calls_leave_readable_json(sandbox):
@@ -90,10 +91,10 @@ def test_repeated_concurrent_calls_leave_readable_json(sandbox):
 
     def run_once(i):
         if i % 3 == 0:
-            return manager.daily_check(char_id="yexuan")
+            return manager.daily_check(char_id=TEST_CHAR_ID)
         if i % 3 == 1:
-            return manager.get_state(char_id="yexuan")
-        return manager.water("calm", reason="force", char_id="yexuan")
+            return manager.get_state(char_id=TEST_CHAR_ID)
+        return manager.water("calm", reason="force", char_id=TEST_CHAR_ID)
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(run_once, range(24)))
@@ -124,5 +125,5 @@ def test_get_shareable_event_reads_recent_fresh_harvest_without_bootstrap(sandbo
     )
 
     expected = f"{manager._flower_meta('rose')['name']}开花了"
-    assert manager.get_shareable_event(char_id="yexuan") == expected
+    assert manager.get_shareable_event(char_id=TEST_CHAR_ID) == expected
     assert not (sandbox.garden() / "plants.json").exists()

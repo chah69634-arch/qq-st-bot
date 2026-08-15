@@ -4,7 +4,7 @@ tests/test_migrate_uid_only_memory_dry_run.py
 P2 dry-run inventory tests.
 
 Coverage:
-  1.  _TARGET_CHAR_ID locked to "yexuan"
+  1.  _TARGET_CHAR_ID locked to TEST_CHAR_ID
   2.  _collect_legacy_uids: empty dir, json/yaml/dir, unsafe names
   3.  _collect_v1_uids: empty, finds scoped dirs, ignores other chars
   4.  collect_all_uids: union + sorted + dedup
@@ -26,6 +26,7 @@ Coverage:
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 import os
@@ -64,7 +65,7 @@ def _s(p: str) -> str:
 # ── 1. target char_id locked to yexuan ───────────────────────────────────────
 
 def test_target_char_id_is_yexuan():
-    assert _TARGET_CHAR_ID == "yexuan"
+    assert _TARGET_CHAR_ID == TEST_CHAR_ID
 
 
 # ── 2. _collect_legacy_uids ───────────────────────────────────────────────────

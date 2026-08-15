@@ -11,6 +11,7 @@ tests/test_fetch_context_lowinfo_gate.py — P0.5-2 验收
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -40,7 +41,7 @@ import core.user_relation
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -134,8 +135,8 @@ class TestLowInfoGateBlocks:
         self, low_info_text, chars_tree, monkeypatch, sandbox, registry
     ):
         el_mock = AsyncMock(return_value=("", []))
-        pipeline = _make_pipeline("yexuan", registry)
-        _write_active(sandbox, "yexuan")
+        pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+        _write_active(sandbox, TEST_CHAR_ID)
         _apply_base_stubs(monkeypatch, event_log_mock=el_mock)
 
         ctx = _run_fetch(pipeline, content=low_info_text)
@@ -153,8 +154,8 @@ class TestLowInfoGateBlocks:
             fb_calls.append(True)
             return ([], []) if kw.get("return_trace") else []
 
-        pipeline = _make_pipeline("yexuan", registry)
-        _write_active(sandbox, "yexuan")
+        pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+        _write_active(sandbox, TEST_CHAR_ID)
         _apply_base_stubs(monkeypatch, fallback_mock=_fb_spy)
 
         ctx = _run_fetch(pipeline, content=low_info_text)
@@ -166,8 +167,8 @@ class TestLowInfoGateBlocks:
     def test_diary_context_empty_for_low_info(
         self, low_info_text, chars_tree, monkeypatch, sandbox, registry
     ):
-        pipeline = _make_pipeline("yexuan", registry)
-        _write_active(sandbox, "yexuan")
+        pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+        _write_active(sandbox, TEST_CHAR_ID)
         _apply_base_stubs(monkeypatch, diary_load_mock=lambda *a, **kw: "最近的日记内容")
 
         ctx = _run_fetch(pipeline, content=low_info_text)
@@ -178,8 +179,8 @@ class TestLowInfoGateBlocks:
     def test_suppress_emotional_recall_true_for_low_info(
         self, low_info_text, chars_tree, monkeypatch, sandbox, registry
     ):
-        pipeline = _make_pipeline("yexuan", registry)
-        _write_active(sandbox, "yexuan")
+        pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+        _write_active(sandbox, TEST_CHAR_ID)
         _apply_base_stubs(monkeypatch)
 
         ctx = _run_fetch(pipeline, content=low_info_text)
@@ -193,8 +194,8 @@ class TestNormalContentPasses:
         self, normal_text, chars_tree, monkeypatch, sandbox, registry
     ):
         el_mock = AsyncMock(return_value=("", []))
-        pipeline = _make_pipeline("yexuan", registry)
-        _write_active(sandbox, "yexuan")
+        pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+        _write_active(sandbox, TEST_CHAR_ID)
         _apply_base_stubs(monkeypatch, event_log_mock=el_mock)
 
         _run_fetch(pipeline, content=normal_text)
@@ -205,8 +206,8 @@ class TestNormalContentPasses:
     def test_suppress_emotional_recall_false_for_normal_content(
         self, normal_text, chars_tree, monkeypatch, sandbox, registry
     ):
-        pipeline = _make_pipeline("yexuan", registry)
-        _write_active(sandbox, "yexuan")
+        pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+        _write_active(sandbox, TEST_CHAR_ID)
         _apply_base_stubs(monkeypatch)
 
         ctx = _run_fetch(pipeline, content=normal_text)

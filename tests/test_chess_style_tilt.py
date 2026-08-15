@@ -14,6 +14,7 @@ T7. get_recent_ai_style_tilt ignores invalid tilt values
 T8. session's base ai_style is never overwritten by a tilt
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import chess
 import pytest
@@ -84,7 +85,7 @@ def test_base_ai_style_not_overwritten():
 # ── get_recent_ai_style_tilt ────────────────────────────────────────────────────
 
 def test_get_recent_style_tilt_returns_latest(sandbox):
-    char_id, uid, sid = "yexuan", "user1", "chess_tilt_session"
+    char_id, uid, sid = TEST_CHAR_ID, "user1", "chess_tilt_session"
     TR.append_entry(char_id, uid, "chess", sid, {
         "type": "assistant_chat",
         "text": "...",
@@ -102,12 +103,12 @@ def test_get_recent_style_tilt_returns_latest(sandbox):
 
 
 def test_get_recent_style_tilt_none_when_empty(sandbox):
-    tilt = CC.get_recent_ai_style_tilt("yexuan", "user1", "empty_chess_tilt_session")
+    tilt = CC.get_recent_ai_style_tilt(TEST_CHAR_ID, "user1", "empty_chess_tilt_session")
     assert tilt is None
 
 
 def test_get_recent_style_tilt_ignores_invalid(sandbox):
-    char_id, uid, sid = "yexuan", "user1", "invalid_chess_tilt_session"
+    char_id, uid, sid = TEST_CHAR_ID, "user1", "invalid_chess_tilt_session"
     TR.append_entry(char_id, uid, "chess", sid, {
         "type": "assistant_chat",
         "text": "...",
@@ -140,5 +141,5 @@ async def test_chat_control_parses_ai_style_tilt(sandbox, monkeypatch):
         "move_history": [],
         "last_move": None,
     }
-    reply, control, grounding = await CC.generate_reply("yexuan", "user1", "sessTilt", state, "test")
+    reply, control, grounding = await CC.generate_reply(TEST_CHAR_ID, "user1", "sessTilt", state, "test")
     assert control.get("ai_style_tilt") == "teaching"

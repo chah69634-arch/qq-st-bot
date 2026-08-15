@@ -14,6 +14,7 @@ Coverage:
  main.py 现直接调用 pipeline_registry.register()。）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import sys
@@ -82,7 +83,7 @@ async def test_pipeline_send_reads_from_registry(monkeypatch):
 
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
     monkeypatch.setattr(loop, "_user_active_recently", lambda: False)
-    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "yexuan")
+    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(loop, "_char_name", lambda: "Companion")
     monkeypatch.setattr("core.perceive_event.receive_perceive_event", _make_perceive_accepted())
     monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
@@ -119,7 +120,7 @@ async def test_hot_swap_registry_pipeline(monkeypatch):
 
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
     monkeypatch.setattr(loop, "_user_active_recently", lambda: False)
-    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "yexuan")
+    monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(loop, "_char_name", lambda: "Companion")
     monkeypatch.setattr("core.perceive_event.receive_perceive_event", _make_perceive_accepted())
     monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)

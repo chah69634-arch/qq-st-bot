@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_session_char_scope.py — P0-T05.5: Dream session char_id plumbing
 
@@ -32,7 +33,7 @@ _UID = "dream_char_scope_u1"
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -111,7 +112,7 @@ def test_admin_dream_enter_passes_active_char_id(sandbox, chars_tree, monkeypatc
 
     captured_char_id: list[str] = []
 
-    async def _mock_enter(uid, entry_reason="", *, char_id="yexuan", dream_mode="sandbox", script_id=None):
+    async def _mock_enter(uid, entry_reason="", *, char_id=TEST_CHAR_ID, dream_mode="sandbox", script_id=None):
         captured_char_id.append(char_id)
         return {"ok": True, "dream_id": "mock_dream_id"}
 
@@ -161,7 +162,7 @@ def test_generate_summary_bg_uses_dream_state_char_id(sandbox):
 
     captured_kwargs: list[dict] = []
 
-    async def _mock_distill(uid, did, exit_type, *, char_id="yexuan", **_kwargs):
+    async def _mock_distill(uid, did, exit_type, *, char_id=TEST_CHAR_ID, **_kwargs):
         captured_kwargs.append({"uid": uid, "dream_id": did, "char_id": char_id})
 
     async def run():
@@ -205,7 +206,7 @@ def test_generate_summary_bg_char_id_forwarded_directly(sandbox):
 
     captured: list[str] = []
 
-    async def _mock_distill(uid, did, exit_type, *, char_id="yexuan", **_kwargs):
+    async def _mock_distill(uid, did, exit_type, *, char_id=TEST_CHAR_ID, **_kwargs):
         captured.append(char_id)
 
     async def run():
@@ -225,8 +226,8 @@ def test_generate_summary_bg_char_id_forwarded_directly(sandbox):
 
 def test_close_uses_session_char_id_not_current_active(sandbox):
     """
-    enter with char_id='yexuan', then switch active to 'character_b', then close:
-    distill_impression must receive char_id='yexuan' (the session char_id).
+    enter with char_id=TEST_CHAR_ID, then switch active to 'character_b', then close:
+    distill_impression must receive char_id=TEST_CHAR_ID (the session char_id).
     """
     from core.dream.dream_state import write_state, DreamStatus
 
@@ -236,7 +237,7 @@ def test_close_uses_session_char_id_not_current_active(sandbox):
         "user_id": _UID,
         "status": DreamStatus.DREAM_CLOSING.value,
         "dream_id": dream_id,
-        "char_id": "yexuan",  # frozen at enter time
+        "char_id": TEST_CHAR_ID,  # frozen at enter time
     })
 
     # "Switch" active character to character_b (would normally write active_prompt_assets)
@@ -244,7 +245,7 @@ def test_close_uses_session_char_id_not_current_active(sandbox):
 
     captured_char_id: list[str] = []
 
-    async def _mock_distill(uid, did, exit_type, *, char_id="yexuan", **_kwargs):
+    async def _mock_distill(uid, did, exit_type, *, char_id=TEST_CHAR_ID, **_kwargs):
         captured_char_id.append(char_id)
 
     async def run():
@@ -253,12 +254,12 @@ def test_close_uses_session_char_id_not_current_active(sandbox):
              patch("core.dream.dream_exit_afterglow.wire_afterglow_from_summary"), \
              patch("core.dream.distill_impression.distill_impression", new=_mock_distill):
             # Pass the session char_id as stored in dream_state, even though "active" is now character_b
-            await _generate_summary_bg(_UID, dream_id, "soft", char_id="yexuan")
+            await _generate_summary_bg(_UID, dream_id, "soft", char_id=TEST_CHAR_ID)
 
     asyncio.run(run())
 
-    assert captured_char_id == ["yexuan"], (
-        f"After active switch, close must still use session char_id='yexuan', "
+    assert captured_char_id == [TEST_CHAR_ID], (
+        f"After active switch, close must still use session char_id=TEST_CHAR_ID, "
         f"got {captured_char_id}"
     )
 
@@ -284,7 +285,7 @@ def test_legacy_dream_state_missing_char_id_warns_and_fallbacks(sandbox, caplog)
 
     captured_char_id: list[str] = []
 
-    async def _mock_distill(uid, did, exit_type, *, char_id="yexuan", **_kwargs):
+    async def _mock_distill(uid, did, exit_type, *, char_id=TEST_CHAR_ID, **_kwargs):
         captured_char_id.append(char_id)
 
     with caplog.at_level(logging.WARNING, logger="core.dream.dream_pipeline"):
@@ -352,13 +353,13 @@ def test_distill_impression_reads_from_char_id_archive(sandbox):
     asyncio.run(run())
 
     hc_entries = load_impressions(uid, char_id="character_b")
-    yx_entries = load_impressions(uid, char_id="yexuan")
+    yx_entries = load_impressions(uid, char_id=TEST_CHAR_ID)
 
     assert len(hc_entries) == 1, (
         f"character_b impression bucket must have 1 entry, got {len(hc_entries)}"
     )
     assert "DemoUser" in hc_entries[0]["impression_text"]
-    assert yx_entries == [], "yexuan bucket must be empty when char_id='character_b'"
+    assert yx_entries == [], f"{TEST_CHAR_ID} bucket must be empty when char_id='character_b'"
 
 
 def test_distill_impression_empty_if_wrong_archive_path(sandbox):
@@ -374,7 +375,7 @@ def test_distill_impression_empty_if_wrong_archive_path(sandbox):
     dream_id = f"dream_{uid}_wrong_path"
 
     # Write ONLY to yexuan archive
-    yx_archive = sandbox.dreams_archive_dir(char_id="yexuan")
+    yx_archive = sandbox.dreams_archive_dir(char_id=TEST_CHAR_ID)
     yx_archive.mkdir(parents=True, exist_ok=True)
     (yx_archive / f"dream_{dream_id}.jsonl").write_text(
         json.dumps({"role": "user", "content": "Companion内容"}) + "\n",
@@ -437,9 +438,9 @@ def test_generate_summary_writes_char_id_into_record(sandbox):
         f"Summary record must carry char_id='character_b' for T-06, got {record.get('char_id')!r}"
     )
     # Summary must NOT land in yexuan summaries dir
-    yx_dest = sandbox.dreams_summaries_dir(char_id="yexuan") / f"dream_{dream_id}.summary.json"
+    yx_dest = sandbox.dreams_summaries_dir(char_id=TEST_CHAR_ID) / f"dream_{dream_id}.summary.json"
     assert not yx_dest.exists(), (
-        "Summary with char_id='character_b' must NOT write to yexuan summaries dir"
+        f"Summary with char_id='character_b' must NOT write to {TEST_CHAR_ID} summaries dir"
     )
 
 
@@ -475,11 +476,11 @@ def test_afterglow_payload_char_id_forwarded_to_wire(sandbox):
 
     called_with: list[dict] = []
 
-    def _mock_save_residue(uid_, residue, *, created_at=None, char_id="yexuan"):
+    def _mock_save_residue(uid_, residue, *, created_at=None, char_id=TEST_CHAR_ID):
         called_with.append({"uid": uid_, "tone": residue.tone, "char_id": char_id})
         return True
 
-    def _mock_integrate(uid_, residue, *, write_envelope, now=None, char_id="yexuan"):
+    def _mock_integrate(uid_, residue, *, write_envelope, now=None, char_id=TEST_CHAR_ID):
         from core.memory.user_hidden_state import IntegrationResult
         return None, MagicMock(accepted=True, rejected=False, touched_fields=[], rejected_reasons=[])
 

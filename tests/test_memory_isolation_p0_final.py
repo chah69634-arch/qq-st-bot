@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_memory_isolation_p0_final.py
 
@@ -49,7 +50,7 @@ _UID_BASE = "p0final"
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -151,15 +152,15 @@ def test_scenario_a_yexuan_content_not_in_character_b_context(
     unique_word = "草莓大福-P0Final"
 
     # Step 1: Write unique word to yexuan buckets
-    capture_turn(uid, f"{unique_word}用户消息", f"{unique_word}回复", char_id="yexuan", envelope=env)
-    _mt.append(uid, f"摘要:{unique_word}", tags=[], char_id="yexuan")
+    capture_turn(uid, f"{unique_word}用户消息", f"{unique_word}回复", char_id=TEST_CHAR_ID, envelope=env)
+    _mt.append(uid, f"摘要:{unique_word}", tags=[], char_id=TEST_CHAR_ID)
 
     # Sanity: verify unique word IS in yexuan bucket
-    yexuan_hist = load_for_prompt(uid, char_id="yexuan")
+    yexuan_hist = load_for_prompt(uid, char_id=TEST_CHAR_ID)
     yexuan_hist_text = " ".join(m.get("content", "") for m in yexuan_hist)
-    assert unique_word in yexuan_hist_text, "预置失败：yexuan short_term 应含唯一词"
-    yexuan_mt = _mt.format_for_prompt(uid, char_id="yexuan")
-    assert unique_word in yexuan_mt, "预置失败：yexuan mid_term 应含唯一词"
+    assert unique_word in yexuan_hist_text, f'预置失败：{TEST_CHAR_ID} short_term 应含唯一词'
+    yexuan_mt = _mt.format_for_prompt(uid, char_id=TEST_CHAR_ID)
+    assert unique_word in yexuan_mt, f'预置失败：{TEST_CHAR_ID} mid_term 应含唯一词'
 
     # Step 2: Switch to character_b and fetch_context
     _write_active(sandbox, "character_b")
@@ -190,16 +191,16 @@ def test_scenario_a_yexuan_bucket_still_has_content(sandbox):
     uid = _UID_BASE + "_a_ctrl"
     unique_word = "草莓大福-P0Final-控制"
 
-    capture_turn(uid, f"{unique_word}用户", f"{unique_word}回复", char_id="yexuan", envelope=env)
+    capture_turn(uid, f"{unique_word}用户", f"{unique_word}回复", char_id=TEST_CHAR_ID, envelope=env)
 
-    yexuan_hist = load_for_prompt(uid, char_id="yexuan")
+    yexuan_hist = load_for_prompt(uid, char_id=TEST_CHAR_ID)
     yexuan_text = " ".join(m.get("content", "") for m in yexuan_hist)
     assert unique_word in yexuan_text, (
-        "正控失败：yexuan 写路径未正确工作，short_term 应含唯一词"
+        f'正控失败：{TEST_CHAR_ID} 写路径未正确工作，short_term 应含唯一词'
     )
     # character_b bucket must be empty for this uid
     character_b_hist = load_for_prompt(uid, char_id="character_b")
-    assert character_b_hist == [], "yexuan 写入不应污染 character_b short_term"
+    assert character_b_hist == [], f'{TEST_CHAR_ID} 写入不应污染 character_b short_term'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -237,9 +238,9 @@ def test_scenario_b_character_b_content_not_in_yexuan_context(
     assert unique_word in character_b_mt, "预置失败：character_b mid_term 应含唯一词"
 
     # Step 2: Switch to yexuan and fetch_context
-    _write_active(sandbox, "yexuan")
+    _write_active(sandbox, TEST_CHAR_ID)
     _apply_fetch_stubs(monkeypatch)
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     ctx = asyncio.run(pipeline.fetch_context(user_id=uid, content="你好"))
 
     # Step 3: Verify no contamination
@@ -273,8 +274,8 @@ def test_scenario_b_character_b_bucket_still_has_content(sandbox):
         "正控失败：character_b 写路径未正确工作，short_term 应含唯一词"
     )
     # yexuan bucket must be empty for this uid
-    yexuan_hist = load_for_prompt(uid, char_id="yexuan")
-    assert yexuan_hist == [], "character_b 写入不应污染 yexuan short_term"
+    yexuan_hist = load_for_prompt(uid, char_id=TEST_CHAR_ID)
+    assert yexuan_hist == [], f'character_b 写入不应污染 {TEST_CHAR_ID} short_term'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -306,7 +307,7 @@ def test_scenario_c_yexuan_afterglow_not_in_character_b_hidden_state(sandbox):
     # Seed both buckets with identical baseline sensitivity=50
     state_y = default_hidden_state()
     state_y.sensitivity.current.value = 50.0
-    save_hidden_state(uid, state_y, char_id="yexuan")
+    save_hidden_state(uid, state_y, char_id=TEST_CHAR_ID)
 
     state_h = default_hidden_state()
     state_h.sensitivity.current.value = 50.0
@@ -314,13 +315,13 @@ def test_scenario_c_yexuan_afterglow_not_in_character_b_hidden_state(sandbox):
 
     # yexuan afterglow: comfort tone → sensitivity.current should increase
     residue = AfterglowResidueInput(emotional_tags=["warm"], tone="comfort", age_hours=0.0)
-    save_afterglow_residue(uid, residue, created_at=now, char_id="yexuan")
+    save_afterglow_residue(uid, residue, created_at=now, char_id=TEST_CHAR_ID)
     envelope = stamp_dream_afterglow()
-    integrate_afterglow_and_save(uid, residue, envelope, now, char_id="yexuan")
+    integrate_afterglow_and_save(uid, residue, envelope, now, char_id=TEST_CHAR_ID)
 
     # Load character_b bucket — must be unchanged at 50.0
     character_b_after = load_hidden_state(uid, char_id="character_b")
-    yexuan_after = load_hidden_state(uid, char_id="yexuan")
+    yexuan_after = load_hidden_state(uid, char_id=TEST_CHAR_ID)
 
     assert character_b_after.sensitivity.current.value == pytest.approx(50.0), (
         f"P0 FAIL 场景C: character_b hidden_state.sensitivity.current 被 yexuan afterglow 改动: "
@@ -344,14 +345,14 @@ def test_scenario_c_afterglow_residue_file_isolation(sandbox):
     now = datetime.now(timezone.utc).isoformat()
 
     residue = AfterglowResidueInput(emotional_tags=["calm"], tone="calm", age_hours=0.0)
-    save_afterglow_residue(uid, residue, created_at=now, char_id="yexuan")
+    save_afterglow_residue(uid, residue, created_at=now, char_id=TEST_CHAR_ID)
 
-    yexuan_path = sandbox.user_memory_root(uid, char_id="yexuan") / "afterglow_residue.json"
+    yexuan_path = sandbox.user_memory_root(uid, char_id=TEST_CHAR_ID) / "afterglow_residue.json"
     character_b_path = sandbox.user_memory_root(uid, char_id="character_b") / "afterglow_residue.json"
 
-    assert yexuan_path.exists(), "yexuan afterglow_residue.json 应被写入"
+    assert yexuan_path.exists(), f'{TEST_CHAR_ID} afterglow_residue.json 应被写入'
     assert not character_b_path.exists(), (
-        "yexuan afterglow 不应写入 character_b 桶的 afterglow_residue.json"
+        f'{TEST_CHAR_ID} afterglow 不应写入 character_b 桶的 afterglow_residue.json'
     )
 
 
@@ -362,9 +363,9 @@ def test_scenario_c_afterglow_residue_file_isolation(sandbox):
 def test_scenario_d_dream_close_writes_to_session_char_yexuan(sandbox):
     """
     Dream 桶锁定验收 D:
-    - dream_state.char_id="yexuan"（入梦时锁定）
+    - dream_state.char_id=TEST_CHAR_ID（入梦时锁定）
     - "active" 已切换到 character_b（不影响 dream close 路径）
-    - _generate_summary_bg(char_id="yexuan") 使用入梦时的 char_id
+    - _generate_summary_bg(char_id=TEST_CHAR_ID) 使用入梦时的 char_id
     - summary 写入 yexuan summaries_dir
     - impression 写入 yexuan impressions 桶
     - character_b summaries_dir 和 impressions 桶均为空
@@ -381,11 +382,11 @@ def test_scenario_d_dream_close_writes_to_session_char_yexuan(sandbox):
         "user_id": uid,
         "status": DreamStatus.DREAM_CLOSING.value,
         "dream_id": dream_id,
-        "char_id": "yexuan",  # frozen at enter time — does NOT change when active switches
+        "char_id": TEST_CHAR_ID,  # frozen at enter time — does NOT change when active switches
     })
 
     # Write dream archive to yexuan path (simulating dream log at enter time)
-    archive_dir = sandbox.dreams_archive_dir(char_id="yexuan")
+    archive_dir = sandbox.dreams_archive_dir(char_id=TEST_CHAR_ID)
     archive_dir.mkdir(parents=True, exist_ok=True)
     (archive_dir / f"dream_{dream_id}.jsonl").write_text(
         json.dumps({"role": "user", "content": "Companion梦境内容场景D"}) + "\n",
@@ -413,12 +414,12 @@ def test_scenario_d_dream_close_writes_to_session_char_yexuan(sandbox):
                    AsyncMock(return_value=mock_distill_result)), \
              patch("core.dream.dream_exit_afterglow.wire_afterglow_from_summary"):
             # char_id comes from dream_state — even if active has been switched to character_b
-            await _generate_summary_bg(uid, dream_id, "soft", char_id="yexuan")
+            await _generate_summary_bg(uid, dream_id, "soft", char_id=TEST_CHAR_ID)
 
     asyncio.run(run())
 
     # Verify summary written to yexuan summaries dir, NOT character_b
-    yexuan_summary_path = sandbox.dreams_summaries_dir(char_id="yexuan") / f"dream_{dream_id}.summary.json"
+    yexuan_summary_path = sandbox.dreams_summaries_dir(char_id=TEST_CHAR_ID) / f"dream_{dream_id}.summary.json"
     character_b_summary_path = sandbox.dreams_summaries_dir(char_id="character_b") / f"dream_{dream_id}.summary.json"
 
     assert yexuan_summary_path.exists(), (
@@ -428,14 +429,14 @@ def test_scenario_d_dream_close_writes_to_session_char_yexuan(sandbox):
         f"P0 FAIL 场景D: summary 不应写入 character_b summaries_dir，但文件存在: {character_b_summary_path}"
     )
 
-    # Verify summary record carries char_id='yexuan' (T-06 seam)
+    # Verify summary record carries char_id=TEST_CHAR_ID (T-06 seam)
     summary_record = json.loads(yexuan_summary_path.read_text(encoding="utf-8"))
-    assert summary_record.get("char_id") == "yexuan", (
-        f"summary 记录的 char_id 应为 'yexuan'，实际: {summary_record.get('char_id')!r}"
+    assert summary_record.get("char_id") == TEST_CHAR_ID, (
+        f"summary 记录的 char_id 应为 TEST_CHAR_ID，实际: {summary_record.get('char_id')!r}"
     )
 
     # Verify impression written to yexuan bucket, NOT character_b
-    yexuan_impressions = load_impressions(uid, char_id="yexuan")
+    yexuan_impressions = load_impressions(uid, char_id=TEST_CHAR_ID)
     character_b_impressions = load_impressions(uid, char_id="character_b")
 
     assert len(yexuan_impressions) >= 1, (
@@ -450,7 +451,7 @@ def test_scenario_d_dream_char_id_not_read_from_active(sandbox):
     """
     场景 D 补充：dream close 路径不读 active_prompt_assets.json，
     只依赖 dream_state.char_id 传递的 char_id 参数。
-    验证：dream_state.char_id=yexuan 时 _generate_summary_bg 调 distill_impression(char_id="yexuan")。
+    验证：dream_state.char_id=yexuan 时 _generate_summary_bg 调 distill_impression(char_id=TEST_CHAR_ID)。
     """
     from core.dream.dream_state import write_state, DreamStatus
     from core.dream.dream_pipeline import _generate_summary_bg
@@ -462,10 +463,10 @@ def test_scenario_d_dream_char_id_not_read_from_active(sandbox):
         "user_id": uid,
         "status": DreamStatus.DREAM_CLOSING.value,
         "dream_id": dream_id,
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
     })
 
-    archive_dir = sandbox.dreams_archive_dir(char_id="yexuan")
+    archive_dir = sandbox.dreams_archive_dir(char_id=TEST_CHAR_ID)
     archive_dir.mkdir(parents=True, exist_ok=True)
     (archive_dir / f"dream_{dream_id}.jsonl").write_text(
         json.dumps({"role": "user", "content": "测试内容"}) + "\n",
@@ -474,7 +475,7 @@ def test_scenario_d_dream_char_id_not_read_from_active(sandbox):
 
     distill_calls: list[dict] = []
 
-    async def _mock_distill(uid_, dream_id_, exit_type_, *, char_id="yexuan", **_kwargs):
+    async def _mock_distill(uid_, dream_id_, exit_type_, *, char_id=TEST_CHAR_ID, **_kwargs):
         distill_calls.append({"uid": uid_, "char_id": char_id})
 
     mock_summary = json.dumps({
@@ -491,13 +492,13 @@ def test_scenario_d_dream_char_id_not_read_from_active(sandbox):
              patch("core.dream.distill_impression.distill_impression", _mock_distill), \
              patch("core.dream.dream_exit_afterglow.wire_afterglow_from_summary"):
             # pass char_id from dream_state (not from active_prompt_assets)
-            await _generate_summary_bg(uid, dream_id, "soft", char_id="yexuan")
+            await _generate_summary_bg(uid, dream_id, "soft", char_id=TEST_CHAR_ID)
 
     asyncio.run(run())
 
     assert distill_calls, "distill_impression 应被调用"
-    assert distill_calls[0]["char_id"] == "yexuan", (
-        f"P0 FAIL 场景D补充: distill_impression 应收到 char_id='yexuan'，"
+    assert distill_calls[0]["char_id"] == TEST_CHAR_ID, (
+        f"P0 FAIL 场景D补充: distill_impression 应收到 char_id=TEST_CHAR_ID，"
         f"实际: {distill_calls[0]['char_id']!r}"
     )
 
@@ -536,7 +537,7 @@ async def test_slow_queue_drain_mid_term_isolation(sandbox):
             "reply": "好吃的",
             "tags": [],
             "emotion": "neutral",
-            "char_id": "yexuan",
+            "char_id": TEST_CHAR_ID,
         })
 
         # character_b 任务
@@ -550,7 +551,7 @@ async def test_slow_queue_drain_mid_term_isolation(sandbox):
             "char_id": "character_b",
         })
 
-    yexuan_events = _mt.load(uid, char_id="yexuan")
+    yexuan_events = _mt.load(uid, char_id=TEST_CHAR_ID)
     character_b_events = _mt.load(uid, char_id="character_b")
     yexuan_text = " ".join(e.get("summary", "") for e in yexuan_events)
     character_b_text = " ".join(e.get("summary", "") for e in character_b_events)
@@ -586,7 +587,7 @@ async def test_fail_loud_missing_active_blocks_all_writes(
     import core.post_process.slow_queue as sq
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "nonexistent_ghost",
                     "enabled_lorebooks": [], "enabled_jailbreaks": []}),
@@ -620,7 +621,7 @@ async def test_fail_loud_empty_active_blocks_fetch_context(
     """
     import core.memory.short_term as _st
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
         encoding="utf-8",
@@ -653,7 +654,7 @@ async def test_fail_loud_missing_active_no_mood_update(
     import core.memory.mood_state as _ms
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "ghost_2", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
         encoding="utf-8",

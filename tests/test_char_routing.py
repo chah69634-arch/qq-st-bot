@@ -20,8 +20,18 @@ _MP_CONFIG = {
     "active_routing": "default",
     "defaults": {},
     "presets": {
-        "ds": {"provider_kind": "deepseek", "base_url": "", "api_key": "", "model": "ds-chat"},
-        "claude": {"provider_kind": "anthropic_compat", "base_url": "", "api_key": "", "model": "claude"},
+        "ds": {
+            "provider_kind": "deepseek",
+            "base_url": "",
+            "api_key": "test-only-placeholder",
+            "model": "ds-chat",
+        },
+        "claude": {
+            "provider_kind": "anthropic_compat",
+            "base_url": "",
+            "api_key": "test-only-placeholder",
+            "model": "claude",
+        },
     },
     "routing_profiles": {
         "default": {"chat": "ds", "intent": "ds"},

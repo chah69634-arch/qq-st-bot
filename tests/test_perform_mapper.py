@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_perform_mapper.py — Brief 20 句级表演意图映射
 
@@ -190,7 +191,7 @@ class TestEnrichSaySegments:
         reply = "*她凑近了一些*\n你好呀"
         from core.narrative_parser import build_say_segments
         _content, say_segs = build_say_segments(reply)
-        result = await enrich_say_segments(reply, say_segs, char_id="yexuan")
+        result = await enrich_say_segments(reply, say_segs, char_id=TEST_CHAR_ID)
         assert len(result) == len(say_segs)
         assert result[0]["perform"]["posture"] == "lean_in"
 
@@ -199,7 +200,7 @@ class TestEnrichSaySegments:
         reply = "*她凑近了一些*\n你好呀"
         from core.narrative_parser import build_say_segments
         _content, say_segs = build_say_segments(reply)
-        result = await enrich_say_segments(reply, say_segs, char_id="yexuan")
+        result = await enrich_say_segments(reply, say_segs, char_id=TEST_CHAR_ID)
         assert result == say_segs
         assert "perform" not in result[0]
 
@@ -211,7 +212,7 @@ class TestEnrichSaySegments:
 
         monkeypatch.setattr("core.narrative_parser.parse_narrative_segments", _boom)
         say_segs = [{"type": "say", "text": "你好"}]
-        result = await enrich_say_segments("*她凑近了*\n你好", say_segs, char_id="yexuan")
+        result = await enrich_say_segments("*她凑近了*\n你好", say_segs, char_id=TEST_CHAR_ID)
         assert result == say_segs
 
     async def test_fail_open_on_say_count_mismatch(self, monkeypatch):
@@ -219,7 +220,7 @@ class TestEnrichSaySegments:
         reply = "第一句\n第二句"
         # Deliberately mismatched say_segs (caller bug) — must fail-open untouched.
         say_segs = [{"type": "say", "text": "第一句"}]
-        result = await enrich_say_segments(reply, say_segs, char_id="yexuan")
+        result = await enrich_say_segments(reply, say_segs, char_id=TEST_CHAR_ID)
         assert result == say_segs
 
     async def test_llm_provider_legal_response(self, monkeypatch):
@@ -236,7 +237,7 @@ class TestEnrichSaySegments:
         reply = "*她歪着头*\n才、才没有等你很久呢"
         from core.narrative_parser import build_say_segments
         _content, say_segs = build_say_segments(reply)
-        result = await enrich_say_segments(reply, say_segs, char_id="yexuan")
+        result = await enrich_say_segments(reply, say_segs, char_id=TEST_CHAR_ID)
         assert result[0]["perform"]["expression"] == "happy"
         assert result[0]["perform"]["head"] == "tilt_r"
 
@@ -250,7 +251,7 @@ class TestEnrichSaySegments:
         reply = "*她歪着头*\n才、才没有等你很久呢"
         from core.narrative_parser import build_say_segments
         _content, say_segs = build_say_segments(reply)
-        result = await enrich_say_segments(reply, say_segs, char_id="yexuan")
+        result = await enrich_say_segments(reply, say_segs, char_id=TEST_CHAR_ID)
         assert "perform" not in result[0]
 
     async def test_llm_provider_timeout_fails_open(self, monkeypatch):
@@ -267,5 +268,5 @@ class TestEnrichSaySegments:
         reply = "*她歪着头*\n才、才没有等你很久呢"
         from core.narrative_parser import build_say_segments
         _content, say_segs = build_say_segments(reply)
-        result = await enrich_say_segments(reply, say_segs, char_id="yexuan")
+        result = await enrich_say_segments(reply, say_segs, char_id=TEST_CHAR_ID)
         assert "perform" not in result[0]

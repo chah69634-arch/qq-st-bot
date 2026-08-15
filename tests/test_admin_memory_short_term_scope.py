@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_admin_memory_short_term_scope.py — P1-0C: ShortTermMemory char_id scope
 
@@ -30,7 +31,7 @@ def chars_tree(tmp_path):
     """Minimal characters/ tree with yexuan + character_b."""
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -91,7 +92,7 @@ def test_stm_load_reads_character_b_bucket_not_yexuan(sandbox):
 
     stm = ShortTermMemory()
     character_b_history = stm.load(uid, char_id="character_b")
-    yexuan_history = stm.load(uid, char_id="yexuan")
+    yexuan_history = stm.load(uid, char_id=TEST_CHAR_ID)
 
     assert any(SENTINEL in m.get("content", "") for m in character_b_history), (
         f"character_b bucket should contain sentinel; got {character_b_history}"
@@ -107,16 +108,16 @@ def test_stm_clear_clears_character_b_bucket_not_yexuan(sandbox):
 
     uid = "u_stm_clear"
     SENTINEL_H = "草莓大福-character_b-clear"
-    SENTINEL_Y = "草莓大福-yexuan-clear"
+    SENTINEL_Y = f'草莓大福-{TEST_CHAR_ID}-clear'
 
     append(uid, "user", SENTINEL_H, char_id="character_b")
-    append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
 
     stm = ShortTermMemory()
     stm.clear(uid, char_id="character_b")
 
     character_b_history = stm.load(uid, char_id="character_b")
-    yexuan_history = stm.load(uid, char_id="yexuan")
+    yexuan_history = stm.load(uid, char_id=TEST_CHAR_ID)
 
     assert character_b_history == [], f"character_b bucket must be empty after clear; got {character_b_history}"
     assert any(SENTINEL_Y in m.get("content", "") for m in yexuan_history), (
@@ -157,18 +158,18 @@ def test_admin_delete_only_clears_active_char(sandbox, registry, monkeypatch):
 
     uid = "u_admin_delete_active"
     SENTINEL_H = "草莓大福-delete-character_b"
-    SENTINEL_Y = "草莓大福-delete-yexuan"
+    SENTINEL_Y = f'草莓大福-delete-{TEST_CHAR_ID}'
 
     _st.append(uid, "user", SENTINEL_H, char_id="character_b")
-    _st.append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    _st.append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
 
     result = asyncio.run(clear_short_term(uid, char_id=None, auth="dummy"))
 
     assert result["char_id"] == "character_b"
     assert _st.load(uid, char_id="character_b") == [], "character_b bucket must be empty"
-    yexuan_history = _st.load(uid, char_id="yexuan")
+    yexuan_history = _st.load(uid, char_id=TEST_CHAR_ID)
     assert any(SENTINEL_Y in m.get("content", "") for m in yexuan_history), (
-        "yexuan bucket must be untouched after delete of character_b"
+        f'{TEST_CHAR_ID} bucket must be untouched after delete of character_b'
     )
 
 
@@ -182,12 +183,12 @@ def test_admin_get_explicit_char_id(sandbox, registry, monkeypatch):
     _seed_active(sandbox, "character_b")
 
     uid = "u_admin_get_explicit"
-    SENTINEL_Y = "草莓大福-explicit-yexuan"
-    _st.append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    SENTINEL_Y = f'草莓大福-explicit-{TEST_CHAR_ID}'
+    _st.append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
 
-    result = asyncio.run(get_short_term(uid, char_id="yexuan", auth="dummy"))
+    result = asyncio.run(get_short_term(uid, char_id=TEST_CHAR_ID, auth="dummy"))
 
-    assert result["char_id"] == "yexuan"
+    assert result["char_id"] == TEST_CHAR_ID
     contents = [m.get("content", "") for m in result["history"]]
     assert any(SENTINEL_Y in c for c in contents), (
         f"yexuan sentinel must appear; got {contents}"
@@ -206,12 +207,12 @@ def test_admin_delete_explicit_char_id(sandbox, registry, monkeypatch):
     SENTINEL_Y = "草莓大福-explicit-y"
 
     _st.append(uid, "user", SENTINEL_H, char_id="character_b")
-    _st.append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    _st.append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
 
-    result = asyncio.run(clear_short_term(uid, char_id="yexuan", auth="dummy"))
+    result = asyncio.run(clear_short_term(uid, char_id=TEST_CHAR_ID, auth="dummy"))
 
-    assert result["char_id"] == "yexuan"
-    assert _st.load(uid, char_id="yexuan") == [], "yexuan bucket must be empty"
+    assert result["char_id"] == TEST_CHAR_ID
+    assert _st.load(uid, char_id=TEST_CHAR_ID) == [], f'{TEST_CHAR_ID} bucket must be empty'
     character_b_history = _st.load(uid, char_id="character_b")
     assert any(SENTINEL_H in m.get("content", "") for m in character_b_history), (
         "character_b bucket must be untouched"
@@ -270,7 +271,7 @@ def test_admin_get_invalid_char_id_returns_422(sandbox, registry, monkeypatch):
     from fastapi import HTTPException
     from admin.routers.memory import get_short_term
 
-    _seed_active(sandbox, "yexuan")
+    _seed_active(sandbox, TEST_CHAR_ID)
 
     load_called = []
     import core.memory.short_term as _st
@@ -288,7 +289,7 @@ def test_admin_delete_invalid_char_id_returns_422(sandbox, registry, monkeypatch
     from fastapi import HTTPException
     from admin.routers.memory import clear_short_term
 
-    _seed_active(sandbox, "yexuan")
+    _seed_active(sandbox, TEST_CHAR_ID)
 
     clear_called = []
     import core.memory.short_term as _st
@@ -317,10 +318,10 @@ def test_load_for_prompt_char_id_passthrough(sandbox):
         f"load_for_prompt(char_id=character_b) must read character_b bucket; got {contents}"
     )
 
-    result_y = load_for_prompt(uid, char_id="yexuan")
+    result_y = load_for_prompt(uid, char_id=TEST_CHAR_ID)
     contents_y = [m.get("content", "") for m in result_y]
     assert not any(SENTINEL in c for c in contents_y), (
-        "load_for_prompt(char_id=yexuan) must not see character_b content"
+        f'load_for_prompt(char_id={TEST_CHAR_ID}) must not see character_b content'
     )
 
 
@@ -335,6 +336,6 @@ def test_append_char_id_passthrough(sandbox):
     assert any(SENTINEL in m.get("content", "") for m in load(uid, char_id="character_b")), (
         "append(char_id=character_b) must write to character_b bucket"
     )
-    assert not any(SENTINEL in m.get("content", "") for m in load(uid, char_id="yexuan")), (
-        "yexuan bucket must remain clean"
+    assert not any(SENTINEL in m.get("content", "") for m in load(uid, char_id=TEST_CHAR_ID)), (
+        f'{TEST_CHAR_ID} bucket must remain clean'
     )

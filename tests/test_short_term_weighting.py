@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_THIRD_CHAR_ID
 from core.memory import short_term
 
 
@@ -57,7 +58,7 @@ def test_group_turns_scores_and_load_for_prompt_selection(monkeypatch):
     assert capped_score <= short_term.TURN_SCORE_CAP
     assert any(value > 0 for value in capped_parts.values())
 
-    monkeypatch.setattr(short_term, "load", lambda user_id, *, char_id="yexuan": [dict(item) for item in history])
+    monkeypatch.setattr(short_term, "load", lambda user_id, *, char_id=TEST_CHAR_ID: [dict(item) for item in history])
     selected = short_term.load_for_prompt("u_weight", budget_rounds=4, near_k=2)
 
     selected_turn_ids = [m.get("_turn_id") for m in selected]
@@ -76,24 +77,24 @@ def test_group_turns_scores_and_load_for_prompt_selection(monkeypatch):
 def test_group_turns_keeps_multiple_assistant_speakers_in_one_turn():
     history = [
         {**_entry("user", "大家觉得呢？", 1, "t_group"), "speaker_id": "owner"},
-        {**_entry("assistant", "我先说。", 2, "t_group"), "speaker_id": "yexuan"},
-        {**_entry("assistant", "我补一句。", 3, "t_group"), "speaker_id": "hongcha"},
+        {**_entry("assistant", "我先说。", 2, "t_group"), "speaker_id": TEST_CHAR_ID},
+        {**_entry("assistant", "我补一句。", 3, "t_group"), "speaker_id": TEST_THIRD_CHAR_ID},
     ]
 
     groups = short_term._group_turns(history)
 
     assert len(groups) == 1
-    assert [item["speaker_id"] for item in groups[0]] == ["owner", "yexuan", "hongcha"]
+    assert [item["speaker_id"] for item in groups[0]] == ["owner", TEST_CHAR_ID, TEST_THIRD_CHAR_ID]
 
 
 def test_score_turn_group_rewards_assistant_speaker_diversity():
     one_speaker = [
-        {**_entry("assistant", "同一句。", 1, "t1"), "speaker_id": "yexuan"},
-        {**_entry("assistant", "同一句。", 2, "t1"), "speaker_id": "yexuan"},
+        {**_entry("assistant", "同一句。", 1, "t1"), "speaker_id": TEST_CHAR_ID},
+        {**_entry("assistant", "同一句。", 2, "t1"), "speaker_id": TEST_CHAR_ID},
     ]
     two_speakers = [
-        {**_entry("assistant", "同一句。", 1, "t2"), "speaker_id": "yexuan"},
-        {**_entry("assistant", "同一句。", 2, "t2"), "speaker_id": "hongcha"},
+        {**_entry("assistant", "同一句。", 1, "t2"), "speaker_id": TEST_CHAR_ID},
+        {**_entry("assistant", "同一句。", 2, "t2"), "speaker_id": TEST_THIRD_CHAR_ID},
     ]
 
     one_score, one_parts = short_term._score_turn_group(one_speaker)

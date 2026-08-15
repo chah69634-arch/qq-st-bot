@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_slow_queue_short_term_reader_scope.py
 
@@ -92,7 +93,7 @@ async def test_user_profile_update_does_not_read_short_term(sandbox):
 
     st_load_called = []
 
-    async def _fake_extract(u, msgs, *, char_id="yexuan"):
+    async def _fake_extract(u, msgs, *, char_id=TEST_CHAR_ID):
         pass  # no-op
 
     with (
@@ -127,7 +128,7 @@ async def test_consolidate_to_identity_does_not_read_short_term(sandbox):
 
     st_load_called = []
 
-    async def _fake_consolidate(uid, llm_client, *, char_id="yexuan"):
+    async def _fake_consolidate(uid, llm_client, *, char_id=TEST_CHAR_ID):
         return True
 
     with (
@@ -237,7 +238,7 @@ async def test_capture_turn_retry_writes_not_reads_short_term(sandbox):
         st_load_called.append((a, kw))
         return []
 
-    def _spy_append(u, role, content, *, turn_id=None, char_id="yexuan"):
+    def _spy_append(u, role, content, *, turn_id=None, char_id=TEST_CHAR_ID):
         st_append_called.append({"uid": u, "role": role, "char_id": char_id})
         return True
 
@@ -267,7 +268,7 @@ async def test_capture_turn_retry_writes_not_reads_short_term(sandbox):
 @pytest.mark.asyncio
 async def test_character_b_payload_never_reads_yexuan_short_term(sandbox):
     """
-    payload char_id='character_b' 时，任意 handler 不会以 char_id='yexuan'
+    payload char_id='character_b' 时，任意 handler 不会以 char_id=TEST_CHAR_ID
     调用 short_term.load。
     """
     from core.memory.fixation_pipeline import (
@@ -284,18 +285,18 @@ async def test_character_b_payload_never_reads_yexuan_short_term(sandbox):
 
     original_load = _st.load
 
-    def _spy_load(user_id, *args, char_id="yexuan", **kwargs):
-        if char_id == "yexuan":
+    def _spy_load(user_id, *args, char_id=TEST_CHAR_ID, **kwargs):
+        if char_id == TEST_CHAR_ID:
             yexuan_reads.append({"user_id": user_id, "caller": "load"})
         return []
 
-    def _spy_get_history(user_id, *args, char_id="yexuan", **kwargs):
-        if char_id == "yexuan":
+    def _spy_get_history(user_id, *args, char_id=TEST_CHAR_ID, **kwargs):
+        if char_id == TEST_CHAR_ID:
             yexuan_reads.append({"user_id": user_id, "caller": "get_history"})
         return []
 
-    def _spy_load_for_prompt(user_id, *args, char_id="yexuan", **kwargs):
-        if char_id == "yexuan":
+    def _spy_load_for_prompt(user_id, *args, char_id=TEST_CHAR_ID, **kwargs):
+        if char_id == TEST_CHAR_ID:
             yexuan_reads.append({"user_id": user_id, "caller": "load_for_prompt"})
         return []
 
@@ -320,7 +321,7 @@ async def test_character_b_payload_never_reads_yexuan_short_term(sandbox):
         await _handler_user_profile_update(_profile_payload(uid, "character_b", []))
 
     assert yexuan_reads == [], (
-        f"character_b payload 下所有 handler 均不应以 char_id='yexuan' 读取 short_term，"
+        f"character_b payload 下所有 handler 均不应以 char_id=TEST_CHAR_ID 读取 short_term，"
         f"但检测到: {yexuan_reads}"
     )
 
@@ -332,7 +333,7 @@ async def test_character_b_payload_never_reads_yexuan_short_term(sandbox):
 @pytest.mark.asyncio
 async def test_legacy_dlq_payload_missing_char_id_warns_and_falls_back(caplog):
     """
-    payload 缺少 char_id 时，_get_char_id_from_payload 发出 WARNING 并返回 'yexuan'。
+    payload 缺少 char_id 时，_get_char_id_from_payload 发出 WARNING 并返回 TEST_CHAR_ID。
     覆盖 fixation_pipeline 和 pipeline 两处 helper。
     """
     from core.memory.fixation_pipeline import _get_scope_from_payload as _fp_helper
@@ -340,8 +341,8 @@ async def test_legacy_dlq_payload_missing_char_id_warns_and_falls_back(caplog):
 
     with caplog.at_level(logging.WARNING):
         fp_scope = _fp_helper({"uid": "u1"}, "test_handler")
-    assert fp_scope.character_id == "yexuan", f"fallback 应为 yexuan，实际: {fp_scope.character_id!r}"
-    assert any("yexuan" in r.message for r in caplog.records), (
+    assert fp_scope.character_id == TEST_CHAR_ID, f"fallback 应为 yexuan，实际: {fp_scope.character_id!r}"
+    assert any(TEST_CHAR_ID in r.message for r in caplog.records), (
         "缺少 char_id 时应有 WARNING 日志，但未检测到"
     )
 
@@ -349,8 +350,8 @@ async def test_legacy_dlq_payload_missing_char_id_warns_and_falls_back(caplog):
 
     with caplog.at_level(logging.WARNING):
         pl_scope = _pl_helper({"uid": "u2"}, "test_handler2")
-    assert pl_scope.character_id == "yexuan", f"pipeline fallback 应为 yexuan，实际: {pl_scope.character_id!r}"
-    assert any("yexuan" in r.message for r in caplog.records), (
+    assert pl_scope.character_id == TEST_CHAR_ID, f"pipeline fallback 应为 yexuan，实际: {pl_scope.character_id!r}"
+    assert any(TEST_CHAR_ID in r.message for r in caplog.records), (
         "pipeline _get_scope_from_payload 缺少 scope/char_id 时应有 WARNING 日志"
     )
 

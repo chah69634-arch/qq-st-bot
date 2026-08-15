@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_qq_dream_guard.py — QQ 入梦 guard
 
@@ -46,10 +47,10 @@ def _patch_pipeline(monkeypatch, uid: str = _OWNER_ID):
     fake.character = MagicMock()
     fake.character.name = "Companion"
     fake.author_note_extra = ""
-    fake._active_character_id = "yexuan"
+    fake._active_character_id = TEST_CHAR_ID
     # N1: _current_reality_scope must return a real MemoryScope so char_id is a string.
     fake._current_reality_scope = MagicMock(
-        return_value=MemoryScope.reality_scope(str(uid), "yexuan")
+        return_value=MemoryScope.reality_scope(str(uid), TEST_CHAR_ID)
     )
     fake.fetch_context = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
@@ -322,10 +323,10 @@ async def test_stamp_qq_used_in_reality_chat(sandbox, monkeypatch):
     fake.character = MagicMock()
     fake.character.name = "Companion"
     fake.author_note_extra = ""
-    fake._active_character_id = "yexuan"
+    fake._active_character_id = TEST_CHAR_ID
     # N1 fix: _current_reality_scope must return a real MemoryScope
     fake._current_reality_scope = MagicMock(
-        return_value=MemoryScope.reality_scope(_OWNER_ID, "yexuan")
+        return_value=MemoryScope.reality_scope(_OWNER_ID, TEST_CHAR_ID)
     )
     fake.fetch_context = AsyncMock(return_value={})
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))

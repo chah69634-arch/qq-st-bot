@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dedupe_key_stability.py — P1.1 dedupe_key stability audit
 
@@ -158,7 +159,7 @@ async def test_different_char_id_not_deduped(monkeypatch):
     ts = time.time()
     e1 = PerceiveEvent(
         source="desktop_wake", uid="u-char", channel="desktop", kind="wake",
-        char_id="char-yexuan", payload={}, created_at=ts,
+        char_id=f'char-{TEST_CHAR_ID}', payload={}, created_at=ts,
     )
     e2 = PerceiveEvent(
         source="desktop_wake", uid="u-char", channel="desktop", kind="wake",

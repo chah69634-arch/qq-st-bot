@@ -17,6 +17,7 @@ T11. prompt 包含 current_page 信息
 T12. 合法 control 值保存到 transcript
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -54,7 +55,7 @@ def _raising_llm(exc=RuntimeError("llm error")):
 @pytest.mark.asyncio
 async def test_generate_reply_returns_3_tuple(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("这段开头很有意思。"))
-    result = await RC.generate_reply("yexuan", "user1", "sess1", 3, 50, "sample.pdf", "第三页内容", "你觉得这段怎么样")
+    result = await RC.generate_reply(TEST_CHAR_ID, "user1", "sess1", 3, 50, "sample.pdf", "第三页内容", "你觉得这段怎么样")
     assert isinstance(result, tuple) and len(result) == 3
     reply, control, grounding = result
     assert isinstance(reply, str) and reply
@@ -66,8 +67,8 @@ async def test_generate_reply_returns_3_tuple(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_transcript_written_to_disk(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("嗯，看到这里了。"))
-    await RC.generate_reply("yexuan", "user1", "sessA", 1, 100, "book.pdf", "内容", "你好")
-    p = _transcript_path(sandbox, "yexuan", "user1", "sessA")
+    await RC.generate_reply(TEST_CHAR_ID, "user1", "sessA", 1, 100, "book.pdf", "内容", "你好")
+    p = _transcript_path(sandbox, TEST_CHAR_ID, "user1", "sessA")
     assert p.exists()
 
 
@@ -75,8 +76,8 @@ async def test_transcript_written_to_disk(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_transcript_has_both_types(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("这本书不错。"))
-    await RC.generate_reply("yexuan", "user1", "sessB", 5, 200, "novel.pdf", "页面内容", "感觉如何")
-    p = _transcript_path(sandbox, "yexuan", "user1", "sessB")
+    await RC.generate_reply(TEST_CHAR_ID, "user1", "sessB", 5, 200, "novel.pdf", "页面内容", "感觉如何")
+    p = _transcript_path(sandbox, TEST_CHAR_ID, "user1", "sessB")
     lines = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     types = {e["type"] for e in lines}
     assert "user_chat" in types
@@ -87,7 +88,7 @@ async def test_transcript_has_both_types(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_does_not_create_short_term(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("好的。"))
-    await RC.generate_reply("yexuan", "user1", "sessC", 1, 10, "f.pdf", None, "test")
+    await RC.generate_reply(TEST_CHAR_ID, "user1", "sessC", 1, 10, "f.pdf", None, "test")
     short_term_dir = sandbox._base / "history"
     assert not short_term_dir.exists()
 
@@ -96,7 +97,7 @@ async def test_chat_does_not_create_short_term(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_does_not_create_user_hidden_state(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("好的。"))
-    await RC.generate_reply("yexuan", "user1", "sessD", 1, 10, "f.pdf", None, "test")
+    await RC.generate_reply(TEST_CHAR_ID, "user1", "sessD", 1, 10, "f.pdf", None, "test")
     hidden_state_dir = sandbox._base / "user_hidden_state"
     assert not hidden_state_dir.exists()
 
@@ -105,9 +106,9 @@ async def test_chat_does_not_create_user_hidden_state(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_fallback_on_llm_error(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _raising_llm())
-    reply, control, grounding = await RC.generate_reply("yexuan", "user1", "sessE", 2, 30, "f.pdf", "text", "test")
+    reply, control, grounding = await RC.generate_reply(TEST_CHAR_ID, "user1", "sessE", 2, 30, "f.pdf", "text", "test")
     assert reply == RC._FALLBACK_REPLY
-    p = _transcript_path(sandbox, "yexuan", "user1", "sessE")
+    p = _transcript_path(sandbox, TEST_CHAR_ID, "user1", "sessE")
     assert p.exists()
 
 
@@ -115,7 +116,7 @@ async def test_fallback_on_llm_error(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_grounding_has_expected_fields(sandbox, monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", _fake_llm("好的。"))
-    _, _, grounding = await RC.generate_reply("yexuan", "user1", "sessF", 7, 50, "book.pdf", "content", "test")
+    _, _, grounding = await RC.generate_reply(TEST_CHAR_ID, "user1", "sessF", 7, 50, "book.pdf", "content", "test")
     assert grounding["current_page"] == 7
     assert grounding["total_pages"] == 50
     assert "progress_pct" in grounding
@@ -157,8 +158,8 @@ def test_format_contains_page_number():
 async def test_valid_control_saved_to_transcript(sandbox, monkeypatch):
     reply_with_control = '不错的一段。\n\n<activity_control>\n{"commentary_tone":"focused"}\n</activity_control>'
     monkeypatch.setattr("core.llm_client.chat", _fake_llm(reply_with_control))
-    await RC.generate_reply("yexuan", "user1", "sessG", 1, 10, "f.pdf", "text", "test")
-    p = _transcript_path(sandbox, "yexuan", "user1", "sessG")
+    await RC.generate_reply(TEST_CHAR_ID, "user1", "sessG", 1, 10, "f.pdf", "text", "test")
+    p = _transcript_path(sandbox, TEST_CHAR_ID, "user1", "sessG")
     lines = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     assistant = next(e for e in lines if e["type"] == "assistant_chat")
     assert "control" in assistant

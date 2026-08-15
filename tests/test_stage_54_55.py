@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_THIRD_CHAR_ID
 from types import SimpleNamespace
 
 import pytest
@@ -9,7 +10,7 @@ def _stage():
     return Stage(
         "relations-g",
         "owner",
-        ("yexuan", "yexuanJ-5412", "hongcha"),
+        (TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_THIRD_CHAR_ID),
         settings=StageSettings(max_responders=2),
     )
 
@@ -19,16 +20,16 @@ def test_projection_participation_weights_and_clamp():
 
     stage = _stage()
     segment = [
-        SimpleNamespace(speaker_id="yexuan", content="第一句", _addressed="yexuan"),
-        SimpleNamespace(speaker_id="yexuan", content="第二句", _addressed=False),
-        SimpleNamespace(speaker_id="yexuanJ-5412", content="一句", _addressed=False),
+        SimpleNamespace(speaker_id=TEST_CHAR_ID, content="第一句", _addressed=TEST_CHAR_ID),
+        SimpleNamespace(speaker_id=TEST_CHAR_ID, content="第二句", _addressed=False),
+        SimpleNamespace(speaker_id=TEST_PEER_CHAR_ID, content="一句", _addressed=False),
     ]
 
-    assert participation_memory_strength(stage, segment, "yexuan") == pytest.approx(0.8)
-    assert participation_memory_strength(stage, segment, "yexuanJ-5412") == pytest.approx(0.55)
-    assert participation_memory_strength(stage, segment, "hongcha") == pytest.approx(0.4)
-    noisy = [SimpleNamespace(speaker_id="yexuan", content="x", _addressed="yexuan") for _ in range(10)]
-    assert participation_memory_strength(stage, noisy, "yexuan") == pytest.approx(0.9)
+    assert participation_memory_strength(stage, segment, TEST_CHAR_ID) == pytest.approx(0.8)
+    assert participation_memory_strength(stage, segment, TEST_PEER_CHAR_ID) == pytest.approx(0.55)
+    assert participation_memory_strength(stage, segment, TEST_THIRD_CHAR_ID) == pytest.approx(0.4)
+    noisy = [SimpleNamespace(speaker_id=TEST_CHAR_ID, content="x", _addressed=TEST_CHAR_ID) for _ in range(10)]
+    assert participation_memory_strength(stage, noisy, TEST_CHAR_ID) == pytest.approx(0.9)
 
 
 @pytest.mark.asyncio
@@ -38,9 +39,9 @@ async def test_projection_carries_speakers_and_group_attribution_prompt(sandbox,
     from core.stage.store import append_transcript, create_stage
     from core import llm_client
 
-    stage = create_stage("projection-attribution", "owner", ["yexuan", "yexuanJ-5412"])
+    stage = create_stage("projection-attribution", "owner", [TEST_CHAR_ID, TEST_PEER_CHAR_ID])
     append_transcript(stage, TranscriptEntry("owner", "请你们谈谈", 1, "t", "user"))
-    append_transcript(stage, TranscriptEntry("yexuan", "我先说。", 2, "t", "user"))
+    append_transcript(stage, TranscriptEntry(TEST_CHAR_ID, "我先说。", 2, "t", "user"))
     jobs = []
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda kind, payload: jobs.append((kind, payload)))
     await enqueue_reality_projection("projection-attribution")
@@ -71,19 +72,19 @@ async def test_relation_handler_writes_provenance_then_cools_down(sandbox, monke
 
     monkeypatch.setattr("core.llm_client.chat", fake_chat)
     payload = {
-        "uid": "owner", "char_a": "yexuan", "char_b": "yexuanJ-5412",
+        "uid": "owner", "char_a": TEST_CHAR_ID, "char_b": TEST_PEER_CHAR_ID,
         "excerpt": "甲→乙：回应", "timestamp": 100000.0,
         "write_envelope": {"source": "user_chat", "can_write_memory": True},
     }
     await handler_update_char_relations(payload)
-    relation = load_relation("yexuan", "yexuanJ-5412")
+    relation = load_relation(TEST_CHAR_ID, TEST_PEER_CHAR_ID)
     assert relation["interaction_count"] == 1
     assert relation["a_of_b"]["summary"]
-    assert query("owner", "yexuan", artifact="char_relation")
+    assert query("owner", TEST_CHAR_ID, artifact="char_relation")
 
     payload["timestamp"] += 60
     await handler_update_char_relations(payload)
-    assert load_relation("yexuan", "yexuanJ-5412")["interaction_count"] == 2
+    assert load_relation(TEST_CHAR_ID, TEST_PEER_CHAR_ID)["interaction_count"] == 2
     assert len(calls) == 1
 
 
@@ -96,10 +97,10 @@ async def test_relation_handler_rejects_test_envelope(sandbox, monkeypatch):
 
     monkeypatch.setattr("core.llm_client.chat", should_not_call)
     await handler_update_char_relations({
-        "uid": "owner", "char_a": "yexuan", "char_b": "yexuanJ-5412",
+        "uid": "owner", "char_a": TEST_CHAR_ID, "char_b": TEST_PEER_CHAR_ID,
         "excerpt": "x", "write_envelope": {"can_write_memory": True, "is_test": True},
     })
-    assert load_relation("yexuan", "yexuanJ-5412") is None
+    assert load_relation(TEST_CHAR_ID, TEST_PEER_CHAR_ID) is None
 
 
 @pytest.mark.asyncio
@@ -108,16 +109,16 @@ async def test_only_direct_ai_pairs_enqueue_relation_updates(sandbox, monkeypatc
     from core.stage.models import TranscriptEntry
     from core.stage.store import append_transcript, create_stage
 
-    stage = create_stage("pair-queue", "owner", ["yexuan", "yexuanJ-5412"])
+    stage = create_stage("pair-queue", "owner", [TEST_CHAR_ID, TEST_PEER_CHAR_ID])
     append_transcript(stage, TranscriptEntry("owner", "先说", 1, "round", "user"))
-    append_transcript(stage, TranscriptEntry("yexuan", "我说", 2, "round", "user"))
-    append_transcript(stage, TranscriptEntry("yexuanJ-5412", "我接你的话", 3, "round", "yexuan"))
+    append_transcript(stage, TranscriptEntry(TEST_CHAR_ID, "我说", 2, "round", "user"))
+    append_transcript(stage, TranscriptEntry(TEST_PEER_CHAR_ID, "我接你的话", 3, "round", TEST_CHAR_ID))
     jobs = []
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda kind, payload: jobs.append((kind, payload)))
 
     assert await enqueue_relation_updates("pair-queue", "round") == 1
     assert jobs[0][0] == "update_char_relations"
-    assert {jobs[0][1]["char_a"], jobs[0][1]["char_b"]} == {"yexuan", "yexuanJ-5412"}
+    assert {jobs[0][1]["char_a"], jobs[0][1]["char_b"]} == {TEST_CHAR_ID, TEST_PEER_CHAR_ID}
     assert "owner" not in {jobs[0][1]["char_a"], jobs[0][1]["char_b"]}
 
 
@@ -126,13 +127,13 @@ def test_relation_presence_and_explicit_delete(sandbox):
     from core.stage.context import render_presence
     from core.memory.provenance_log import query
 
-    relation = _empty_relation("yexuan", "yexuanJ-5412")
+    relation = _empty_relation(TEST_CHAR_ID, TEST_PEER_CHAR_ID)
     relation["a_of_b"]["summary"] = "甲会认真听乙说话"
     relation["b_of_a"]["summary"] = "乙觉得甲很有主见"
     assert _save_relation(relation)
-    presence = render_presence(_stage(), viewer_id="yexuan")
+    presence = render_presence(_stage(), viewer_id=TEST_CHAR_ID)
     assert "角色间既有印象" in presence
     assert presence.count("的印象：") == 2
-    assert delete_relation("yexuan", "yexuanJ-5412", uid="owner")
-    records = query("owner", "yexuan", artifact="char_relation")
+    assert delete_relation(TEST_CHAR_ID, TEST_PEER_CHAR_ID, uid="owner")
+    records = query("owner", TEST_CHAR_ID, artifact="char_relation")
     assert any(record["trigger_signal"] == "explicit_forget" for record in records)

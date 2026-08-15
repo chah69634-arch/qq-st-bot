@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_slow_queue_scope_payload.py
 
@@ -38,7 +39,7 @@ from core.memory.scope import MemoryScope
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -149,7 +150,7 @@ async def test_handler_reads_uid_char_id_from_scope(sandbox):
 
     captured: list[tuple[str, str]] = []
 
-    def _spy_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id="yexuan"):
+    def _spy_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id=TEST_CHAR_ID):
         captured.append((uid, char_id))
 
     scope = MemoryScope.reality_scope("u_scope", "character_b").to_payload()
@@ -183,7 +184,7 @@ def test_scope_wins_over_char_id_field():
     scope_payload = MemoryScope.reality_scope("u99", "character_b").to_payload()
     payload = {
         "uid": "u99",
-        "char_id": "yexuan",    # 与 scope 冲突
+        "char_id": TEST_CHAR_ID,    # 与 scope 冲突
         "scope": scope_payload,
     }
     result = _get_scope_from_payload(payload, "conflict_test")
@@ -201,8 +202,8 @@ def test_non_reality_scope_raises():
     from core.memory.scope import MemoryScope
 
     # dream scope 需要 world_id
-    dream_scope = MemoryScope.dream_scope("u1", "yexuan", "world_x").to_payload()
-    payload = {"uid": "u1", "char_id": "yexuan", "scope": dream_scope}
+    dream_scope = MemoryScope.dream_scope("u1", TEST_CHAR_ID, "world_x").to_payload()
+    payload = {"uid": "u1", "char_id": TEST_CHAR_ID, "scope": dream_scope}
 
     with pytest.raises(ValueError, match="reality"):
         _get_scope_from_payload(payload, "test_handler")
@@ -212,8 +213,8 @@ def test_non_reality_scope_raises_pipeline():
     """pipeline._get_scope_from_payload 对非 reality domain 也应 fail-loud。"""
     from core.pipeline import _get_scope_from_payload
 
-    dream_scope = MemoryScope.dream_scope("u1", "yexuan", "world_x").to_payload()
-    payload = {"uid": "u1", "char_id": "yexuan", "scope": dream_scope}
+    dream_scope = MemoryScope.dream_scope("u1", TEST_CHAR_ID, "world_x").to_payload()
+    payload = {"uid": "u1", "char_id": TEST_CHAR_ID, "scope": dream_scope}
 
     with pytest.raises(ValueError, match="reality"):
         _get_scope_from_payload(payload, "test_handler")
@@ -251,10 +252,10 @@ def test_legacy_payload_pipeline_with_char_id_no_scope():
     """pipeline._get_scope_from_payload 对旧格式同样兼容。"""
     from core.pipeline import _get_scope_from_payload
 
-    payload = {"uid": "u_old", "char_id": "yexuan"}
+    payload = {"uid": "u_old", "char_id": TEST_CHAR_ID}
     scope = _get_scope_from_payload(payload, "legacy_test")
     assert scope.uid == "u_old"
-    assert scope.character_id == "yexuan"
+    assert scope.character_id == TEST_CHAR_ID
     assert scope.domain == "reality"
 
 
@@ -268,9 +269,9 @@ def test_legacy_payload_no_char_id_no_scope_warns_and_fallback(caplog):
     with caplog.at_level(logging.WARNING):
         scope = _get_scope_from_payload(payload, "dlq_handler")
 
-    assert scope.character_id == "yexuan", "fallback 应为 yexuan"
+    assert scope.character_id == TEST_CHAR_ID, f'fallback 应为 {TEST_CHAR_ID}'
     assert scope.uid == "u_dlq"
-    assert any("yexuan" in r.message for r in caplog.records), "应有 WARN 日志"
+    assert any(TEST_CHAR_ID in r.message for r in caplog.records), "应有 WARN 日志"
 
 
 def test_legacy_payload_pipeline_no_char_id_warns(caplog):
@@ -281,8 +282,8 @@ def test_legacy_payload_pipeline_no_char_id_warns(caplog):
     with caplog.at_level(logging.WARNING):
         scope = _get_scope_from_payload(payload, "dlq_handler2")
 
-    assert scope.character_id == "yexuan"
-    assert any("yexuan" in r.message for r in caplog.records)
+    assert scope.character_id == TEST_CHAR_ID
+    assert any(TEST_CHAR_ID in r.message for r in caplog.records)
 
 
 # ── Test 9: handler_capture_turn_retry 使用 scope 中的 char_id ──────────────
@@ -301,7 +302,7 @@ async def test_handler_capture_turn_retry_uses_scope_char_id(sandbox):
     scope = MemoryScope.reality_scope("u1", "character_b").to_payload()
     payload = {
         "uid": "u1",
-        "char_id": "yexuan",   # 旧字段，scope 应覆盖
+        "char_id": TEST_CHAR_ID,   # 旧字段，scope 应覆盖
         "scope": scope,
         "user_content": "msg",
         "reply": "rep",
@@ -341,7 +342,7 @@ async def test_handler_summarize_to_midterm_uses_scope_char_id(sandbox):
         "uid": "u2",
         "user_content": "msg",
         "reply": "rep",
-        "char_id": "yexuan",   # scope 应覆盖
+        "char_id": TEST_CHAR_ID,   # scope 应覆盖
         "scope": scope,
     }
 
@@ -368,7 +369,7 @@ async def test_handler_reflect_to_episodic_uses_scope_char_id(sandbox):
         "uid": "u3",
         "mid_ids": ["m1"],
         "trigger": "eager",
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
         "scope": scope,
     }
 
@@ -394,7 +395,7 @@ async def test_handler_user_profile_update_uses_scope_char_id(sandbox):
     payload = {
         "uid": "u4",
         "recent": "some text",
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
         "scope": scope,
     }
 
@@ -424,7 +425,7 @@ async def test_handler_consolidate_to_identity_uses_scope_char_id(sandbox):
     scope = MemoryScope.reality_scope("u5", "character_b").to_payload()
     payload = {
         "uid": "u5",
-        "char_id": "yexuan",
+        "char_id": TEST_CHAR_ID,
         "scope": scope,
     }
 
@@ -486,7 +487,7 @@ def test_memory_scope_roundtrip_reality():
 
 def test_memory_scope_roundtrip_dream():
     """dream scope roundtrip 保持一致。"""
-    original = MemoryScope.dream_scope("u_d", "yexuan", "world_z")
+    original = MemoryScope.dream_scope("u_d", TEST_CHAR_ID, "world_z")
     raw = original.to_payload()
     restored = MemoryScope.from_payload(raw)
     assert restored == original
@@ -503,7 +504,7 @@ def test_memory_scope_roundtrip_global():
 def test_memory_scope_from_payload_missing_field_raises():
     """from_payload 缺少 uid 或 domain 时应 fail-loud。"""
     with pytest.raises((ValueError, TypeError)):
-        MemoryScope.from_payload({"domain": "reality", "character_id": "yexuan"})  # 缺 uid
+        MemoryScope.from_payload({"domain": "reality", "character_id": TEST_CHAR_ID})  # 缺 uid
 
     with pytest.raises((ValueError, TypeError)):
         MemoryScope.from_payload({"uid": "u1"})  # 缺 domain

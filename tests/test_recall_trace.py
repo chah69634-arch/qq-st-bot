@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_recall_trace.py
 
@@ -17,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 UID = "recall_trace_test_user"
-CHAR_ID = "yexuan"
+CHAR_ID = TEST_CHAR_ID
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────

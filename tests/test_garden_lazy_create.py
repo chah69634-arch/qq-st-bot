@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 garden lazy-create tests — 新角色首次访问花园时的行为。
 
@@ -70,7 +71,7 @@ def test_new_char_does_not_touch_yexuan_garden(sandbox):
     from core.garden import manager
 
     char_id = "fresh_char"
-    yexuan_dir = sandbox.garden(char_id="yexuan")
+    yexuan_dir = sandbox.garden(char_id=TEST_CHAR_ID)
 
     assert not yexuan_dir.exists()
 

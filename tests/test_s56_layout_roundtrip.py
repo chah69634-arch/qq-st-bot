@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 S5/S6 布局路径往返验证（V9 post-soak，fallback 已退役）
 
@@ -134,7 +135,7 @@ def test_mood_write_new_path_and_reload(sandbox):
     mood_state.save(payload)
 
     # mood_state.save/load default to yexuan; roundtrip test checks yexuan path.
-    assert sandbox.mood_state(char_id="yexuan").exists(), "save() 应写入新路径"
+    assert sandbox.mood_state(char_id=TEST_CHAR_ID).exists(), "save() 应写入新路径"
 
     loaded = mood_state.load()
     assert loaded["current"] == "sad"
@@ -296,13 +297,13 @@ def test_garden_water_writes_new_path(sandbox):
     """water(slot_key) → 写新路径 plants.json → get_state 包含该槽位。"""
     from core.garden.manager import water, get_state
 
-    result = water("calm", reason="smoke_test", char_id="yexuan")
+    result = water("calm", reason="smoke_test", char_id=TEST_CHAR_ID)
     assert result["ok"], f"water 返回失败: {result}"
 
-    new_plants = sandbox.garden(char_id="yexuan") / "plants.json"
+    new_plants = sandbox.garden(char_id=TEST_CHAR_ID) / "plants.json"
     assert new_plants.exists(), "water 应写入新路径 plants.json"
 
-    state = get_state(char_id="yexuan")
+    state = get_state(char_id=TEST_CHAR_ID)
     slot_keys = {s["slot_key"] for s in state["slots"]}
     assert "calm" in slot_keys
 

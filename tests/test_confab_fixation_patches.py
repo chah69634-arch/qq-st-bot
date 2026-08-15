@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_confab_fixation_patches.py — 虚构记忆固化回路补丁验收
 
@@ -28,7 +29,7 @@ from core.memory.fixation_pipeline import (
 # ─── shared fixtures ─────────────────────────────────────────────────────────
 
 _UID = "confab_fix_uid"
-_CHAR = "yexuan"
+_CHAR = TEST_CHAR_ID
 _NOW = 1_800_000_000.0
 
 _DEFAULT_EPISODE_JSON = json.dumps({

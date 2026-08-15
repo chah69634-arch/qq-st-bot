@@ -9,8 +9,10 @@ from pathlib import Path
 
 _config: dict | None = None
 _base_config: dict | None = None
-_CONFIG_PATH = Path("config.yaml")
-_CONFIG_LOCAL_PATH = Path("config.local.yaml")
+_CONFIG_PATH = Path(os.environ.get("PRESENCEKIT_CONFIG_PATH", "config.yaml"))
+_CONFIG_LOCAL_PATH = Path(
+    os.environ.get("PRESENCEKIT_CONFIG_LOCAL_PATH", "config.local.yaml")
+)
 _config_mtime: tuple[float, float | None] | None = None
 _base_config_mtime: float | None = None
 _DATA_PREFIX_ENV = "YEXUAN_DATA_PREFIX"

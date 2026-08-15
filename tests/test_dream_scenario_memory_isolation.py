@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_scenario_memory_isolation.py — Scenario Mode 记忆/身体投影隔离守卫
 
@@ -77,7 +78,7 @@ def test_scenario_exit_skips_wire_afterglow():
     ):
         asyncio.run(_generate_summary_bg(
             "u_scenario", "dream_u_001", "soft",
-            char_id="yexuan", dream_mode="scenario",
+            char_id=TEST_CHAR_ID, dream_mode="scenario",
         ))
 
     wire_mock.assert_not_called()
@@ -96,7 +97,7 @@ def test_scenario_hard_exit_also_skips_wire_afterglow():
     ):
         asyncio.run(_generate_summary_bg(
             "u_scenario", "dream_u_002", "hard_exit",
-            char_id="yexuan", dream_mode="scenario",
+            char_id=TEST_CHAR_ID, dream_mode="scenario",
         ))
 
     wire_mock.assert_not_called()
@@ -115,7 +116,7 @@ def test_sandbox_exit_calls_wire_afterglow():
     ):
         asyncio.run(_generate_summary_bg(
             "u_sandbox", "dream_u_003", "soft",
-            char_id="yexuan", dream_mode="sandbox",
+            char_id=TEST_CHAR_ID, dream_mode="sandbox",
         ))
 
     wire_mock.assert_called_once()
@@ -220,7 +221,7 @@ def test_scenario_exit_skips_distill_impression():
     ):
         asyncio.run(_generate_summary_bg(
             "u_scenario_h", "dream_u_h001", "soft",
-            char_id="yexuan", dream_mode="scenario",
+            char_id=TEST_CHAR_ID, dream_mode="scenario",
         ))
 
     distill_mock.assert_not_called()
@@ -239,7 +240,7 @@ def test_scenario_hard_exit_also_skips_distill_impression():
     ):
         asyncio.run(_generate_summary_bg(
             "u_scenario_i", "dream_u_i001", "hard_exit",
-            char_id="yexuan", dream_mode="scenario",
+            char_id=TEST_CHAR_ID, dream_mode="scenario",
         ))
 
     distill_mock.assert_not_called()
@@ -258,7 +259,7 @@ def test_sandbox_exit_calls_distill_impression():
     ):
         asyncio.run(_generate_summary_bg(
             "u_sandbox_j", "dream_u_j001", "soft",
-            char_id="yexuan", dream_mode="sandbox",
+            char_id=TEST_CHAR_ID, dream_mode="sandbox",
         ))
 
     distill_mock.assert_called_once()
@@ -278,7 +279,7 @@ def test_scenario_summary_generation_not_blocked():
     ):
         asyncio.run(_generate_summary_bg(
             "u_scenario_k", "dream_u_k001", "soft",
-            char_id="yexuan", dream_mode="scenario",
+            char_id=TEST_CHAR_ID, dream_mode="scenario",
         ))
 
     summary_mock.assert_called_once()

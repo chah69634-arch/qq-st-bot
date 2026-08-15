@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_perceive_event.py — core/perceive_event.py gate and wake-event coverage
 Covers:
@@ -224,7 +225,7 @@ async def test_char_id_resolved_from_active_prompt_assets(monkeypatch, sandbox):
 async def test_char_id_missing_no_hardcoded_fallback(monkeypatch, sandbox):
     """
     When active_prompt_assets.json can't be read (OSError), char_id is None —
-    never falls back to a hardcoded character name like 'AI' or 'yexuan'.
+    never falls back to a hardcoded character name like 'AI' or TEST_CHAR_ID.
     """
     _allow_dream_guard(monkeypatch)
 
@@ -369,12 +370,12 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
             return "好呀"
 
         def _current_reality_scope(self, uid):
-            return type("Scope", (), {"character_id": "yexuan"})()
+            return type("Scope", (), {"character_id": TEST_CHAR_ID})()
 
         def _refresh_character_if_needed(self):
             pass
 
-        _active_character_id = "yexuan"
+        _active_character_id = TEST_CHAR_ID
 
     import core.pipeline_registry as _preg
     monkeypatch.setattr(_preg, "_pipeline", _FakePipeline())
@@ -382,7 +383,7 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     # Stub tool probe so it returns None (no tool call)
     import admin.routers.chat as _chat
 
-    async def _no_tool(msg, uid, *, char_id="yexuan", provenance_channel=None):
+    async def _no_tool(msg, uid, *, char_id=TEST_CHAR_ID, provenance_channel=None):
         return None
 
     monkeypatch.setattr(_chat, "_probe_and_execute_tools", _no_tool)

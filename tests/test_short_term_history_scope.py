@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_short_term_history_scope.py — P1-0C.5: get_history / module-level load char_id scope
 
@@ -32,13 +33,13 @@ def test_module_load_reads_character_b_bucket(sandbox):
 
     uid = "u_hist_load"
     SENTINEL_H = "荔枝DemoUser-load-character_b"
-    SENTINEL_Y = "茉莉Companion-load-yexuan"
+    SENTINEL_Y = f'茉莉Companion-load-{TEST_CHAR_ID}'
 
     append(uid, "user", SENTINEL_H, char_id="character_b")
-    append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
 
     character_b = load(uid, char_id="character_b")
-    yexuan = load(uid, char_id="yexuan")
+    yexuan = load(uid, char_id=TEST_CHAR_ID)
 
     assert any(SENTINEL_H in m.get("content", "") for m in character_b), (
         f"character_b bucket must contain sentinel; got {character_b}"
@@ -75,10 +76,10 @@ def test_get_history_excludes_cross_bucket_content(sandbox):
     from core.memory.short_term import append, get_history
 
     uid = "u_hist_cross"
-    SENTINEL_Y = "茉莉Companion-cross-yexuan"
+    SENTINEL_Y = f'茉莉Companion-cross-{TEST_CHAR_ID}'
     SENTINEL_H = "荔枝DemoUser-cross-character_b"
 
-    append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
     append(uid, "user", SENTINEL_H, char_id="character_b")
 
     result = get_history(uid, char_id="character_b")
@@ -99,14 +100,14 @@ def test_stm_get_history_class_method_reads_character_b_bucket(sandbox):
 
     uid = "u_hist_stm"
     SENTINEL_H = "荔枝DemoUser-stm-gh-character_b"
-    SENTINEL_Y = "茉莉Companion-stm-gh-yexuan"
+    SENTINEL_Y = f'茉莉Companion-stm-gh-{TEST_CHAR_ID}'
 
     append(uid, "user", SENTINEL_H, char_id="character_b")
-    append(uid, "user", SENTINEL_Y, char_id="yexuan")
+    append(uid, "user", SENTINEL_Y, char_id=TEST_CHAR_ID)
 
     stm = ShortTermMemory()
     character_b = stm.get_history(uid, char_id="character_b")
-    yexuan = stm.get_history(uid, char_id="yexuan")
+    yexuan = stm.get_history(uid, char_id=TEST_CHAR_ID)
 
     assert any(SENTINEL_H in m.get("content", "") for m in character_b), (
         f"ShortTermMemory.get_history(character_b) must return character_b content; got {character_b}"

@@ -19,6 +19,7 @@ Covers:
 12. Regression: test_memory_path_resolver unaffected
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 
@@ -92,16 +93,16 @@ def test_reset_via_save_targets_resolver_path(sandbox):
         "high_strength_since_last": 4,
         "strength_accumulated": 6.0,
         "last_sweep_at": 0.0,
-    }, char_id="yexuan")
+    }, char_id=TEST_CHAR_ID)
 
     # simulate the inline reset done by consolidate_to_identity
-    state = _load_fixation_state(_UID, char_id="yexuan")
+    state = _load_fixation_state(_UID, char_id=TEST_CHAR_ID)
     state["episodic_since_last"] = 0
     state["high_strength_since_last"] = 0
     state["strength_accumulated"] = 0.0
-    _save_fixation_state(_UID, state, char_id="yexuan")
+    _save_fixation_state(_UID, state, char_id=TEST_CHAR_ID)
 
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     path = resolve_path(scope, "fixation_state")
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["episodic_since_last"] == 0
@@ -122,9 +123,9 @@ def test_fixation_state_path_equals_legacy_sandbox_path_character_b(sandbox):
 
 
 def test_fixation_state_path_equals_legacy_sandbox_path_yexuan(sandbox):
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     resolver_path = resolve_path(scope, "fixation_state")
-    legacy_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "fixation_state.json"
+    legacy_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "fixation_state.json"
     assert resolver_path == legacy_path, (
         f"Resolver path diverged from legacy:\n  resolver: {resolver_path}\n  legacy:   {legacy_path}"
     )
@@ -175,7 +176,7 @@ def test_yexuan_character_b_fixation_state_isolated(sandbox):
         "high_strength_since_last": 0,
         "strength_accumulated": 0.0,
         "last_sweep_at": 0.0,
-    }, char_id="yexuan")
+    }, char_id=TEST_CHAR_ID)
     _save_fixation_state(_UID, {
         "last_consolidated_at": 0.0,
         "episodic_since_last": 99,
@@ -184,13 +185,13 @@ def test_yexuan_character_b_fixation_state_isolated(sandbox):
         "last_sweep_at": 0.0,
     }, char_id="character_b")
 
-    y = _load_fixation_state(_UID, char_id="yexuan")
+    y = _load_fixation_state(_UID, char_id=TEST_CHAR_ID)
     h = _load_fixation_state(_UID, char_id="character_b")
 
     assert y["episodic_since_last"] == 1
     assert h["episodic_since_last"] == 99
 
-    y_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "fixation_state.json"
+    y_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "fixation_state.json"
     h_path = sandbox.user_memory_root(_UID, char_id="character_b") / "fixation_state.json"
     assert y_path.exists()
     assert h_path.exists()
@@ -211,12 +212,12 @@ def test_character_b_fixation_does_not_read_yexuan_value(sandbox):
         "high_strength_since_last": 77,
         "strength_accumulated": 0.0,
         "last_sweep_at": 0.0,
-    }, char_id="yexuan")
+    }, char_id=TEST_CHAR_ID)
 
     # character_b bucket is untouched → should return defaults
     h = _load_fixation_state(_UID, char_id="character_b")
     assert h["high_strength_since_last"] == 0, (
-        "character_b must not read yexuan high_strength_since_last=77"
+        f'character_b must not read {TEST_CHAR_ID} high_strength_since_last=77'
     )
 
 
@@ -225,25 +226,25 @@ def test_character_b_fixation_does_not_read_yexuan_value(sandbox):
 # ---------------------------------------------------------------------------
 
 def test_resolver_fixation_state_filename_is_fixation_state_json(sandbox):
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     p = resolve_path(scope, "fixation_state")
     assert p.name == "fixation_state.json"
 
 
 def test_resolver_fixation_state_parent_is_user_memory_root(sandbox):
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     p = resolve_path(scope, "fixation_state")
-    expected_parent = sandbox.user_memory_root(_UID, char_id="yexuan")
+    expected_parent = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID)
     assert p.parent == expected_parent
 
 
 def test_resolver_fixation_state_different_char_different_path(sandbox):
-    scope_y = MemoryScope.reality_scope(_UID, "yexuan")
+    scope_y = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     scope_h = MemoryScope.reality_scope(_UID, "character_b")
     assert resolve_path(scope_y, "fixation_state") != resolve_path(scope_h, "fixation_state")
 
 
 def test_resolver_fixation_state_different_uid_different_path(sandbox):
-    scope_a = MemoryScope.reality_scope("uid_aaa", "yexuan")
-    scope_b = MemoryScope.reality_scope("uid_bbb", "yexuan")
+    scope_a = MemoryScope.reality_scope("uid_aaa", TEST_CHAR_ID)
+    scope_b = MemoryScope.reality_scope("uid_bbb", TEST_CHAR_ID)
     assert resolve_path(scope_a, "fixation_state") != resolve_path(scope_b, "fixation_state")

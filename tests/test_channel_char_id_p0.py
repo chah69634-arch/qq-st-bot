@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_THIRD_CHAR_ID
 import json
 
 
@@ -12,15 +13,15 @@ async def test_desktop_ws_envelopes_include_optional_char_id(monkeypatch):
 
     monkeypatch.setattr(desktop_ws, "_send_json", fake_send)
 
-    await desktop_ws.push_message("hello", msg_id="turn-1", char_id="hongcha")
+    await desktop_ws.push_message("hello", msg_id="turn-1", char_id=TEST_THIRD_CHAR_ID)
     await desktop_ws.push_segments(
         "hello",
         [{"type": "say", "text": "hello"}],
         msg_id="turn-1",
-        char_id="hongcha",
+        char_id=TEST_THIRD_CHAR_ID,
     )
 
-    assert [item["char_id"] for item in sent] == ["hongcha", "hongcha"]
+    assert [item["char_id"] for item in sent] == [TEST_THIRD_CHAR_ID, TEST_THIRD_CHAR_ID]
 
 
 async def test_desktop_ws_envelopes_omit_char_id_when_unspecified(monkeypatch):
@@ -43,20 +44,20 @@ async def test_desktop_ws_envelopes_omit_char_id_when_unspecified(monkeypatch):
 async def test_mobile_queue_includes_optional_char_id(sandbox):
     from channels.mobile import MobileChannel
 
-    await MobileChannel().send("hello", "owner", msg_id="turn-1", char_id="hongcha")
+    await MobileChannel().send("hello", "owner", msg_id="turn-1", char_id=TEST_THIRD_CHAR_ID)
 
     queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
-    assert queue[0]["char_id"] == "hongcha"
+    assert queue[0]["char_id"] == TEST_THIRD_CHAR_ID
 
 
 async def test_desktop_fallback_queue_includes_optional_char_id(sandbox, monkeypatch):
     from channels.desktop import DesktopChannel
 
     monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
-    await DesktopChannel().send("hello", "owner", char_id="hongcha")
+    await DesktopChannel().send("hello", "owner", char_id=TEST_THIRD_CHAR_ID)
 
     queue = json.loads(sandbox.channel_queue().read_text(encoding="utf-8"))
-    assert queue[0]["char_id"] == "hongcha"
+    assert queue[0]["char_id"] == TEST_THIRD_CHAR_ID
 
 
 async def test_registry_broadcast_passes_optional_char_id():
@@ -76,9 +77,9 @@ async def test_registry_broadcast_passes_optional_char_id():
     channel = Channel()
     registry.register(channel)
 
-    await registry.broadcast("hello", "owner", char_id="hongcha")
+    await registry.broadcast("hello", "owner", char_id=TEST_THIRD_CHAR_ID)
 
-    assert channel.char_id == "hongcha"
+    assert channel.char_id == TEST_THIRD_CHAR_ID
 
 
 async def test_turn_sink_fanout_passes_explicit_char_id():
@@ -105,10 +106,10 @@ async def test_turn_sink_fanout_passes_explicit_char_id():
         uid="owner",
         fanout="all",
         behavior=None,
-        char_id="hongcha",
+        char_id=TEST_THIRD_CHAR_ID,
     )
 
-    assert channel.char_id == "hongcha"
+    assert channel.char_id == TEST_THIRD_CHAR_ID
 
 
 async def test_turn_sink_fanout_uses_pipeline_active_char_id():
@@ -125,7 +126,7 @@ async def test_turn_sink_fanout_uses_pipeline_active_char_id():
             self.char_id = char_id
 
     class Pipeline:
-        _active_character_id = "hongcha"
+        _active_character_id = TEST_THIRD_CHAR_ID
 
         async def post_process_critical(self, uid, content, reply, **kwargs):
             return {"turn_id": "turn-1", "critical_written": True}
@@ -148,4 +149,4 @@ async def test_turn_sink_fanout_uses_pipeline_active_char_id():
         pipeline=Pipeline(),
     )
 
-    assert channel.char_id == "hongcha"
+    assert channel.char_id == TEST_THIRD_CHAR_ID

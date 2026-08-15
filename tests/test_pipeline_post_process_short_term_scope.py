@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_pipeline_post_process_short_term_scope.py
 
@@ -31,7 +32,7 @@ import core.memory.fixation_pipeline  # noqa: F401
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -78,7 +79,7 @@ async def test_post_process_st_load_receives_char_id_character_b(
 ):
     """
     Inside post_process, both _st.load calls for the profile-update check
-    must forward char_id='character_b', not the default 'yexuan'.
+    must forward char_id='character_b', not the default TEST_CHAR_ID.
     """
     from core.write_envelope import WriteEnvelope, SourceType
 
@@ -87,7 +88,7 @@ async def test_post_process_st_load_receives_char_id_character_b(
 
     captured_char_ids: list[str] = []
 
-    def _spy_load(user_id, *, char_id="yexuan"):
+    def _spy_load(user_id, *, char_id=TEST_CHAR_ID):
         captured_char_ids.append(char_id)
         return []
 
@@ -118,16 +119,16 @@ async def test_post_process_st_load_uses_new_char_id_after_switch(
 ):
     """
     After writing active_character character_b, the next post_process call passes
-    char_id='character_b' to _st.load (not 'yexuan' from the initial pipeline state).
+    char_id='character_b' to _st.load (not TEST_CHAR_ID from the initial pipeline state).
     """
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     captured: list[str] = []
 
-    def _spy_load(user_id, *, char_id="yexuan"):
+    def _spy_load(user_id, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return []
 
@@ -148,8 +149,8 @@ async def test_post_process_st_load_uses_new_char_id_after_switch(
         await pipeline.post_process(user_id="u1", content="你好", reply="在的", envelope=env)
         first_calls = list(captured)
         assert first_calls, "_st.load must be called on first turn"
-        assert all(c == "yexuan" for c in first_calls), (
-            f"First turn must read char_id='yexuan'; got {first_calls}"
+        assert all(c == TEST_CHAR_ID for c in first_calls), (
+            f"First turn must read char_id=TEST_CHAR_ID; got {first_calls}"
         )
 
         captured.clear()
@@ -180,7 +181,7 @@ async def test_post_process_profile_recent_reads_character_b_bucket_only(
     _write_active(sandbox, "character_b")
 
     uid = "u_pp_content_scope"
-    YEXUAN_ONLY = "草莓大福-yexuan专属内容"
+    YEXUAN_ONLY = f'草莓大福-{TEST_CHAR_ID}专属内容'
     CHARACTER_B_SIGNAL = "荔枝DemoUser-character_b专属"
 
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
@@ -204,7 +205,7 @@ async def test_post_process_profile_recent_reads_character_b_bucket_only(
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
         # Pre-populate both buckets inside the patch so get_config mock applies
-        _st_mod.append(uid, "user", YEXUAN_ONLY, char_id="yexuan")
+        _st_mod.append(uid, "user", YEXUAN_ONLY, char_id=TEST_CHAR_ID)
         _st_mod.append(uid, "user", CHARACTER_B_SIGNAL, char_id="character_b")
 
         await pipeline.post_process(user_id=uid, content="你好", reply="在的", envelope=env)

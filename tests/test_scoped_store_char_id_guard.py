@@ -3,7 +3,7 @@ tests/test_scoped_store_char_id_guard.py — T-14A
 
 Verifies that every migrated scoped store rejects invalid char_id values
 (None, "", non-str) with a ValueError before any path construction or
-MemoryScope creation, and that the default char_id="yexuan" still works.
+MemoryScope creation, and that the default char_id=TEST_CHAR_ID still works.
 
 Covers:
 1.  require_character_id helper — None / "" / int / valid str
@@ -19,6 +19,7 @@ Covers:
 10. No new fallback to yexuan introduced (confirmed via ValueError not bypassed)
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import pytest
@@ -33,7 +34,7 @@ _UID = "guard_test_u1"
 class TestRequireCharacterId:
     def test_valid_string_returned_unchanged(self):
         from core.memory.scope import require_character_id
-        assert require_character_id("yexuan") == "yexuan"
+        assert require_character_id(TEST_CHAR_ID) == TEST_CHAR_ID
         assert require_character_id("character_b") == "character_b"
 
     def test_none_raises(self):
@@ -54,7 +55,7 @@ class TestRequireCharacterId:
     def test_list_raises(self):
         from core.memory.scope import require_character_id
         with pytest.raises(ValueError, match="character_id"):
-            require_character_id(["yexuan"])
+            require_character_id([TEST_CHAR_ID])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -267,8 +268,8 @@ class TestEventLogGuard:
         assert result is False
 
         # Confirm yexuan bucket was not written
-        yexuan_dir = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "event_log")
-        assert not yexuan_dir.exists(), "append must not fall back to writing yexuan bucket"
+        yexuan_dir = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "event_log")
+        assert not yexuan_dir.exists(), f'append must not fall back to writing {TEST_CHAR_ID} bucket'
 
     def test_append_empty_returns_false_not_write_yexuan(self, sandbox):
         import core.memory.event_log as el
@@ -278,7 +279,7 @@ class TestEventLogGuard:
         result = el.append(_UID, "user", "hello", char_id="")
         assert result is False
 
-        yexuan_dir = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "event_log")
+        yexuan_dir = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "event_log")
         assert not yexuan_dir.exists()
 
     def test_default_char_id_works(self, sandbox):
@@ -391,7 +392,7 @@ class TestNoYexuanFallback:
         with pytest.raises(ValueError):
             up.save(_UID, {"name": "injected"}, char_id=None)
 
-        yexuan_path = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "profile")
+        yexuan_path = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "profile")
         assert not yexuan_path.exists()
 
     def test_mid_term_no_yexuan_fallback(self, sandbox):
@@ -402,7 +403,7 @@ class TestNoYexuanFallback:
         with pytest.raises(ValueError):
             mt.append(_UID, "injected summary", char_id=None)
 
-        yexuan_path = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "mid_term")
+        yexuan_path = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "mid_term")
         assert not yexuan_path.exists()
 
     def test_short_term_no_yexuan_fallback(self, sandbox):
@@ -413,5 +414,5 @@ class TestNoYexuanFallback:
         with pytest.raises(ValueError):
             st.load(_UID, char_id=None)
 
-        yexuan_path = resolve_path(MemoryScope.reality_scope(_UID, "yexuan"), "history")
+        yexuan_path = resolve_path(MemoryScope.reality_scope(_UID, TEST_CHAR_ID), "history")
         assert not yexuan_path.exists()

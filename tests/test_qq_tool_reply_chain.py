@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_qq_tool_reply_chain.py — P2.1: QQ 工具确认回复链路修复验证
 
@@ -24,7 +25,7 @@ def _make_fake_pipeline(llm_reply: str = "你好") -> MagicMock:
     fake.character = MagicMock()
     fake.character.name = "TestChar"
     fake.author_note_extra = ""
-    fake._active_character_id = "yexuan"
+    fake._active_character_id = TEST_CHAR_ID
     fake.build_prompt = MagicMock(return_value=([], {"pending_paths": []}))
     fake.run_llm = AsyncMock(return_value=llm_reply)
     # Brief 37: record_assistant_turn calls post_process_critical (awaited) then
@@ -271,7 +272,7 @@ async def test_handle_message_main_path_intact(sandbox, monkeypatch):
     fake = _make_fake_pipeline("正常回复内容。")
     fake.fetch_context = AsyncMock(return_value={})
     fake._current_reality_scope = MagicMock(
-        return_value=MemoryScope.reality_scope(_UID, "yexuan")
+        return_value=MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     )
     monkeypatch.setattr(_main, "_pipeline", fake)
 

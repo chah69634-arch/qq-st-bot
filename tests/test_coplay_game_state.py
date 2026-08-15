@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_game_state.py — Brief 41: per-game 进度档 + coplay_context 层文本。
 """
@@ -10,7 +11,7 @@ from core.coplay import game_state, session
 from core.coplay.observer import GameMoment
 
 UID = "u1"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 GAME_ID = "steam:123"
 
 

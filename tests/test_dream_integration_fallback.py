@@ -20,12 +20,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import core.sandbox as _sandbox
+from tests.fixtures.public_assets import PUBLIC_DREAM_WORLDS
 
-# ── Real _default location: resolved fresh, not hardcoded to the pre-C1-migration
-# characters/dream_worlds/ path (that dir no longer exists on disk; real content
-# now lives under userdata/characters/dream/worlds/, see docs/c1-root-asset-inventory.md).
-_REAL_WORLDS_BASE = _sandbox.DataPaths(mode=None).dream_worlds_dir()
+# ── Public fixture location: never read a developer's ignored authored worlds.
+_REAL_WORLDS_BASE = PUBLIC_DREAM_WORLDS
 
 # ── Key phrases from _default files (see characters/dream_worlds/_default/) ──
 # Changes to _default content must be reflected here.

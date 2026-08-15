@@ -16,6 +16,7 @@ Coverage:
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -45,7 +46,7 @@ class TestTriggerDreamBlocked(unittest.TestCase):
             uid=uid,
             channel="system",
             kind="scheduled",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             payload={"trigger_name": trigger_name},
         )
 
@@ -118,7 +119,7 @@ class TestTriggerNoShortTermWrite(unittest.TestCase):
                 emotion="happy",
                 trigger_name="hidden_state_decay",
                 envelope=stamp_trigger(),
-                char_id="yexuan",
+                char_id=TEST_CHAR_ID,
             )
 
         self.assertEqual(short_term_calls, [],
@@ -156,7 +157,7 @@ class TestTriggerNoShortTermWrite(unittest.TestCase):
                 emotion="happy",
                 trigger_name="morning_greeting",
                 envelope=stamp_trigger(),
-                char_id="yexuan",
+                char_id=TEST_CHAR_ID,
             )
 
         self.assertTrue(all(c[0][1] == "assistant" for c in short_term_calls),
@@ -194,7 +195,7 @@ class TestTriggerNoShortTermWrite(unittest.TestCase):
                 emotion="neutral",
                 trigger_name="",
                 envelope=stamp_user_chat(),
-                char_id="yexuan",
+                char_id=TEST_CHAR_ID,
             )
 
         user_st = [c for c in short_term_calls if c[0][1] == "user"]
@@ -226,7 +227,7 @@ class TestTriggerAuditLog(unittest.TestCase):
                 trigger_name="morning_greeting",
                 reply=reply,
                 emotion="happy",
-                char_id="yexuan",
+                char_id=TEST_CHAR_ID,
             )
 
         audit_files = list(tmp.rglob("trigger_audit.jsonl"))
@@ -253,7 +254,7 @@ class TestTriggerAuditLog(unittest.TestCase):
             from core.memory.fixation_pipeline import _write_trigger_audit_log
             _write_trigger_audit_log(
                 uid="u2", turn_id="u2_tid", trigger_name="diary_reminder",
-                reply=None, emotion="neutral", char_id="yexuan",
+                reply=None, emotion="neutral", char_id=TEST_CHAR_ID,
             )
 
 
@@ -275,7 +276,7 @@ class TestTriggerPerceiveEvent(unittest.TestCase):
             uid="owner_stable",
             channel="system",
             kind="scheduled",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             payload={"trigger_name": "morning_greeting"},
         )
 
@@ -298,15 +299,15 @@ class TestTriggerPerceiveEvent(unittest.TestCase):
         now = (time.time() // 60) * 60 + 10
         e1 = PerceiveEvent(
             source="scheduler", uid="u", channel="system", kind="scheduled",
-            char_id="yexuan", payload={"trigger_name": "morning_greeting"},
+            char_id=TEST_CHAR_ID, payload={"trigger_name": "morning_greeting"},
             created_at=now,
         )
         e2 = PerceiveEvent(
             source="scheduler", uid="u", channel="system", kind="scheduled",
-            char_id="yexuan", payload={"trigger_name": "morning_greeting"},
+            char_id=TEST_CHAR_ID, payload={"trigger_name": "morning_greeting"},
             created_at=now + 5,
         )
-        self.assertEqual(_make_dedupe_key(e1, "yexuan"), _make_dedupe_key(e2, "yexuan"))
+        self.assertEqual(_make_dedupe_key(e1, TEST_CHAR_ID), _make_dedupe_key(e2, TEST_CHAR_ID))
 
     def test_different_triggers_different_keys(self):
         from core.perceive_event import PerceiveEvent, _make_dedupe_key
@@ -314,13 +315,13 @@ class TestTriggerPerceiveEvent(unittest.TestCase):
         now = time.time()
         e_m = PerceiveEvent(
             source="scheduler", uid="u", channel="system", kind="scheduled",
-            char_id="yexuan", payload={"trigger_name": "morning_greeting"}, created_at=now,
+            char_id=TEST_CHAR_ID, payload={"trigger_name": "morning_greeting"}, created_at=now,
         )
         e_n = PerceiveEvent(
             source="scheduler", uid="u", channel="system", kind="scheduled",
-            char_id="yexuan", payload={"trigger_name": "night_reminder"}, created_at=now,
+            char_id=TEST_CHAR_ID, payload={"trigger_name": "night_reminder"}, created_at=now,
         )
-        self.assertNotEqual(_make_dedupe_key(e_m, "yexuan"), _make_dedupe_key(e_n, "yexuan"))
+        self.assertNotEqual(_make_dedupe_key(e_m, TEST_CHAR_ID), _make_dedupe_key(e_n, TEST_CHAR_ID))
 
 
 # ── T5: duplicate trigger rejected ────────────────────────────────────────────
@@ -336,7 +337,7 @@ class TestDuplicateTrigger(unittest.TestCase):
         from core.perceive_event import PerceiveEvent
         return PerceiveEvent(
             source="scheduler", uid=uid, channel="system", kind="scheduled",
-            char_id="yexuan", payload={"trigger_name": "random_message"},
+            char_id=TEST_CHAR_ID, payload={"trigger_name": "random_message"},
         )
 
     def test_duplicate_trigger_rejected(self):
@@ -372,7 +373,7 @@ class TestDuplicateTrigger(unittest.TestCase):
 # ── T6: char_id resolved without hardcoded fallback ───────────────────────────
 
 class TestTriggerCharId(unittest.TestCase):
-    """T6: trigger char_id resolved from caller / assets; no 'yexuan' hardcode."""
+    """T6: trigger char_id resolved from caller / assets; no TEST_CHAR_ID hardcode."""
 
     def test_explicit_char_id_used_directly(self):
         from core.perceive_event import _resolve_char_id
@@ -461,7 +462,7 @@ class TestCaptureEnvelopeGuard(unittest.TestCase):
                 uid="u1", user_msg="p", reply="r",
                 trigger_name="morning_greeting",
                 envelope=WriteEnvelope(),
-                char_id="yexuan",
+                char_id=TEST_CHAR_ID,
             )
 
         self.assertEqual(st_calls, [], "can_write_memory=False must not call short_term.append")

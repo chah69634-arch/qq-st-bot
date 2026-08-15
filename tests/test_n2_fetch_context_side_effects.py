@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_n2_fetch_context_side_effects.py
 
@@ -39,7 +40,7 @@ import core.user_relation             # noqa: F401
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -128,13 +129,13 @@ def test_fetch_context_does_not_call_mood_state_update_directly(
     """N2-A T1: fetch_context 全程不调用 mood_state.update。"""
     import core.memory.mood_state as _ms
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
     _apply_base_stubs(monkeypatch)
 
     mood_update_calls = []
 
-    def _spy_update(new_emotion, new_intensity=None, source="detect", *, char_id="yexuan"):
+    def _spy_update(new_emotion, new_intensity=None, source="detect", *, char_id=TEST_CHAR_ID):
         mood_update_calls.append((new_emotion, source))
         return {}
 
@@ -167,8 +168,8 @@ def test_fetch_context_calls_retrieve_with_allow_strengthen_false(
     """N2-A T2: fetch_context 调 episodic.retrieve 必须传 allow_strengthen=False。"""
     import core.memory.episodic_memory as _ep
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
     _apply_base_stubs(monkeypatch)
 
     retrieve_kwargs = []
@@ -221,7 +222,7 @@ def test_retrieve_with_allow_strengthen_false_does_not_save():
             user_id="u_test",
             topic="测试 hello",
             top_k=3,
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             allow_strengthen=False,
         )
 
@@ -266,7 +267,7 @@ def test_retrieve_with_allow_strengthen_true_does_save():
             user_id="u_test",
             topic="测试 hello",
             top_k=3,
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             allow_strengthen=True,
         )
 
@@ -312,7 +313,7 @@ def test_retrieve_with_allow_strengthen_false_does_not_call_nudge():
             user_id="u_test",
             topic="情绪",
             top_k=3,
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             allow_strengthen=False,
         )
 
@@ -353,7 +354,7 @@ async def test_mark_tool_thinking_mood_calls_mood_update():
     with patch("core.memory.locks.global_lock", return_value=mock_lock):
         with patch.object(_ms, "update",
                           side_effect=lambda *a, **kw: calls.append((a, kw))):
-            await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id="yexuan")
+            await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id=TEST_CHAR_ID)
 
     assert len(calls) == 1
     assert calls[0][0][0] == "thinking", f"情绪应为 thinking，实际 {calls[0][0][0]!r}"
@@ -373,7 +374,7 @@ async def test_mark_tool_thinking_mood_skips_when_envelope_blocks():
     calls = []
     with patch.object(_ms, "update",
                       side_effect=lambda *a, **kw: calls.append((a, kw))):
-        await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id="yexuan", envelope=env)
+        await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id=TEST_CHAR_ID, envelope=env)
 
     assert calls == []
 
@@ -403,7 +404,7 @@ async def test_maybe_mark_sleepy_writes_when_nighttime():
                      side_effect=lambda *a, **kw: calls.append((a, kw))),
     ):
         _dt.now.return_value.hour = 23
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID)
 
     assert len(calls) == 1 and calls[0][0][0] == "sleepy"
     assert calls[0][1]["force"] is True
@@ -424,7 +425,7 @@ async def test_maybe_mark_sleepy_skips_when_daytime():
                      side_effect=lambda *a, **kw: calls.append(a)),
     ):
         _dt.now.return_value.hour = 14
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID)
 
     assert calls == []
 
@@ -450,7 +451,7 @@ async def test_maybe_mark_sleepy_skips_when_yandere():
                      side_effect=lambda *a, **kw: calls.append(a)),
     ):
         _dt.now.return_value.hour = 2
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID)
 
     assert calls == []
 
@@ -473,7 +474,7 @@ async def test_maybe_mark_sleepy_skips_when_envelope_blocks():
                      side_effect=lambda *a, **kw: calls.append(a)),
     ):
         _dt.now.return_value.hour = 23
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan",
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID,
                                                         envelope=env)
 
     assert calls == []

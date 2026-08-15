@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_turn_isolation.py — dream_turn 副作用隔离 + reality 硬拒绝
 
@@ -72,7 +73,7 @@ def active_dream(sandbox):
 
 def test_dream_turn_does_not_touch_mood_state(sandbox, active_dream):
     """mood_state.json must not change after a dream turn."""
-    mood_path = sandbox.mood_state(char_id="yexuan")
+    mood_path = sandbox.mood_state(char_id=TEST_CHAR_ID)
     mood_initial = mood_path.read_text() if mood_path.exists() else "ABSENT"
 
     with patch("core.llm_client.chat", _make_fake_llm()), \

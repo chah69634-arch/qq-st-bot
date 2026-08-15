@@ -7,6 +7,7 @@ tests/test_char_model_routing_api.py — Brief 87 §1: per-角色模型绑定 AP
   GET   /model-presets/routing-profiles
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -42,7 +43,7 @@ def chars_tree(tmp_path):
     """最小 characters/ 目录：一个未声明路由的角色 + 一个已绑定 claude-main 的角色。"""
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "叶瑄", "presence_ext": {}, "world_book": []}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -76,7 +77,7 @@ def test_get_unknown_char_404(registry):
 
 def test_get_undeclared_char_falls_back_to_active_routing(registry):
     from admin.routers.character import get_character_model_routing
-    result = asyncio.run(get_character_model_routing("yexuan", auth="dummy"))
+    result = asyncio.run(get_character_model_routing(TEST_CHAR_ID, auth="dummy"))
     assert result["model_routing"] is None
     assert result["effective_profile"] == "default"
     assert result["resolved_chat_preset"] == "ds"
@@ -97,17 +98,17 @@ def test_patch_valid_profile_binds_and_writes_file(registry, chars_tree):
 
     result = asyncio.run(
         set_character_model_routing(
-            "yexuan", ModelRoutingUpdate(model_routing="claude-main"), auth="dummy"
+            TEST_CHAR_ID, ModelRoutingUpdate(model_routing="claude-main"), auth="dummy"
         )
     )
     assert result["model_routing"] == "claude-main"
     assert result["effective_profile"] == "claude-main"
     assert result["resolved_chat_preset"] == "claude"
 
-    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / "yexuan.json").read_text(encoding="utf-8"))
+    saved = json.loads((chars_tree / "userdata" / "characters" / "cards" / f'{TEST_CHAR_ID}.json').read_text(encoding="utf-8"))
     assert saved["presence_ext"]["model_routing"] == "claude-main"
     assert saved["name"] == "叶瑄", "其余字段不受影响"
-    legacy = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    legacy = json.loads((chars_tree / "characters" / f'{TEST_CHAR_ID}.json').read_text(encoding="utf-8"))
     assert legacy["presence_ext"] == {}, "legacy fallback 必须保持只读"
 
 
@@ -117,12 +118,12 @@ def test_patch_unknown_profile_rejected_422(registry, chars_tree):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(
             set_character_model_routing(
-                "yexuan", ModelRoutingUpdate(model_routing="does-not-exist"), auth="dummy"
+                TEST_CHAR_ID, ModelRoutingUpdate(model_routing="does-not-exist"), auth="dummy"
             )
         )
     assert exc.value.status_code == 422
 
-    saved = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    saved = json.loads((chars_tree / "characters" / f'{TEST_CHAR_ID}.json').read_text(encoding="utf-8"))
     assert saved["presence_ext"] == {}, "非法值不能写入磁盘（不能静默失效，也不能半写入）"
 
 

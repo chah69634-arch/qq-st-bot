@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_p1_memory_fields.py — P1 验收
 
@@ -31,9 +32,9 @@ class TestEventLogAppendSpeaker:
         full_file = tmp_path / "full_log.md"
 
         monkeypatch.setattr(cl, "_char_name", lambda: "叶瑄")
-        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id="yexuan": day_file)
-        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id="yexuan": full_file)
-        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id="yexuan": None)
+        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id=TEST_CHAR_ID: day_file)
+        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id=TEST_CHAR_ID: full_file)
+        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id=TEST_CHAR_ID: None)
         monkeypatch.setattr(el, "_already_appended", lambda path, line, turn_id: False)
 
         el.append("test_uid", "user", "我在下棋", turn_id="test_1000")
@@ -51,9 +52,9 @@ class TestEventLogAppendSpeaker:
         full_file = tmp_path / "full_log.md"
 
         monkeypatch.setattr(cl, "_char_name", lambda: "叶瑄")
-        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id="yexuan": day_file)
-        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id="yexuan": full_file)
-        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id="yexuan": None)
+        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id=TEST_CHAR_ID: day_file)
+        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id=TEST_CHAR_ID: full_file)
+        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id=TEST_CHAR_ID: None)
         monkeypatch.setattr(el, "_already_appended", lambda path, line, turn_id: False)
 
         el.append("test_uid", "assistant", "下棋很有意思", emotion="happy", turn_id="test_2000")
@@ -71,9 +72,9 @@ class TestEventLogAppendSpeaker:
         full_file = tmp_path / "full_log.md"
 
         monkeypatch.setattr(cl, "_char_name", lambda: "叶瑄")
-        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id="yexuan": day_file)
-        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id="yexuan": full_file)
-        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id="yexuan": None)
+        monkeypatch.setattr(el, "_day_file_write", lambda uid, now, char_id=TEST_CHAR_ID: day_file)
+        monkeypatch.setattr(el, "_full_log_file_write", lambda uid, char_id=TEST_CHAR_ID: full_file)
+        monkeypatch.setattr(el, "_ensure_dir", lambda uid, char_id=TEST_CHAR_ID: None)
         monkeypatch.setattr(el, "_already_appended", lambda path, line, turn_id: False)
 
         el.append("test_uid", "user", "随便说说")  # no turn_id
@@ -93,10 +94,10 @@ class TestMidTermOccurredAt:
         from core.memory.scope import MemoryScope
         from core.memory.path_resolver import resolve_path
 
-        scope = MemoryScope.reality_scope("uid_mt", "yexuan")
+        scope = MemoryScope.reality_scope("uid_mt", TEST_CHAR_ID)
         p = tmp_path / "mid_term.json"
-        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id="yexuan": p)
+        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
 
         _ts = 1_700_000_000.0
         mt.append("uid_mt", "用户去下棋了", mid_id="mt_1", occurred_at=_ts)
@@ -111,8 +112,8 @@ class TestMidTermOccurredAt:
         import core.memory.mid_term as mt
 
         p = tmp_path / "mid_term.json"
-        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id="yexuan": p)
+        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
 
         _before = time.time()
         mt.append("uid_mt", "随便聊聊", mid_id="mt_2", occurred_at=None)
@@ -127,8 +128,8 @@ class TestMidTermOccurredAt:
         import core.memory.mid_term as mt
 
         p = tmp_path / "mid_term.json"
-        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id="yexuan": p)
+        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
 
         _before = time.time()
         mt.append("uid_mt", "测试", mid_id="mt_3", occurred_at="not-a-float")  # type: ignore
@@ -205,8 +206,8 @@ class TestSummarizeToMidtermOccurredAt:
         import core.llm_client as lc
 
         p = tmp_path / "mid_term.json"
-        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id="yexuan": p)
+        monkeypatch.setattr(mt, "_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(mt, "_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
 
         # turn_id 中的毫秒 → 1_700_000_000_000 ms → 1_700_000_000.0 s
         _turn_id = "uid_1700000000000"
@@ -235,7 +236,7 @@ class TestSummarizeToMidtermOccurredAt:
             user_msg="我在学下棋",
             reply="好厉害",
             tags=["下棋"],
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
         )
 
         if p.exists():
@@ -280,16 +281,16 @@ class TestEpisodicLineageDedup:
         import core.memory.episodic_memory as em
 
         p = tmp_path / "episodic.json"
-        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
-        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
 
         ep1 = self._base_episode("ep_1", ["mt_abc", "mt_def"])
-        em.write_episode("uid", ep1, char_id="yexuan")
+        em.write_episode("uid", ep1, char_id=TEST_CHAR_ID)
 
         ep2 = self._base_episode("ep_2", ["mt_abc", "mt_xyz"], summary="完全不同的摘要")
-        em.write_episode("uid", ep2, char_id="yexuan")
+        em.write_episode("uid", ep2, char_id=TEST_CHAR_ID)
 
         data = json.loads(p.read_text(encoding="utf-8"))
         ids = [e["id"] for e in data]
@@ -301,16 +302,16 @@ class TestEpisodicLineageDedup:
         import core.memory.episodic_memory as em
 
         p = tmp_path / "episodic.json"
-        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
-        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
 
         ep1 = self._base_episode("ep_1", ["mt_aaa"], summary="用户今天去下棋了")
-        em.write_episode("uid", ep1, char_id="yexuan")
+        em.write_episode("uid", ep1, char_id=TEST_CHAR_ID)
 
         ep2 = self._base_episode("ep_2", ["mt_bbb"], summary="用户今天去下棋了")  # 同文本，不同血缘
-        em.write_episode("uid", ep2, char_id="yexuan")
+        em.write_episode("uid", ep2, char_id=TEST_CHAR_ID)
 
         data = json.loads(p.read_text(encoding="utf-8"))
         assert len(data) == 1, "文本相似的第二条应被原文本去重逻辑跳过"
@@ -320,16 +321,16 @@ class TestEpisodicLineageDedup:
         import core.memory.episodic_memory as em
 
         p = tmp_path / "episodic.json"
-        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
-        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
 
         ep1 = self._base_episode("ep_1", ["mt_aaa"], summary="用户今天下棋赢了")
-        em.write_episode("uid", ep1, char_id="yexuan")
+        em.write_episode("uid", ep1, char_id=TEST_CHAR_ID)
 
         ep2 = self._base_episode("ep_2", ["mt_bbb"], summary="用户今天去游泳")  # 完全不同
-        em.write_episode("uid", ep2, char_id="yexuan")
+        em.write_episode("uid", ep2, char_id=TEST_CHAR_ID)
 
         data = json.loads(p.read_text(encoding="utf-8"))
         ids = [e["id"] for e in data]
@@ -341,17 +342,17 @@ class TestEpisodicLineageDedup:
         import core.memory.episodic_memory as em
 
         p = tmp_path / "episodic.json"
-        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id="yexuan": p)
-        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
-        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id="yexuan": tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_mem_read_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_mem_write_file", lambda uid, char_id=TEST_CHAR_ID: p)
+        monkeypatch.setattr(em, "_index_write_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
+        monkeypatch.setattr(em, "_index_read_file", lambda uid, char_id=TEST_CHAR_ID: tmp_path / "idx.json")
 
         # Use text distinct enough to pass the _is_similar(threshold=0.6) text check
         ep1 = self._base_episode("ep_1", [], summary="用户失眠睡不着觉焦虑")
-        em.write_episode("uid", ep1, char_id="yexuan")
+        em.write_episode("uid", ep1, char_id=TEST_CHAR_ID)
 
         ep2 = self._base_episode("ep_2", [], summary="收到礼物特别惊喜开心")
-        em.write_episode("uid", ep2, char_id="yexuan")
+        em.write_episode("uid", ep2, char_id=TEST_CHAR_ID)
 
         data = json.loads(p.read_text(encoding="utf-8"))
         assert len(data) == 2, "无血缘信息时两条应正常写入"

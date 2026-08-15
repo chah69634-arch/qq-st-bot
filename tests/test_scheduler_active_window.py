@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import json
 import sys
 import time
@@ -10,7 +11,7 @@ class _FakePipeline:
     character = type("_C", (), {"name": "TestChar"})()
 
     def _current_reality_scope(self, uid):
-        return type("Scope", (), {"character_id": "yexuan"})()
+        return type("Scope", (), {"character_id": TEST_CHAR_ID})()
 
     async def fetch_context(self, uid, query, **kwargs):
         return {}
@@ -129,7 +130,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
     monkeypatch.setattr(loop, "_last_user_message_time", 0.0)
     monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "u1"}})
-    async def fake_probe(message, user_id, *, char_id="yexuan", provenance_channel=None):
+    async def fake_probe(message, user_id, *, char_id=TEST_CHAR_ID, provenance_channel=None):
         return ""
 
     monkeypatch.setattr(chat, "_probe_and_execute_tools", fake_probe)

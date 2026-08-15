@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_garden_active_char_fail_loud.py
 
@@ -213,13 +214,13 @@ def test_admin_garden_invalid_active_raises_422(sandbox):
 
 @pytest.mark.asyncio
 async def test_no_yexuan_fallback_garden_water(sandbox):
-    """garden_water failure path must never call auto_water_tick(char_id='yexuan') as fallback."""
+    """garden_water failure path must never call auto_water_tick(char_id=TEST_CHAR_ID) as fallback."""
     _write_active_empty(sandbox)
 
     yexuan_calls = []
 
     def spy_tick(**kw):
-        if kw.get("char_id") == "yexuan":
+        if kw.get("char_id") == TEST_CHAR_ID:
             yexuan_calls.append(kw)
         return {"ok": False}
 
@@ -232,18 +233,18 @@ async def test_no_yexuan_fallback_garden_water(sandbox):
         from core.scheduler.triggers.garden_water import _check_garden_water
         await _check_garden_water()
 
-    assert yexuan_calls == [], "auto_water_tick must never fallback to char_id='yexuan'"
+    assert yexuan_calls == [], "auto_water_tick must never fallback to char_id=TEST_CHAR_ID"
 
 
 @pytest.mark.asyncio
 async def test_no_yexuan_fallback_garden_tools(sandbox):
-    """garden_tools failure path must never call force_water(char_id='yexuan') as fallback."""
+    """garden_tools failure path must never call force_water(char_id=TEST_CHAR_ID) as fallback."""
     _write_active_empty(sandbox)
 
     yexuan_calls = []
 
     def spy_force(**kw):
-        if kw.get("char_id") == "yexuan":
+        if kw.get("char_id") == TEST_CHAR_ID:
             yexuan_calls.append(kw)
         return {"ok": False, "reason": "test"}
 
@@ -251,7 +252,7 @@ async def test_no_yexuan_fallback_garden_tools(sandbox):
         from core.tools.garden_tools import water_garden
         await water_garden()
 
-    assert yexuan_calls == [], "force_water must never fallback to char_id='yexuan'"
+    assert yexuan_calls == [], "force_water must never fallback to char_id=TEST_CHAR_ID"
 
 
 def test_no_yexuan_fallback_admin_garden(sandbox):
@@ -261,7 +262,7 @@ def test_no_yexuan_fallback_admin_garden(sandbox):
     yexuan_calls = []
 
     def spy_state(**kw):
-        if kw.get("char_id") == "yexuan":
+        if kw.get("char_id") == TEST_CHAR_ID:
             yexuan_calls.append(kw)
         return {}
 
@@ -270,7 +271,7 @@ def test_no_yexuan_fallback_admin_garden(sandbox):
         with pytest.raises(HTTPException):
             _active_char_id()
 
-    assert yexuan_calls == [], "get_state must never be called with fallback char_id='yexuan'"
+    assert yexuan_calls == [], "get_state must never be called with fallback char_id=TEST_CHAR_ID"
 
 
 # ── 11. active=character_b passes character_b correctly ───────────────────────────────

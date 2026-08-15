@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_scope_leak_p1.py
 
@@ -31,17 +32,17 @@ def test_observations_requires_char_id(sandbox):
 
 def test_mood_state_accepts_explicit_char_id(sandbox):
     """mood_state(char_id=...) must not raise."""
-    p = sandbox.mood_state(char_id="yexuan")
-    assert "yexuan" in str(p)
+    p = sandbox.mood_state(char_id=TEST_CHAR_ID)
+    assert TEST_CHAR_ID in str(p)
 
 
 def test_activity_snapshot_accepts_explicit_char_id(sandbox):
     """activity_snapshot(char_id=...) must not raise."""
-    p = sandbox.activity_snapshot(char_id="yexuan")
-    assert "yexuan" in str(p)
+    p = sandbox.activity_snapshot(char_id=TEST_CHAR_ID)
+    assert TEST_CHAR_ID in str(p)
 
 
 def test_observations_accepts_explicit_char_id(sandbox):
     """observations(char_id=...) must not raise."""
-    p = sandbox.observations(char_id="yexuan")
-    assert "yexuan" in str(p)
+    p = sandbox.observations(char_id=TEST_CHAR_ID)
+    assert TEST_CHAR_ID in str(p)

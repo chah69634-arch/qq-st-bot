@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import asyncio
 
 import pytest
@@ -87,7 +88,7 @@ def test_compute_signals_is_fail_closed_per_source(monkeypatch):
     monkeypatch.setattr(garden_manager, "get_shareable_event", fail)
     monkeypatch.setattr(mood_state, "get_intensity", fail)
 
-    signals = overflow_bucket.compute_signals("u1", char_id="yexuan")
+    signals = overflow_bucket.compute_signals("u1", char_id=TEST_CHAR_ID)
 
     assert signals.bucket_score() == 0.0
     assert signals.top_signal == ""

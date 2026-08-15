@@ -6,11 +6,12 @@ Coverage:
 2.  yexuan/character_b 同时存在时，character_b 数据影响 _pick_note underrepresented 入参
 3.  prompt_builder.build() 传入 char_id 时，get_current_note 以该 char_id 被调用
 4.  char_id=None 兼容旧行为（legacy path：trait_state 调用无 char_id kwarg）
-5.  core/author_note_rotator.py 无新增 char_id="yexuan" 函数参数默认值（R3-CI Rule-1）
+5.  core/author_note_rotator.py 无新增 char_id=TEST_CHAR_ID 函数参数默认值（R3-CI Rule-1）
 6.  R8-B handler 写路径与 rotator 读路径一致（同 char_id 下同一 Path 对象）
-7.  yexuan 单角色默认行为不回归（char_id="yexuan" 显式传入）
+7.  yexuan 单角色默认行为不回归（char_id=TEST_CHAR_ID 显式传入）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import ast
 import json
@@ -164,7 +165,7 @@ def test_build_passes_char_id_to_get_current_note(monkeypatch):
     monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda *, char_id="": "")
-    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id="yexuan": "")
+    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(_cl, "get_config", lambda: {"chat": {}})
 
@@ -237,13 +238,13 @@ def test_char_id_none_legacy_no_char_id_kwarg(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 5. R3-CI Rule-1：core/author_note_rotator.py 无 char_id="yexuan" 函数默认值
+# 5. R3-CI Rule-1：core/author_note_rotator.py 无 char_id=TEST_CHAR_ID 函数默认值
 # ---------------------------------------------------------------------------
 
 def test_no_yexuan_default_in_author_note_rotator():
     """
     core/author_note_rotator.py must not define any function with
-    char_id="yexuan" or character_id="yexuan" as a parameter default.
+    char_id=TEST_CHAR_ID or character_id=TEST_CHAR_ID as a parameter default.
     (R3 Rule-1 guard for this file specifically.)
     """
     PROJECT_ROOT = Path(__file__).parent.parent
@@ -264,7 +265,7 @@ def test_no_yexuan_default_in_author_note_rotator():
             if (
                 arg.arg in _guarded
                 and isinstance(default, ast.Constant)
-                and default.value == "yexuan"
+                and default.value == TEST_CHAR_ID
             ):
                 violations.append(default.lineno)
         for arg, default in zip(args.kwonlyargs, args.kw_defaults):
@@ -273,12 +274,12 @@ def test_no_yexuan_default_in_author_note_rotator():
             if (
                 arg.arg in _guarded
                 and isinstance(default, ast.Constant)
-                and default.value == "yexuan"
+                and default.value == TEST_CHAR_ID
             ):
                 violations.append(default.lineno)
 
     assert not violations, (
-        f"core/author_note_rotator.py has char_id='yexuan' defaults at lines {violations}"
+        f"core/author_note_rotator.py has char_id=TEST_CHAR_ID defaults at lines {violations}"
     )
 
 
@@ -295,7 +296,7 @@ def test_r8b_write_path_matches_rotator_read_path_per_char_id(sandbox):
     from core.sandbox import get_paths
     paths = get_paths()
 
-    for char_id in ("yexuan", "character_b"):
+    for char_id in (TEST_CHAR_ID, "character_b"):
         handler_write = paths.trait_state(char_id=char_id)
 
         # Simulate what get_current_note does with _kw = {"char_id": char_id}
@@ -307,10 +308,10 @@ def test_r8b_write_path_matches_rotator_read_path_per_char_id(sandbox):
         )
 
     # Explicit: character_b and yexuan paths must differ
-    yexuan_path = paths.trait_state(char_id="yexuan")
+    yexuan_path = paths.trait_state(char_id=TEST_CHAR_ID)
     character_b_path = paths.trait_state(char_id="character_b")
     assert yexuan_path != character_b_path, (
-        "yexuan and character_b trait_state paths must be different "
+        f'{TEST_CHAR_ID} and character_b trait_state paths must be different '
         f"(both resolved to {yexuan_path})"
     )
 
@@ -321,7 +322,7 @@ def test_r8b_write_path_matches_rotator_read_path_per_char_id(sandbox):
 
 def test_yexuan_explicit_reads_yexuan_trait_state(tmp_path):
     """
-    get_current_note(char_id="yexuan") must call trait_state(char_id="yexuan"),
+    get_current_note(char_id=TEST_CHAR_ID) must call trait_state(char_id=TEST_CHAR_ID),
     confirming the explicit path is symmetric with the character_b test.
     """
     from core.author_note_rotator import get_current_note
@@ -339,11 +340,11 @@ def test_yexuan_explicit_reads_yexuan_trait_state(tmp_path):
         yexuan_trait_path=yexuan_trait,
     )
 
-    get_current_note(paths=paths, char_id="yexuan")
+    get_current_note(paths=paths, char_id=TEST_CHAR_ID)
 
     assert paths.trait_calls, "trait_state() was never called"
     call = paths.trait_calls[-1]
-    assert call == {"char_id": "yexuan"}, (
-        f"trait_state must be called with char_id='yexuan'; got {call}"
+    assert call == {"char_id": TEST_CHAR_ID}, (
+        f"trait_state must be called with char_id=TEST_CHAR_ID; got {call}"
     )
 

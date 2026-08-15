@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 
@@ -20,7 +21,7 @@ def _client(monkeypatch):
 
 def _active(sandbox):
     sandbox.active_prompt_assets().parent.mkdir(parents=True, exist_ok=True)
-    sandbox.active_prompt_assets().write_text(json.dumps({"active_character": "yexuan"}), encoding="utf-8")
+    sandbox.active_prompt_assets().write_text(json.dumps({"active_character": TEST_CHAR_ID}), encoding="utf-8")
 
 
 def test_growth_endpoints_empty_and_auth(sandbox, monkeypatch):
@@ -36,7 +37,7 @@ def test_growth_endpoints_empty_and_auth(sandbox, monkeypatch):
 def test_work_reader_is_index_bounded(sandbox, monkeypatch):
     _active(sandbox)
     client = _client(monkeypatch)
-    root = sandbox.growth_works_dir("int_test", char_id="yexuan")
+    root = sandbox.growth_works_dir("int_test", char_id=TEST_CHAR_ID)
     root.mkdir(parents=True)
     (root / "index.json").write_text(json.dumps([{"file": "20260712_1.md", "date": "2026-07-12"}]), encoding="utf-8")
     (root / "20260712_1.md").write_text("作品正文", encoding="utf-8")
@@ -59,11 +60,11 @@ def test_debug_recall_alias_is_authenticated_and_empty_safe(sandbox, monkeypatch
     _active(sandbox)
     client = _client(monkeypatch)
     assert client.get("/debug/recall?uid=u1").status_code == 401
-    response = client.get("/debug/recall?uid=u1&char_id=yexuan", headers=_headers())
+    response = client.get(f'/debug/recall?uid=u1&char_id={TEST_CHAR_ID}', headers=_headers())
     assert response.status_code == 200
     payload = response.json()
     assert payload["uid"] == "u1"
-    assert payload["char_id"] == "yexuan"
+    assert payload["char_id"] == TEST_CHAR_ID
     assert payload["records"] == []
 
 
@@ -164,12 +165,12 @@ def test_api_contract_check_gracefully_skips_when_frontend_repo_missing(sandbox,
 def test_character_permissions_requires_auth_and_returns_shape(sandbox, monkeypatch):
     _active(sandbox)
     client = _client(monkeypatch)
-    assert client.get("/observability/character-permissions?char_id=yexuan").status_code == 401
+    assert client.get(f'/observability/character-permissions?char_id={TEST_CHAR_ID}').status_code == 401
 
-    response = client.get("/observability/character-permissions?char_id=yexuan", headers=_headers())
+    response = client.get(f'/observability/character-permissions?char_id={TEST_CHAR_ID}', headers=_headers())
     assert response.status_code == 200
     payload = response.json()
-    assert payload["char_id"] == "yexuan"
+    assert payload["char_id"] == TEST_CHAR_ID
     assert "current_mode" in payload
     cats = {c["category"] for c in payload["categories"]}
     assert cats == {"info", "desktop", "memory", "system", "fs", "phone_control", "mcp"}
@@ -183,7 +184,7 @@ def test_character_permissions_includes_identity_consolidation_when_uid_given(sa
     _active(sandbox)
     client = _client(monkeypatch)
     payload = client.get(
-        "/observability/character-permissions?char_id=yexuan&uid=u1", headers=_headers()
+        f'/observability/character-permissions?char_id={TEST_CHAR_ID}&uid=u1', headers=_headers()
     ).json()
     assert "identity_consolidation" in payload
     assert payload["identity_consolidation"]["uid"] == "u1"
@@ -206,7 +207,7 @@ def test_character_permissions_test_readiness_check_for_desktop_does_not_execute
     response = client.post(
         "/observability/character-permissions/test",
         headers=_headers(),
-        json={"link": "desktop", "char_id": "yexuan", "uid": "u1"},
+        json={"link": "desktop", "char_id": TEST_CHAR_ID, "uid": "u1"},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -234,14 +235,14 @@ def test_character_permissions_test_identity_consolidation_actually_calls_pipeli
     response = client.post(
         "/observability/character-permissions/test",
         headers=_headers(),
-        json={"link": "identity_consolidation", "char_id": "yexuan", "uid": "u_test"},
+        json={"link": "identity_consolidation", "char_id": TEST_CHAR_ID, "uid": "u_test"},
     )
     assert response.status_code == 200
     payload = response.json()
     assert payload["executed"] is True
     assert payload["ok"] is True
     assert payload["identity_changed"] is True
-    assert calls == [("u_test", "yexuan")]
+    assert calls == [("u_test", TEST_CHAR_ID)]
 
 
 def test_character_permissions_test_identity_consolidation_surfaces_real_error(sandbox, monkeypatch):
@@ -259,7 +260,7 @@ def test_character_permissions_test_identity_consolidation_surfaces_real_error(s
     response = client.post(
         "/observability/character-permissions/test",
         headers=_headers(),
-        json={"link": "identity_consolidation", "char_id": "yexuan", "uid": "u_test"},
+        json={"link": "identity_consolidation", "char_id": TEST_CHAR_ID, "uid": "u_test"},
     )
     payload = response.json()
     assert payload["executed"] is True
@@ -273,7 +274,7 @@ def test_character_permissions_test_unknown_link_reports_failure(sandbox, monkey
     response = client.post(
         "/observability/character-permissions/test",
         headers=_headers(),
-        json={"link": "not_a_real_link", "char_id": "yexuan", "uid": "u1"},
+        json={"link": "not_a_real_link", "char_id": TEST_CHAR_ID, "uid": "u1"},
     )
     assert response.status_code == 200
     assert response.json()["ok"] is False

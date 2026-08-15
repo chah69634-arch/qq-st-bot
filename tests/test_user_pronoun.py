@@ -15,6 +15,7 @@ Verifies:
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 import pathlib
@@ -174,7 +175,7 @@ class TestEventLogRenderCard:
             mock.patch("core.memory.event_log.get_recent_days", return_value=fake_log),
             mock.patch("core.config_loader._char_name", return_value="叶瑄"),
         ):
-            result = asyncio.run(search(UID, query="天气", char_id="yexuan"))
+            result = asyncio.run(search(UID, query="天气", char_id=TEST_CHAR_ID))
         return result
 
     def test_default_renders_她提到(self):

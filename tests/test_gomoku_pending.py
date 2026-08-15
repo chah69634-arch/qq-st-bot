@@ -25,6 +25,7 @@ T18. registry 包含 activity_gomoku_ai_move tauri command
 T19. did_hold_back 在 gentle style_tilt 时通过 grounding 反映为 True
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import pytest
 
@@ -37,17 +38,17 @@ from core.activity.gomoku_grounding import build_gomoku_grounding_facts
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _start_pending(sandbox, uid="user1", char_id="yexuan", ai_style="balanced"):
+def _start_pending(sandbox, uid="user1", char_id=TEST_CHAR_ID, ai_style="balanced"):
     return G.start_game(uid, char_id, opponent="yexuan_ai", ai_style=ai_style,
                         ai_response_mode="pending")
 
 
-def _start_auto(sandbox, uid="user1", char_id="yexuan", ai_style="balanced"):
+def _start_auto(sandbox, uid="user1", char_id=TEST_CHAR_ID, ai_style="balanced"):
     return G.start_game(uid, char_id, opponent="yexuan_ai", ai_style=ai_style,
                         ai_response_mode="auto")
 
 
-def _start_human(sandbox, uid="user1", char_id="yexuan"):
+def _start_human(sandbox, uid="user1", char_id=TEST_CHAR_ID):
     return G.start_game(uid, char_id, opponent="human")
 
 
@@ -317,7 +318,7 @@ def test_grounding_did_hold_back_false_balanced_tilt(sandbox):
 # ── get_recent_ai_style_tilt: returns most recent valid tilt ──────────────────
 
 def test_get_recent_style_tilt_returns_latest(sandbox):
-    char_id, uid, sid = "yexuan", "user1", "tilt_test_session"
+    char_id, uid, sid = TEST_CHAR_ID, "user1", "tilt_test_session"
     # Write two assistant_chat entries
     TR.append_entry(char_id, uid, "gomoku", sid, {
         "type": "assistant_chat",
@@ -336,13 +337,13 @@ def test_get_recent_style_tilt_returns_latest(sandbox):
 
 
 def test_get_recent_style_tilt_returns_none_when_empty(sandbox):
-    char_id, uid, sid = "yexuan", "user1", "empty_tilt_session"
+    char_id, uid, sid = TEST_CHAR_ID, "user1", "empty_tilt_session"
     tilt = GC.get_recent_ai_style_tilt(char_id, uid, sid)
     assert tilt is None
 
 
 def test_get_recent_style_tilt_ignores_invalid(sandbox):
-    char_id, uid, sid = "yexuan", "user1", "invalid_tilt_session"
+    char_id, uid, sid = TEST_CHAR_ID, "user1", "invalid_tilt_session"
     TR.append_entry(char_id, uid, "gomoku", sid, {
         "type": "assistant_chat",
         "text": "...",

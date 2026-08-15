@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """Brief 82 · P2-1：显式「再读一遍」绕过工具已读指纹。"""
 
 import importlib
@@ -30,13 +31,13 @@ def test_detect_bypass_intent_matches_controlled_phrases():
 def test_is_recently_read_bypass_skips_block_but_does_not_touch_fingerprint(sandbox, monkeypatch):
     from core.memory import tool_read_log as trl
 
-    trl.record_read("u1", "yexuan", "diary:2026-07-16")
+    trl.record_read("u1", TEST_CHAR_ID, "diary:2026-07-16")
 
     # 无 bypass：正常拦截
-    assert trl.is_recently_read("u1", "yexuan", "diary:2026-07-16") is True
+    assert trl.is_recently_read("u1", TEST_CHAR_ID, "diary:2026-07-16") is True
     # bypass=True：放行，但不改变磁盘上已记录的指纹集合
-    assert trl.is_recently_read("u1", "yexuan", "diary:2026-07-16", bypass=True) is False
-    assert trl.is_recently_read("u1", "yexuan", "diary:2026-07-16") is True
+    assert trl.is_recently_read("u1", TEST_CHAR_ID, "diary:2026-07-16", bypass=True) is False
+    assert trl.is_recently_read("u1", TEST_CHAR_ID, "diary:2026-07-16") is True
 
 
 @pytest.mark.asyncio
@@ -64,7 +65,7 @@ async def test_execute_bypass_read_log_allows_reread_and_refreshes_fingerprint(s
             is_group=False,
             session_state=_FakeState(),
             origin="user_live",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
             bypass_read_log=bypass,
         )
 

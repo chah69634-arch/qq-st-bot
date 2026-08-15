@@ -4,7 +4,7 @@ tests/test_r3_scope_lint.py
 Fable R3-CI: prevent two classes of char_id scope bugs from being
 re-introduced into core/:
 
-  Rule 1 — No new char_id="yexuan" function-parameter defaults
+  Rule 1 — No new char_id=TEST_CHAR_ID function-parameter defaults
   Rule 2 — No new bare data/ path construction
 
 Existing violations are listed in the allowlists below with comments.
@@ -12,6 +12,7 @@ The tests pass today; they fail when NEW violating files appear outside
 those allowlists.
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import ast
 from pathlib import Path
@@ -50,12 +51,12 @@ CHAR_ID_DEFAULT_ALLOWLIST: frozenset[str] = frozenset({
 })
 
 _GUARDED_PARAM_NAMES: frozenset[str] = frozenset({"char_id", "character_id"})
-_GUARDED_DEFAULT_VALUE = "yexuan"
+_GUARDED_DEFAULT_VALUE = TEST_CHAR_ID
 
 
 def _find_yexuan_defaults(source: str) -> list[int]:
     """
-    Return line numbers of function-parameter defaults equal to "yexuan"
+    Return line numbers of function-parameter defaults equal to TEST_CHAR_ID
     where the parameter is named char_id or character_id.
     Uses AST so plain string literals and call-site kwargs are not flagged.
     """
@@ -100,7 +101,7 @@ def _find_yexuan_defaults(source: str) -> list[int]:
 def test_no_new_char_id_yexuan_defaults():
     """
     No core/ file outside CHAR_ID_DEFAULT_ALLOWLIST may define a function with
-    char_id="yexuan" or character_id="yexuan" as a parameter default.
+    char_id=TEST_CHAR_ID or character_id=TEST_CHAR_ID as a parameter default.
     """
     new_violations: dict[str, list[int]] = {}
 
@@ -113,7 +114,7 @@ def test_no_new_char_id_yexuan_defaults():
             new_violations[rel] = lines
 
     assert not new_violations, (
-        "New char_id='yexuan' function defaults found outside the allowlist.\n"
+        "New char_id=TEST_CHAR_ID function defaults found outside the allowlist.\n"
         "Remove the default, or add the file to CHAR_ID_DEFAULT_ALLOWLIST "
         "with a comment explaining why.\n"
         f"Violations: {new_violations}"
@@ -216,26 +217,26 @@ def test_allowlisted_files_still_exist():
 # ---------------------------------------------------------------------------
 
 def test_detector_catches_kwonly_default():
-    """AST detector catches keyword-only param: def f(*, char_id: str = 'yexuan')."""
-    src = 'def load(uid: str, *, char_id: str = "yexuan") -> str:\n    pass\n'
+    """AST detector catches keyword-only param: def f(*, char_id: str = TEST_CHAR_ID)."""
+    src = 'def load(uid: str, *, char_id: str = TEST_CHAR_ID) -> str:\n    pass\n'
     assert _find_yexuan_defaults(src) == [1]
 
 
 def test_detector_catches_positional_default():
-    """AST detector catches positional param: def f(char_id='yexuan')."""
-    src = 'def fn(uid: str, char_id="yexuan"):\n    pass\n'
+    """AST detector catches positional param: def f(char_id=TEST_CHAR_ID)."""
+    src = 'def fn(uid: str, char_id=TEST_CHAR_ID):\n    pass\n'
     assert _find_yexuan_defaults(src) != []
 
 
 def test_detector_ignores_plain_string_literal():
-    """AST detector does NOT fire on a plain assignment CHAR = 'yexuan'."""
-    src = 'CHAR = "yexuan"\n'
+    """AST detector does NOT fire on a plain assignment CHAR = TEST_CHAR_ID."""
+    src = 'CHAR = TEST_CHAR_ID\n'
     assert _find_yexuan_defaults(src) == []
 
 
 def test_detector_ignores_callsite_kwarg():
-    """AST detector does NOT fire on a call-site kwarg paths.get(char_id='yexuan')."""
-    src = 'p = paths.foo(char_id="yexuan")\n'
+    """AST detector does NOT fire on a call-site kwarg paths.get(char_id=TEST_CHAR_ID)."""
+    src = 'p = paths.foo(char_id=TEST_CHAR_ID)\n'
     assert _find_yexuan_defaults(src) == []
 
 

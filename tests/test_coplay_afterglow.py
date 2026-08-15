@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_afterglow.py — Brief 42: 陪玩 afterglow 软提示（fail-closed, TTL）。
 """
@@ -8,7 +9,7 @@ from unittest.mock import patch
 from core.coplay import afterglow
 
 UID = "u1"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 
 
 def test_no_afterglow_by_default(sandbox):

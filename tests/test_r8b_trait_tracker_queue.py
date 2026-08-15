@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 R8-B: trait_tracker_update 独立 slow_queue 任务。
 
@@ -9,7 +10,7 @@ Coverage:
 5.  handler 直接执行后写入 trait_state 文件
 6.  author_note_rotator 读取的路径与 handler 写入路径一致
 7.  fetch_context 源码中不含 trait_tracker_update 调用
-8.  R3 Rule-1：core/pipeline.py 不引入新 char_id="yexuan" 函数参数默认值
+8.  R3 Rule-1：core/pipeline.py 不引入新 char_id=TEST_CHAR_ID 函数参数默认值
 """
 
 import json
@@ -28,7 +29,7 @@ def chars_tree(tmp_path):
     """Minimal characters/ tree with yexuan + character_b."""
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -105,13 +106,13 @@ async def test_post_process_enqueues_trait_tracker_update(
     import core.post_process.slow_queue as sq
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     enqueued: list[tuple[str, dict]] = []
 
     def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="",
-                envelope=None, *, char_id="yexuan", **kw):
+                envelope=None, *, char_id=TEST_CHAR_ID, **kw):
         return turn_id or f"{uid}_spy"
 
     monkeypatch.setattr(_fp, "capture_turn", _spy_ct)
@@ -152,7 +153,7 @@ async def test_payload_uses_active_char_id_not_hardcoded(
             captured_payloads.append(payload)
 
     def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="",
-                envelope=None, *, char_id="yexuan", **kw):
+                envelope=None, *, char_id=TEST_CHAR_ID, **kw):
         return turn_id or f"{uid}_spy"
 
     monkeypatch.setattr(_fp, "capture_turn", _spy_ct)
@@ -186,13 +187,13 @@ async def test_no_enqueue_when_write_disabled(
     import core.post_process.slow_queue as sq
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     enqueued_types: list[str] = []
 
     def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="",
-                envelope=None, *, char_id="yexuan", **kw):
+                envelope=None, *, char_id=TEST_CHAR_ID, **kw):
         return turn_id or f"{uid}_spy"
 
     monkeypatch.setattr(_fp, "capture_turn", _spy_ct)
@@ -263,10 +264,10 @@ def test_fetch_context_has_no_trait_tracker_enqueue():
     )
 
 
-# ── 9. R3 Rule-1：pipeline.py 不引入新 char_id="yexuan" 参数默认值 ────────────
+# ── 9. R3 Rule-1：pipeline.py 不引入新 char_id=TEST_CHAR_ID 参数默认值 ────────────
 
 def test_r3_no_new_yexuan_default_from_trait_handler():
-    """_handler_trait_tracker_update must not declare char_id='yexuan' as default."""
+    """_handler_trait_tracker_update must not declare char_id=TEST_CHAR_ID as default."""
     import ast, core.pipeline as _p
 
     source = inspect.getsource(_p._handler_trait_tracker_update)
@@ -281,12 +282,12 @@ def test_r3_no_new_yexuan_default_from_trait_handler():
             arg = all_args[offset + i]
             if arg.arg in ("char_id", "character_id"):
                 assert not (
-                    isinstance(default, ast.Constant) and default.value == "yexuan"
-                ), "handler must not default char_id='yexuan'"
+                    isinstance(default, ast.Constant) and default.value == TEST_CHAR_ID
+                ), "handler must not default char_id=TEST_CHAR_ID"
         for arg, default in zip(node.args.kwonlyargs, node.args.kw_defaults):
             if default is None:
                 continue
             if arg.arg in ("char_id", "character_id"):
                 assert not (
-                    isinstance(default, ast.Constant) and default.value == "yexuan"
-                ), "handler must not default char_id='yexuan'"
+                    isinstance(default, ast.Constant) and default.value == TEST_CHAR_ID
+                ), "handler must not default char_id=TEST_CHAR_ID"

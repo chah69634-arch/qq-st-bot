@@ -1,5 +1,6 @@
 """Brief 50: append-only, fail-open Stage arbiter decision traces."""
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 import json
 
@@ -14,7 +15,7 @@ def _settings(**overrides):
         "max_responders": 1,
         "max_ai_chain_depth": 2,
         "respond_threshold": 0.5,
-        "talkativeness": {"yexuan": 1.0, "yexuanJ-5412": 1.0},
+        "talkativeness": {TEST_CHAR_ID: 1.0, TEST_PEER_CHAR_ID: 1.0},
         # Brief 85 §4 topic-seed is orthogonal to what these tests exercise and
         # uses real random.random() when unmocked — pin it off for determinism.
         "topic_seed_prob": 0.0,
@@ -29,11 +30,11 @@ async def test_trace_records_phase_a_and_each_phase_b_selection(sandbox):
     from core.stage.store import create_stage
 
     stage = create_stage(
-        "trace-round", "owner", ["yexuan", "yexuanJ-5412"], settings=_settings(),
+        "trace-round", "owner", [TEST_CHAR_ID, TEST_PEER_CHAR_ID], settings=_settings(),
     )
 
     async def generate(_stage, speaker_id, _transcript, _turn_id, _triggered_by):
-        return "我先说说窗外的雨。" if speaker_id == "yexuan" else "我更想谈谈刚才那部电影。"
+        return "我先说说窗外的雨。" if speaker_id == TEST_CHAR_ID else "我更想谈谈刚才那部电影。"
 
     result = await run_owner_turn(stage.group_id, "今天怎么样", generate_reply=generate, turn_id="round-1")
 
@@ -56,7 +57,7 @@ async def test_trace_write_failure_does_not_block_stage_turn(sandbox, monkeypatc
     from core.stage.runner import run_owner_turn
     from core.stage.store import create_stage
 
-    stage = create_stage("trace-fail", "owner", ["yexuan"], settings=_settings(max_ai_chain_depth=0))
+    stage = create_stage("trace-fail", "owner", [TEST_CHAR_ID], settings=_settings(max_ai_chain_depth=0))
     monkeypatch.setattr("core.stage.runner.safe_append_jsonl", lambda *_args, **_kwargs: False)
 
     result = await run_owner_turn(

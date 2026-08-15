@@ -1,11 +1,12 @@
 """Brief 100 · 群聊梦境（Dream Stage）后端 v1."""
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_THIRD_CHAR_ID
 
 import asyncio
 
 import pytest
 
-ROSTER = ["yexuan", "yexuanJ-5412"]
+ROSTER = [TEST_CHAR_ID, TEST_PEER_CHAR_ID]
 GROUP_ID = "dream-g1"
 
 
@@ -410,11 +411,11 @@ async def test_settings_default_and_patch_roundtrip(sandbox):
 
     patched = await group_dream_settings_patch(GROUP_ID, {
         "boundary_level": "numbers_visible",
-        "per_char": {"yexuan": {"jailbreak_presets": ["default"]}},
+        "per_char": {TEST_CHAR_ID: {"jailbreak_presets": ["default"]}},
     })
     assert patched["ok"] is True
     assert patched["settings"]["boundary_level"] == "numbers_visible"
-    assert patched["settings"]["per_char"]["yexuan"]["jailbreak_presets"] == ["default"]
+    assert patched["settings"]["per_char"][TEST_CHAR_ID]["jailbreak_presets"] == ["default"]
 
 
 @pytest.mark.asyncio
@@ -450,17 +451,17 @@ def test_resolve_jailbreak_presets_fallback_chain():
     # per_char hit
     settings = {
         "jailbreak_presets": ["group_default"],
-        "per_char": {"yexuan": {"jailbreak_presets": ["per_char_preset"]}},
+        "per_char": {TEST_CHAR_ID: {"jailbreak_presets": ["per_char_preset"]}},
     }
-    assert resolve_jailbreak_presets(settings, "yexuan") == ["per_char_preset"]
+    assert resolve_jailbreak_presets(settings, TEST_CHAR_ID) == ["per_char_preset"]
 
     # per_char miss → group-level
-    assert resolve_jailbreak_presets(settings, "hongcha") == ["group_default"]
+    assert resolve_jailbreak_presets(settings, TEST_THIRD_CHAR_ID) == ["group_default"]
 
     # both missing → hardcoded ["default"] (the final default.md link is
     # resolved inside core.dream.dream_pipeline._load_presets_text())
     empty_settings = {"jailbreak_presets": [], "per_char": {}}
-    assert resolve_jailbreak_presets(empty_settings, "yexuan") == ["default"]
+    assert resolve_jailbreak_presets(empty_settings, TEST_CHAR_ID) == ["default"]
 
 
 # ── §2/§4 prompt-layer hard guards for dream_domain="group" ───────────────────
@@ -625,9 +626,9 @@ async def test_round_llm_call_budget_hard_cap(sandbox, monkeypatch):
     from core.stage.store import load_stage
 
     _create_reality_group(
-        roster=["yexuan", "yexuanJ-5412", "hongcha"],
+        roster=[TEST_CHAR_ID, TEST_PEER_CHAR_ID, TEST_THIRD_CHAR_ID],
         min_responders=1, max_responders=3, max_ai_chain_depth=2,
-        talkativeness={"yexuan": 1.0, "yexuanJ-5412": 1.0, "hongcha": 1.0},
+        talkativeness={TEST_CHAR_ID: 1.0, TEST_PEER_CHAR_ID: 1.0, TEST_THIRD_CHAR_ID: 1.0},
     )
     await _enter_group_dream()
 

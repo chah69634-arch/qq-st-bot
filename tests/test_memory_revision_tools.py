@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import pytest
 
 
@@ -21,7 +22,7 @@ async def test_revise_memory_weakens_old_episode_adds_correction_and_records_aud
     })
     result, confirm = await execute(
         "revise_memory", {"episode_id": "ep-old", "correction": "用户其实在规律早睡。"},
-        "owner", "owner", False, _Session(), origin="assistant_loop", char_id="yexuan",
+        "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
     assert confirm is None
@@ -31,7 +32,7 @@ async def test_revise_memory_weakens_old_episode_adds_correction_and_records_aud
     correction = next(item for item in entries if item.get("corrects_episode_id") == "ep-old")
     assert old["strength"] == 0.1 and old["correction"] == "用户其实在规律早睡。"
     assert correction["is_correction"] is True
-    assert len(query("owner", "yexuan", artifact="episodic")) >= 2
+    assert len(query("owner", TEST_CHAR_ID, artifact="episodic")) >= 2
 
 
 @pytest.mark.asyncio
@@ -42,14 +43,14 @@ async def test_revise_user_profile_writes_identity_provenance_and_action_trace(s
 
     result, confirm = await execute(
         "revise_user_profile", {"field": "sleep_pattern", "correction": "用户通常在23点前休息。"},
-        "owner", "owner", False, _Session(), origin="assistant_loop", char_id="yexuan",
+        "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
     assert confirm is None
     assert "已更新" in result
-    records = query("owner", "yexuan", artifact="user_identity", field="sleep_pattern")
+    records = query("owner", TEST_CHAR_ID, artifact="user_identity", field="sleep_pattern")
     assert records[0]["origin"]["tool"] == "revise_user_profile"
-    assert any(item["tool"] == "revise_user_profile" and item["status"] == "ok" for item in recent("owner", "yexuan"))
+    assert any(item["tool"] == "revise_user_profile" and item["status"] == "ok" for item in recent("owner", TEST_CHAR_ID))
 
 
 @pytest.mark.asyncio
@@ -64,7 +65,7 @@ async def test_forget_episodic_downgrades_topic_excludes_recall_and_records_audi
     })
     result, confirm = await execute(
         "forget_episodic", {"topic": "考试"},
-        "owner", "owner", False, _Session(), origin="assistant_loop", char_id="yexuan",
+        "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
     assert confirm is None
@@ -73,8 +74,8 @@ async def test_forget_episodic_downgrades_topic_excludes_recall_and_records_audi
     assert episode["strength"] == 0.1
     assert episode["status"] == "forgotten"
     assert episode["is_core"] is False
-    assert retrieve("owner", topic="考试", char_id="yexuan", allow_strengthen=False) == []
-    records = query("owner", "yexuan", artifact="episodic", field="ep-forget")
+    assert retrieve("owner", topic="考试", char_id=TEST_CHAR_ID, allow_strengthen=False) == []
+    records = query("owner", TEST_CHAR_ID, artifact="episodic", field="ep-forget")
     assert records[0]["origin"]["tool"] == "forget_episodic"
 
 
@@ -84,14 +85,14 @@ async def test_clear_midterm_clears_current_bucket_and_records_audit(sandbox):
     from core.memory.provenance_log import query
     from core.tool_dispatcher import execute
 
-    mid_term.append("owner", "临时的近况", char_id="yexuan")
+    mid_term.append("owner", "临时的近况", char_id=TEST_CHAR_ID)
     result, confirm = await execute(
         "clear_midterm", {},
-        "owner", "owner", False, _Session(), origin="assistant_loop", char_id="yexuan",
+        "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
     assert confirm is None
     assert "已清空当前 1 条" in result
-    assert mid_term.load("owner", char_id="yexuan") == []
-    records = query("owner", "yexuan", artifact="mid_term", field="all")
+    assert mid_term.load("owner", char_id=TEST_CHAR_ID) == []
+    records = query("owner", TEST_CHAR_ID, artifact="mid_term", field="all")
     assert records[0]["origin"]["tool"] == "clear_midterm"

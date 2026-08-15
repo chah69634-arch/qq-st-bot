@@ -4,6 +4,7 @@ DataPaths：路径定义与沙盒类（实现层）。
 """
 
 import logging
+import os
 import re
 import shutil
 from datetime import datetime
@@ -13,7 +14,9 @@ from core.test_data_guard import assert_production_identity_allowed
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
+_CONFIG_PATH = Path(
+    os.environ.get("PRESENCEKIT_CONFIG_PATH", Path(__file__).parent.parent / "config.yaml")
+)
 _BUNDLED_ROOT = Path("bundled")
 _USERDATA_ROOT = Path("userdata")
 _SAFE_USER_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")

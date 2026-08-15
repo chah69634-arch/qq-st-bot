@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_router.py — Brief 54-A：coplay 启用链路修缮的 router 测试。
 
@@ -17,7 +18,7 @@ from admin.routers import coplay as coplay_router
 from core.coplay import session, watcher
 
 UID = "u_router_test"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 
 
 @pytest.fixture(autouse=True)

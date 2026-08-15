@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_asset_registry.py
 
@@ -9,7 +10,7 @@ Tests cover:
 3. PATCH with label/filename is rejected
 4. hidden/template/example assets excluded from UI list
 5. unknown asset id fails loud
-6. legacy config "Companion" / "Companion.json" / "yexuan.json" normalizes to "yexuan"
+6. legacy config "Companion" / "Companion.json" / "yexuan.json" normalizes to TEST_CHAR_ID
 7. dream preset entries: ASCII ids visible; Chinese filenames get stable ASCII ids
 8. dream preset legacy normalization: Chinese filename/label → ASCII id
 """
@@ -32,7 +33,7 @@ def fake_characters(tmp_path):
     chars.mkdir()
 
     # Real character card
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test"}), encoding="utf-8"
     )
 
@@ -81,23 +82,23 @@ def registry(fake_characters, monkeypatch):
 # ── 1. yexuan id resolves correctly ───────────────────────────────────────────
 
 def test_yexuan_resolves_to_filename_and_label(registry):
-    entry = registry.resolve("yexuan", "character")
-    assert entry.filename == "yexuan.json"
+    entry = registry.resolve(TEST_CHAR_ID, "character")
+    assert entry.filename == f'{TEST_CHAR_ID}.json'
     assert entry.label == "Companion"
-    assert entry.id == "yexuan"
+    assert entry.id == TEST_CHAR_ID
     assert entry.kind == "character"
     assert not entry.hidden
 
 
 def test_yexuan_path(registry, fake_characters):
-    entry = registry.resolve("yexuan", "character")
-    assert entry.path() == Path("characters") / "yexuan.json"
+    entry = registry.resolve(TEST_CHAR_ID, "character")
+    assert entry.path() == Path("characters") / f'{TEST_CHAR_ID}.json'
 
 
 # ── 2. Active config stores id, not label/filename ────────────────────────────
 
 def test_active_config_uses_id(tmp_path):
-    """active_prompt_assets.json default generator stores id 'yexuan', not filename."""
+    """active_prompt_assets.json default generator stores id TEST_CHAR_ID, not filename."""
     import core.data_paths as _dp
     import importlib
     # Re-read the module to get the default generation code
@@ -105,8 +106,8 @@ def test_active_config_uses_id(tmp_path):
     paths._base = tmp_path
     p = paths.active_prompt_assets()
     data = json.loads(p.read_text(encoding="utf-8"))
-    assert data["active_character"] == "yexuan", (
-        "active_prompt_assets.json:active_character must store id 'yexuan', not a filename"
+    assert data["active_character"] == TEST_CHAR_ID, (
+        "active_prompt_assets.json:active_character must store id TEST_CHAR_ID, not a filename"
     )
     assert "." not in data["active_character"], (
         "active_character must not contain a dot (would indicate filename, not id)"
@@ -123,7 +124,7 @@ def test_validate_id_rejects_filename_with_extension(registry, monkeypatch):
     monkeypatch.setattr(_mod, "_registry", registry)
 
     with pytest.raises(HTTPException) as exc:
-        _validate_id("yexuan.json", "character", "active_character")
+        _validate_id(f'{TEST_CHAR_ID}.json', "character", "active_character")
     assert exc.value.status_code == 422
     assert "filename" in exc.value.detail.lower() or "扩展名" in exc.value.detail
 
@@ -135,7 +136,7 @@ def test_validate_id_rejects_path_separator(registry, monkeypatch):
     monkeypatch.setattr(_mod, "_registry", registry)
 
     with pytest.raises(HTTPException):
-        _validate_id("characters/yexuan", "character", "active_character")
+        _validate_id(f'characters/{TEST_CHAR_ID}', "character", "active_character")
 
 
 def test_validate_id_accepts_known_id(registry, monkeypatch):
@@ -144,7 +145,7 @@ def test_validate_id_accepts_known_id(registry, monkeypatch):
     monkeypatch.setattr(_mod, "_registry", registry)
 
     # Should not raise
-    _validate_id("yexuan", "character", "active_character")
+    _validate_id(TEST_CHAR_ID, "character", "active_character")
 
 
 def test_validate_id_rejects_unknown_id(registry, monkeypatch):
@@ -172,7 +173,7 @@ def test_example_character_is_hidden(registry):
 
 def test_list_ui_excludes_hidden_characters(registry):
     visible = [e.id for e in registry.list_ui("character")]
-    assert "yexuan" in visible
+    assert TEST_CHAR_ID in visible
     assert "character_template" not in visible
     assert "example_char" not in visible
 
@@ -204,19 +205,19 @@ def test_resolve_unknown_lorebook_raises(registry):
 # ── 6. Legacy config normalization ───────────────────────────────────────────
 
 def test_normalize_legacy_id_passthrough(registry):
-    assert registry.normalize_legacy("yexuan", "character") == "yexuan"
+    assert registry.normalize_legacy(TEST_CHAR_ID, "character") == TEST_CHAR_ID
 
 
 def test_normalize_legacy_filename_to_id(registry):
-    assert registry.normalize_legacy("yexuan.json", "character") == "yexuan"
+    assert registry.normalize_legacy(f'{TEST_CHAR_ID}.json', "character") == TEST_CHAR_ID
 
 
 def test_normalize_legacy_chinese_label_to_id(registry):
-    assert registry.normalize_legacy("Companion", "character") == "yexuan"
+    assert registry.normalize_legacy("Companion", "character") == TEST_CHAR_ID
 
 
 def test_normalize_legacy_chinese_label_with_extension(registry):
-    assert registry.normalize_legacy("Companion.json", "character") == "yexuan"
+    assert registry.normalize_legacy("Companion.json", "character") == TEST_CHAR_ID
 
 
 # ── 7. Dream preset: ASCII ids; Chinese filenames get stable ASCII ids ────────

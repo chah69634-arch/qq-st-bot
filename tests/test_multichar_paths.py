@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 多角色路径铺线验证测试（S4 + S5 + S6）
 
@@ -37,50 +38,50 @@ def test_layout_switches():
 _NO_DEFAULT = {"observations", "activity_snapshot", "mood_state"}
 
 @pytest.mark.parametrize("method,expected_parts", [
-    ("mood_state",        ("runtime", "characters", "yexuan", "inner", "mood_state.json")),
-    ("activity_state",    ("runtime", "characters", "yexuan", "inner", "activity_state.json")),
-    ("trait_state",       ("runtime", "characters", "yexuan", "inner", "trait_state.json")),
-    ("author_note_state", ("runtime", "characters", "yexuan", "inner", "author_note_state.json")),
-    ("observations",      ("runtime", "characters", "yexuan", "inner", "observations.jsonl")),
-    ("yexuan_inner_diary",("runtime", "characters", "yexuan", "inner", "diary")),
-    ("presence",          ("runtime", "characters", "yexuan", "inner", "presence.json")),
-    ("activity_snapshot", ("runtime", "characters", "yexuan", "inner", "activity_snapshot.json")),
+    ("mood_state",        ("runtime", "characters", TEST_CHAR_ID, "inner", "mood_state.json")),
+    ("activity_state",    ("runtime", "characters", TEST_CHAR_ID, "inner", "activity_state.json")),
+    ("trait_state",       ("runtime", "characters", TEST_CHAR_ID, "inner", "trait_state.json")),
+    ("author_note_state", ("runtime", "characters", TEST_CHAR_ID, "inner", "author_note_state.json")),
+    ("observations",      ("runtime", "characters", TEST_CHAR_ID, "inner", "observations.jsonl")),
+    ("yexuan_inner_diary",("runtime", "characters", TEST_CHAR_ID, "inner", "diary")),
+    ("presence",          ("runtime", "characters", TEST_CHAR_ID, "inner", "presence.json")),
+    ("activity_snapshot", ("runtime", "characters", TEST_CHAR_ID, "inner", "activity_snapshot.json")),
 ])
 def test_character_inner_v1_paths(dp, tmp_path, method, expected_parts):
     fn = getattr(dp, method)
-    assert fn(char_id="yexuan") == tmp_path.joinpath(*expected_parts)
+    assert fn(char_id=TEST_CHAR_ID) == tmp_path.joinpath(*expected_parts)
     # methods with no default char_id cannot be called without arg
     if method not in _NO_DEFAULT:
-        assert fn() == fn(char_id="yexuan")
+        assert fn() == fn(char_id=TEST_CHAR_ID)
 
 
 def test_character_inner_v1_top_paths(dp, tmp_path):
-    assert dp.garden(char_id="yexuan") == tmp_path.joinpath(
-        "runtime", "characters", "yexuan", "garden"
+    assert dp.garden(char_id=TEST_CHAR_ID) == tmp_path.joinpath(
+        "runtime", "characters", TEST_CHAR_ID, "garden"
     )
-    assert dp.garden() == dp.garden(char_id="yexuan")
+    assert dp.garden() == dp.garden(char_id=TEST_CHAR_ID)
 
 
 # ── character_inner authored 静态路径（不走沙盒 _p，绝对路径略去 base）─────────
 
 def test_activity_pool_v1(dp):
     # C1 migrated private activity pool is now the primary path.
-    assert dp.activity_pool(char_id="yexuan") == Path(
-        "userdata/characters/authored/yexuan/activity_pool.yaml"
+    assert dp.activity_pool(char_id=TEST_CHAR_ID) == Path(
+        f'userdata/characters/authored/{TEST_CHAR_ID}/activity_pool.yaml'
     )
-    assert dp.activity_pool() == dp.activity_pool(char_id="yexuan")
+    assert dp.activity_pool() == dp.activity_pool(char_id=TEST_CHAR_ID)
 
 
 def test_author_notes_pool_userdata_primary(dp):
     # C1 migrated private author notes are now the primary path.
-    result = dp.author_notes_pool(char_id="yexuan")
-    assert result == Path("userdata/characters/authored/yexuan/author_notes.json")
-    assert dp.author_notes_pool() == dp.author_notes_pool(char_id="yexuan")
+    result = dp.author_notes_pool(char_id=TEST_CHAR_ID)
+    assert result == Path(f'userdata/characters/authored/{TEST_CHAR_ID}/author_notes.json')
+    assert dp.author_notes_pool() == dp.author_notes_pool(char_id=TEST_CHAR_ID)
 
 
 def test_traits_resolve_to_bundled_default(dp):
-    assert dp.yexuan_traits(char_id="yexuan") == Path("bundled/characters/default/traits.yaml")
-    assert dp.yexuan_traits() == dp.yexuan_traits(char_id="yexuan")
+    assert dp.yexuan_traits(char_id=TEST_CHAR_ID) == Path("bundled/characters/default/traits.yaml")
+    assert dp.yexuan_traits() == dp.yexuan_traits(char_id=TEST_CHAR_ID)
 
 
 # character_growth 路径解析测试已删除（Brief 50 · 工单C.3）：character_growth
@@ -92,49 +93,49 @@ def test_traits_resolve_to_bundled_default(dp):
 # ── reality per_char_user 目录：v1 路径落在 chars/{char_id}/{artifact} ──────────
 
 @pytest.mark.parametrize("method,expected_rel", [
-    ("history",           ("chars", "yexuan", "history")),
-    ("mid_term",          ("chars", "yexuan", "mid_term")),
-    ("episodic_memory",   ("chars", "yexuan", "episodic_memory")),
-    ("memory_index",      ("chars", "yexuan", "memory_index")),
-    ("profiles",          ("chars", "yexuan", "profiles")),
-    ("reminders",         ("chars", "yexuan", "reminders")),
-    ("diary_context",     ("chars", "yexuan", "diary_context")),
-    ("event_log",         ("chars", "yexuan", "event_log")),
-    ("fixation_state_dir",("chars", "yexuan", "fixation_state")),
-    ("user_identity_dir", ("chars", "yexuan", "user_identity")),
+    ("history",           ("chars", TEST_CHAR_ID, "history")),
+    ("mid_term",          ("chars", TEST_CHAR_ID, "mid_term")),
+    ("episodic_memory",   ("chars", TEST_CHAR_ID, "episodic_memory")),
+    ("memory_index",      ("chars", TEST_CHAR_ID, "memory_index")),
+    ("profiles",          ("chars", TEST_CHAR_ID, "profiles")),
+    ("reminders",         ("chars", TEST_CHAR_ID, "reminders")),
+    ("diary_context",     ("chars", TEST_CHAR_ID, "diary_context")),
+    ("event_log",         ("chars", TEST_CHAR_ID, "event_log")),
+    ("fixation_state_dir",("chars", TEST_CHAR_ID, "fixation_state")),
+    ("user_identity_dir", ("chars", TEST_CHAR_ID, "user_identity")),
 ])
 def test_reality_v1_paths(dp, tmp_path, method, expected_rel):
     fn = getattr(dp, method)
-    assert fn(char_id="yexuan") == tmp_path.joinpath(*expected_rel)
-    assert fn() == fn(char_id="yexuan")
+    assert fn(char_id=TEST_CHAR_ID) == tmp_path.joinpath(*expected_rel)
+    assert fn() == fn(char_id=TEST_CHAR_ID)
 
 
 # ── dream 路径：v1 路径落在 runtime/dreams/{char_id}/... ─────────────────────
 
 @pytest.mark.parametrize("method,expected_parts", [
-    ("dreams_tmp_dir",        ("runtime", "dreams", "yexuan", "tmp")),
-    ("dreams_archive_dir",    ("runtime", "dreams", "yexuan", "archive")),
-    ("dreams_summaries_dir",  ("runtime", "dreams", "yexuan", "summaries")),
-    ("dreams_impressions_dir",("runtime", "dreams", "yexuan", "impressions")),
+    ("dreams_tmp_dir",        ("runtime", "dreams", TEST_CHAR_ID, "tmp")),
+    ("dreams_archive_dir",    ("runtime", "dreams", TEST_CHAR_ID, "archive")),
+    ("dreams_summaries_dir",  ("runtime", "dreams", TEST_CHAR_ID, "summaries")),
+    ("dreams_impressions_dir",("runtime", "dreams", TEST_CHAR_ID, "impressions")),
 ])
 def test_dream_dir_v1_paths(dp, tmp_path, method, expected_parts):
     fn = getattr(dp, method)
-    assert fn(char_id="yexuan") == tmp_path.joinpath(*expected_parts)
-    assert fn() == fn(char_id="yexuan")
+    assert fn(char_id=TEST_CHAR_ID) == tmp_path.joinpath(*expected_parts)
+    assert fn() == fn(char_id=TEST_CHAR_ID)
 
 
 def test_dream_state_path_v1(dp, tmp_path):
-    assert dp.dream_state_path("123456", char_id="yexuan") == (
-        tmp_path / "runtime" / "dreams" / "yexuan" / "state" / "123456" / "dream_state.json"
+    assert dp.dream_state_path("123456", char_id=TEST_CHAR_ID) == (
+        tmp_path / "runtime" / "dreams" / TEST_CHAR_ID / "state" / "123456" / "dream_state.json"
     )
-    assert dp.dream_state_path("123456") == dp.dream_state_path("123456", char_id="yexuan")
+    assert dp.dream_state_path("123456") == dp.dream_state_path("123456", char_id=TEST_CHAR_ID)
 
 
 def test_dream_settings_path_v1(dp, tmp_path):
-    assert dp.dream_settings_path("123456", char_id="yexuan") == (
-        tmp_path / "runtime" / "dreams" / "yexuan" / "settings" / "123456.json"
+    assert dp.dream_settings_path("123456", char_id=TEST_CHAR_ID) == (
+        tmp_path / "runtime" / "dreams" / TEST_CHAR_ID / "settings" / "123456.json"
     )
-    assert dp.dream_settings_path("123456") == dp.dream_settings_path("123456", char_id="yexuan")
+    assert dp.dream_settings_path("123456") == dp.dream_settings_path("123456", char_id=TEST_CHAR_ID)
 
 
 # ── 内存模块路径助手：S6 v1 路径穿透到 path_resolver ────────────────────────────
@@ -144,9 +145,9 @@ def test_short_term_history_path_v1(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import short_term
-    p = short_term._history_path("1234567890", char_id="yexuan")
+    p = short_term._history_path("1234567890", char_id=TEST_CHAR_ID)
     # S6 v1: runtime/memory/{char_id}/{uid}/history.json
-    assert p == tmp_path / "runtime" / "memory" / "yexuan" / "1234567890" / "history.json"
+    assert p == tmp_path / "runtime" / "memory" / TEST_CHAR_ID / "1234567890" / "history.json"
     assert short_term._history_path("1234567890") == p
 
 
@@ -155,9 +156,9 @@ def test_mid_term_file_v1(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import mid_term
-    p = mid_term._read_file("1234567890", char_id="yexuan")
+    p = mid_term._read_file("1234567890", char_id=TEST_CHAR_ID)
     # S6 v1: runtime/memory/{char_id}/{uid}/mid_term.json
-    assert p == tmp_path / "runtime" / "memory" / "yexuan" / "1234567890" / "mid_term.json"
+    assert p == tmp_path / "runtime" / "memory" / TEST_CHAR_ID / "1234567890" / "mid_term.json"
     assert mid_term._read_file("1234567890") == p
 
 
@@ -166,9 +167,9 @@ def test_episodic_mem_file_v1(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import episodic_memory
-    p = episodic_memory._mem_read_file("1234567890", char_id="yexuan")
+    p = episodic_memory._mem_read_file("1234567890", char_id=TEST_CHAR_ID)
     # S6 v1: runtime/memory/{char_id}/{uid}/episodic.json
-    assert p == tmp_path / "runtime" / "memory" / "yexuan" / "1234567890" / "episodic.json"
+    assert p == tmp_path / "runtime" / "memory" / TEST_CHAR_ID / "1234567890" / "episodic.json"
     assert episodic_memory._mem_read_file("1234567890") == p
 
 
@@ -177,9 +178,9 @@ def test_fixation_state_file_v1(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import fixation_pipeline
-    p = fixation_pipeline._state_read_file("1234567890", char_id="yexuan")
+    p = fixation_pipeline._state_read_file("1234567890", char_id=TEST_CHAR_ID)
     # S6 v1: runtime/memory/{char_id}/{uid}/fixation_state.json
-    assert p == tmp_path / "runtime" / "memory" / "yexuan" / "1234567890" / "fixation_state.json"
+    assert p == tmp_path / "runtime" / "memory" / TEST_CHAR_ID / "1234567890" / "fixation_state.json"
     assert fixation_pipeline._state_read_file("1234567890") == p
 
 
@@ -190,9 +191,9 @@ def test_event_log_day_file_v1(dp, tmp_path, monkeypatch):
     from core.memory import event_log
     d = datetime(2026, 5, 29)
     # Use _day_file_write which always targets v1 path (no fallback)
-    p = event_log._day_file_write("1234567890", d, char_id="yexuan")
+    p = event_log._day_file_write("1234567890", d, char_id=TEST_CHAR_ID)
     # S6 v1: runtime/memory/{char_id}/{uid}/event_log/2026-05-29.md
     assert p == (
-        tmp_path / "runtime" / "memory" / "yexuan" / "1234567890" / "event_log" / "2026-05-29.md"
+        tmp_path / "runtime" / "memory" / TEST_CHAR_ID / "1234567890" / "event_log" / "2026-05-29.md"
     )
     assert event_log._day_file_write("1234567890", d) == p

@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_pipeline_read_scope.py
 
@@ -50,7 +51,7 @@ def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
 
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -181,7 +182,7 @@ def test_fetch_context_passes_char_id_to_event_log_search(
 
     captured: list[str] = []
 
-    async def _spy_search(user_id, query, llm_client=None, *, char_id="yexuan", return_trace=False, query_vec=None, since_ts=None, until_ts=None):
+    async def _spy_search(user_id, query, llm_client=None, *, char_id=TEST_CHAR_ID, return_trace=False, query_vec=None, since_ts=None, until_ts=None):
         captured.append(char_id)
         return ("", []) if return_trace else ""
 
@@ -208,7 +209,7 @@ def test_fetch_context_passes_char_id_to_user_profile_load(
 
     captured: list[str] = []
 
-    def _spy_load(user_id, *, char_id="yexuan"):
+    def _spy_load(user_id, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return {}
 
@@ -235,7 +236,7 @@ def test_fetch_context_passes_char_id_to_mid_term_format(
 
     captured: list[str] = []
 
-    def _spy_format(uid, *, char_id="yexuan"):
+    def _spy_format(uid, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return ""
 
@@ -262,7 +263,7 @@ def test_fetch_context_passes_char_id_to_short_term_load_for_prompt(
 
     captured: list[str] = []
 
-    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id="yexuan"):
+    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return []
 
@@ -289,7 +290,7 @@ def test_fetch_context_passes_char_id_to_episodic_retrieve(
 
     captured: list[str] = []
 
-    def _spy_retrieve(user_id, topic="", top_k=3, *, char_id="yexuan", char_name="", allow_strengthen=True, return_trace=False, query_vec=None, sem_hits=None, since_ts=None, until_ts=None):
+    def _spy_retrieve(user_id, topic="", top_k=3, *, char_id=TEST_CHAR_ID, char_name="", allow_strengthen=True, return_trace=False, query_vec=None, sem_hits=None, since_ts=None, until_ts=None):
         captured.append(char_id)
         return ([], []) if return_trace else []
 
@@ -316,7 +317,7 @@ def test_fetch_context_passes_char_id_to_user_identity_format(
 
     captured: list[str] = []
 
-    async def _spy_format(user_id, min_confidence=0.5, *, char_id="yexuan"):
+    async def _spy_format(user_id, min_confidence=0.5, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return ""
 
@@ -348,7 +349,7 @@ def test_fetch_context_passes_char_id_to_impression_loader(
 
     captured: list[str] = []
 
-    def _spy_load_imp(uid, *, char_id="yexuan", **_kwargs):
+    def _spy_load_imp(uid, *, char_id=TEST_CHAR_ID, **_kwargs):
         captured.append(char_id)
         return ""
 
@@ -373,13 +374,13 @@ def test_fetch_context_uses_new_char_id_after_switch(
     """
     import core.memory.short_term as _st
 
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
     _apply_base_stubs(monkeypatch)
 
     captured: list[str] = []
 
-    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id="yexuan"):
+    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return []
 
@@ -387,7 +388,7 @@ def test_fetch_context_uses_new_char_id_after_switch(
 
     # First call: yexuan
     _run_fetch(pipeline)
-    assert captured[-1] == "yexuan", f"First call must use yexuan, got {captured[-1]!r}"
+    assert captured[-1] == TEST_CHAR_ID, f"First call must use yexuan, got {captured[-1]!r}"
 
     # Switch active to character_b
     _write_active(sandbox, "character_b")
@@ -410,7 +411,7 @@ def test_fetch_context_invalid_active_does_not_call_readers(
     """
     import core.memory.short_term as _st
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "missing_id", "enabled_lorebooks": [],

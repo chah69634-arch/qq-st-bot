@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """Brief 72：生成后段落硬兜底、双输出路径与热开关。"""
 
 from pathlib import Path
@@ -213,7 +214,7 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
         character = SimpleNamespace(name="Companion")
 
         def _current_reality_scope(self, uid):
-            return SimpleNamespace(character_id="yexuan")
+            return SimpleNamespace(character_id=TEST_CHAR_ID)
 
         async def fetch_context(self, uid, message, **kwargs):
             return {}

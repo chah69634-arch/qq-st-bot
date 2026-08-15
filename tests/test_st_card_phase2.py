@@ -10,6 +10,7 @@ tests/test_st_card_phase2.py
 改动 5：alternate_greetings 可通过 Character 属性访问。
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 from pathlib import Path
@@ -63,7 +64,7 @@ def old_card_dir(tmp_path):
         "system_prompt": "",
         "world_book": [],
     }
-    (d / "yexuan.json").write_text(json.dumps(card, ensure_ascii=False), encoding="utf-8")
+    (d / f'{TEST_CHAR_ID}.json').write_text(json.dumps(card, ensure_ascii=False), encoding="utf-8")
     return tmp_path
 
 
@@ -102,7 +103,7 @@ class TestCharacterLoaderNewFields:
     def test_old_card_defaults_to_empty(self, old_card_dir, fresh_registry):
         """老卡缺省三个字段为空，不报错。"""
         fresh_registry(old_card_dir)
-        char = load("yexuan")
+        char = load(TEST_CHAR_ID)
         assert char.post_history_extra == ""
         assert char.post_history_instructions == ""
         assert char.alternate_greetings == []

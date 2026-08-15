@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_slow_queue_char_scope.py
 
@@ -34,7 +35,7 @@ from core.asset_registry import AssetRegistry
 def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -127,8 +128,8 @@ async def test_payload_char_id_is_snapshot_not_current(
     chars_tree, monkeypatch, sandbox, registry
 ):
     """入队后切换角色不影响已入队 payload 的 char_id 快照。"""
-    pipeline = _make_pipeline("yexuan", registry)
-    _write_active(sandbox, "yexuan")
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
 
     enqueued_a: list[dict] = []
     enqueued_b: list[dict] = []
@@ -154,7 +155,7 @@ async def test_payload_char_id_is_snapshot_not_current(
         await pipeline.post_process("u1", "消息A", "回复A", envelope=env)
 
     payload_a_char_ids = {p.get("char_id") for p in enqueued_a if p.get("char_id")}
-    assert "yexuan" in payload_a_char_ids, f"第一轮 payload char_id 应含 yexuan，实际: {payload_a_char_ids}"
+    assert TEST_CHAR_ID in payload_a_char_ids, f"第一轮 payload char_id 应含 yexuan，实际: {payload_a_char_ids}"
 
     # 切换到 character_b
     _write_active(sandbox, "character_b")
@@ -164,8 +165,8 @@ async def test_payload_char_id_is_snapshot_not_current(
     for p in enqueued_a:
         cid = p.get("char_id")
         if cid is not None:
-            assert cid == "yexuan", (
-                f"切换后旧 payload char_id 应仍是 'yexuan'，但变成了: {cid!r}"
+            assert cid == TEST_CHAR_ID, (
+                f"切换后旧 payload char_id 应仍是 TEST_CHAR_ID，但变成了: {cid!r}"
             )
 
     with (
@@ -193,7 +194,7 @@ async def test_handler_summarize_to_midterm_passes_char_id(sandbox):
 
     captured: list[str] = []
 
-    def _spy_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id="yexuan", occurred_at=None, **kw):
+    def _spy_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id=TEST_CHAR_ID, occurred_at=None, **kw):
         captured.append(char_id)
 
     monkeypatch_mt = patch.object(_mt, "append", side_effect=_spy_append)
@@ -227,7 +228,7 @@ async def test_handler_reflect_to_episodic_passes_char_id(sandbox):
 
     captured: list[str] = []
 
-    def _spy_write_episode(user_id, episode, *, char_id="yexuan"):
+    def _spy_write_episode(user_id, episode, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
 
     fake_mid_entry = {
@@ -278,7 +279,7 @@ async def test_handler_user_profile_update_passes_char_id(sandbox):
 
     captured: list[str] = []
 
-    async def _spy_extract(uid, recent_messages, *, char_id="yexuan"):
+    async def _spy_extract(uid, recent_messages, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
 
     with patch.object(_up, "extract_and_update", side_effect=_spy_extract):
@@ -303,7 +304,7 @@ async def test_handler_consolidate_to_identity_passes_char_id(sandbox):
 
     captured: list[str] = []
 
-    async def _spy_consolidate(uid, llm_client, *, char_id="yexuan"):
+    async def _spy_consolidate(uid, llm_client, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return True
 
@@ -329,7 +330,7 @@ async def test_handler_capture_turn_retry_passes_char_id(sandbox):
     captured: list[str] = []
 
     def _spy_capture_turn(uid, user_msg, reply, emotion="neutral", turn_id=None,
-                          trigger_name="", envelope=None, *, char_id="yexuan"):
+                          trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return turn_id or f"{uid}_spy"
 
@@ -356,8 +357,8 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
     """
     对所有 handler，不带 char_id 的 legacy payload 必须：
     - 不因 KeyError 崩溃
-    - 透传到 writer 的 char_id 为 'yexuan'
-    - caplog 中有 WARN 且含 'yexuan'
+    - 透传到 writer 的 char_id 为 TEST_CHAR_ID
+    - caplog 中有 WARN 且含 TEST_CHAR_ID
     """
     import core.memory.fixation_pipeline as _fp
     import core.memory.mid_term as _mt
@@ -367,7 +368,7 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
     # --- handler_summarize_to_midterm ---
     st_captured: list[str] = []
 
-    def _spy_mt_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id="yexuan", occurred_at=None, **kw):
+    def _spy_mt_append(uid, summary, tags=None, mid_id=None, source_turn_id=None, *, char_id=TEST_CHAR_ID, occurred_at=None, **kw):
         st_captured.append(char_id)
 
     with (
@@ -385,11 +386,11 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
         })
 
     assert st_captured, "mid_term.append 应被调用（legacy fallback 路径）"
-    assert st_captured[0] == "yexuan", (
-        f"legacy fallback char_id 必须是 'yexuan'，实际: {st_captured[0]!r}"
+    assert st_captured[0] == TEST_CHAR_ID, (
+        f"legacy fallback char_id 必须是 TEST_CHAR_ID，实际: {st_captured[0]!r}"
     )
-    assert any("yexuan" in r.message for r in caplog.records if r.levelno >= logging.WARNING), (
-        "caplog 应含有包含 'yexuan' 的 WARNING"
+    assert any(TEST_CHAR_ID in r.message for r in caplog.records if r.levelno >= logging.WARNING), (
+        "caplog 应含有包含 TEST_CHAR_ID 的 WARNING"
     )
 
     # --- handler_capture_turn_retry ---
@@ -397,7 +398,7 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
     retry_captured: list[str] = []
 
     def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None,
-                trigger_name="", envelope=None, *, char_id="yexuan"):
+                trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID):
         retry_captured.append(char_id)
         return turn_id or f"{uid}_spy"
 
@@ -414,11 +415,11 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
         })
 
     assert retry_captured, "capture_turn 应被调用（legacy fallback 路径）"
-    assert retry_captured[0] == "yexuan", (
-        f"legacy fallback char_id 必须是 'yexuan'，实际: {retry_captured[0]!r}"
+    assert retry_captured[0] == TEST_CHAR_ID, (
+        f"legacy fallback char_id 必须是 TEST_CHAR_ID，实际: {retry_captured[0]!r}"
     )
-    assert any("yexuan" in r.message for r in caplog.records if r.levelno >= logging.WARNING), (
-        "capture_turn_retry legacy caplog 应含 'yexuan' WARN"
+    assert any(TEST_CHAR_ID in r.message for r in caplog.records if r.levelno >= logging.WARNING), (
+        "capture_turn_retry legacy caplog 应含 TEST_CHAR_ID WARN"
     )
 
     # --- _handler_user_profile_update (pipeline.py handler) ---
@@ -427,7 +428,7 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
 
     up_captured: list[str] = []
 
-    async def _spy_extract(uid, recent_messages, *, char_id="yexuan"):
+    async def _spy_extract(uid, recent_messages, *, char_id=TEST_CHAR_ID):
         up_captured.append(char_id)
 
     with (
@@ -441,11 +442,11 @@ async def test_legacy_payload_missing_char_id_warns_and_falls_back(sandbox, capl
         })
 
     assert up_captured, "extract_and_update 应被调用（legacy fallback 路径）"
-    assert up_captured[0] == "yexuan", (
-        f"legacy fallback char_id 必须是 'yexuan'，实际: {up_captured[0]!r}"
+    assert up_captured[0] == TEST_CHAR_ID, (
+        f"legacy fallback char_id 必须是 TEST_CHAR_ID，实际: {up_captured[0]!r}"
     )
-    assert any("yexuan" in r.message for r in caplog.records if r.levelno >= logging.WARNING), (
-        "user_profile_update legacy caplog 应含 'yexuan' WARN"
+    assert any(TEST_CHAR_ID in r.message for r in caplog.records if r.levelno >= logging.WARNING), (
+        "user_profile_update legacy caplog 应含 TEST_CHAR_ID WARN"
     )
 
 
@@ -461,7 +462,7 @@ async def test_post_process_invalid_active_does_not_enqueue(
     import core.post_process.slow_queue as sq
     from core.write_envelope import WriteEnvelope, SourceType
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "missing_id", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
         encoding="utf-8",
@@ -516,7 +517,7 @@ async def test_e2e_char_scoped_mid_term_isolation(sandbox):
             "reply": "好吃的",
             "tags": [],
             "emotion": "neutral",
-            "char_id": "yexuan",
+            "char_id": TEST_CHAR_ID,
         })
 
         # 入队 character_b 任务
@@ -533,7 +534,7 @@ async def test_e2e_char_scoped_mid_term_isolation(sandbox):
         await sq.drain()
 
     # 读两个桶
-    yexuan_events = _mt.load(uid, char_id="yexuan")
+    yexuan_events = _mt.load(uid, char_id=TEST_CHAR_ID)
     character_b_events = _mt.load(uid, char_id="character_b")
 
     yexuan_text = " ".join(e.get("summary", "") for e in yexuan_events)
@@ -610,7 +611,7 @@ def test_t01_regression_fetch_context_char_id(chars_tree, monkeypatch, sandbox, 
 
     captured: list[str] = []
 
-    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id="yexuan"):
+    def _spy_load(user_id, *, budget_rounds=None, near_k=5, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return []
 
@@ -634,7 +635,7 @@ def test_t02_regression_capture_turn_char_id(sandbox):
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
     captured: list[str] = []
 
-    def _spy_st(user_id, role, content, turn_id=None, *, char_id="yexuan"):
+    def _spy_st(user_id, role, content, turn_id=None, *, char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return True
 

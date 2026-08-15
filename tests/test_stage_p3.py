@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -23,19 +24,19 @@ def test_stage_context_renders_viewer_and_other_speakers(sandbox):
     from core.stage.context import render_presence, render_transcript
     from core.stage.models import Stage, TranscriptEntry
 
-    stage = Stage("g", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
+    stage = Stage("g", "owner", (TEST_CHAR_ID, TEST_PEER_CHAR_ID), settings=_settings())
     transcript = [
         TranscriptEntry("owner", "hello", 1, "t", "user"),
-        TranscriptEntry("yexuan", "one", 2, "t", "user"),
-        TranscriptEntry("yexuanJ-5412", "two", 3, "t", "yexuan"),
+        TranscriptEntry(TEST_CHAR_ID, "one", 2, "t", "user"),
+        TranscriptEntry(TEST_PEER_CHAR_ID, "two", 3, "t", TEST_CHAR_ID),
     ]
 
-    rendered = render_transcript(stage, transcript, viewer_id="yexuan")
-    presence = render_presence(stage, viewer_id="yexuan")
+    rendered = render_transcript(stage, transcript, viewer_id=TEST_CHAR_ID)
+    presence = render_presence(stage, viewer_id=TEST_CHAR_ID)
 
     assert "owner：hello" in rendered
     assert "你：one" in rendered
-    assert f"{get_char_name('yexuanJ-5412')}：two" in rendered
+    assert f"{get_char_name(TEST_PEER_CHAR_ID)}：two" in rendered
     assert "群聊在场感" in presence
 
 
@@ -62,9 +63,9 @@ async def test_stage_character_view_uses_explicit_scope_and_prompt_context(sandb
             return "reply"
 
     view = object.__new__(StageCharacterView)
-    view.char_id = "yexuanJ-5412"
+    view.char_id = TEST_PEER_CHAR_ID
     view.pipeline = FakePipeline()
-    stage = Stage("g", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
+    stage = Stage("g", "owner", (TEST_CHAR_ID, TEST_PEER_CHAR_ID), settings=_settings())
     transcript = [TranscriptEntry("owner", "hello", 1, "t", "user")]
 
     with patch("core.observe.prompt_capture.set_capture_origin") as set_origin:
@@ -74,16 +75,16 @@ async def test_stage_character_view_uses_explicit_scope_and_prompt_context(sandb
     set_origin.assert_called_once_with({
         "origin": "stage",
         "group_id": "g",
-        "speaker": "yexuanJ-5412",
+        "speaker": TEST_PEER_CHAR_ID,
         "round_id": "t",
     })
-    assert captured["scope"].character_id == "yexuanJ-5412"
+    assert captured["scope"].character_id == TEST_PEER_CHAR_ID
     assert captured["context"]["stage_presence"]
     assert "owner：hello" in captured["context"]["stage_transcript"]
-    assert captured["kwargs"]["char_id"] == "yexuanJ-5412"
+    assert captured["kwargs"]["char_id"] == TEST_PEER_CHAR_ID
     assert captured["kwargs"]["consume_pending_perception"] is False
     assert captured["prompt_content"] != "hello"
-    assert captured["run_llm_char_id"] == "yexuanJ-5412"
+    assert captured["run_llm_char_id"] == TEST_PEER_CHAR_ID
 
 
 @pytest.mark.asyncio
@@ -105,15 +106,15 @@ async def test_stage_character_view_skips_fetch_context_for_peer_triggered_reply
             return "reply"
 
     view = object.__new__(StageCharacterView)
-    view.char_id = "yexuanJ-5412"
+    view.char_id = TEST_PEER_CHAR_ID
     view.pipeline = FakePipeline()
-    stage = Stage("g", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
+    stage = Stage("g", "owner", (TEST_CHAR_ID, TEST_PEER_CHAR_ID), settings=_settings())
     transcript = [
         TranscriptEntry("owner", "hello", 1, "t", "user"),
-        TranscriptEntry("yexuan", "one", 2, "t", "user"),
+        TranscriptEntry(TEST_CHAR_ID, "one", 2, "t", "user"),
     ]
 
-    reply = await view.generate(stage, transcript, "t", "yexuan")
+    reply = await view.generate(stage, transcript, "t", TEST_CHAR_ID)
 
     assert reply == "reply"
     context = captured["context"]
@@ -130,9 +131,9 @@ async def test_stage_character_view_injects_directed_block_for_peer_reply(sandbo
     from core.stage.models import Stage, TranscriptEntry
     from core.stage.views import StageCharacterView
 
-    # view.char_id below is "yexuanJ-5412" (char_b) responding to "yexuan" (char_a):
+    # view.char_id below is TEST_PEER_CHAR_ID (char_b) responding to TEST_CHAR_ID (char_a):
     # the directed block must speak in yexuanJ-5412's own voice, i.e. b_of_a.
-    relation = _empty_relation("yexuan", "yexuanJ-5412")
+    relation = _empty_relation(TEST_CHAR_ID, TEST_PEER_CHAR_ID)
     relation["b_of_a"]["summary"] = "乙觉得甲很坦率"
     assert _save_relation(relation)
 
@@ -150,17 +151,17 @@ async def test_stage_character_view_injects_directed_block_for_peer_reply(sandbo
             return "reply"
 
     view = object.__new__(StageCharacterView)
-    view.char_id = "yexuanJ-5412"
+    view.char_id = TEST_PEER_CHAR_ID
     view.pipeline = FakePipeline()
-    stage = Stage("g", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
+    stage = Stage("g", "owner", (TEST_CHAR_ID, TEST_PEER_CHAR_ID), settings=_settings())
     transcript = [
         TranscriptEntry("owner", "聊聊今天", 1, "t", "user"),
-        TranscriptEntry("yexuan", "今天天气不错。", 2, "t", "user"),
+        TranscriptEntry(TEST_CHAR_ID, "今天天气不错。", 2, "t", "user"),
     ]
 
-    await view.generate(stage, transcript, "t", "yexuan")
+    await view.generate(stage, transcript, "t", TEST_CHAR_ID)
 
-    speaker_name = get_char_name("yexuan")
+    speaker_name = get_char_name(TEST_CHAR_ID)
     assert f"你在回应 {speaker_name} 刚才那句：「今天天气不错。」" in captured["content"]
     assert "乙觉得甲很坦率" in captured["content"]
 
@@ -184,9 +185,9 @@ async def test_stage_character_view_omits_directed_block_for_owner_reply(sandbox
             return "reply"
 
     view = object.__new__(StageCharacterView)
-    view.char_id = "yexuanJ-5412"
+    view.char_id = TEST_PEER_CHAR_ID
     view.pipeline = FakePipeline()
-    stage = Stage("g", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
+    stage = Stage("g", "owner", (TEST_CHAR_ID, TEST_PEER_CHAR_ID), settings=_settings())
     transcript = [TranscriptEntry("owner", "在吗", 1, "t", "user")]
 
     await view.generate(stage, transcript, "t", "user")
@@ -254,11 +255,11 @@ async def test_projection_enqueues_per_character_and_is_idempotent(sandbox, monk
     stage = create_stage(
         "group-projection",
         "owner",
-        ["yexuan", "yexuanJ-5412"],
+        [TEST_CHAR_ID, TEST_PEER_CHAR_ID],
         settings=_settings(),
     )
     append_transcript(stage, TranscriptEntry("owner", "hello", 1, "t", "user"))
-    append_transcript(stage, TranscriptEntry("yexuan", "reply", 2, "t", "user"))
+    append_transcript(stage, TranscriptEntry(TEST_CHAR_ID, "reply", 2, "t", "user"))
     jobs = []
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda kind, payload: jobs.append((kind, payload)))
 
@@ -267,10 +268,10 @@ async def test_projection_enqueues_per_character_and_is_idempotent(sandbox, monk
 
     assert count == 2
     assert second == 0
-    assert {payload["char_id"] for _, payload in jobs} == {"yexuan", "yexuanJ-5412"}
+    assert {payload["char_id"] for _, payload in jobs} == {TEST_CHAR_ID, TEST_PEER_CHAR_ID}
     assert all(payload["source"] == "group:group-projection" for _, payload in jobs)
     strengths = {payload["char_id"]: payload["memory_strength"] for _, payload in jobs}
-    assert strengths == {"yexuan": 0.55, "yexuanJ-5412": 0.4}
+    assert strengths == {TEST_CHAR_ID: 0.55, TEST_PEER_CHAR_ID: 0.4}
     assert all(payload["scope"]["character_id"] == payload["char_id"] for _, payload in jobs)
     assert load_stage("group-projection").projection_cursor == 2
 
@@ -284,13 +285,13 @@ async def test_projection_cursor_survives_transcript_pruning(sandbox, monkeypatc
     stage = create_stage(
         "group-prune",
         "owner",
-        ["yexuan"],
+        [TEST_CHAR_ID],
         settings=_settings(transcript_limit=2),
     )
     jobs = []
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda kind, payload: jobs.append(payload))
     append_transcript(stage, TranscriptEntry("owner", "one", 1, "t1", "user"))
-    append_transcript(stage, TranscriptEntry("yexuan", "two", 2, "t1", "user"))
+    append_transcript(stage, TranscriptEntry(TEST_CHAR_ID, "two", 2, "t1", "user"))
     await enqueue_reality_projection("group-prune")
 
     latest = load_stage("group-prune")
@@ -309,12 +310,12 @@ def test_mid_term_group_projection_metadata_persists(sandbox):
         "group summary",
         mid_id="m1",
         source_turn_id="g:0:2",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
         source="group:g",
         memory_strength=0.7,
     )
 
-    entry = mid_term.load("owner", char_id="yexuan")[0]
+    entry = mid_term.load("owner", char_id=TEST_CHAR_ID)[0]
     assert entry["source"] == "group:g"
     assert entry["memory_strength"] == 0.7
 
@@ -469,13 +470,13 @@ async def test_reality_runtime_delivers_speaker_and_enqueues_projection(sandbox,
     from core.stage.runner import StageTurnResult
     from core.stage.runtime import run_reality_stage_turn
 
-    stage = Stage("runtime-g", "actual-owner", ("yexuan",), settings=_settings())
+    stage = Stage("runtime-g", "actual-owner", (TEST_CHAR_ID,), settings=_settings())
     ws_sent = []
     non_desktop_sent = []
     projected = []
 
     async def fake_run(group_id, owner_content, *, generate_reply, deliver_reply, turn_id):
-        await deliver_reply("yexuan", "reply", "t")
+        await deliver_reply(TEST_CHAR_ID, "reply", "t")
         return StageTurnResult(group_id, "t", (), 0)
 
     class FakeChannel:
@@ -509,9 +510,9 @@ async def test_reality_runtime_delivers_speaker_and_enqueues_projection(sandbox,
     assert "channel_message" in ws_types
     msg = next(f for f in ws_sent if f["type"] == "channel_message")
     assert msg["content"] == "reply"
-    assert msg.get("char_id") == "yexuan"
+    assert msg.get("char_id") == TEST_CHAR_ID
     # Non-desktop channel also received the delivery.
-    assert non_desktop_sent == [("reply", "actual-owner", "yexuan")]
+    assert non_desktop_sent == [("reply", "actual-owner", TEST_CHAR_ID)]
     assert projected == ["runtime-g"]
 
 
@@ -520,11 +521,11 @@ def test_scheduler_cooldown_can_be_scoped_per_character(sandbox, monkeypatch):
 
     monkeypatch.setattr(loop.time, "time", lambda: 100000.0)
     loop._last_trigger.clear()
-    loop._mark("morning_greeting", char_id="yexuan")
+    loop._mark("morning_greeting", char_id=TEST_CHAR_ID)
 
-    assert loop._is_ready("morning_greeting", char_id="yexuan") is False
-    assert loop._is_ready("morning_greeting", char_id="yexuanJ-5412") is True
-    assert "yexuan:morning_greeting" in loop._last_trigger
+    assert loop._is_ready("morning_greeting", char_id=TEST_CHAR_ID) is False
+    assert loop._is_ready("morning_greeting", char_id=TEST_PEER_CHAR_ID) is True
+    assert f'{TEST_CHAR_ID}:morning_greeting' in loop._last_trigger
 
 
 async def _record_async(target: list, value):

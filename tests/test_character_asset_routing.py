@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_character_asset_routing.py
 
@@ -82,9 +83,9 @@ class TestTtsPresetRouting:
              patch("core.output.voice_adapter.get_provider_config", return_value=("gsv", {})), \
              patch.dict("core.output.voice_adapter._PROVIDERS", {"gsv": MagicMock(synthesize=_async_return(b"wav"))}), \
              patch("core.api_call_log.append", lambda **kw: None):
-            await voice_adapter.synthesize("hi", "happy", char_id="yexuan")
+            await voice_adapter.synthesize("hi", "happy", char_id=TEST_CHAR_ID)
 
-        assert captured["char_id"] == "yexuan"
+        assert captured["char_id"] == TEST_CHAR_ID
 
 
 def _async_return(value):
@@ -113,7 +114,7 @@ class TestStickerPackRouting:
 
         with patch("core.sandbox.get_paths", return_value=paths), \
              patch("core.character_loader.load", return_value=char):
-            picked = sticker._pick_sticker("开心", char_id="yexuan")
+            picked = sticker._pick_sticker("开心", char_id=TEST_CHAR_ID)
 
         assert picked is not None
         assert "packs" in picked and "cute" in picked
@@ -134,7 +135,7 @@ class TestStickerPackRouting:
 
         with patch("core.sandbox.get_paths", return_value=paths), \
              patch("core.character_loader.load", return_value=char):
-            picked = sticker._pick_sticker("开心", char_id="yexuan")
+            picked = sticker._pick_sticker("开心", char_id=TEST_CHAR_ID)
 
         assert picked is not None
         assert "shared" in picked
@@ -170,7 +171,7 @@ class TestStickerPackRouting:
 
         with patch("core.sandbox.get_paths", return_value=paths), \
              patch("core.character_loader.load", return_value=char):
-            picked = sticker._pick_sticker("开心", char_id="yexuan")
+            picked = sticker._pick_sticker("开心", char_id=TEST_CHAR_ID)
 
         assert picked is not None
         paths.sticker_pack_dir.assert_not_called()

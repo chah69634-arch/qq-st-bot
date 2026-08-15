@@ -1,5 +1,6 @@
 """Scenario arc director and stage-advance integration contracts."""
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -49,7 +50,7 @@ async def _run_two_satisfied_turns(sandbox, *, script_id: str, projected_tension
         patch("core.pipeline_registry.get", return_value=pipeline),
         patch("core.dream.dream_hud.delete_hud_state"),
     ):
-        result = await enter_dream(uid, char_id="yexuan", dream_mode="scenario", script_id=script_id)
+        result = await enter_dream(uid, char_id=TEST_CHAR_ID, dream_mode="scenario", script_id=script_id)
     assert result["ok"] is True
 
     matched_exit = "用户回应了他的话" if script_id == "test_short" else "双方有了第一次真实的对话"

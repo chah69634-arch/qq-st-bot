@@ -14,6 +14,7 @@ Tests cover:
   H  Write isolation           (2)   WI-01–WI-02
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 import tempfile
@@ -279,10 +280,10 @@ class TestAndSaveWiring:
         ag = _residue(tone="comfort", age_hours=1.0)
         save_calls: list[str] = []
 
-        def _fake_load(uid, char_id="yexuan"):
+        def _fake_load(uid, char_id=TEST_CHAR_ID):
             return default_hidden_state()
 
-        def _fake_save(uid, state, char_id="yexuan"):
+        def _fake_save(uid, state, char_id=TEST_CHAR_ID):
             save_calls.append(str(uid))
             return True
 
@@ -298,10 +299,10 @@ class TestAndSaveWiring:
         ag = _residue(tone="comfort", age_hours=1.0)
         save_calls: list[str] = []
 
-        def _fake_load(uid, char_id="yexuan"):
+        def _fake_load(uid, char_id=TEST_CHAR_ID):
             return default_hidden_state()
 
-        def _fake_save(uid, state, char_id="yexuan"):
+        def _fake_save(uid, state, char_id=TEST_CHAR_ID):
             save_calls.append(str(uid))
             return True
 

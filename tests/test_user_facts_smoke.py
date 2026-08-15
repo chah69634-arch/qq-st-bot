@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/test_user_facts_smoke.py
 ===============================
 Smoke test: verify user_facts global layer is injected correctly across
@@ -9,6 +9,7 @@ Run with:
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 import asyncio
 import json
@@ -27,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 # ─────────────────────────────────────────────────────────────────────────────
 
 OWNER_UID = "1234567890"
-CHARACTERS = ["yexuan", "character_b", "yexuanJ-5412"]
+CHARACTERS = [TEST_CHAR_ID, "character_b", TEST_PEER_CHAR_ID]
 
 TEST_FACTS = {
     "preferred_language": "Chinese",
@@ -81,7 +82,7 @@ def _apply_build_stubs(monkeypatch):
     monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda *, char_id="": "")
-    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id="yexuan": "")
+    monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(_anr, "get_current_note", lambda paths=None, char_id=None: "")
     monkeypatch.setattr(_cl, "get_config", lambda: {"chat": {}})
@@ -183,9 +184,9 @@ class TestFieldGuard:
 # ─────────────────────────────────────────────────────────────────────────────
 
 CHAR_NAMES = {
-    "yexuan": "Companion",
+    TEST_CHAR_ID: "Companion",
     "character_b": "DemoUser",
-    "yexuanJ-5412": "CompanionJ",
+    TEST_PEER_CHAR_ID: "CompanionJ",
 }
 
 
@@ -331,7 +332,7 @@ class TestScopedIsolation:
             profile={},
             group_context=[],
             user_facts_text="preferred_language: Chinese",
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
         )
         layers = _extract_layers(messages)
         facts_layer = layers.get("5.1_user_facts", "")
@@ -363,7 +364,7 @@ class TestNoFactsScenario:
             profile={},
             group_context=[],
             user_facts_text=uf_text,
-            char_id="yexuan",
+            char_id=TEST_CHAR_ID,
         )
         layers = _extract_layers(messages)
         assert "5.1_user_facts" not in layers
@@ -436,8 +437,8 @@ class TestPipelineFetchContext:
         return asyncio.run(_go())
 
     def test_fetch_context_includes_user_facts_text(self):
-        pipeline = self._make_pipeline("yexuan")
-        ctx = self._run_fetch_context(pipeline, OWNER_UID, "yexuan")
+        pipeline = self._make_pipeline(TEST_CHAR_ID)
+        ctx = self._run_fetch_context(pipeline, OWNER_UID, TEST_CHAR_ID)
 
         assert "user_facts_text" in ctx, "fetch_context must return user_facts_text key"
         uf_text = ctx["user_facts_text"]

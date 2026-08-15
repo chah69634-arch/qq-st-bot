@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """Read-only fs browsing tool contracts (Brief 31 · fs_list / fs_read)."""
 
 import pytest
@@ -265,7 +266,7 @@ async def test_fs_tools_execute_without_danger_mode(monkeypatch, tmp_path):
 
     result, confirm = await tool_dispatcher.execute(
         "fs_read", {"path": str(f)}, "u1", "u1", False, _Session(),
-        origin="user_live", char_id="yexuan",
+        origin="user_live", char_id=TEST_CHAR_ID,
     )
     assert "hello" in result
     assert confirm is None

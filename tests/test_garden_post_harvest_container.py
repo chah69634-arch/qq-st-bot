@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """Brief 83 · G4：花园 dry/gift/ask 采后容器最小方案。"""
 
 import json
@@ -42,16 +43,16 @@ def test_daily_check_dry_gift_ask_land_in_history_and_leave_harvest(
 
     now = 2_000_000.0
     monkeypatch.setattr(manager.time, "time", lambda: now)
-    _seed_harvest("yexuan", flower_id="daisy", now=now)
+    _seed_harvest(TEST_CHAR_ID, flower_id="daisy", now=now)
 
     rolls = iter([ask_roll, self_roll])
     monkeypatch.setattr(manager.random, "random", lambda: next(rolls))
 
-    events = manager.daily_check(char_id="yexuan")
+    events = manager.daily_check(char_id=TEST_CHAR_ID)
     assert [e["type"] for e in events] == ["harvest_handle"]
     assert events[0]["handle_action"] == expected_kind
 
-    storage = _read_json(sandbox.garden(char_id="yexuan") / "storage.json")
+    storage = _read_json(sandbox.garden(char_id=TEST_CHAR_ID) / "storage.json")
     assert storage["harvest"] == [], "dry/gift/ask 处理完成后必须离开 harvest"
 
     assert len(storage["history"]) == 1
@@ -69,15 +70,15 @@ def test_daily_check_vase_branch_unchanged_no_history_entry(sandbox, monkeypatch
 
     now = 2_000_000.0
     monkeypatch.setattr(manager.time, "time", lambda: now)
-    _seed_harvest("yexuan", flower_id="rose", now=now)
+    _seed_harvest(TEST_CHAR_ID, flower_id="rose", now=now)
 
     rolls = iter([0.40, 0.90])  # self 分支，第二次 roll >= 0.5 → vase
     monkeypatch.setattr(manager.random, "random", lambda: next(rolls))
 
-    events = manager.daily_check(char_id="yexuan")
+    events = manager.daily_check(char_id=TEST_CHAR_ID)
     assert events[0]["handle_action"] == "vase"
 
-    storage = _read_json(sandbox.garden(char_id="yexuan") / "storage.json")
+    storage = _read_json(sandbox.garden(char_id=TEST_CHAR_ID) / "storage.json")
     assert storage["harvest"] == []
     assert storage["history"] == []
     assert len(storage["vase"]) == 1
@@ -89,14 +90,14 @@ def test_daily_check_silent_branch_stays_in_harvest(sandbox, monkeypatch):
 
     now = 2_000_000.0
     monkeypatch.setattr(manager.time, "time", lambda: now)
-    _seed_harvest("yexuan", flower_id="rose", now=now)
+    _seed_harvest(TEST_CHAR_ID, flower_id="rose", now=now)
 
     monkeypatch.setattr(manager.random, "random", lambda: 0.90)  # silent 区间
 
-    events = manager.daily_check(char_id="yexuan")
+    events = manager.daily_check(char_id=TEST_CHAR_ID)
     assert events[0]["handle_action"] == "silent"
 
-    storage = _read_json(sandbox.garden(char_id="yexuan") / "storage.json")
+    storage = _read_json(sandbox.garden(char_id=TEST_CHAR_ID) / "storage.json")
     assert len(storage["harvest"]) == 1
     assert storage["history"] == []
 
@@ -107,7 +108,7 @@ def test_daily_check_history_backward_compatible_with_missing_history_key(sandbo
 
     now = 2_000_000.0
     monkeypatch.setattr(manager.time, "time", lambda: now)
-    garden_dir = sandbox.garden(char_id="yexuan")
+    garden_dir = sandbox.garden(char_id=TEST_CHAR_ID)
     garden_dir.mkdir(parents=True, exist_ok=True)
     (garden_dir / "storage.json").write_text(
         json.dumps({
@@ -123,7 +124,7 @@ def test_daily_check_history_backward_compatible_with_missing_history_key(sandbo
     )
     monkeypatch.setattr(manager.random, "random", lambda: 0.10)  # ask 区间
 
-    events = manager.daily_check(char_id="yexuan")
+    events = manager.daily_check(char_id=TEST_CHAR_ID)
     assert events[0]["handle_action"] == "ask"
 
     storage = _read_json(garden_dir / "storage.json")
@@ -137,7 +138,7 @@ def test_get_state_exposes_history_recent(sandbox, monkeypatch):
     now = 2_000_000.0
     monkeypatch.setattr(manager.time, "time", lambda: now)
     manager._save(
-        manager._storage_path("yexuan"),
+        manager._storage_path(TEST_CHAR_ID),
         {
             "harvest": [],
             "vase": [],
@@ -146,10 +147,10 @@ def test_get_state_exposes_history_recent(sandbox, monkeypatch):
                 {"kind": "gift", "flower": "daisy", "mood_source": "neutral", "ts": now, "note": "纯真"},
             ],
         },
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
 
-    state = manager.get_state(char_id="yexuan")
+    state = manager.get_state(char_id=TEST_CHAR_ID)
     assert state["history_recent"] == [
         {"kind": "gift", "flower": "daisy", "mood_source": "neutral", "ts": now, "note": "纯真"},
     ]
@@ -158,7 +159,7 @@ def test_get_state_exposes_history_recent(sandbox, monkeypatch):
 def test_get_state_history_recent_empty_when_no_history(sandbox):
     from core.garden import manager
 
-    state = manager.get_state(char_id="yexuan")
+    state = manager.get_state(char_id=TEST_CHAR_ID)
     assert state["history_recent"] == []
 
 

@@ -19,6 +19,7 @@ Covers:
 12. Regression: memory_path_resolver all-artifacts test
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 import time
@@ -106,9 +107,9 @@ def test_mid_term_path_equals_legacy_sandbox_path(sandbox):
 
 
 def test_mid_term_path_equals_legacy_sandbox_path_yexuan(sandbox):
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     resolver_path = resolve_path(scope, "mid_term")
-    legacy_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "mid_term.json"
+    legacy_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "mid_term.json"
     assert resolver_path == legacy_path, (
         f"Resolver path diverged from legacy:\n  resolver: {resolver_path}\n  legacy:   {legacy_path}"
     )
@@ -177,10 +178,10 @@ def test_format_for_prompt_empty_char_id_raises(sandbox):
 def test_yexuan_character_b_mid_term_isolated(sandbox):
     import core.memory.mid_term as _mt
 
-    _mt.append(_UID, "Companion专属摘要", char_id="yexuan")
+    _mt.append(_UID, "Companion专属摘要", char_id=TEST_CHAR_ID)
     _mt.append(_UID, "DemoUser专属摘要", char_id="character_b")
 
-    y_events = _mt.load(_UID, char_id="yexuan")
+    y_events = _mt.load(_UID, char_id=TEST_CHAR_ID)
     h_events = _mt.load(_UID, char_id="character_b")
 
     y_summaries = [e["summary"] for e in y_events]
@@ -191,7 +192,7 @@ def test_yexuan_character_b_mid_term_isolated(sandbox):
     assert "DemoUser专属摘要" in h_summaries
     assert "Companion专属摘要" not in h_summaries
 
-    y_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "mid_term.json"
+    y_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "mid_term.json"
     h_path = sandbox.user_memory_root(_UID, char_id="character_b") / "mid_term.json"
     assert y_path.exists()
     assert h_path.exists()
@@ -205,13 +206,13 @@ def test_yexuan_character_b_mid_term_isolated(sandbox):
 def test_format_for_prompt_isolation(sandbox):
     import core.memory.mid_term as _mt
 
-    yexuan_word = "yexuan-unique-8a7f3"
+    yexuan_word = f'{TEST_CHAR_ID}-unique-8a7f3'
     character_b_word = "character_b-unique-9b2e1"
 
-    _mt.append(_UID, yexuan_word, char_id="yexuan")
+    _mt.append(_UID, yexuan_word, char_id=TEST_CHAR_ID)
     _mt.append(_UID, character_b_word, char_id="character_b")
 
-    y_text = _mt.format_for_prompt(_UID, char_id="yexuan")
+    y_text = _mt.format_for_prompt(_UID, char_id=TEST_CHAR_ID)
     h_text = _mt.format_for_prompt(_UID, char_id="character_b")
 
     assert yexuan_word in y_text, f"yexuan word missing from yexuan format_for_prompt"
@@ -257,8 +258,8 @@ def test_mid_term_resolver_char_and_uid_present(sandbox):
 
 
 def test_mid_term_resolver_no_yexuan_for_custom_char(sandbox):
-    """Resolver emits scope.character_id, not a hardcoded 'yexuan' default."""
+    """Resolver emits scope.character_id, not a hardcoded TEST_CHAR_ID default."""
     scope = MemoryScope.reality_scope("u1", "custom_char")
     p = str(resolve_path(scope, "mid_term")).replace("\\", "/")
     assert "custom_char" in p
-    assert "yexuan" not in p
+    assert TEST_CHAR_ID not in p

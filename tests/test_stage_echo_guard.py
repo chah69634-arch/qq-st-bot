@@ -1,5 +1,6 @@
 """Brief 51: prompt-view sanitization and Phase B echo cut-off."""
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 import json
 
@@ -14,7 +15,7 @@ def _settings(**overrides):
         "max_responders": 1,
         "max_ai_chain_depth": 2,
         "respond_threshold": 0.5,
-        "talkativeness": {"yexuan": 1.0, "yexuanJ-5412": 1.0},
+        "talkativeness": {TEST_CHAR_ID: 1.0, TEST_PEER_CHAR_ID: 1.0},
         # Brief 85 §4 topic-seed is orthogonal to what this test exercises and
         # uses real random.random() when unmocked — pin it off for determinism.
         "topic_seed_prob": 0.0,
@@ -28,7 +29,7 @@ async def test_phase_b_echo_is_not_persisted_delivered_and_ends_chain(sandbox):
     from core.stage.runner import run_owner_turn
     from core.stage.store import create_stage, load_transcript
 
-    stage = create_stage("echo-cut", "owner", ["yexuan", "yexuanJ-5412"], settings=_settings())
+    stage = create_stage("echo-cut", "owner", [TEST_CHAR_ID, TEST_PEER_CHAR_ID], settings=_settings())
     deliveries = []
 
     async def generate(_stage, speaker_id, _transcript, _turn_id, _triggered_by):
@@ -55,13 +56,13 @@ def test_transcript_sanitizes_ai_prompt_view_but_not_owner_or_source(sandbox):
 
     long_action = "（" + "缓慢地转身，望向窗外沉默了很久。" * 5 + "）"
     ai_text = long_action + "我还是想先听你说。"
-    stage = Stage("echo-context", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
+    stage = Stage("echo-context", "owner", (TEST_CHAR_ID, TEST_PEER_CHAR_ID), settings=_settings())
     entries = [
         TranscriptEntry("owner", "（用户的原文不应改动）", 1, "t", "user"),
-        TranscriptEntry("yexuanJ-5412", ai_text, 2, "t", "user"),
+        TranscriptEntry(TEST_PEER_CHAR_ID, ai_text, 2, "t", "user"),
     ]
 
-    rendered = render_transcript(stage, entries, viewer_id="yexuan")
+    rendered = render_transcript(stage, entries, viewer_id=TEST_CHAR_ID)
 
     assert "用户的原文不应改动" in rendered
     assert long_action not in rendered
@@ -73,6 +74,6 @@ def test_chain_presence_contains_anti_echo_instruction(sandbox):
     from core.stage.context import render_presence
     from core.stage.models import Stage
 
-    stage = Stage("echo-presence", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
-    assert "不要复述或简单附和" not in render_presence(stage, viewer_id="yexuan")
-    assert "不要复述或简单附和" in render_presence(stage, viewer_id="yexuan", chain_reply=True)
+    stage = Stage("echo-presence", "owner", (TEST_CHAR_ID, TEST_PEER_CHAR_ID), settings=_settings())
+    assert "不要复述或简单附和" not in render_presence(stage, viewer_id=TEST_CHAR_ID)
+    assert "不要复述或简单附和" in render_presence(stage, viewer_id=TEST_CHAR_ID, chain_reply=True)

@@ -20,6 +20,7 @@ Coverage:
     current owner / not-yet-fixed.
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import textwrap
 from pathlib import Path
@@ -67,10 +68,10 @@ def test_get_history_reads_memory_short_term_rounds(sandbox, monkeypatch):
     monkeypatch.setattr(st, "get_config", lambda: {"memory": {"short_term_rounds": 5}})
     # Append 10 rounds worth of messages
     for i in range(10):
-        st.append("u1", "user", f"msg {i}", char_id="yexuan")
-        st.append("u1", "assistant", f"rep {i}", char_id="yexuan")
+        st.append("u1", "user", f"msg {i}", char_id=TEST_CHAR_ID)
+        st.append("u1", "assistant", f"rep {i}", char_id=TEST_CHAR_ID)
 
-    result = st.get_history("u1", char_id="yexuan")
+    result = st.get_history("u1", char_id=TEST_CHAR_ID)
     assert len(result) <= 10, f"Expected ≤10 msgs for 5-round budget, got {len(result)}"
 
 
@@ -84,10 +85,10 @@ def test_get_history_legacy_alias_fallback(sandbox, monkeypatch):
 
     monkeypatch.setattr(st, "get_config", lambda: {"context": {"max_turns": 3}})
     for i in range(10):
-        st.append("u2", "user", f"msg {i}", char_id="yexuan")
-        st.append("u2", "assistant", f"rep {i}", char_id="yexuan")
+        st.append("u2", "user", f"msg {i}", char_id=TEST_CHAR_ID)
+        st.append("u2", "assistant", f"rep {i}", char_id=TEST_CHAR_ID)
 
-    result = st.get_history("u2", char_id="yexuan")
+    result = st.get_history("u2", char_id=TEST_CHAR_ID)
     assert len(result) <= 6, f"Expected ≤6 msgs for 3-round legacy budget, got {len(result)}"
 
 
@@ -104,10 +105,10 @@ def test_get_history_owner_wins_over_alias(sandbox, monkeypatch):
         "context": {"max_turns": 10},          # alias: 10 rounds
     })
     for i in range(10):
-        st.append("u3", "user", f"msg {i}", char_id="yexuan")
-        st.append("u3", "assistant", f"rep {i}", char_id="yexuan")
+        st.append("u3", "user", f"msg {i}", char_id=TEST_CHAR_ID)
+        st.append("u3", "assistant", f"rep {i}", char_id=TEST_CHAR_ID)
 
-    result = st.get_history("u3", char_id="yexuan")
+    result = st.get_history("u3", char_id=TEST_CHAR_ID)
     assert len(result) <= 4, (
         f"memory.short_term_rounds=2 should win over context.max_turns=10; got {len(result)} msgs"
     )
@@ -123,10 +124,10 @@ def test_load_for_prompt_reads_memory_short_term_rounds(sandbox, monkeypatch):
 
     monkeypatch.setattr(st, "get_config", lambda: {"memory": {"short_term_rounds": 3}})
     for i in range(10):
-        st.append("u4", "user", f"q {i}", char_id="yexuan")
-        st.append("u4", "assistant", f"a {i}", char_id="yexuan")
+        st.append("u4", "user", f"q {i}", char_id=TEST_CHAR_ID)
+        st.append("u4", "assistant", f"a {i}", char_id=TEST_CHAR_ID)
 
-    result = st.load_for_prompt("u4", char_id="yexuan")
+    result = st.load_for_prompt("u4", char_id=TEST_CHAR_ID)
     # load_for_prompt returns turn-groups, each group = 2 msgs; budget=3 → ≤6 msgs
     assert len(result) <= 6, (
         f"load_for_prompt with short_term_rounds=3 should return ≤6 msgs, got {len(result)}"

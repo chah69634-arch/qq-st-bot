@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_active_character_fail_loud.py
 
@@ -53,7 +54,7 @@ def chars_tree(tmp_path):
     chars = tmp_path / "characters"
     chars.mkdir()
 
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "Companion", "description": "test", "world_book": []}),
         encoding="utf-8",
     )
@@ -89,7 +90,7 @@ def _make_pipeline(char_id: str, registry):
 
 def test_missing_active_character_field_raises(chars_tree, monkeypatch, sandbox, registry):
     """JSON has no active_character field at all → ValueError."""
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"enabled_lorebooks": [], "enabled_jailbreaks": []}),
@@ -100,12 +101,12 @@ def test_missing_active_character_field_raises(chars_tree, monkeypatch, sandbox,
         pipeline._refresh_character_if_needed()
 
     assert pipeline.character.name == "Companion", "character must remain unchanged"
-    assert pipeline._active_character_id == "yexuan"
+    assert pipeline._active_character_id == TEST_CHAR_ID
 
 
 def test_empty_active_character_field_raises(chars_tree, monkeypatch, sandbox, registry):
     """active_character is explicit empty string → ValueError."""
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
@@ -116,14 +117,14 @@ def test_empty_active_character_field_raises(chars_tree, monkeypatch, sandbox, r
         pipeline._refresh_character_if_needed()
 
     assert pipeline.character.name == "Companion"
-    assert pipeline._active_character_id == "yexuan"
+    assert pipeline._active_character_id == TEST_CHAR_ID
 
 
 def test_empty_active_character_no_slow_queue(chars_tree, monkeypatch, sandbox, registry):
     """Empty active_character: build_prompt raises before post_process can enqueue."""
     from core.post_process import slow_queue
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
@@ -168,7 +169,7 @@ def test_empty_active_character_no_short_term_write(chars_tree, monkeypatch, san
     """Empty active_character: short_term.append must never be called."""
     from core.memory import short_term
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
@@ -210,7 +211,7 @@ def test_empty_active_character_no_short_term_write(chars_tree, monkeypatch, san
 
 def test_unknown_active_character_raises_valueerror(chars_tree, monkeypatch, sandbox, registry):
     """Unknown active_character id → ValueError; original character preserved."""
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "does_not_exist", "enabled_lorebooks": [],
@@ -224,8 +225,8 @@ def test_unknown_active_character_raises_valueerror(chars_tree, monkeypatch, san
     # Must not have swapped to AI fallback
     assert pipeline.character.name != "AI"
     # Must not have fallen back to yexuan (it WAS yexuan; the key point: id unchanged)
-    assert pipeline._active_character_id == "yexuan", (
-        "active_character_id must remain yexuan, not updated to the invalid id"
+    assert pipeline._active_character_id == TEST_CHAR_ID, (
+        f'active_character_id must remain {TEST_CHAR_ID}, not updated to the invalid id'
     )
     # The character object must be the original yexuan, not any new object
     assert pipeline.character.name == "Companion"
@@ -262,7 +263,7 @@ def test_unknown_active_character_no_yexuan_fallback(chars_tree, monkeypatch, sa
     with pytest.raises(ValueError):
         pipeline._refresh_character_if_needed()
 
-    assert pipeline.character.name == "DemoUser", "must stay as character_b, no fallback to yexuan"
+    assert pipeline.character.name == "DemoUser", f'must stay as character_b, no fallback to {TEST_CHAR_ID}'
     assert pipeline._active_character_id == "character_b"
 
 
@@ -275,7 +276,7 @@ def test_patch_invalid_active_character_returns_422(chars_tree, monkeypatch, san
 
     # Seed with yexuan
     sandbox.active_prompt_assets().write_text(
-        json.dumps({"active_character": "yexuan", "enabled_lorebooks": [],
+        json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [],
                     "enabled_jailbreaks": ["base"]}),
         encoding="utf-8",
     )
@@ -291,7 +292,7 @@ def test_patch_invalid_active_character_returns_422(chars_tree, monkeypatch, san
 
     # File must be unchanged
     after = json.loads(sandbox.active_prompt_assets().read_text(encoding="utf-8"))
-    assert after["active_character"] == "yexuan", (
+    assert after["active_character"] == TEST_CHAR_ID, (
         "active_prompt_assets must not be modified after rejected PATCH"
     )
 
@@ -302,7 +303,7 @@ def test_patch_invalid_active_character_no_disk_write(chars_tree, monkeypatch, s
     from admin.routers.settings_prompt_assets import PromptAssetsUpdate, patch_prompt_assets
 
     sandbox.active_prompt_assets().write_text(
-        json.dumps({"active_character": "yexuan", "enabled_lorebooks": [],
+        json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [],
                     "enabled_jailbreaks": ["base"]}),
         encoding="utf-8",
     )
@@ -317,7 +318,7 @@ def test_patch_invalid_active_character_no_disk_write(chars_tree, monkeypatch, s
     assert exc_info.value.status_code == 422
 
     after = json.loads(sandbox.active_prompt_assets().read_text(encoding="utf-8"))
-    assert after["active_character"] == "yexuan"
+    assert after["active_character"] == TEST_CHAR_ID
 
 
 # ── 4. PUT /characters/active with invalid id → 422, pipeline not updated ────
@@ -328,7 +329,7 @@ def test_put_active_invalid_id_returns_422(chars_tree, monkeypatch, sandbox, reg
     from admin.routers.character import set_active_character
 
     sandbox.active_prompt_assets().write_text(
-        json.dumps({"active_character": "yexuan", "enabled_lorebooks": [],
+        json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [],
                     "enabled_jailbreaks": []}),
         encoding="utf-8",
     )
@@ -346,7 +347,7 @@ def test_put_active_invalid_id_no_disk_write(chars_tree, monkeypatch, sandbox, r
     from admin.routers.character import set_active_character
 
     sandbox.active_prompt_assets().write_text(
-        json.dumps({"active_character": "yexuan", "enabled_lorebooks": [],
+        json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [],
                     "enabled_jailbreaks": []}),
         encoding="utf-8",
     )
@@ -357,7 +358,7 @@ def test_put_active_invalid_id_no_disk_write(chars_tree, monkeypatch, sandbox, r
         )
 
     after = json.loads(sandbox.active_prompt_assets().read_text(encoding="utf-8"))
-    assert after["active_character"] == "yexuan", (
+    assert after["active_character"] == TEST_CHAR_ID, (
         "active_prompt_assets must not change after rejected PUT /characters/active"
     )
 
@@ -371,11 +372,11 @@ def test_put_active_invalid_id_does_not_update_pipeline(
     from core.pipeline import Pipeline
     import core.pipeline_registry as _preg
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     monkeypatch.setattr(_preg, "_pipeline", pipeline)
 
     sandbox.active_prompt_assets().write_text(
-        json.dumps({"active_character": "yexuan", "enabled_lorebooks": [],
+        json.dumps({"active_character": TEST_CHAR_ID, "enabled_lorebooks": [],
                     "enabled_jailbreaks": []}),
         encoding="utf-8",
     )
@@ -386,7 +387,7 @@ def test_put_active_invalid_id_does_not_update_pipeline(
         )
 
     assert pipeline.character.name == "Companion", "Pipeline character must remain unchanged"
-    assert pipeline._active_character_id == "yexuan"
+    assert pipeline._active_character_id == TEST_CHAR_ID
 
 
 # ── 5. active_prompt_assets.active_character overrides config.default ─────────
@@ -398,7 +399,7 @@ def test_active_overrides_config_default_at_pipeline_refresh(
     from core.pipeline import Pipeline
     from core.character_loader import load as _load
 
-    pipeline = Pipeline(_load("yexuan"), lore_engine=None, active_character_id="yexuan")
+    pipeline = Pipeline(_load(TEST_CHAR_ID), lore_engine=None, active_character_id=TEST_CHAR_ID)
 
     # active_prompt_assets says character_b
     sandbox.active_prompt_assets().write_text(
@@ -408,11 +409,11 @@ def test_active_overrides_config_default_at_pipeline_refresh(
     )
 
     # config says yexuan (mock)
-    with patch("core.config_loader.get_config", return_value={"character": {"default": "yexuan"}}):
+    with patch("core.config_loader.get_config", return_value={"character": {"default": TEST_CHAR_ID}}):
         pipeline._refresh_character_if_needed()
 
     assert pipeline.character.name == "DemoUser", (
-        "Pipeline must use active_prompt_assets (character_b), not config.default (yexuan)"
+        f'Pipeline must use active_prompt_assets (character_b), not config.default ({TEST_CHAR_ID})'
     )
     assert pipeline._active_character_id == "character_b"
 
@@ -458,7 +459,7 @@ def test_fetch_context_blocks_on_empty_active_character(
     """fetch_context raises before reading any memory when active_character is empty."""
     from core.memory import short_term
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "", "enabled_lorebooks": [],
@@ -489,7 +490,7 @@ def test_fetch_context_blocks_on_unknown_active_character(
     """fetch_context raises before reading memory when active_character is unknown."""
     from core.memory import short_term
 
-    pipeline = _make_pipeline("yexuan", registry)
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
 
     sandbox.active_prompt_assets().write_text(
         json.dumps({"active_character": "ghost_99", "enabled_lorebooks": [],

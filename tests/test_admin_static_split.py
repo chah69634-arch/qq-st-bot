@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 from pathlib import Path
 import re
 
@@ -68,7 +69,7 @@ def test_tools_page_exposes_editable_global_default_mode():
 def test_removed_legacy_pet_and_chat_panels_have_no_static_entrypoint():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
 
-    for page in ("pet", "yexuan"):
+    for page in ("pet", TEST_CHAR_ID):
         assert not (PAGES / f"{page}.html").exists()
         assert f'data-page="{page}"' not in index
         assert f'data-page-fragment="{page}"' not in index

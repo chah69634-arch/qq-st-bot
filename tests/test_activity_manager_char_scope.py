@@ -14,6 +14,7 @@ _load_pool() 调 get_paths().activity_state()/activity_pool() 时不传 char_id�
 """
 
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 import time
@@ -53,7 +54,7 @@ def test_load_state_missing_char_returns_empty(sandbox):
 def test_get_current_switches_independently_per_char(sandbox, monkeypatch):
     monkeypatch.setattr(
         am, "_pick_activity",
-        lambda arc, char_id="yexuan": {"text": f"{char_id} 的活动", "id": "x"},
+        lambda arc, char_id=TEST_CHAR_ID: {"text": f"{char_id} 的活动", "id": "x"},
     )
 
     state_a = am.get_current(char_id="character_a")
@@ -63,7 +64,7 @@ def test_get_current_switches_independently_per_char(sandbox, monkeypatch):
     assert state_b["current"] == "character_b 的活动"
 
     # 第二次调用（未过期）应从各自磁盘状态直接读回，不重新切换
-    monkeypatch.setattr(am, "should_switch", lambda char_id="yexuan": False)
+    monkeypatch.setattr(am, "should_switch", lambda char_id=TEST_CHAR_ID: False)
     assert am.get_current(char_id="character_a")["current"] == "character_a 的活动"
     assert am.get_current(char_id="character_b")["current"] == "character_b 的活动"
 
@@ -74,7 +75,7 @@ class _FakePaths:
     def __init__(self, pool_paths: dict[str, "object"]):
         self._pool_paths = pool_paths
 
-    def activity_pool(self, *, char_id: str = "yexuan"):
+    def activity_pool(self, *, char_id: str = TEST_CHAR_ID):
         return self._pool_paths[char_id]
 
 
@@ -114,12 +115,12 @@ def test_load_pool_default_char_no_fallback_log(tmp_path, monkeypatch, caplog):
     default_pool = tmp_path / "yexuan_pool.yaml"
     default_pool.write_text("activities:\n  - id: y1\n    text: 在看书\n    arcs: [afternoon]\n", encoding="utf-8")
 
-    fake_paths = _FakePaths({"yexuan": default_pool})
+    fake_paths = _FakePaths({TEST_CHAR_ID: default_pool})
     monkeypatch.setattr(am, "get_paths", lambda: fake_paths)
 
     import logging
     with caplog.at_level(logging.DEBUG, logger="core.activity_manager"):
-        result = am._load_pool(char_id="yexuan")
+        result = am._load_pool(char_id=TEST_CHAR_ID)
 
     assert result == [{"id": "y1", "text": "在看书", "arcs": ["afternoon"]}]
     assert not any("fallback" in r.message for r in caplog.records)
@@ -130,7 +131,7 @@ def test_load_pool_default_char_no_fallback_log(tmp_path, monkeypatch, caplog):
 def test_get_prompt_fragment_forwards_char_id(monkeypatch):
     captured = []
 
-    def _fake_get_current(char_id="yexuan"):
+    def _fake_get_current(char_id=TEST_CHAR_ID):
         captured.append(char_id)
         return {"current": "在遛狗", "thinking_about": ""}
 
@@ -225,7 +226,7 @@ async def test_activity_current_endpoint_includes_char_id(sandbox, monkeypatch):
 
     captured_char_ids = []
 
-    def _fake_get_current(char_id="yexuan"):
+    def _fake_get_current(char_id=TEST_CHAR_ID):
         captured_char_ids.append(char_id)
         return {"current": "character_a 在种花", "arc": "afternoon", "expected_until_ts": 0}
 

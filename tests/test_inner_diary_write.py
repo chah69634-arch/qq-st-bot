@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """Brief 26 · 角色日记生成与主动发言解耦。
 
 `_check_inner_diary_write` 是静默维护任务，与 daily_journal 主动发言完全解耦：
@@ -45,7 +46,7 @@ async def test_inner_diary_write_ignores_gating_and_writes_file(monkeypatch, san
     monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
     monkeypatch.setattr(time_based, "_mark", lambda name: marks.append(name))
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: ["yexuan"])
+    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: [TEST_CHAR_ID])
     monkeypatch.setattr(
         "core.memory.event_log.get_recent_days",
         lambda oid, days=1, **kw: "## 14:30\n**用户**：在干嘛\n**Companion**：想你了\n---\n",
@@ -55,7 +56,7 @@ async def test_inner_diary_write_ignores_gating_and_writes_file(monkeypatch, san
 
     await time_based._check_inner_diary_write()
 
-    diary_file = sandbox.yexuan_inner_diary(char_id="yexuan") / "2026-05-25.md"
+    diary_file = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
     assert diary_file.exists()
     assert marks == ["inner_diary_write"]
     assert len(chat_calls) == 2
@@ -71,9 +72,9 @@ async def test_inner_diary_write_idempotent_skips_llm(monkeypatch, sandbox):
     monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
     monkeypatch.setattr(time_based, "_mark", lambda name: marks.append(name))
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: ["yexuan"])
+    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: [TEST_CHAR_ID])
 
-    diary_dir = sandbox.yexuan_inner_diary(char_id="yexuan")
+    diary_dir = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID)
     diary_dir.mkdir(parents=True, exist_ok=True)
     (diary_dir / "2026-05-25.md").write_text("# 已经写过了\n", encoding="utf-8")
 
@@ -96,7 +97,7 @@ async def test_inner_diary_write_cross_midnight_uses_previous_logical_day(monkey
     monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
     monkeypatch.setattr(time_based, "_mark", lambda name: None)
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: ["yexuan"])
+    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: [TEST_CHAR_ID])
 
     seen_days = []
 
@@ -111,7 +112,7 @@ async def test_inner_diary_write_cross_midnight_uses_previous_logical_day(monkey
     await time_based._check_inner_diary_write()
 
     # logical_day(cutoff=5) at 2026-05-26 01:00 → 2026-05-25
-    diary_file = sandbox.yexuan_inner_diary(char_id="yexuan") / "2026-05-25.md"
+    diary_file = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
     assert diary_file.exists()
     assert seen_days == [2]
 
@@ -126,7 +127,7 @@ async def test_inner_diary_write_outside_window_noop(monkeypatch, sandbox):
     monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
     monkeypatch.setattr(time_based, "_mark", lambda name: marks.append(name))
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: ["yexuan"])
+    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: [TEST_CHAR_ID])
     chat_calls = []
     monkeypatch.setattr("core.llm_client.chat", _fake_chat_factory(chat_calls))
 
@@ -134,7 +135,7 @@ async def test_inner_diary_write_outside_window_noop(monkeypatch, sandbox):
 
     assert marks == []
     assert chat_calls == []
-    diary_file = sandbox.yexuan_inner_diary(char_id="yexuan") / "2026-05-25.md"
+    diary_file = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
     assert not diary_file.exists()
 
 
@@ -160,5 +161,5 @@ async def test_daily_journal_proposal_no_longer_writes_diary(monkeypatch, sandbo
 
     assert result.trigger_name == "daily_journal"
     assert chat_calls == []
-    diary_file = sandbox.yexuan_inner_diary(char_id="yexuan") / "2026-05-25.md"
+    diary_file = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
     assert not diary_file.exists()

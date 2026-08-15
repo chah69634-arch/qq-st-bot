@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 施工单 03b 验收测试
 
@@ -14,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 UID = "integrity_test_user"
-CHAR_ID = "yexuan"
+CHAR_ID = TEST_CHAR_ID
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_watcher.py — Brief 39 验收：模拟进程列表的 watcher 单元测试
 + arm → 检测到游戏 → active → 关游戏 → closing 全链路。
@@ -12,7 +13,7 @@ import pytest
 from core.coplay import session, watcher
 
 UID = "u1"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 
 
 @pytest.fixture(autouse=True)

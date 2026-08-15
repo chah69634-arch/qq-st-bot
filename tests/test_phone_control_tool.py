@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """phone_control_start 工具的门禁行为：安全模式拦截、危险模式下仍需二次确认。"""
 import json
 import time
@@ -44,7 +45,7 @@ async def test_safe_mode_blocks_phone_control_with_phone_specific_message(sandbo
         False,
         _Session(),
         origin="user_live",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
     assert "安全模式" in result
     assert "手机" in result
@@ -69,7 +70,7 @@ async def test_danger_mode_still_asks_confirmation_before_executing(sandbox, mon
         False,
         session,
         origin="user_live",
-        char_id="yexuan",
+        char_id=TEST_CHAR_ID,
     )
     # dangerous=True 工具第一次调用永远先要求确认，不管危险模式是否已开——两道闸独立，不能互相替代。
     assert result is None
@@ -80,7 +81,7 @@ async def test_danger_mode_still_asks_confirmation_before_executing(sandbox, mon
 
 @pytest.mark.asyncio
 async def test_wrapper_rejects_empty_task(sandbox):
-    result = await tool_dispatcher._phone_control_start_wrapper("", user_id="u1", char_id="yexuan")
+    result = await tool_dispatcher._phone_control_start_wrapper("", user_id="u1", char_id=TEST_CHAR_ID)
     assert "没听清楚" in result or "没法" in result
 
 
@@ -94,7 +95,7 @@ async def test_wrapper_starts_task_and_queues_mobile_behavior(sandbox, monkeypat
     registry.register(mobile)
 
     result = await tool_dispatcher._phone_control_start_wrapper(
-        "帮我点杯奶茶", user_id="u1", char_id="yexuan",
+        "帮我点杯奶茶", user_id="u1", char_id=TEST_CHAR_ID,
     )
     assert "已经把任务派给手机了" in result
 

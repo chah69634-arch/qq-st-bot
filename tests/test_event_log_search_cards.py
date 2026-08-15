@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_event_log_search_cards.py — P0-1 验收
 
@@ -18,7 +19,7 @@ import pytest
 from core.memory import event_log
 
 _UID = "search_card_uid"
-_CHAR_ID = "yexuan"
+_CHAR_ID = TEST_CHAR_ID
 _CHAR_NAME = "叶瑄"
 
 

@@ -9,6 +9,7 @@ tests/test_memory_janitor.py — Brief 49 memory_janitor 调度触发器测试
   4. 孤儿向量 25 条 → 触发 rebuild；5 条（占比 <10%）→ 只记日志不 rebuild。
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 from datetime import datetime
@@ -16,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.memory.episodic_memory import _load_memories, _save_memories
 
-_CHAR = "yexuan"
+_CHAR = TEST_CHAR_ID
 
 
 # ── 辅助 fixture / helper ─────────────────────────────────────────────────────

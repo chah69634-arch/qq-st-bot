@@ -16,6 +16,7 @@ Covers:
 9.  period info is uid-global and unaffected by character profile buckets
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import json
 
@@ -118,9 +119,9 @@ def test_profile_path_equals_legacy_sandbox_path(sandbox):
 
 
 def test_profile_path_equals_legacy_sandbox_path_yexuan(sandbox):
-    scope = MemoryScope.reality_scope(_UID, "yexuan")
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     resolver_path = resolve_path(scope, "profile")
-    legacy_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "profile.json"
+    legacy_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "profile.json"
     assert resolver_path == legacy_path, (
         f"Resolver path diverged from legacy:\n  resolver: {resolver_path}\n  legacy:   {legacy_path}"
     )
@@ -177,16 +178,16 @@ def test_clear_profile_empty_char_id_raises(sandbox):
 def test_yexuan_character_b_profile_isolated(sandbox):
     import core.memory.user_profile as _up
 
-    _up.save(_UID, {"name": "Companion专属"}, char_id="yexuan")
+    _up.save(_UID, {"name": "Companion专属"}, char_id=TEST_CHAR_ID)
     _up.save(_UID, {"name": "DemoUser专属"}, char_id="character_b")
 
-    y = _up.load(_UID, char_id="yexuan")
+    y = _up.load(_UID, char_id=TEST_CHAR_ID)
     h = _up.load(_UID, char_id="character_b")
 
     assert y["name"] == "Companion专属"
     assert h["name"] == "DemoUser专属"
 
-    y_path = sandbox.user_memory_root(_UID, char_id="yexuan") / "profile.json"
+    y_path = sandbox.user_memory_root(_UID, char_id=TEST_CHAR_ID) / "profile.json"
     h_path = sandbox.user_memory_root(_UID, char_id="character_b") / "profile.json"
     assert y_path.exists()
     assert h_path.exists()
@@ -196,13 +197,13 @@ def test_yexuan_character_b_profile_isolated(sandbox):
 def test_clear_character_b_does_not_affect_yexuan(sandbox):
     import core.memory.user_profile as _up
 
-    _up.save(_UID, {"name": "Companion不动"}, char_id="yexuan")
+    _up.save(_UID, {"name": "Companion不动"}, char_id=TEST_CHAR_ID)
     _up.save(_UID, {"name": "DemoUser清除"}, char_id="character_b")
 
     _up.clear(_UID, char_id="character_b")
 
-    y = _up.load(_UID, char_id="yexuan")
-    assert y["name"] == "Companion不动", "yexuan bucket must survive character_b clear"
+    y = _up.load(_UID, char_id=TEST_CHAR_ID)
+    assert y["name"] == "Companion不动", f'{TEST_CHAR_ID} bucket must survive character_b clear'
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +215,7 @@ def test_period_info_is_uid_global(sandbox):
     import core.memory.user_profile as _up
 
     health_state.set_period_date(_UID, "2026-08-01")
-    _up.save(_UID, {"last_period_date": "2026-01-01"}, char_id="yexuan")
+    _up.save(_UID, {"last_period_date": "2026-01-01"}, char_id=TEST_CHAR_ID)
     _up.save(_UID, {"last_period_date": "2026-06-01"}, char_id="character_b")
 
     assert health_state.get_period_info(_UID)["last_period_date"] == "2026-08-01"

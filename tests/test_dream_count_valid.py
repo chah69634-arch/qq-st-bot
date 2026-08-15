@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_dream_count_valid.py — count_valid_dreams() unit tests
 
@@ -41,7 +42,7 @@ def _assistant_turn(ts: float) -> dict:
 def archive(sandbox):
     """Return the v1 archive dir for char_id=yexuan (created on demand)."""
     from core.sandbox import get_paths
-    d = get_paths().dreams_archive_dir(char_id="yexuan")
+    d = get_paths().dreams_archive_dir(char_id=TEST_CHAR_ID)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -67,7 +68,7 @@ def test_one_valid_one_short(archive):
     ])
 
     from core.dream.dream_log import count_valid_dreams
-    result = count_valid_dreams(char_id="yexuan")
+    result = count_valid_dreams(char_id=TEST_CHAR_ID)
 
     assert result["total_archived"] == 2
     assert result["total_valid"] == 1
@@ -85,7 +86,7 @@ def test_all_short_dreams(archive):
         ])
 
     from core.dream.dream_log import count_valid_dreams
-    result = count_valid_dreams(char_id="yexuan")
+    result = count_valid_dreams(char_id=TEST_CHAR_ID)
 
     assert result["total_archived"] == 2
     assert result["total_valid"] == 0
@@ -95,7 +96,7 @@ def test_all_short_dreams(archive):
 def test_empty_archive_dir(archive):
     """Archive dir exists but is empty."""
     from core.dream.dream_log import count_valid_dreams
-    result = count_valid_dreams(char_id="yexuan")
+    result = count_valid_dreams(char_id=TEST_CHAR_ID)
 
     assert result == {"total_valid": 0, "total_archived": 0, "last_dream_at": None}
 
@@ -103,7 +104,7 @@ def test_empty_archive_dir(archive):
 def test_no_archive_dir(sandbox):
     """Archive dir does not exist at all → zeros, no crash."""
     from core.dream.dream_log import count_valid_dreams
-    result = count_valid_dreams(char_id="yexuan")
+    result = count_valid_dreams(char_id=TEST_CHAR_ID)
 
     assert result == {"total_valid": 0, "total_archived": 0, "last_dream_at": None}
 
@@ -118,7 +119,7 @@ def test_corrupt_lines_skipped(archive):
     f.write_text("\n".join(lines), encoding="utf-8")
 
     from core.dream.dream_log import count_valid_dreams
-    result = count_valid_dreams(char_id="yexuan")
+    result = count_valid_dreams(char_id=TEST_CHAR_ID)
 
     assert result["total_valid"] == 1
     assert result["total_archived"] == 1
@@ -133,7 +134,7 @@ def test_last_dream_at_is_max_ts_across_valid(archive):
     _write_dream(archive, "late", [_user_turn(base + 100 + i) for i in range(4)])
 
     from core.dream.dream_log import count_valid_dreams
-    result = count_valid_dreams(char_id="yexuan")
+    result = count_valid_dreams(char_id=TEST_CHAR_ID)
 
     assert result["total_valid"] == 2
     assert result["last_dream_at"] == pytest.approx(base + 103)

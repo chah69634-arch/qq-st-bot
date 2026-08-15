@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_coplay_commentator.py — Brief 41: 主动开口 D5 静默规则 + proposer 编排。
 """
@@ -11,7 +12,7 @@ from core.coplay import commentator, observer, session
 from core.coplay.observer import GameMoment
 
 UID = "owner1"
-CHAR = "yexuan"
+CHAR = TEST_CHAR_ID
 
 
 @pytest.fixture(autouse=True)

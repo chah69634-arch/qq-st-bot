@@ -1,3 +1,4 @@
+from tests.fixtures.public_assets import TEST_CHAR_ID
 import os
 from datetime import datetime
 from pathlib import Path
@@ -19,7 +20,7 @@ def test_datapaths_rejects_absolute_part(sandbox, tmp_path):
 
 
 def test_datapaths_fixed_paths_still_generate(sandbox, tmp_path):
-    assert sandbox.history() == tmp_path / "chars" / "yexuan" / "history"
+    assert sandbox.history() == tmp_path / "chars" / TEST_CHAR_ID / "history"
     assert sandbox.channel_queue() == tmp_path / "runtime" / "channel_queue.json"
 
 

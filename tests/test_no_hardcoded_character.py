@@ -13,9 +13,10 @@ tests/test_no_hardcoded_character.py — Brief 25 §3 P3 守门测试
   Rule C — 白名单条目必须仍然存在且仍然命中，否则说明已经清理干净，白名单该删了
            （防止白名单本身腐烂成摆设）。
 
-char_id="yexuan" 默认参数的守门已有独立测试：tests/test_r3_scope_lint.py。
+char_id=TEST_CHAR_ID 默认参数的守门已有独立测试：tests/test_r3_scope_lint.py。
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import re
 from pathlib import Path

@@ -18,6 +18,47 @@ os.chdir(_ROOT)
 sys.path.insert(0, str(_ROOT))
 
 
+TEST_CHAR_ID = "fixture_character"
+TEST_OWNER_ID = "test_owner"
+
+
+def _configure_public_test_environment() -> None:
+    """Use a generated public-only config before importing test modules."""
+    import yaml
+
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "controller")
+    config_dir = _ROOT / ".tmp"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / f"pytest-public-config-{worker}.yaml"
+    local_path = config_dir / f"pytest-public-config-{worker}.local.yaml"
+
+    config = yaml.safe_load((_ROOT / "config.example.yaml").read_text(encoding="utf-8")) or {}
+    config.setdefault("character", {})["default"] = TEST_CHAR_ID
+    config["character"]["name"] = "Fixture Companion"
+    config.setdefault("user", {})["display_name"] = ""
+    config.setdefault("scheduler", {})["owner_id"] = TEST_OWNER_ID
+
+    def replace_credentials(value):
+        if isinstance(value, dict):
+            return {
+                key: "test-only-placeholder" if key == "api_key" else replace_credentials(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [replace_credentials(item) for item in value]
+        return value
+
+    config_path.write_text(
+        yaml.safe_dump(replace_credentials(config), allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    os.environ["PRESENCEKIT_CONFIG_PATH"] = str(config_path)
+    os.environ["PRESENCEKIT_CONFIG_LOCAL_PATH"] = str(local_path)
+
+
+_configure_public_test_environment()
+
+
 def _worker_session(suffix: str) -> str:
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
     return f"pytest_{worker}_{suffix}"
@@ -58,29 +99,38 @@ def _dream_scenario_examples(monkeypatch):
 
 
 @pytest.fixture
-def real_dream_worlds(monkeypatch):
-    """让 core.dream 的 world/hud_label/scene_label/symbolic loader 读取仓库里真实的
-    userdata/characters/dream/worlds（生产态 DataPaths 解析结果），不受 autouse 沙盒
-    影响（Brief 121）。
+def real_dream_worlds(tmp_path, monkeypatch):
+    """Use tracked public dream worlds, never a developer's authored worlds."""
+    from tests.fixtures.public_assets import install_public_dream_worlds
 
-    直接 patch 各 loader 模块的 `_worlds_base` 函数，而不是整体替换
-    `core.sandbox._instance`——这样可以和 `sandbox` fixture 同时使用（比如某个测试
-    既要把 dreams_archive_dir() 隔离到 tmp，又要读真实的世界包 vocab.json）。
-    仅用于显式需要真实世界包内容做身份/人称/词表回归断言的测试。
-    """
-    import core.sandbox as _sandbox
-    real_base = _sandbox.DataPaths(mode=None).dream_worlds_dir()
+    public_base = install_public_dream_worlds(tmp_path / "dream_worlds")
 
     import core.dream.world_loader as _world_loader
     import core.dream.hud_label_loader as _hud_label_loader
     import core.dream.scene_label_loader as _scene_label_loader
     import core.dream.symbolic_loader as _symbolic_loader
 
-    monkeypatch.setattr(_world_loader, "_worlds_base", lambda: real_base)
-    monkeypatch.setattr(_hud_label_loader, "_worlds_base", lambda: real_base)
-    monkeypatch.setattr(_scene_label_loader, "_worlds_base", lambda: real_base)
-    monkeypatch.setattr(_symbolic_loader, "_worlds_base", lambda: real_base)
-    return real_base
+    monkeypatch.setattr(_world_loader, "_worlds_base", lambda: public_base)
+    monkeypatch.setattr(_hud_label_loader, "_worlds_base", lambda: public_base)
+    monkeypatch.setattr(_scene_label_loader, "_worlds_base", lambda: public_base)
+    monkeypatch.setattr(_symbolic_loader, "_worlds_base", lambda: public_base)
+    return public_base
+
+
+@pytest.fixture(autouse=True)
+def public_character_assets(sandbox):
+    """Install public role cards in every test sandbox."""
+    from tests.fixtures.public_assets import install_public_character_cards
+
+    install_public_character_cards(sandbox)
+    import core.asset_registry as asset_registry
+    import core.character_loader as character_loader
+
+    asset_registry._registry = None
+    character_loader._character_cache.clear()
+    yield
+    asset_registry._registry = None
+    character_loader._character_cache.clear()
 
 
 @pytest.fixture(autouse=True)
