@@ -18,6 +18,7 @@ TEST_CHAR_NAME = "Fixture Companion"
 
 _FIXTURE_ROOT = Path(__file__).parent
 PUBLIC_CHARACTER_CARDS = _FIXTURE_ROOT / "characters" / "cards"
+PUBLIC_CHARACTER_ASSETS = _FIXTURE_ROOT / "characters" / "authored"
 PUBLIC_DREAM_WORLDS = _FIXTURE_ROOT / "dream_worlds"
 
 
@@ -28,6 +29,13 @@ def install_public_character_cards(paths) -> tuple[str, ...]:
         target = paths.character_card_write_path(char_id)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
+        source_assets = PUBLIC_CHARACTER_ASSETS / char_id
+        if source_assets.is_dir():
+            target_assets = paths.user_authored_character_dir(char_id=char_id)
+            target_assets.mkdir(parents=True, exist_ok=True)
+            for asset in source_assets.iterdir():
+                if asset.is_file():
+                    shutil.copyfile(asset, target_assets / asset.name)
     return TEST_CHAR_IDS
 
 

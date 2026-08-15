@@ -1,4 +1,3 @@
-from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 P1-0H: 运行期 yexuan fallback 审计测试
 
@@ -24,6 +23,7 @@ import unittest.mock as mock
 from unittest.mock import patch
 
 import pytest
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 ROOT = pathlib.Path(__file__).parent.parent
 
@@ -50,8 +50,8 @@ _DLQ_ALLOWED_FUNCTIONS = {
     "core/memory/fixation_pipeline.py": "_get_scope_from_payload",
 }
 
-# P1-3A: DLQ fallback 由旧 `return TEST_CHAR_ID` 改为 `MemoryScope.reality_scope(uid, TEST_CHAR_ID)`
-_DLQ_FALLBACK_PATTERN = ', TEST_CHAR_ID)'  # 出现在 reality_scope(str(uid), TEST_CHAR_ID) 中
+# P1-3A: DLQ fallback uses the configured public default rather than a deployment id.
+_DLQ_FALLBACK_PATTERN = ', DEFAULT_CHAR_ID)'  # reality_scope(str(uid), DEFAULT_CHAR_ID)
 
 
 def test_dlq_fallback_yexuan_only_in_allowed_functions():
@@ -79,7 +79,7 @@ def test_no_unexpected_return_yexuan_in_admin_routers():
     router_dir = ROOT / "admin" / "routers"
     for py_file in router_dir.glob("*.py"):
         src = py_file.read_text(encoding="utf-8")
-        lines = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
+        lines = [l.strip() for l in src.splitlines() if 'return DEFAULT_CHAR_ID' in l]
         assert not lines, (
             f"{py_file.name} 中存在 `return TEST_CHAR_ID`: {lines}"
         )
@@ -94,7 +94,7 @@ def test_no_unexpected_return_yexuan_in_core_memory():
     mem_dir = ROOT / "core" / "memory"
     for py_file in mem_dir.glob("*.py"):
         src = py_file.read_text(encoding="utf-8")
-        bad = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
+        bad = [l.strip() for l in src.splitlines() if 'return DEFAULT_CHAR_ID' in l]
         assert not bad, (
             f"core/memory/{py_file.name} 中出现意外的 `return TEST_CHAR_ID`: {bad}"
         )
@@ -110,7 +110,7 @@ def test_no_unexpected_return_yexuan_in_core_garden():
     garden_dir = ROOT / "core" / "garden"
     for py_file in garden_dir.glob("*.py"):
         src = py_file.read_text(encoding="utf-8")
-        bad = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
+        bad = [l.strip() for l in src.splitlines() if 'return DEFAULT_CHAR_ID' in l]
         assert not bad, (
             f"core/garden/{py_file.name}: `return TEST_CHAR_ID` 应已移除: {bad}"
         )
@@ -248,7 +248,7 @@ def test_active_resolver_files_no_return_yexuan_fallback():
     """
     for rel in _ACTIVE_RESOLVER_FILES:
         src = _read_src(rel)
-        bad = [l.strip() for l in src.splitlines() if 'return TEST_CHAR_ID' in l]
+        bad = [l.strip() for l in src.splitlines() if 'return DEFAULT_CHAR_ID' in l]
         assert not bad, (
             f"{rel} 中存在意外的 `return TEST_CHAR_ID` fallback: {bad}"
         )

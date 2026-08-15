@@ -26,8 +26,6 @@ Coverage:
 """
 
 from __future__ import annotations
-from tests.fixtures.public_assets import TEST_CHAR_ID
-
 import json
 import os
 import sys
@@ -65,7 +63,7 @@ def _s(p: str) -> str:
 # ── 1. target char_id locked to yexuan ───────────────────────────────────────
 
 def test_target_char_id_is_yexuan():
-    assert _TARGET_CHAR_ID == TEST_CHAR_ID
+    assert _TARGET_CHAR_ID == "yexuan"
 
 
 # ── 2. _collect_legacy_uids ───────────────────────────────────────────────────

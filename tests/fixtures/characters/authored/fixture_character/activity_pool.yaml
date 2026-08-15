@@ -1,0 +1,4 @@
+activities:
+  - id: public_fixture_activity
+    text: "在公开测试夹具里整理一段文字"
+    arcs: [morning, afternoon, evening]

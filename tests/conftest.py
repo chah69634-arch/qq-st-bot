@@ -37,6 +37,9 @@ def _configure_public_test_environment() -> None:
     config["character"]["name"] = "Fixture Companion"
     config.setdefault("user", {})["display_name"] = ""
     config.setdefault("scheduler", {})["owner_id"] = TEST_OWNER_ID
+    # These tests exercise signal production and queue observability.  Keep
+    # scheduler sources available while leaving autonomy/LLM execution off.
+    config["scheduler"]["enabled"] = True
 
     def replace_credentials(value):
         if isinstance(value, dict):
@@ -70,6 +73,10 @@ def sandbox(tmp_path, monkeypatch):
     import core.sandbox as _sandbox
     paths = _sandbox.DataPaths(mode="test", test_session_id=_worker_session("unit"))
     paths._base = tmp_path
+    # Authored assets live outside DataPaths._base, so anchor their test-only
+    # project root as well.  This keeps public fixture cards out of the repo's
+    # real userdata/ tree while preserving the production path layout.
+    paths._project_root = tmp_path
     monkeypatch.setattr(_sandbox, "_instance", paths)
     return paths
 
@@ -86,6 +93,7 @@ def _default_sandbox_guard(tmp_path, monkeypatch):
     import core.sandbox as _sandbox
     guard_paths = _sandbox.DataPaths(mode="test", test_session_id=_worker_session("default_guard"))
     guard_paths._base = tmp_path / "_default_sandbox_guard"
+    guard_paths._project_root = tmp_path
     monkeypatch.setattr(_sandbox, "_instance", guard_paths)
 
 
@@ -96,6 +104,21 @@ def _dream_scenario_examples(monkeypatch):
 
     fixture_dir = _ROOT / "tests" / "fixtures" / "dream_scenarios"
     monkeypatch.setattr(scenario_loader, "_SCRIPTS_BASE", fixture_dir)
+
+
+@pytest.fixture(autouse=True)
+def _public_dream_world_template(monkeypatch, request):
+    """Point world-management writes at the tracked public seed package."""
+    if request.node.path.name != "test_dream_world_management.py":
+        return
+    from core.data_paths import DataPaths
+    from tests.fixtures.public_assets import PUBLIC_DREAM_WORLDS
+
+    monkeypatch.setattr(
+        DataPaths,
+        "default_dream_world_template_dir",
+        lambda _self: PUBLIC_DREAM_WORLDS / "_default",
+    )
 
 
 @pytest.fixture
@@ -118,17 +141,41 @@ def real_dream_worlds(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def public_character_assets(sandbox):
+def public_character_assets(sandbox, request):
     """Install public role cards in every test sandbox."""
     from tests.fixtures.public_assets import install_public_character_cards
+    from core.sandbox import get_paths
 
-    install_public_character_cards(sandbox)
+    paths = get_paths()
+    custom_asset_fixtures = {
+        "chars_dir",
+        "chars_tree",
+        "fake_characters",
+        "registry",
+        "registry_from",
+    }
+    custom_asset_root = bool(custom_asset_fixtures.intersection(request.fixturenames))
+    self_managed_asset_root = request.node.path.name == "test_user_asset_paths.py"
+    original_project_root = getattr(paths, "_project_root", None)
+    if self_managed_asset_root and hasattr(paths, "_project_root"):
+        # This module deliberately verifies relative production-path
+        # compatibility after changing cwd; do not let the shared test anchor
+        # turn its AssetEntry paths into absolute paths.
+        paths._project_root = None
+    # A small number of legacy module-local fixtures construct DataPaths via
+    # __new__ and intentionally expose only the runtime sandbox API.  They do
+    # not consume character cards; do not make the shared asset fixture depend
+    # on their incomplete test double.
+    if hasattr(paths, "_project_root") and not custom_asset_root and not self_managed_asset_root:
+        install_public_character_cards(paths)
     import core.asset_registry as asset_registry
     import core.character_loader as character_loader
 
     asset_registry._registry = None
     character_loader._character_cache.clear()
     yield
+    if self_managed_asset_root and hasattr(paths, "_project_root"):
+        paths._project_root = original_project_root
     asset_registry._registry = None
     character_loader._character_cache.clear()
 

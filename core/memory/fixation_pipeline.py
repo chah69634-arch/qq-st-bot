@@ -1435,11 +1435,11 @@ def _get_scope_from_payload(payload: dict, handler_name: str) -> MemoryScope:
         return MemoryScope.reality_scope(str(uid), char_id)
 
     logger.warning(
-        "[fixation.%s] payload 缺少 scope/char_id，使用 legacy DLQ fallback char_id=yexuan "
+        "[fixation.%s] payload 缺少 scope/char_id，使用 legacy DLQ fallback char_id=%s "
         "(uid=%s)",
-        handler_name, uid,
+        handler_name, DEFAULT_CHAR_ID, uid,
     )
-    return MemoryScope.reality_scope(str(uid), "yexuan")
+    return MemoryScope.reality_scope(str(uid), DEFAULT_CHAR_ID)
 
 
 async def handler_summarize_to_midterm(payload: dict) -> None:

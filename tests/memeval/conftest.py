@@ -7,6 +7,7 @@ tests/memeval/conftest.py — memeval 专用 fixture
 """
 
 from pathlib import Path
+import time
 
 import pytest
 
@@ -20,6 +21,24 @@ def _production_data_entries(root: Path) -> set[Path]:
         for path in root.rglob("*")
         if path.relative_to(root).parts[:1] != ("test_sandbox",)
     }
+
+
+def _stable_production_data_entries(root: Path, before: set[Path]) -> set[Path]:
+    """Allow an in-flight atomic-write temp file to finish before asserting.
+
+    xdist can finish a neighboring worker's test while this teardown is
+    running.  A ``*.json.tmp`` is only an intermediate safe-write artifact;
+    persistent files still fail immediately, and a temp artifact that does not
+    disappear within the short grace window remains a real pollution failure.
+    """
+    after = _production_data_entries(root)
+    for _ in range(10):
+        new_files = after - before
+        if not new_files or any(path.suffix != ".tmp" for path in new_files):
+            return after
+        time.sleep(0.05)
+        after = _production_data_entries(root)
+    return after
 
 
 @pytest.fixture
@@ -59,6 +78,6 @@ def _production_data_untouched():
     root = Path(__file__).parent.parent.parent / "data"
     before = _production_data_entries(root) if root.exists() else set()
     yield
-    after = _production_data_entries(root) if root.exists() else set()
+    after = _stable_production_data_entries(root, before) if root.exists() else set()
     new_files = after - before
     assert not new_files, f"memeval 用例污染了生产 data/ 目录，新增文件：{new_files}"

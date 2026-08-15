@@ -218,25 +218,25 @@ def test_allowlisted_files_still_exist():
 
 def test_detector_catches_kwonly_default():
     """AST detector catches keyword-only param: def f(*, char_id: str = TEST_CHAR_ID)."""
-    src = 'def load(uid: str, *, char_id: str = TEST_CHAR_ID) -> str:\n    pass\n'
+    src = f'def load(uid: str, *, char_id: str = "{TEST_CHAR_ID}") -> str:\n    pass\n'
     assert _find_yexuan_defaults(src) == [1]
 
 
 def test_detector_catches_positional_default():
     """AST detector catches positional param: def f(char_id=TEST_CHAR_ID)."""
-    src = 'def fn(uid: str, char_id=TEST_CHAR_ID):\n    pass\n'
+    src = f'def fn(uid: str, char_id="{TEST_CHAR_ID}"):\n    pass\n'
     assert _find_yexuan_defaults(src) != []
 
 
 def test_detector_ignores_plain_string_literal():
     """AST detector does NOT fire on a plain assignment CHAR = TEST_CHAR_ID."""
-    src = 'CHAR = TEST_CHAR_ID\n'
+    src = f'CHAR = "{TEST_CHAR_ID}"\n'
     assert _find_yexuan_defaults(src) == []
 
 
 def test_detector_ignores_callsite_kwarg():
     """AST detector does NOT fire on a call-site kwarg paths.get(char_id=TEST_CHAR_ID)."""
-    src = 'p = paths.foo(char_id=TEST_CHAR_ID)\n'
+    src = f'p = paths.foo(char_id="{TEST_CHAR_ID}")\n'
     assert _find_yexuan_defaults(src) == []
 
 
