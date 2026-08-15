@@ -12,6 +12,7 @@ def _make_pipeline():
 def _patch_loop(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", lambda: {
         "tool_loop": {"max_steps": 3, "total_timeout_s": 30, "categories": ["info"]},
+        "tool_exposure": {"path_a": {"categories": ["info", "desktop"]}},
     })
     monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda categories=None, **kwargs: [
         {"type": "function", "function": {"name": "p0_tool", "description": "", "parameters": {}}},
@@ -71,6 +72,11 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
     profile_calls: list[dict] = []
     history_calls: list[dict] = []
     probe_prompt_calls: list[dict] = []
+
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"tool_exposure": {"path_a": {"categories": ["info", "desktop"]}}},
+    )
 
     def _profile_load(uid, **kwargs):
         profile_calls.append(kwargs)

@@ -1845,28 +1845,17 @@ async def _execute_structured_impl(
         return _execution_outcome("tool_unknown", _fail)
 
     if allowed_tool_names is not None and tool_name not in allowed_tool_names:
-        return _execution_outcome("tool_failed", "tool capability unavailable for this caller")
+        return _execution_outcome("tool_failed", "这项能力不在本次调用范围内。")
 
     tool_info = _TOOL_REGISTRY[tool_name]
     if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
         _msg = "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
         _trace("failed", _msg)
         return _execution_outcome("tool_failed", _msg)
-    if tool_info.get("self_management"):
-        if origin not in {"assistant_self_management", "autonomy_self_management"}:
-            _trace("failed", "self-management origin rejected")
-            return _execution_outcome("tool_failed", "This management action is unavailable in this context.")
-    else:
-        if origin in {"assistant_self_management", "autonomy_self_management"}:
-            _trace("failed", "self-management origin may not execute a business tool")
-            return _execution_outcome("tool_failed", "This management origin may only change self capability.")
-        from core.self_management.policy import tool_allowed
-        if not tool_allowed(user_id, char_id, tool_name):
-            _trace("failed", "self capability disabled")
-            return _execution_outcome("tool_failed", "This capability is currently unavailable for this character.")
-
-    # Brief 61 defensive gate. A blocked hallucinated MCP call is not an action,
-    # so it deliberately leaves no action_trace record and reveals no level data.
+    # Keep the three user-visible capability refusals in one order: MCP
+    # proficiency is neutral, safe mode is explicit, and only then do we
+    # report a role-level authorization denial.  This prevents an internal
+    # policy/level fallback from leaking through the tool result.
     if tool_name.startswith("mcp__") and origin != "admin_console":
         from core.growth.mcp_proficiency import NEUTRAL_REFUSAL, is_tool_allowed
         if not is_tool_allowed(tool_name, char_id=char_id):
@@ -1877,6 +1866,19 @@ async def _execute_structured_impl(
     if gate_msg is not None:
         _trace("failed", gate_msg)
         return _execution_outcome("tool_failed", gate_msg)
+
+    if tool_info.get("self_management"):
+        if origin not in {"assistant_self_management", "autonomy_self_management"}:
+            _trace("failed", "self-management origin rejected")
+            return _execution_outcome("tool_failed", "这项自主管理能力不能在当前上下文中调用。")
+    else:
+        if origin in {"assistant_self_management", "autonomy_self_management"}:
+            _trace("failed", "self-management origin may not execute a business tool")
+            return _execution_outcome("tool_failed", "该管理调用只能修改自身能力，不能执行普通工具。")
+        from core.self_management.policy import tool_allowed
+        if not tool_allowed(user_id, char_id, tool_name):
+            _trace("failed", "self capability disabled")
+            return _execution_outcome("tool_failed", "这项能力尚未对当前角色开放。")
 
     if not _is_tool_enabled(tool_name):
         _fail = get_tool_fail_response()

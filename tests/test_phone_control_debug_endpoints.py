@@ -15,14 +15,27 @@ class _FakeChar:
         self.presence_ext = presence_ext
 
 
+def _patch_default_exposure(monkeypatch):
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {
+            "tool_exposure": {
+                "path_a": {"categories": ["info", "desktop"]},
+                "path_c": {"categories": ["info", "desktop", "memory"]},
+            },
+        },
+    )
+
+
 @pytest.mark.asyncio
 async def test_status_reports_enabled_when_category_present(monkeypatch):
+    _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
         "admin.routers.character._active_character_id", lambda: "yexuan",
     )
     monkeypatch.setattr(
         "core.character_loader.load",
-        lambda char_id: _FakeChar({"tool_categories": ["info", "phone_control"]}),
+        lambda char_id: _FakeChar({"tool_categories_path_c": ["info", "phone_control"]}),
     )
     monkeypatch.setattr(
         "core.phone_control.vision_client.get_phone_control_vision_config",
@@ -41,6 +54,7 @@ async def test_status_reports_enabled_when_category_present(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_status_reports_disabled_when_category_missing(monkeypatch):
+    _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
         "admin.routers.character._active_character_id", lambda: "yexuan",
     )
@@ -65,6 +79,7 @@ async def test_status_reports_disabled_when_category_missing(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_status_handles_character_load_failure(monkeypatch):
+    _patch_default_exposure(monkeypatch)
     monkeypatch.setattr(
         "admin.routers.character._active_character_id", lambda: "yexuan",
     )

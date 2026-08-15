@@ -11,6 +11,7 @@ import time
 import logging
 
 from channels.base import BaseChannel
+from core.deployment_capabilities import is_remote_server
 from core.sandbox import get_paths
 from core.safe_write import safe_write_json
 

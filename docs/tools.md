@@ -607,7 +607,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
-| `phone_control_start` | 发起一次手机自动化任务（导航外卖/购物到支付确认页、操作无开放 API 的第三方 App） | `dangerous=True`，需用户确认 + danger-mode 门禁；只负责把任务派给手机（写 `mobile_queue` + `behavior_id=phone_control_task`），真正的截屏/点击循环在设备本地跑，见 `docs/protocols/phone-control-protocol.md`（Emerald-mobile 仓库）。**绝不自动完成支付/提交订单/确认收货**——遇到密码/支付/银行类页面，后端 `core/phone_control/sensitive_filter.py` 和设备本地各自独立拦截，命中任一方即停。默认不在任一路径暴露面内；显式加入 `tool_exposure.path_c` 或角色 `tool_categories_path_c` 后仅进 loop，加入 `path_a` 后三个端都会进入预探针，仍受确认和 danger-mode 闸门约束。 |
+| `phone_control_start` | 发起一次手机自动化任务（导航外卖/购物到支付确认页、操作无开放 API 的第三方 App） | `dangerous=True`，需用户确认 + danger-mode 门禁；只负责把任务派给手机（写 `mobile_queue` + `behavior_id=phone_control_task`），真正的截屏/点击循环在设备本地跑，见 `docs/protocols/phone-control-protocol.md`（Emerald-mobile 仓库）。**绝不自动完成支付/提交订单/确认收货**——遇到密码/支付/银行类页面，后端 `core/phone_control/sensitive_filter.py` 和设备本地各自独立拦截，命中任一方即停。默认不在任一路径暴露面内；显式加入 `tool_exposure.path_c` 或角色 `tool_categories_path_c` 后仅进 loop，加入 `path_a` 后三个端都会进入预探针，仍受确认和 danger-mode 闸门约束。能力诊断在角色加载失败时按 fail-closed 处理。 |
 
 新增子系统：`core/phone_control/`（`sensitive_filter.py` 敏感页面拦截、`vision_client.py` 视觉模型调用、`task_state.py` 步数/超时状态）+ 三个端点（`admin/routers/phone_control.py`）：
 
@@ -617,7 +617,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | `GET /phone_control/status` | `chat` | 只读诊断：兼容字段 `tool_enabled`（Path C）以及 `path_a_enabled`/`path_c_enabled`，均按角色覆盖后的共享暴露策略解析；另含 `vision_configured` 和 `char_id`，供手机端能力页展示 |
 | `POST /phone_control/debug/start` | `chat` | 调试用：跳过 LLM 判断和 chat 内二次确认，直接调 `tool_dispatcher._phone_control_start_wrapper()` 发起任务；**仍然过danger-mode 门禁**（复用 `tool_dispatcher._current_mode()`），不因为是调试端点就放宽 |
 
-视觉模型走 `config.yaml` 的 `vision`（或专用 `phone_control_vision` 覆盖）段，与 `core/perception/vlm_client.py` 共用同一种 OpenAI-compatible 调用方式。当前已配置：`vision` 段用 GLM-4V（免费档，通用视觉观察够用），`phone_control_vision` 单独覆盖 `model: glm-4.6v`（智谱 2026-12 发布，原生带 function call/grounding，读取点击坐标更准，价格反而比上一代 glm-4.5v 低一半），`api_key`/`base_url` 继承自 `vision` 段不用重复填。叶瑄角色卡 `presence_ext.tool_categories` 已加入 `phone_control`（连带保留了原有的 `mcp`，否则会静默丢失 `cedar_toy` 工具访问）。
+视觉模型走 `config.yaml` 的 `vision`（或专用 `phone_control_vision` 覆盖）段，与 `core/perception/vlm_client.py` 共用同一种 OpenAI-compatible 调用方式。角色级手机控制授权使用正式的 `presence_ext.tool_categories_path_a/path_c` 字段；旧 `tool_categories` 只作为 Path C 兼容别名。
 
 ### fs 类（默认不暴露）
 

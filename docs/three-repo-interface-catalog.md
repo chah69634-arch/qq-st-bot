@@ -115,7 +115,7 @@ flowchart LR
 | `GET /sensor/behavior/status` | 后端 → 客户端 | 手机能力检查、管理面 | `current`；只读最近行为裁决 |
 | `/watch/event`、`/watch/status` | POST/GET | Watch/管理面 | `current`；外部事件进入后端状态/观测链 |
 | `/perception/visual`、`/perception/visual/config`、`/perception/visual-trace` | GET/POST | 桌面视觉 sidecar、管理面 | `current`；原图不进 prompt/记忆，是否上传受本地 opt-in 与后端开关共同约束 |
-| `/phone_control/step`、`/phone_control/status`、`/phone_control/debug/start` | POST/GET | Android 手机自动化、能力检查 | `current`；高风险动作仍受 danger mode 和用户确认 |
+| `/phone_control/step`、`/phone_control/status`、`/phone_control/debug/start` | POST/GET | Android 手机自动化、能力检查 | `current`；高风险动作仍受 danger mode 和用户确认；status 返回兼容 `tool_enabled` 与 `path_a_enabled`/`path_c_enabled`，按共享角色暴露解析器判断，角色加载失败时三个能力布尔值均 fail-closed |
 | `/hardware/devices`、`/hardware/connect`、`/hardware/jobs*` | GET/POST | 管理面、受控工具 | `admin-only` / hardware scope；桌面 UI 不应自行扩展硬件动作 |
 
 ### 3.4 Prompt 资产、角色和设置

@@ -109,6 +109,8 @@ async def phone_control_status(auth=Depends(require_scopes("chat"))):
 
             def _enabled(path: str) -> bool:
                 exposure = resolve_exposure(path, char_id=active_id)
+                if exposure.character_load_failed:
+                    return False
                 return (
                     "phone_control" in exposure.categories
                     and (exposure.tools is None or "phone_control_start" in exposure.tools)

@@ -22,6 +22,11 @@ class ToolExposure:
     tools: frozenset[str] | None
     exclude_tools: frozenset[str]
     source: str
+    # ``resolve`` deliberately keeps ordinary chat fail-soft when an authored
+    # card cannot be loaded.  Read-only capability diagnostics can still use
+    # this bit to fail closed instead of mistaking global defaults for a
+    # successfully loaded character policy.
+    character_load_failed: bool = False
 
 
 def _clean_names(value, *, allow_empty: bool = True) -> list[str] | None:
@@ -60,6 +65,7 @@ def resolve(path: str, *, char_id: str | None = None) -> ToolExposure:
     source = f"config.tool_exposure.{path}" if block else (
         "config.tool_loop" if path == "path_c" and isinstance(cfg.get("tool_loop"), dict) else "default"
     )
+    character_load_failed = False
 
     if char_id:
         try:
@@ -85,7 +91,7 @@ def resolve(path: str, *, char_id: str | None = None) -> ToolExposure:
                 excludes.extend(_clean_names(char_excludes) or [])
         except Exception:
             # Character loading must not make ordinary chat unavailable.
-            pass
+            character_load_failed = True
 
     return ToolExposure(
         path=path,
@@ -93,6 +99,7 @@ def resolve(path: str, *, char_id: str | None = None) -> ToolExposure:
         tools=None if tools is None else frozenset(tools),
         exclude_tools=frozenset(excludes),
         source=source,
+        character_load_failed=character_load_failed,
     )
 
 

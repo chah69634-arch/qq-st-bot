@@ -315,7 +315,7 @@ class TestRunAgenticLoopToolCategories:
     def _patch_char_name(self, monkeypatch):
         monkeypatch.setattr("core.character_name_provider.get_char_name", lambda char_id=None: "小星")
 
-    def test_char_tool_categories_override_global(self, monkeypatch):
+    def test_char_tool_categories_path_c_override_global(self, monkeypatch):
         from core.llm_client import ChatTurn
 
         cfg = {"tool_loop": {"max_steps": 5, "total_timeout_s": 90,
@@ -335,7 +335,9 @@ class TestRunAgenticLoopToolCategories:
 
         async def _fake_retry(loop_msgs, text):
             return text
-        pl = self._make_pipeline(character=_FakeChar(presence_ext={"tool_categories": ["info", "mcp"]}))
+        character = _FakeChar(presence_ext={"tool_categories_path_c": ["info", "mcp"]})
+        monkeypatch.setattr("core.character_loader.load", lambda _char_id: character)
+        pl = self._make_pipeline(character=character)
         monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
 
         import asyncio

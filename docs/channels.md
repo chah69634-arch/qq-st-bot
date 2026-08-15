@@ -44,7 +44,7 @@ QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 
 | 通道 | 文件 | 激活方式 | 发送方式 |
 |---|---|---|---|
 | QQ | `channels/qq.py` | `standalone_mode=false` 且 `qq.enabled=true` 时由 `main.py` 注册 | `core/qq_adapter.send_message()` → NapCat |
-| 桌宠 | `channels/desktop.py` | 总是注册；WS 连接或 `set_active(True)` 后活跃 | 主动下行优先 WebSocket，失败降级到 `data/runtime/channel_queue.json`（仅 USER_CHAT 回显 / WS 在线时的瞬时失败；proactive turn 见下条广播一次规则） |
+| 桌宠 | `channels/desktop.py` | 总是注册；WS 连接或 `set_active(True)` 后活跃 | 主动下行优先 WebSocket，失败降级到 `data/runtime/channel_queue.json`（仅 USER_CHAT 回显 / WS 在线时的瞬时失败；proactive turn 见下条广播一次规则）；remote server 部署不写本地 fallback |
 | 手机 | `channels/mobile.py` | 总是注册；`POST /mobile/activate` 或 `GET /mobile/poll` 后短时活跃 | 写入 `data/runtime/mobile_queue.json`，手机端轮询读取；`turn_sink._fanout` 里所有来源（含 USER_CHAT）都无条件补进 mobile durable fallback，`is_active` 不再是能否入队的门槛，只影响其他 channel 的活跃判断 |
 | 设备 | `channels/device.py` | 总是注册；仅 `/ws/device` 连接后活跃 | 只走 WebSocket（MVP 无文件降级），WS 未连接时 `send()` 直接返回 |
 
