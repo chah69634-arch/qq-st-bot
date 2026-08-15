@@ -187,7 +187,7 @@
     LLM 的 messages 不包含最近现实对话、profile impression、episodic、mid-term、relationship state
     或 entry reason。
   - Dream prompt inspector 仍保留 `D4_frozen_reality` 记录，但固定为 `injected=false`、`DISABLED`、
-    `note="scenario_mode"`，以区分硬关闭与空快照。
+    `note="scenario_profile"`，以区分硬关闭与空快照；该值是 Prompt Profile v2 的 canonical inspector note。
   - Sandbox / Mirror 保持 D4 frozen snapshot 行为不变；Scenario 的 D4.5 与 D5 硬关闭合同也继续有效。
 - `ScenarioCore.increment_stage_turns()`：每轮 dream_turn LLM 成功后调用，返回新冻结实例
 - **mid-session 写保护守卫**（v0.5）：DREAM_ACTIVE 状态下 `enter_dream` fail-loud：

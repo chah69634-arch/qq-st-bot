@@ -69,7 +69,7 @@ def test_scenario_d4_is_hard_disabled_in_messages_and_inspector():
     d4 = next(layer for layer in capture["layers"] if layer["label"] == "D4_frozen_reality")
     assert d4["injected"] is False
     assert d4["flags"] == ["DISABLED"]
-    assert d4["note"] == "scenario_mode"
+    assert d4["note"] == "scenario_profile"
     assert not d4["content"]
 
 
