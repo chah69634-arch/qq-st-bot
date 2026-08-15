@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>His Presence 管理面板</title>
-<link rel="stylesheet" href="/static/style.css?v=scenario-private-truths-1">
+<link rel="stylesheet" href="/static/style.css?v=brief-180-admin-static-1">
 </head>
 <body>
 
@@ -96,6 +96,7 @@
     <div class="nav-group-header nav-group-readonly" data-action="toggleNavGroup" data-action-args='["existence"]'><span class="nav-caret" id="caret-existence">▾</span><span data-i18n="nav.group.existence">存在</span></div>
     <div class="nav-group nav-group-readonly" id="navgroup-existence">
       <a data-page="observe-existence" data-action="goto" data-action-args='["observe-existence"]'><span class="icon">✨</span><span data-i18n="nav.existence_overview">存在总览</span></a>
+      <a data-page="observe-memory" data-action="goto" data-action-args='["memory"]'><span class="icon">🧠</span><span data-i18n="nav.memory">记忆探查</span></a>
       <a data-page="observe-memory-summary" data-action="goto" data-action-args='["observe-memory-summary"]'><span class="icon">📚</span><span data-i18n="nav.memory_summary">记忆摘要</span></a>
       <a data-page="observe-growth" data-action="goto" data-action-args='["observe-growth"]'><span class="icon">🌱</span><span data-i18n="nav.growth">成长</span></a>
       <a data-page="observe-visual" data-action="goto" data-action-args='["observe-visual"]'><span class="icon">👁️</span><span data-i18n="nav.visual">视觉</span></a>
@@ -115,6 +116,7 @@
       <a data-page="observe-char-permissions" data-action="goto" data-action-args='["observe-char-permissions"]'><span class="icon">🔐</span><span data-i18n="nav.char_permissions">角色权限</span></a>
       <a data-page="observe-chatlog" data-action="goto" data-action-args='["observe-chatlog"]'><span class="icon">💬</span><span data-i18n="nav.chat_log">聊天日志</span></a>
       <a data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime">运行时内部态</span></a>
+      <a data-page="observe-runtime-signals" data-action="goto" data-action-args='["observe-runtime-signals"]'><span class="icon">📡</span><span data-i18n="nav.runtime_signals">运行信号</span></a>
       <a data-page="logs"      data-action="goto" data-action-args='["logs"]'>     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
     </div>
 
@@ -594,8 +596,8 @@
 <div id="toast"></div>
 
 <script src="/static/i18n.js?v=brief-175-scenario-reconciler-1"></script>
-<script src="/static/js/core.js?v=brief-173-owner-turn-1"></script>
-<script src="/static/js/overview.js?v=admin-existence-userdata-tts-i18n-2"></script>
+<script src="/static/js/core.js?v=brief-180-admin-static-1"></script>
+<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
 <script src="/static/js/setup.js?v=brief-163-status-config-ux-1"></script>
 <script src="/static/js/mcp.js?v=brief-161-tools-mcp-ux-1"></script>
 <script src="/static/js/tools.js?v=brief-161-tools-mcp-ux-1"></script>
@@ -605,7 +607,7 @@
 <script src="/static/js/settings.js?v=brief-175-scenario-reconciler-1"></script>
 <script src="/static/js/owner-turn-api.js?v=brief-173-owner-turn-1"></script>
 <script src="/static/js/relationship.js"></script>
-<script src="/static/js/character.js?v=brief-169-scenario-profile-1"></script>
+<script src="/static/js/character.js?v=brief-180-admin-static-1"></script>
 <script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>
 <script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>
 <script src="/static/js/observability.js?v=brief-175-scenario-reconciler-1"></script>

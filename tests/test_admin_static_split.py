@@ -26,14 +26,25 @@ def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
 def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     fragments = sorted(PAGES.glob("*.html"))
+    fragment_names = {fragment.stem for fragment in fragments}
+    placeholder_names = set(re.findall(r'data-page-fragment="([^"]+)"', index))
+    nav_names = set(re.findall(r'<a[^>]+data-page="([^"]+)"', index))
+    source = read_admin_client_source()
+    loader_block = re.search(r"const loaders = \{(.*?)\n  \};", source, re.S)
+    assert loader_block, "core.js must publish the page loader map"
+    loader_names = set(re.findall(r"^\s*['\"]?([\w-]+)['\"]?\s*:", loader_block.group(1), re.M))
 
-    assert len(fragments) == 42
+    assert fragment_names == placeholder_names
+    assert nav_names <= fragment_names
+    # integrations is an intentional frozen compatibility deep link; every
+    # other fragment must have an explicit loader entry.
+    assert fragment_names - loader_names == {"integrations"}
+    assert loader_names <= fragment_names
     for fragment in fragments:
         page = fragment.stem
         assert f'id="page-{page}" data-page-fragment="{page}"' in index
         assert fragment.read_text(encoding="utf-8").strip()
 
-    source = read_admin_client_source()
     assert "async function loadPageFragment(page, {reload = false} = {})" in source
     assert "fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`)" in source
     assert "window.AdminI18n?.applyI18n(container)" in source

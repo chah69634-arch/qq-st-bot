@@ -49,6 +49,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     # 管理页只提供会走同一 Garden 提交逻辑的 manual_test，不暴露任意外部载荷编辑器。
     ("POST", "/integrations/forum/events"): "外部 forum provider adapter 入口，不在管理面板构造任意外部事件",
     ("POST", "/integrations/garden/wake"): "独立 Garden bridge injector 入口，管理页仅提供受保护的 manual_test",
+    ("POST", "/integrations/garden/test-wake"): "仅供管理员受保护的 Garden 手动测试入口；Integrations 页面冻结为兼容深链，不提供生产操作 UI",
 
     # ── 梦境正式对话流程（区别于管理面板做的"世界/剧本编辑"与"梦境状态观测"）
     ("POST", "/dream/enter"): "梦境对话流程由桌宠客户端驱动，管理面板只做世界/剧本编辑与状态观测",

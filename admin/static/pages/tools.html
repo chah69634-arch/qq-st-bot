@@ -2,8 +2,8 @@
 
 <div class="card">
   <p data-i18n="tools.notice">这里管理内置已注册工具的运行开关，以及每个聊天模型实际收到的工具 schema。</p>
-  <p id="tools-mcp-status" style="color:var(--muted);font-size:12px"></p>
-  <p id="tools-intiface-status" style="color:var(--muted);font-size:12px"></p>
+  <p id="tools-mcp-status" class="tools-status-note"></p>
+  <p id="tools-intiface-status" class="tools-status-note"></p>
 </div>
 
 <div class="card">
@@ -11,9 +11,9 @@
   <div class="form-row">
     <label class="field"><span data-i18n="tools.model">聊天模型 preset</span><select id="tools-model-preset" onchange="changeToolsModelPreset(this.value)"></select></label>
   </div>
-  <p id="tools-binding-note" style="color:var(--muted);font-size:12px"></p>
+  <p id="tools-binding-note" class="tools-status-note"></p>
   <div id="tools-preset-buttons"></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+  <div class="tools-action-row">
     <button id="tools-save-preset" class="btn btn-primary btn-sm" data-action="saveToolPreset" data-i18n="tools.save_preset">保存当前勾选</button>
     <button class="btn btn-ghost btn-sm" data-action="createToolPreset" data-i18n="tools.create_preset">新建预设</button>
   </div>
@@ -21,12 +21,12 @@
 
 <div class="card">
   <div class="card-header"><h3 data-i18n="tools.registry_title">已注册工具</h3><span id="tools-exposure-count" class="badge"></span></div>
-  <p data-i18n="tools.registry_hint" style="color:var(--muted);font-size:12px">“在此模型中暴露”只影响工具循环传给当前聊天模型的 schema；全局执行开关关闭后，任何模型都不能调用该内置工具。</p>
+  <p data-i18n="tools.registry_hint" class="tools-status-note">“在此模型中暴露”只影响工具循环传给当前聊天模型的 schema；全局执行开关关闭后，任何模型都不能调用该内置工具。</p>
   <div id="tools-registry-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
 </div>
 
 <div class="card">
   <div class="card-header"><h3 data-i18n="tools.path_title">路径工具类别</h3><button class="btn btn-primary btn-sm" data-action="savePathExposure" data-i18n="tools.save_path">保存类别</button></div>
-  <p style="color:var(--muted);font-size:12px" data-i18n="tools.path_hint">Path A 对 QQ、desktop、mobile 统一生效；Path C 仅控制工具循环。角色卡可进一步覆盖这两个全局默认值。</p>
+  <p class="tools-status-note" data-i18n="tools.path_hint">Path A 对 QQ、desktop、mobile 统一生效；Path C 仅控制工具循环。角色卡可进一步覆盖这两个全局默认值。</p>
   <div id="tools-path-exposure"><div class="loading" data-i18n="common.loading">加载中...</div></div>
 </div>

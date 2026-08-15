@@ -20,7 +20,9 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-173-owner-turn-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-180-admin-static-1';
+
+const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
@@ -210,6 +212,7 @@ function initMobileSidebar() {
 
 
 async function goto(page, {reloadFragment = false} = {}) {
+  page = ADMIN_PAGE_ALIASES[page] || page;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
   const pageElement = document.getElementById('page-' + page);
