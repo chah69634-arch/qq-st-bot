@@ -10,6 +10,7 @@ tests/test_character_new.py — Brief 94 §1: POST /characters/new（从模板�
   ⑤ 新建的卡不写 config.yaml、不切换活跃角色（正控：active_id 不受影响）
 """
 from __future__ import annotations
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
 import json
@@ -23,12 +24,12 @@ def chars_tree(tmp_path):
     """最小工作目录：characters/（含既有 yexuan 卡）+ examples/character_template.json。"""
     chars = tmp_path / "characters"
     chars.mkdir()
-    (chars / "yexuan.json").write_text(
+    (chars / f'{TEST_CHAR_ID}.json').write_text(
         json.dumps({"name": "叶瑄", "world_book": []}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     (tmp_path / "config.yaml").write_text(
-        "character:\n  default: yexuan\n", encoding="utf-8",
+        f'character:\n  default: {TEST_CHAR_ID}\n', encoding="utf-8",
     )
     examples = tmp_path / "examples"
     examples.mkdir()
@@ -101,7 +102,18 @@ def test_new_character_rejects_illegal_id(registry, chars_tree, bad_id):
         _new_character({"id": bad_id})
     assert exc.value.status_code == 422
     # 正控：目录下除了预置的 yexuan.json，没有任何新文件被创建
-    assert sorted(p.name for p in (chars_tree / "characters").glob("*.json")) == ["yexuan.json"]
+    assert sorted(p.name for p in (chars_tree / "characters").glob("*.json")) == [f'{TEST_CHAR_ID}.json']
+
+
+@pytest.mark.parametrize("path_flavor", ["posix", "windows"])
+@pytest.mark.parametrize("bad_id", [".", "..", "a/../b", r"a\..\b"])
+def test_new_character_rejects_traversal_for_both_path_flavors(
+    registry, chars_tree, path_flavor, bad_id
+):
+    """The logical-id contract is identical under POSIX and Windows paths."""
+    with pytest.raises(HTTPException) as exc:
+        _new_character({"id": bad_id})
+    assert exc.value.status_code == 422, f"path flavor {path_flavor!r} accepted {bad_id!r}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -110,10 +122,10 @@ def test_new_character_rejects_illegal_id(registry, chars_tree, bad_id):
 
 def test_new_character_conflict_returns_409_and_does_not_overwrite(registry, chars_tree):
     with pytest.raises(HTTPException) as exc:
-        _new_character({"id": "yexuan"})
+        _new_character({"id": TEST_CHAR_ID})
     assert exc.value.status_code == 409
     # 正控：原有 yexuan.json 内容未被模板覆盖
-    data = json.loads((chars_tree / "characters" / "yexuan.json").read_text(encoding="utf-8"))
+    data = json.loads((chars_tree / "characters" / f'{TEST_CHAR_ID}.json').read_text(encoding="utf-8"))
     assert data["name"] == "叶瑄"
 
 
@@ -124,4 +136,4 @@ def test_new_character_conflict_returns_409_and_does_not_overwrite(registry, cha
 def test_new_character_does_not_change_active_character(registry, chars_tree):
     _new_character({"id": "newbie2"})
     cfg = (chars_tree / "config.yaml").read_text(encoding="utf-8")
-    assert "default: yexuan" in cfg, "新建角色卡不应改写活跃角色配置"
+    assert f'default: {TEST_CHAR_ID}' in cfg, "新建角色卡不应改写活跃角色配置"

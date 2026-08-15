@@ -226,7 +226,16 @@ async def new_character(body: Dict[str, Any], auth=Depends(require_scopes("perso
     raw_id = (body.get("id") or "").strip()
     if not raw_id:
         raise HTTPException(status_code=422, detail="id 不能为空")
-    if raw_id != Path(raw_id).name or raw_id.startswith("."):
+    # Do not delegate this contract to pathlib: on POSIX, ``a\\b`` is a
+    # normal filename while Windows treats it as a separator.  Character ids
+    # are portable logical ids, so reject both separators on every platform.
+    if (
+        raw_id in {".", ".."}
+        or raw_id.startswith(".")
+        or "/" in raw_id
+        or "\\" in raw_id
+        or raw_id != Path(raw_id).name
+    ):
         raise HTTPException(status_code=422, detail=f"非法角色 id: {raw_id!r}")
 
     read_path = _safe_path(f"{raw_id}.json")
