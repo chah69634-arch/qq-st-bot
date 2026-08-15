@@ -21,7 +21,7 @@ async def test_postcard_system_prompt_contains_invariant_hint():
     invariant = {"situation": "你退缩时", "response": "先停下来等你"}
     with (
         patch.object(postcard, "_load_schedule", return_value=[]),
-        patch.object(postcard, "_archive_turns", return_value=_turns()),
+        patch.object(postcard, "_archive_turns", return_value=postcard.ArchiveSnapshot(_turns(), True)),
         patch.object(postcard, "_save_schedule", return_value=True),
         patch.object(postcard, "_template_text", return_value="template"),
         patch("core.dream.invariants.select_for_postcard", return_value=invariant),
@@ -41,7 +41,7 @@ async def test_postcard_system_prompt_omits_invariant_hint_when_none():
     chat = AsyncMock(return_value="letter")
     with (
         patch.object(postcard, "_load_schedule", return_value=[]),
-        patch.object(postcard, "_archive_turns", return_value=_turns()),
+        patch.object(postcard, "_archive_turns", return_value=postcard.ArchiveSnapshot(_turns(), True)),
         patch.object(postcard, "_save_schedule", return_value=True),
         patch.object(postcard, "_template_text", return_value="template"),
         patch("core.dream.invariants.select_for_postcard", return_value=None),
@@ -59,7 +59,7 @@ async def test_long_hard_exit_can_generate_postcard_when_complete():
 
     with (
         patch.object(postcard, "_load_schedule", return_value=[]),
-        patch.object(postcard, "_archive_turns", return_value=_turns()),
+        patch.object(postcard, "_archive_turns", return_value=postcard.ArchiveSnapshot(_turns(), True)),
         patch.object(postcard, "_save_schedule", return_value=True),
         patch.object(postcard, "_template_text", return_value="template"),
         patch("core.dream.invariants.select_for_postcard", return_value=None),
@@ -81,7 +81,7 @@ async def test_short_hard_exit_is_rejected_as_interrupted():
 
     with (
         patch.object(postcard, "_load_schedule", return_value=[]),
-        patch.object(postcard, "_archive_turns", return_value=_turns(4)),
+        patch.object(postcard, "_archive_turns", return_value=postcard.ArchiveSnapshot(_turns(4), True)),
         patch("core.llm_client.chat", new=AsyncMock()) as chat,
     ):
         await postcard.generate_postcard(
@@ -125,7 +125,7 @@ async def test_fewer_than_five_assistant_turns_does_not_generate():
 
     with (
         patch.object(postcard, "_load_schedule", return_value=[]),
-        patch.object(postcard, "_archive_turns", return_value=_turns(4)),
+        patch.object(postcard, "_archive_turns", return_value=postcard.ArchiveSnapshot(_turns(4), True)),
         patch("core.llm_client.chat", new=AsyncMock()) as chat,
     ):
         await postcard.generate_postcard("u", "d", "soft_exit")
@@ -151,7 +151,7 @@ async def test_qualified_postcard_persists_schedule_entry():
     saved: list[list[dict]] = []
     with (
         patch.object(postcard, "_load_schedule", return_value=[]),
-        patch.object(postcard, "_archive_turns", return_value=_turns()),
+        patch.object(postcard, "_archive_turns", return_value=postcard.ArchiveSnapshot(_turns(), True)),
         patch.object(postcard, "_save_schedule", side_effect=lambda _cid, rows: saved.append(rows) or True),
         patch.object(postcard, "_template_text", return_value="template"),
         patch("core.dream.invariants.select_for_postcard", return_value=None),

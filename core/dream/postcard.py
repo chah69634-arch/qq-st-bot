@@ -100,16 +100,6 @@ def _archive_turns(dream_id: str, char_id: str) -> ArchiveSnapshot:
     return ArchiveSnapshot(turns=turns, readable=readable)
 
 
-def _normalize_archive_snapshot(value: ArchiveSnapshot | list[dict[str, Any]] | Any) -> ArchiveSnapshot:
-    """Normalize archive I/O or a complete test double into one evidence object."""
-    if isinstance(value, ArchiveSnapshot):
-        return value
-    if isinstance(value, list):
-        # A patched list is an explicit, complete snapshot supplied by the
-        # caller; generation must not perform a second filesystem read.
-        return ArchiveSnapshot(turns=value, readable=True)
-    return ArchiveSnapshot(turns=[], readable=False)
-
 def _due_date(entries: list[dict[str, Any]], today: date) -> date:
     used = {str(item.get("scheduled_date")) for item in entries if not item.get("sent")}
     for _ in range(10):
@@ -134,7 +124,7 @@ async def generate_postcard(
     entries = _load_schedule(char_id)
     if any(str(item.get("dream_id")) == dream_id and item.get("generation_status") != "generation_failed" for item in entries):
         return
-    archive = _normalize_archive_snapshot(_archive_turns(dream_id, char_id))
+    archive = _archive_turns(dream_id, char_id)
     turns = archive.turns
     inferred = completion is None
     if completion is None:
