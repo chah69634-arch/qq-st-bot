@@ -39,6 +39,11 @@ jobs:
       - name: Prepare public fresh-clone configuration
         run: cp config.example.yaml config.yaml
 
+      # The backend workflow does not checkout Emerald-client. Cross-repo
+      # contract tests have a separate workflow and must be skipped here.
+      - name: Configure isolated backend tests
+        run: echo "SKIP_CROSS_REPO=1" >> "$GITHUB_ENV"
+
       # v0.1 smoke subset: keep a focused, public-asset-only regression suite.
       # A failure here is actionable; tests must not assume a private config or
       # character assets beyond config.example.yaml and tracked defaults.
@@ -90,6 +95,9 @@ jobs:
 
       - name: Prepare public fresh-clone configuration
         run: cp config.example.yaml config.yaml
+
+      - name: Configure isolated backend tests
+        run: echo "SKIP_CROSS_REPO=1" >> "$GITHUB_ENV"
 
       - name: Run full pytest with junit evidence
         run: |

@@ -16,12 +16,15 @@ import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
 from core.sandbox import paths_for_installation
+
+
+UTC = timezone.utc
 
 
 MANIFEST_NAME = "manifest.json"

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from enum import StrEnum
+from enum import Enum
 import time
 import uuid
 
 
-class TriggerSource(StrEnum):
+class _StrEnum(str, Enum):
+    """Python 3.10-compatible equivalent of enum.StrEnum."""
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class TriggerSource(_StrEnum):
     MANUAL = "manual"
     INTERVAL = "interval"
     SCHEDULE = "schedule"
@@ -19,7 +26,7 @@ SIGNAL_SCHEMA_VERSION = SIGNAL_VERSION
 OPPORTUNITY_SCHEMA_VERSION = OPPORTUNITY_VERSION
 
 
-class ActionMode(StrEnum):
+class ActionMode(_StrEnum):
     NONE = "none"
     REFLECT = "reflect"
     USE_TOOLS = "use_tools"
@@ -181,7 +188,7 @@ class Opportunity:
         return cls(**values)
 
 
-class Disposition(StrEnum):
+class Disposition(_StrEnum):
     COMPLETED_NO_OP = "completed_no_op"
     COMPLETED_TOOLS_ONLY = "completed_tools_only"
     COMPLETED_TALK_SENT = "completed_talk_sent"
