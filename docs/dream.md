@@ -73,7 +73,7 @@
   旧兼容 `echo_gate` seam 不再用裸「梦」匹配，只识别「梦里 / 梦见 / 梦到 / 做梦 / 梦境 / 入梦」等明确梦境表达，避免「梦想」误触。
 
 **梦境明信片（archive 出站复盘，非第四层回流）**
-- 合格 sandbox 梦（至少五个 assistant 轮、非 hard_exit、每个 dream_id 至多一次）会在 summary 后冻结成一封信；模板随机，投递日随机延迟 1–356 天。
+- 合格 sandbox 梦（归档完整可读、至少五个 assistant 轮、completion 为 complete、每个 dream_id 至多一次）会在 summary 后冻结成一封信；模板随机，投递日随机延迟 1–356 天。资格判断使用同一次 archive snapshot，同时携带 turns 与可读性证据；损坏或不存在的 JSONL 绝不调用 LLM，也不写入明信片 schedule。
 - 明信片只读 dream summary/archive，并只写 `postcards/schedule.json` 与 SMTP；它是 archive 的第一个合法程序化读者，方向为梦 → 用户眼睛。
 - 它绝不写 memory / mood / hidden_state / impression，绝不进入任何 prompt loader；世界专有词可留在用户面对的信内。
 

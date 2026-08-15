@@ -30,6 +30,14 @@ class PostcardEligibility:
     legacy_inferred: bool = False
 
 
+@dataclass(frozen=True)
+class ArchiveSnapshot:
+    """One read of an archive, including the evidence that it was readable."""
+
+    turns: list[dict[str, Any]]
+    readable: bool
+
+
 def evaluate_postcard_eligibility(
     *,
     dream_id: str,
@@ -73,39 +81,34 @@ def _load_schedule(char_id: str) -> list[dict[str, Any]]:
 def _save_schedule(char_id: str, entries: list[dict[str, Any]]) -> bool:
     return safe_write_json(_schedule_path(char_id), entries)
 
-def _archive_turns(dream_id: str, char_id: str) -> list[dict[str, Any]]:
+def _archive_turns(dream_id: str, char_id: str) -> ArchiveSnapshot:
     from core.sandbox import get_paths
     path = get_paths().dreams_archive_dir(char_id=char_id) / f"dream_{dream_id}.jsonl"
     turns: list[dict[str, Any]] = []
+    readable = path.is_file()
     try:
         for line in path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 value = json.loads(line)
                 if isinstance(value, dict):
                     turns.append(value)
+                else:
+                    readable = False
     except Exception as exc:
         logger.warning("[postcard] archive read failed: %s", exc)
-    return turns
+        readable = False
+    return ArchiveSnapshot(turns=turns, readable=readable)
 
 
-def _archive_has_parse_error(dream_id: str, char_id: str) -> bool:
-    """Return true for any malformed/non-object JSONL row.
-
-    Postcard generation may use the valid prefix for diagnostics, but a damaged
-    archive must never qualify for a generated artifact.
-    """
-    from core.sandbox import get_paths
-    path = get_paths().dreams_archive_dir(char_id=char_id) / f"dream_{dream_id}.jsonl"
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            value = json.loads(line)
-            if not isinstance(value, dict):
-                return True
-    except Exception:
-        return True
-    return False
+def _normalize_archive_snapshot(value: ArchiveSnapshot | list[dict[str, Any]] | Any) -> ArchiveSnapshot:
+    """Normalize archive I/O or a complete test double into one evidence object."""
+    if isinstance(value, ArchiveSnapshot):
+        return value
+    if isinstance(value, list):
+        # A patched list is an explicit, complete snapshot supplied by the
+        # caller; generation must not perform a second filesystem read.
+        return ArchiveSnapshot(turns=value, readable=True)
+    return ArchiveSnapshot(turns=[], readable=False)
 
 def _due_date(entries: list[dict[str, Any]], today: date) -> date:
     used = {str(item.get("scheduled_date")) for item in entries if not item.get("sent")}
@@ -131,7 +134,8 @@ async def generate_postcard(
     entries = _load_schedule(char_id)
     if any(str(item.get("dream_id")) == dream_id and item.get("generation_status") != "generation_failed" for item in entries):
         return
-    turns = _archive_turns(dream_id, char_id)
+    archive = _normalize_archive_snapshot(_archive_turns(dream_id, char_id))
+    turns = archive.turns
     inferred = completion is None
     if completion is None:
         # Historical summaries have no completion field.  Infer conservatively
@@ -145,7 +149,7 @@ async def generate_postcard(
         completion=completion,
         turns=turns,
         existing_entries=entries,
-        archive_readable=bool(turns) and not _archive_has_parse_error(dream_id, char_id),
+        archive_readable=bool(turns) and archive.readable,
         legacy_inferred=inferred,
     )
     if not eligibility.eligible:
