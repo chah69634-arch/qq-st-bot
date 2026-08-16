@@ -97,7 +97,7 @@ sftp <SSH用户>@<服务器公网地址>
 进入 SFTP 后：
 
 ```text
-lcd C:\Users\<本地用户>\PresenceKitBackups
+lcd <本地备份目录>
 get -a /home/<用户>/backups/presencekit/server-<时间戳>.tar.gz
 get /home/<用户>/backups/presencekit/server-<时间戳>.tar.gz.sha256
 bye

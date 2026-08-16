@@ -39,6 +39,7 @@
 - [token-rotation.md](token-rotation.md)、[private-content-manifest.md](private-content-manifest.md)
 - [fresh-clone-testing.md](fresh-clone-testing.md)、[system-readiness.md](system-readiness.md)
 - [v1-cold-start-single-user-deployment.md](v1-cold-start-single-user-deployment.md)：v1 首次启动、readiness、迁移、备份恢复与单用户部署 runbook
+- [ubuntu-single-user-deployment.md](ubuntu-single-user-deployment.md)：Ubuntu + systemd + Tailscale 的个人服务器源码部署示例与排障记录。
 - [server-backup-and-upgrade-runbook.md](server-backup-and-upgrade-runbook.md)：Ubuntu 单机的每周备份、断点回传、恢复演练与源码升级命令。
 - [test_record.md](test_record.md)：手动测试记录模板。
 
