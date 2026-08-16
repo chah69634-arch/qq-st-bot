@@ -178,7 +178,13 @@ def _cursor_decode(value: str) -> tuple[float, str, str, str]:
     try:
         padded = value + "=" * (-len(value) % 4)
         decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
-        payload, signature = decoded.rsplit(b".", 1)
+        if len(decoded) < hashlib.sha256().digest_size + 2:
+            raise ValueError
+        payload = decoded[: -(hashlib.sha256().digest_size + 1)]
+        separator = decoded[-(hashlib.sha256().digest_size + 1)]
+        signature = decoded[-hashlib.sha256().digest_size :]
+        if separator != ord("."):
+            raise ValueError
         expected = hmac.new(_CURSOR_SECRET, payload, hashlib.sha256).digest()
         if not hmac.compare_digest(signature, expected):
             raise ValueError

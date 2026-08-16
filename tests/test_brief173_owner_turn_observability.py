@@ -1,6 +1,7 @@
 """Focused tests for the redacted owner-turn observability projection."""
 
 import json
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -82,3 +83,14 @@ def test_owner_turn_observability_rejects_path_like_filters(sandbox, monkeypatch
         headers={"Authorization": f"Bearer {SECRET}"},
     )
     assert response.status_code == 422
+
+
+def test_owner_turn_cursor_accepts_dot_bytes_inside_signature():
+    from core import owner_turn_receipts
+
+    sort_key = (-300.0, "hardware-c", "turn-c", "receipt.json")
+    digest = b"." * 32
+    with patch("core.owner_turn_receipts.hmac.new") as hmac_new:
+        hmac_new.return_value.digest.return_value = digest
+        cursor = owner_turn_receipts._cursor_encode(sort_key)
+        assert owner_turn_receipts._cursor_decode(cursor) == sort_key
