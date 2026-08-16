@@ -201,6 +201,8 @@ async def record_assistant_turn(
     web_echo: bool = False,
     coplay_echo: bool = False,
     loop_executed: bool = False,
+    provenance_source: str = "",
+    schedule_slow: bool = True,
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -271,25 +273,28 @@ async def record_assistant_turn(
                 frozen_scope=frozen_scope,
                 web_echo=web_echo,
                 coplay_echo=coplay_echo,
+                provenance_source=provenance_source,
             )
         else:
-            asyncio.create_task(
-                pipeline.post_process(
-                    uid,
-                    memory_input,
-                    memory_text,
-                    target_id=target_id,
-                    is_group=is_group,
-                    pending_paths=pending_paths,
-                    trigger_name=capture_trigger,
-                    envelope=envelope,
-                    audit_extras=audit_extras,
-                    frozen_scope=frozen_scope,
-                    web_echo=web_echo,
-                    coplay_echo=coplay_echo,
-                    loop_executed=loop_executed,
+            if schedule_slow:
+                asyncio.create_task(
+                    pipeline.post_process(
+                        uid,
+                        memory_input,
+                        memory_text,
+                        target_id=target_id,
+                        is_group=is_group,
+                        pending_paths=pending_paths,
+                        trigger_name=capture_trigger,
+                        envelope=envelope,
+                        audit_extras=audit_extras,
+                        frozen_scope=frozen_scope,
+                        web_echo=web_echo,
+                        coplay_echo=coplay_echo,
+                        loop_executed=loop_executed,
+                        provenance_source=provenance_source,
+                    )
                 )
-            )
 
     # Use the post-process turn_id as the canonical cross-transport correlation id.
     # The fallback only applies to non-critical async post-process paths where no
@@ -317,7 +322,7 @@ async def record_assistant_turn(
 
     # Brief 37: send（上面的 fanout）已经完成，慢段（detect_emotion / mood_state /
     # slow_queue 入队等）现在才调度，绝不 await——否则又把下一条消息的 send 堵住。
-    if await_critical_post_process and post_info is not None:
+    if await_critical_post_process and post_info is not None and schedule_slow:
         asyncio.create_task(
             pipeline.post_process_slow(
                 uid,
@@ -332,6 +337,7 @@ async def record_assistant_turn(
                 web_echo=web_echo,
                 coplay_echo=coplay_echo,
                 loop_executed=loop_executed,
+                provenance_source=provenance_source,
             )
         )
 

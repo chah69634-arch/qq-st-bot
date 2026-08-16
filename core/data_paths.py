@@ -991,6 +991,29 @@ class DataPaths:
     def owner_turn_receipts_root(self) -> Path:
         return self._p("runtime", "owner_turn", "receipts")
 
+    # ── External companion runtime ingress ─────────────────────────────────
+    def companion_root(self) -> Path:
+        """Metadata-only state for the external companion ingress."""
+        return self._p("runtime", "companion")
+
+    def companion_receipt(self, *, caller_label: str, receipt_key: str) -> Path:
+        """One opaque companion idempotency receipt; never a content store."""
+        return self._p(
+            "runtime", "companion", "receipts", safe_user_id(caller_label),
+            f"{safe_user_id(receipt_key)}.json",
+        )
+
+    def companion_receipts_root(self) -> Path:
+        return self._p("runtime", "companion", "receipts")
+
+    def companion_session(self, *, caller_label: str) -> Path:
+        return self._p(
+            "runtime", "companion", "sessions", f"{safe_user_id(caller_label)}.json",
+        )
+
+    def companion_stats(self) -> Path:
+        return self._p("runtime", "companion", "stats.json")
+
     def diary_mirror_root(self, *, owner_id: str | int) -> Path:
         """Private server-side mirror of client-owned dated diary entries."""
         return self._p("runtime", "integrations", "diary", safe_user_id(owner_id))

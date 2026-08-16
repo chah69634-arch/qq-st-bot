@@ -121,6 +121,26 @@ legacy 路径仍通过正常 `record_assistant_turn` 写 assistant turn；`deskt
 - 这不构成 v1 `EventEnvelope`、统一 dispatcher 或 EventBus 承诺；MCP 的 session、动态工具
   注册/摘除和调用取消仍由现有 tool subsystem 管理。
 
+### 3.6 External Companion boundary (Brief 192)
+
+The frozen `presencekit-external-companion-v1` contract reuses the existing
+low-trust stimulus gate for `kind=opportunity` and the existing message path
+for player-entered phone text. It does not introduce `kind=activity`,
+`kind=mcp`, a unified `EventEnvelope`, an EventBus, or a memory-writer path.
+The server fixes caller, owner, character, channel, origin, trust, scope, memory
+policy, and tool exposure; the external body cannot provide those authority
+fields. `opportunity` is recorded only as a metadata receipt/audit and its
+reply turn uses a zero-write envelope. `phone_message` keeps
+`user_authored=true` and `provenance.origin=companion_phone_input`, then uses
+the normal owner memory policy with an empty tool allowlist. Both reply lanes
+set `fanout=[]`: the reply returns to the Bridge over HTTP only and is never
+re-ingested as a new stimulus or broadcast to another channel.
+
+The durable companion receipt is separate from the process-local
+`perceive_event` dedup map. Its identity is authenticated caller plus
+`session_id + event_id`; old sessions cannot reactivate, and a running receipt
+left by a prior process is treated as uncertain rather than rerun.
+
 ---
 
 ## 四、事件流图（v0.1 简化）

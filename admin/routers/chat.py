@@ -38,6 +38,19 @@ async def run_owner_chat_turn(
     reply_to: dict | None = None,
     allowed_tool_categories: frozenset[str] | None = None,
     allowed_tool_names: frozenset[str] | None = None,
+    audit_extras: dict | None = None,
+    pipeline_override=None,
+    fixed_user_id: str | None = None,
+    frozen_scope=None,
+    tool_execution_enabled: bool = True,
+    prompt_context_note: str = "",
+    prompt_capture_origin: str | None = None,
+    turn_source: str = "user_chat",
+    trigger_name: str = "",
+    envelope=None,
+    fanout="all",
+    provenance_source: str = "",
+    schedule_slow: bool = True,
 ) -> dict:
     """
     手机/桌宠共用的 owner 对话入口。
@@ -57,12 +70,12 @@ async def run_owner_chat_turn(
     """
     live_origin_channel = live_origin_channel or provenance_channel
     from core.pipeline_registry import get as _get_pipeline
-    pipeline = _get_pipeline()
+    pipeline = pipeline_override or _get_pipeline()
     if pipeline is None:
         raise HTTPException(status_code=503, detail="Bot pipeline 未初始化，请先启动主程序")
 
     from core.config_loader import get_config
-    user_id = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
+    user_id = fixed_user_id or str(get_config().get("scheduler", {}).get("owner_id", "owner"))
     if not user_id:
         raise HTTPException(status_code=503, detail="owner_id 未配置")
     try:
@@ -89,7 +102,7 @@ async def run_owner_chat_turn(
     # character switch (admin panel) cannot split reads and writes across
     # two characters.
     try:
-        _frozen_scope = pipeline._current_reality_scope(user_id)
+        _frozen_scope = frozen_scope or pipeline._current_reality_scope(user_id)
     except (ValueError, RuntimeError) as _scope_err:
         logger.error("[owner_chat] scope freeze 失败，本轮中止: %s", _scope_err)
         raise HTTPException(status_code=503, detail="active character 状态异常，本轮中止")
@@ -97,7 +110,7 @@ async def run_owner_chat_turn(
     # Brief 28 · Path C 总闸：开关开 + owner（此端点固定 owner）+ chat preset 为
     # function_calling。为真时跳过探针，主生成走 run_agentic_loop。
     from core import tool_dispatcher as _td_loop
-    _loop_active = _td_loop.tool_loop_active(user_id)
+    _loop_active = tool_execution_enabled and _td_loop.tool_loop_active(user_id)
     from core.session_state import get as _get_loop_state
     _loop_session_state = _get_loop_state(f"user_{user_id}")
 
@@ -131,7 +144,13 @@ async def run_owner_chat_turn(
             _t_ctx = time.monotonic() - _t0
             return result
 
-        pretool_result, context = await asyncio.gather(_timed_probe(), _timed_ctx())
+        if tool_execution_enabled:
+            pretool_result, context = await asyncio.gather(_timed_probe(), _timed_ctx())
+        else:
+            pretool_result, context = None, await _timed_ctx()
+        _turn_char_name = getattr(
+            context.get("_scoped_character"), "name", getattr(pipeline.character, "name", "AI")
+        )
         from core.pretool_router import PreToolRouteResult
         if isinstance(pretool_result, PreToolRouteResult):
             tool_result_text = pretool_result.prompt_tool_result
@@ -157,7 +176,10 @@ async def run_owner_chat_turn(
             _required_tool_names = set()
         try:
             from core.observe.prompt_capture import set_capture_origin as _set_capture_origin
-            _set_capture_origin({"origin": provenance_channel})
+            _set_capture_origin({
+                "origin": prompt_capture_origin or provenance_channel,
+                "user_authored": turn_source == "user_chat",
+            })
         except Exception:
             pass
         # ── 流式 vs 非流式分支 ──────────────────────────────────────────────────
@@ -197,6 +219,12 @@ async def run_owner_chat_turn(
                 channel=provenance_channel,
                 char_id=_frozen_scope.character_id,
             )
+            if prompt_context_note:
+                messages.insert(0, {
+                    "role": "system",
+                    "content": prompt_context_note,
+                    "_layer": "companion_ingress",
+                })
             _t_prompt = time.monotonic() - _t0
         if _use_stream:
             from core.output.segment_enforcer import (
@@ -266,7 +294,14 @@ async def run_owner_chat_turn(
                     allowed_tool_names=allowed_tool_names,
                 )
             else:
-                reply = await pipeline.run_llm(messages)
+                if provenance_source or turn_source != "user_chat":
+                    reply = await pipeline.run_llm(
+                        messages,
+                        char_id=_frozen_scope.character_id,
+                        is_proactive=turn_source != "user_chat",
+                    )
+                else:
+                    reply = await pipeline.run_llm(messages)
             _t_llm = time.monotonic() - _t0
         if not reply:
             reply = ""
@@ -285,7 +320,7 @@ async def run_owner_chat_turn(
                 clean_reality_reply_text as _clean_reply,
                 clean_reality_reply_text_for_memory as _clean_memory_reply,
             )
-            reply = _clean_memory_reply(reply, pipeline.character.name) or reply
+            reply = _clean_memory_reply(reply, _turn_char_name) or reply
 
         from channels.registry import get as _get_channel
         channel = _get_channel(live_origin_channel)
@@ -301,18 +336,22 @@ async def run_owner_chat_turn(
         turn_result = await record_assistant_turn(
             assistant_text=reply,
             uid=user_id,
-            source=TurnSource.USER_CHAT,
-            user_text=message,
-            fanout="all",
+            source=TurnSource(turn_source),
+            trigger_name=trigger_name or None,
+            user_text=message if turn_source == TurnSource.USER_CHAT.value else None,
+            fanout=fanout,
             bypass_gate=True,
             exclude_origin_channel=live_origin_channel,
             durable_mobile_mirror=durable_mobile_mirror,
             pipeline=pipeline,
-            envelope=stamp_user_chat(),
+            envelope=envelope if envelope is not None else stamp_user_chat(),
+            audit_extras=audit_extras,
             frozen_scope=_frozen_scope,
             web_echo=_web_echo,
             coplay_echo=_coplay_echo,
             loop_executed=_loop_active,
+            provenance_source=provenance_source,
+            schedule_slow=schedule_slow,
         )
         _t_post = time.monotonic() - _t0
 
@@ -321,7 +360,7 @@ async def run_owner_chat_turn(
         from core.response_processor import strip_render_tags as _strip_tags
         visible_source = reply
         if reply:
-            visible_source = _clean_reply(reply, pipeline.character.name) or reply
+            visible_source = _clean_reply(reply, _turn_char_name) or reply
         visible_reply = _strip_tags(visible_source) or visible_source
 
         # 流式路径：record 走完后用同一 msg_id 推 canonical 干净版替换临时气泡。

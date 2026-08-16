@@ -54,6 +54,24 @@ public endpoint。
 **客户端调用方式**：所有受保护端点均需 `Authorization: Bearer <YEXUAN_ADMIN_SECRET>` header。
 HTTP 管理面不接受 `?token=` / `?secret=` query 鉴权；`/watch/event` 也只接受 Bearer header。
 
+### External Companion ingress（Brief 193）
+
+`POST /integrations/companion/events` 使用独立的 `companion.write` scope/profile，
+不复用 `chat`、`integration.write` 或 owner-input token。鉴权依赖先于 body
+校验、receipt 创建和 runtime state；失败只返回稳定错误码，不触发 LLM 或落盘。
+
+服务端固定 caller label、owner、active character、channel、origin、trust、scope、
+memory policy 和空工具集合。请求只允许冻结 v1 字段，`extra=forbid`，并拒绝任何
+authority/path/token/config 字段。`opportunity` 是 low-trust、non-user-authored
+stimulus，使用零写入 `WriteEnvelope`、零工具、零 fanout；`phone_message` 是
+`companion_phone_input` provenance 的 user-authored owner input，沿正常记忆策略，
+但仍零工具、零 fanout。回复只通过 HTTP 返回，不再作为 stimulus 回灌。
+
+Companion receipt/session 文件只保存 caller、opaque ID、digest、状态、时间和错误码；
+不保存电话正文、opportunity summary、reply text 或 token。`GET
+/observability/companion-events` 使用 `state.read`，只返回 hash/truncated ID、计数、
+状态、延迟、reply 是否生成和 prune 元数据。固定服务端能力无管理面、桌面或手机用户开关。
+
 ### 路径与测试沙盒
 
 运行态 data 路径应通过 `core/sandbox.get_paths()` 获取。`core/sandbox.py` 只是单例胶水，

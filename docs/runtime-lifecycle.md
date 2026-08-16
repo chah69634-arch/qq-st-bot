@@ -340,6 +340,25 @@ Pipeline / Output
 
 在 remote mode 下，服务端本地 OS operation 和客户端 file fallback 被禁用。Desktop action 使用现有 heartbeat/ack WebSocket path；owner turn 和 mobile polling 仍使用正常 HTTP/queue path。
 
+## External Companion receipt/session ownership（Brief 193）
+
+`main.py` 创建并注册 Pipeline；companion router 不创建第二个 Pipeline，也不直接调用
+LLM。请求通过 `core/companion/service.py` 读取 pipeline registry，在执行前冻结 owner
+和 active `MemoryScope`，再调用共享 owner-turn executor。
+
+`core/companion/store.py` 拥有 `data/runtime/companion/` 下的 metadata-only
+receipt/session/stats 文件，路径全部来自 `core/sandbox.get_paths()` 的 DataPaths
+accessor，写入使用 atomic replace。receipt 以 caller + `session_id + event_id`
+幂等；`running` 先持久化，完成后 terminalize。进程重启不会恢复或重跑旧 running
+任务，后续请求返回 execution outcome unknown 的 503。新 session 只有在
+`created_at` 严格更新时推进 current，旧 session 永久失效。
+
+进程内 companion service 维护 inflight 集合，仅用于判断当前任务是否仍由本进程拥有；
+它不是持久化执行证明。每次 reserve 会按 30 天窗口和每 caller 1000 条上限 prune
+terminal receipts。`GET /observability/companion-events` 是对应的 `state.read`
+只读 projection，返回运行可用性、session 更新时间、计数、bounded metadata rows
+和 prune 信息，不返回正文、reply、token、owner 或路径。
+
 ---
 
 ## 12. 已知缺口

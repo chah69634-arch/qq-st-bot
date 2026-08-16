@@ -1445,6 +1445,7 @@ class Pipeline:
         frozen_scope: "MemoryScope | None" = None,
         web_echo: bool = False,
         coplay_echo: bool = False,
+        provenance_source: str = "",
     ) -> dict:
         """
         Brief 37：send 前必须走完的关键路径——只做毫秒级本地落盘（capture_turn），
@@ -1534,7 +1535,7 @@ class Pipeline:
             try:
                 from core.memory.fixation_pipeline import capture_turn as _capture_turn
                 _dream_echo_for_source = _detect_dream_echo(user_id, char_id, content, reply)
-                _source = (
+                _source = provenance_source or (
                     "dream_echo" if _dream_echo_for_source
                     else "web" if web_echo
                     else "coplay" if coplay_echo
@@ -1596,6 +1597,7 @@ class Pipeline:
         web_echo: bool = False,
         coplay_echo: bool = False,
         loop_executed: bool = False,
+        provenance_source: str = "",
     ) -> dict:
         """
         Brief 37：send 之后异步执行的慢段——detect_emotion → mood_state → avatar/
@@ -1716,6 +1718,8 @@ class Pipeline:
                 _mt_payload["web_echo"] = True
             if coplay_echo:
                 _mt_payload["coplay_echo"] = True
+            if provenance_source:
+                _mt_payload["source"] = provenance_source
             slow_queue.enqueue("summarize_to_midterm", _mt_payload)
         slow_queue.enqueue("consistency_check", {
             "reply": reply,
@@ -1798,6 +1802,7 @@ class Pipeline:
         web_echo: bool = False,
         coplay_echo: bool = False,
         loop_executed: bool = False,
+        provenance_source: str = "",
     ):
         """
         Brief 37 拆分前的组合入口：依次 await post_process_critical()（落盘）与
@@ -1816,12 +1821,14 @@ class Pipeline:
             target_id=target_id, is_group=is_group, pending_paths=pending_paths,
             trigger_name=trigger_name, envelope=envelope, audit_extras=audit_extras,
             frozen_scope=frozen_scope, web_echo=web_echo, coplay_echo=coplay_echo,
+            provenance_source=provenance_source,
         )
         slow_result = await self.post_process_slow(
             user_id, content, reply, critical_result,
             target_id=target_id, is_group=is_group, trigger_name=trigger_name,
             envelope=envelope, audit_extras=audit_extras, web_echo=web_echo,
             coplay_echo=coplay_echo, loop_executed=loop_executed,
+            provenance_source=provenance_source,
         )
         return {
             "emotion": slow_result["emotion"],

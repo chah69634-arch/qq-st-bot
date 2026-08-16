@@ -141,6 +141,8 @@ flowchart LR
 | `/growth/*`、`/spend/*`、`/autonomy/*`、`/debug/user-hidden-state`、`/deployment/*` | 成长、支出、主动性、隐性状态、部署能力观测 | 以管理面为主；客户端只能读已脱敏投影 |
 | `/auth/*` | token 创建、轮换、禁用、whoami、profile | `admin-only`；任何客户端都不应回显完整 token |
 | `/integrations/diary/sync*`、`/integrations/*`、`/v1/owner/turns*` | Obsidian 镜像、外部刺激、远程 owner turn | `current`；远程 HTTPS/WSS、重启幂等和跨设备仍需真实验收 |
+| `/integrations/companion/events` | Independent Companion opportunity/phone ingress and optional HTTP reply | `current`；`companion.write`，严格 v1 body，服务端固定 owner/char/channel/origin/trust/tool policy，reply 不 fanout |
+| `/observability/companion-events` | Companion receipt/session/count/latency projection | `current`；`state.read`，只返回 hash/truncated opaque IDs 和脱敏 metadata |
 | `/user-data/assets*`、`/users/*`、`/relations/*`、`/relationship-facts/*` | 用户 authored 资产、用户画像和关系 | 管理面/受控写入；保留旧读路径，不在客户端直接改文件 |
 
 ## 4. 核心请求/响应合同
