@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -82,6 +85,50 @@ def test_create_rejects_running_or_unknown_service(tmp_path: Path, state: backup
         backup.create_snapshot(root, target, protection_mode="protected_volume", get_service_state=lambda _: state)
     assert raised.value.code == code
     assert not target.exists()
+
+
+def test_linux_service_scan_ignores_backup_process_itself(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    current = SimpleNamespace(
+        pid=os.getpid(),
+        info={"name": "python", "cmdline": ["python", "main.py", "backup-state", "create"]},
+    )
+    fake_psutil = SimpleNamespace(
+        process_iter=lambda _attrs: [current],
+        AccessDenied=RuntimeError,
+        NoSuchProcess=RuntimeError,
+        Error=RuntimeError,
+    )
+    monkeypatch.setattr(
+        backup,
+        "paths_for_installation",
+        lambda _installation: SimpleNamespace(service_state=lambda: tmp_path / "missing-marker"),
+    )
+    monkeypatch.setattr(backup.os, "name", "posix")
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+
+    assert backup.service_state(tmp_path) is backup.ServiceState.OFFLINE
+
+
+def test_linux_service_scan_keeps_other_relative_main_process_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    other = SimpleNamespace(
+        pid=os.getpid() + 1,
+        info={"name": "python", "cmdline": ["python", "main.py"]},
+    )
+    fake_psutil = SimpleNamespace(
+        process_iter=lambda _attrs: [other],
+        AccessDenied=RuntimeError,
+        NoSuchProcess=RuntimeError,
+        Error=RuntimeError,
+    )
+    monkeypatch.setattr(
+        backup,
+        "paths_for_installation",
+        lambda _installation: SimpleNamespace(service_state=lambda: tmp_path / "missing-marker"),
+    )
+    monkeypatch.setattr(backup.os, "name", "posix")
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+
+    assert backup.service_state(tmp_path) is backup.ServiceState.UNKNOWN
 
 
 def test_missing_required_root_and_optional_files(tmp_path: Path):

@@ -276,6 +276,8 @@ def service_state(installation: Path) -> ServiceState:
     try:
         for process in psutil.process_iter(["name", "cmdline"]):
             try:
+                if process.pid == os.getpid():
+                    continue
                 info = process.info
                 name = str(info.get("name") or "").lower()
                 if name not in {"python.exe", "pythonw.exe", "python", "pythonw"}:
