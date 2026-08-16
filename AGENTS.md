@@ -182,6 +182,17 @@ python run_test.py
 
 ## 工作惯例
 
+### 三仓 Android 正式签名交接
+
+涉及 `Emerald-mobile`/`PresenceKit-mobile` 正式 APK、GitHub Release 或 release CI 重跑时，不要假设签名材料在 mobile
+仓库内。先读 `docs/release-guide.md`，再检查 mobile 的 `android/key.properties`；如果配置或 keystore 不在当前仓库，
+继续在本工作区的相邻仓库、发布文档和维护者指定的本地凭据/密码文件中寻找既有 keystore，并按 certificate SHA-256
+确认它与历史 public APK 一致。若只缺少本地密码配置，应从 `android/key.properties.example` 创建 mobile 的本地
+`android/key.properties`；若找不到历史 keystore，必须 fail-loud，不能生成新 key 或使用 debug key 代替。
+
+keystore、`key.properties`、密码/凭据说明、base64 内容和 token 始终只能保留在 ignored 的本地文件或 GitHub Secrets，
+不得写入受版本控制的文档、代码或 Release 资产。
+
 **每张施工工单在相关测试通过、差异检查完成后，必须立即提交一次独立 Git commit，再开始下一张工单。**
 
 **每积累若干个功能 brief，安排一个删除 brief。** 只加法、不做减法会让测试从安全网
