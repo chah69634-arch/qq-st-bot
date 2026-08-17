@@ -1,0 +1,27 @@
+{
+  "fixture_version": "memory-event-baseline-v1",
+  "owner_uid": "fixture-owner-memory-event",
+  "canonical_turn": {
+    "turn_id": "fixture-owner-memory-event_1700000000000",
+    "transport_msg_id": "transport-fixture-001",
+    "assistant_msg_id": "fixture-owner-memory-event_1700000000000"
+  },
+  "scenarios": [
+    {"id": "owner_chat", "realm": "reality", "kind": "owner_chat", "channel": "qq", "memory_eligible": true},
+    {"id": "scheduler_assistant_only", "realm": "reality", "kind": "scheduler", "channel": "scheduler", "assistant_only": true, "memory_eligible": true},
+    {"id": "desktop_owner_chat", "realm": "reality", "kind": "owner_chat", "channel": "desktop", "memory_eligible": true},
+    {"id": "mobile_owner_chat", "realm": "reality", "kind": "owner_chat", "channel": "mobile", "memory_eligible": true},
+    {"id": "media_message", "realm": "reality", "kind": "owner_chat", "channel": "qq", "media": ["image", "file"], "memory_eligible": true},
+    {"id": "dream_isolated", "realm": "dream", "kind": "dream_turn", "channel": "dream", "memory_eligible": false},
+    {"id": "stage_isolated", "realm": "stage", "kind": "stage_turn", "channel": "stage", "memory_eligible": false},
+    {"id": "web_echo_isolated", "realm": "reality", "kind": "owner_chat", "channel": "qq", "source": "web", "memory_eligible": false},
+    {"id": "coplay_isolated", "realm": "reality", "kind": "coplay", "channel": "coplay", "memory_eligible": false},
+    {"id": "same_uid_second_character", "realm": "reality", "kind": "owner_chat", "channel": "qq", "character_id": "fixture_peer", "memory_eligible": true}
+  ],
+  "golden": {
+    "fetch_context_required_keys": ["history", "profile", "event_search_result", "episodic_result", "mid_term", "web_recall_result"],
+    "history_entry_required_keys": ["role", "content", "_turn_id", "speaker_id"],
+    "recall_trace_required_keys": ["uid", "char_id", "query", "episodic_hits", "event_log_hits", "lore_hits", "semantic_hits", "mood"],
+    "turn_transport_relation": "inbound transport_msg_id remains transport-local; assistant_msg_id reuses canonical turn_id"
+  }
+}
