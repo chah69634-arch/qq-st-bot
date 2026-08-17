@@ -12,6 +12,19 @@ characters. Each character is cleaned independently so one failed bucket does
 not prevent retention for the others. Archive windows, rotation counts, and
 full-log size limits are unchanged.
 
+## Memory Event 02: evidence ledger schema
+
+`core/memory/event_store.py` is an append-only, scoped evidence ledger. Each
+`MemoryScope.reality_scope(uid, char_id)` resolves to its own SQLite file via
+the resolver. The public adapter accepts `EventRecord`/mapping values and
+returns structured append results; it does not expose SQL and is not wired into
+`capture_turn`, `event_log`, `vector_store`, or prompt construction.
+
+Schema version and table health are available through the read-only
+`GET /memory/{user_id}/event-store?char_id=...` projection under the existing
+`memory.read` scope. A missing ledger is reported without creating a file;
+corrupt or unsupported databases fail closed with a status error.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径

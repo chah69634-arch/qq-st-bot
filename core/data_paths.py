@@ -932,6 +932,10 @@ class DataPaths:
         """ACT-2：流式路径反坍缩一次性降级信号，下一轮 build_prompt 读到后立即消费清除。"""
         return self.user_memory_root(user_id, char_id=char_id) / "stream_collapse_signal.json"
 
+    def event_store(self, user_id: str | int, *, char_id: str) -> Path:
+        """Memory Event evidence ledger for one explicit character/user scope."""
+        return self.user_memory_root(user_id, char_id=char_id) / "event_store.sqlite3"
+
     def sent_letters(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """已发送信件归档: data/runtime/memory/{char_id}/{uid}/sent_letters.json"""
         return self.user_memory_root(user_id, char_id=char_id) / "sent_letters.json"

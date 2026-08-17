@@ -13,6 +13,25 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get("/{user_id}/event-store", summary="读取 Memory Event 账本 schema 状态")
+async def get_event_store_status(
+    user_id: str,
+    char_id: str | None = None,
+    auth=Depends(require_scopes("memory.read")),
+):
+    """Read-only schema/version projection; this endpoint never initializes the ledger."""
+    from core.memory.event_store import schema_status
+    from core.memory.scope import MemoryScope
+
+    resolved = _resolve_char_id(char_id)
+    status = schema_status(MemoryScope.reality_scope(user_id, resolved))
+    return {
+        "user_id": user_id,
+        "char_id": resolved,
+        **status.to_dict(),
+    }
+
+
 def _resolve_char_id(char_id: str | None) -> str:
     """Resolve and validate a char_id for memory operations.
 

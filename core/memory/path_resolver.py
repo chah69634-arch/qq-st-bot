@@ -4,8 +4,9 @@ core/memory/path_resolver.py
 P1-2A: standalone resolver — MemoryScope + artifact key → Path.
 P1-2K: resolver guard — artifact allowlist + domain rules.
 
-Not wired to pipeline / slow_queue / Dream / admin / store.
-Resolver only returns paths; it never creates directories.
+Not wired to pipeline / slow_queue / Dream.  The event-store adapter and
+read-only admin observability consume resolved paths; the resolver itself
+only returns paths and never creates directories.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from core.sandbox import get_paths, safe_user_id
 REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "history",
     "event_log",
+    "event_store",
     "mid_term",
     "episodic",
     "memory_index",
@@ -118,6 +120,9 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
 
     if artifact == "event_log":
         return paths.user_memory_root(uid, char_id=char_id) / "event_log"
+
+    if artifact == "event_store":
+        return paths.event_store(uid, char_id=char_id)
 
     if artifact == "mid_term":
         return paths.user_memory_root(uid, char_id=char_id) / "mid_term.json"

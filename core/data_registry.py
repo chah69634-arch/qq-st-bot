@@ -104,6 +104,7 @@ REGISTRY: dict[str, PathMeta] = {
     # event_log/ 30 天窗口内 canonical，窗口外同物理位置视为 archive；
     # 单目录双身份按主用途标 canonical，无需拆目录
     "event_log":              PathMeta("canonical", "reality",         "per_char_user", "ignore"),
+    "event_store":             PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     "group_context":          PathMeta("canonical", "reality",         "per_group",     "ignore"),
     "fixation_state_dir":     PathMeta("canonical", "reality",         "per_char_user", "ignore"),
 
