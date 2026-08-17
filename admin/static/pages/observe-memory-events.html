@@ -1,6 +1,6 @@
 <div class="page-header">
   <h1 class="page-title" data-i18n="memory_events.title">事件证据账本</h1>
-  <p class="page-subtitle" data-i18n="overview.readonly">只读</p>
+  <p class="page-subtitle" data-i18n="memory_events.retention_subtitle">检索、迁移状态与可逆墓碑</p>
 </div>
 
 <section class="card">
@@ -18,6 +18,8 @@
     <button type="button" class="btn btn-ghost" data-action="loadMemoryEventWindow" data-i18n="memory_events.window">前后文</button>
     <button type="button" class="btn btn-ghost" data-action="loadMemoryEventRelated" data-i18n="memory_events.related">关联</button>
     <button type="button" class="btn btn-ghost" data-action="loadMemoryEventQueryTrace" data-i18n="memory_events.trace">审计</button>
+    <button type="button" class="btn btn-danger" data-action="tombstoneMemoryEvent" data-i18n="memory_events.tombstone">墓碑化</button>
+    <button type="button" class="btn btn-ghost" data-action="loadMemoryEventMigrationStatus" data-i18n="memory_events.migration_status">迁移状态</button>
   </div>
 </section>
 

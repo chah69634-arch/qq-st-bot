@@ -46,6 +46,18 @@ python main.py backup-state verify <protected-volume>\presencekit-snapshot
 
 Restore 会先验证源快照，然后只发布到 live installation 和快照之外的不存在目录或完全空目录：
 
+### Memory Event migration recovery drill
+
+Historical Memory Event import requires a stopped service and a fresh verified
+snapshot. First run `python scripts/migrate_memory_events.py --uid <uid>
+--char-id <char_id>` against an isolated copy. Review the dry-run
+`malformed`, `legacy_unknown`, and `conflict` counts before using `--apply
+--backup-output <protected-volume>\<new-snapshot>` for one small batch.
+Interruption is resumed by rerunning the same command; do not remove migration
+state, old Markdown, archive DB, or media manually. Restore drills use
+`backup-state restore` into a new empty directory, then verify the migration
+pre-state and snapshot checksum before an operator decides to continue.
+
 ```powershell
 python main.py backup-state restore <snapshot> --target <new-empty-directory>
 ```

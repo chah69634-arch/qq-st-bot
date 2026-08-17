@@ -132,6 +132,24 @@ class AppendResult:
 
 
 @dataclass(frozen=True)
+class TombstoneResult:
+    """Outcome of a reversible evidence forget request.
+
+    A tombstone intentionally keeps the event row and all relation edges.  It
+    removes recallable payload fields while preserving stable identifiers and
+    provenance metadata needed to explain derived-memory references.
+    """
+
+    ok: bool
+    changed: bool
+    event_id: str
+    error_code: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class SchemaStatus:
     schema_name: str
     expected_version: int
@@ -445,6 +463,75 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
             _edge_observe("failed")
             logger.warning("[event_store] append failed: %s", exc)
             return _observe_append(AppendResult(False, False, record.event_id, "database_error"), scope)
+
+
+def tombstone_event(scope: MemoryScope, event_id: str) -> TombstoneResult:
+    """Forget event payload without physically deleting evidence or edges.
+
+    The operation is scoped, local and idempotent.  It never initializes a
+    missing ledger, so an admin typo cannot materialize a new database.
+    """
+    clean_id = str(event_id or "").strip()
+    if not clean_id:
+        return TombstoneResult(False, False, clean_id, "invalid_event")
+    try:
+        path = _path(scope)
+    except (AttributeError, TypeError, ValueError):
+        return TombstoneResult(False, False, clean_id, "invalid_scope")
+    if not path.exists():
+        return TombstoneResult(False, False, clean_id, "not_found")
+    with _lock_for(path):
+        try:
+            with _connect(path) as connection:
+                _initialize(connection)
+                row = connection.execute(
+                    "SELECT redaction_state FROM events WHERE uid = ? AND char_id = ? AND realm = ? AND event_id = ?",
+                    (scope.uid, scope.character_id, scope.domain, clean_id),
+                ).fetchone()
+                if row is None:
+                    return TombstoneResult(False, False, clean_id, "not_found")
+                if row["redaction_state"] == "tombstoned":
+                    return TombstoneResult(True, False, clean_id, "already_tombstoned")
+                connection.execute(
+                    """UPDATE events
+                    SET raw_payload_json = '', raw_text = '', visible_text = '', memory_text = '',
+                        media_refs_json = '[]', redaction_state = 'tombstoned'
+                    WHERE uid = ? AND char_id = ? AND realm = ? AND event_id = ?""",
+                    (scope.uid, scope.character_id, scope.domain, clean_id),
+                )
+                connection.commit()
+            return TombstoneResult(True, True, clean_id)
+        except Exception as exc:
+            logger.warning("[event_store] tombstone failed: %s", exc)
+            return TombstoneResult(False, False, clean_id, "database_error")
+
+
+def migration_marker(scope: MemoryScope, event_id: str) -> str | None:
+    """Read the legacy block fingerprint for duplicate/conflict accounting.
+
+    This intentionally exposes only an internal checksum to the offline
+    importer, never the raw payload JSON to an admin projection or prompt.
+    """
+    try:
+        path = _path(scope)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if not path.exists():
+        return None
+    with _lock_for(path):
+        try:
+            with _connect(path) as connection:
+                row = connection.execute(
+                    "SELECT raw_payload_json FROM events WHERE uid = ? AND char_id = ? AND realm = ? AND event_id = ?",
+                    (scope.uid, scope.character_id, scope.domain, str(event_id)),
+                ).fetchone()
+            if row is None:
+                return None
+            payload = json.loads(row["raw_payload_json"] or "{}")
+            marker = payload.get("legacy_block_sha256") if isinstance(payload, dict) else None
+            return str(marker) if isinstance(marker, str) else None
+        except (sqlite3.Error, json.JSONDecodeError, TypeError, ValueError):
+            return None
 
 
 def schema_status(scope: MemoryScope) -> SchemaStatus:

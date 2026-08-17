@@ -197,6 +197,40 @@ async def get_memory_event(
     return {"scope": {"uid": uid, "char_id": char_id, "realm": realm}, **result}
 
 
+@router.delete("/memory-events/{event_id}", summary="墓碑化一条 scoped Memory Event 证据")
+async def tombstone_memory_event(
+    event_id: str = Path(..., min_length=1, max_length=256),
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    realm: str = Query("reality", max_length=16),
+    _auth=Depends(require_scopes("admin")),
+):
+    """Forget payload fields while retaining the event and its relation edges.
+
+    Physical deletion is deliberately unavailable until an owner-confirmed
+    retention policy exists.  Derived memories are not silently rewritten;
+    their lineage continues to point at a visibly tombstoned source.
+    """
+    from core.memory import event_store
+
+    scope = _scope(uid, char_id, realm)
+    result = event_store.tombstone_event(scope, event_id)
+    if result.error_code == "not_found":
+        raise HTTPException(status_code=404, detail={"code": "event_not_found"})
+    if not result.ok:
+        status = 422 if result.error_code in {"invalid_event", "invalid_scope"} else 503
+        raise HTTPException(status_code=status, detail={"code": result.error_code})
+    return {
+        "scope": {"uid": uid, "char_id": char_id, "realm": realm},
+        "event_id": result.event_id,
+        "tombstoned": True,
+        "changed": result.changed,
+        "physical_delete": "disabled_pending_owner_policy",
+        "edges": "retained",
+        "derived_memories": "manual_review_required",
+    }
+
+
 @router.get("/memory-events/{event_id}/window", summary="读取事件的确定性前后窗口")
 async def get_memory_event_window(
     event_id: str = Path(..., min_length=1, max_length=256),

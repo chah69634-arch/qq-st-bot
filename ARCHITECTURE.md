@@ -221,7 +221,12 @@ Memory Event shadow recall is likewise outside the model path. During
 parallel with legacy recall. It appends only event IDs and aggregate metrics to
 `recall_trace`; timeout, error, or rollback leaves the legacy prompt path
 unchanged. Explicit owner Path C Memory Event tools remain the only route that
-can return event evidence to a model turn.
+can return event evidence to a model turn. Legacy Memory Event migration is
+also offline-only: it scans old Markdown and
+memory stores without an LLM, requires a verified private-state backup before
+any bounded import batch, and never blocks chat. Event forget requests become
+ledger tombstones; payloads are removed from recall while stable evidence IDs
+and relation edges remain available for lineage inspection.
 
 ## 数据目录结构
 

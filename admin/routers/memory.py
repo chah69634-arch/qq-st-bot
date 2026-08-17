@@ -345,16 +345,21 @@ async def delete_event_log_day(
     char_id: Optional[str] = None,
     auth=Depends(require_scopes("admin")),
 ):
-    """date_str 格式 YYYY-MM-DD。仅删除新布局文件，不影响旧路径或 full_log.md。"""
+    """Physical deletion is disabled until the owner confirms a retention policy."""
     import re
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
         raise HTTPException(status_code=422, detail="date_str 格式须为 YYYY-MM-DD")
-    from core.memory import event_log
     resolved = _resolve_char_id(char_id)
-    ok = event_log.delete_day(user_id, date_str, char_id=resolved)
-    if not ok:
-        raise HTTPException(status_code=404, detail=f"事件日志 {date_str} 不存在")
-    return {"message": f"事件日志 {date_str} 已删除", "char_id": resolved}
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "physical_delete_disabled_pending_owner_policy",
+            "uid": user_id,
+            "char_id": resolved,
+            "date": date_str,
+            "replacement": "DELETE /memory-events/{event_id} tombstones individual ledger evidence",
+        },
+    )
 
 
 def _read_fixation_log_records() -> list[dict]:

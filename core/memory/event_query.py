@@ -95,9 +95,10 @@ def _safe_media_refs(raw: object) -> list[dict[str, str]]:
 
 
 def _event_projection(row: sqlite3.Row) -> dict[str, Any]:
-    raw_text, raw_truncated = _safe_text(row["raw_text"])
-    visible_text, visible_truncated = _safe_text(row["visible_text"])
-    memory_text, memory_truncated = _safe_text(row["memory_text"])
+    tombstoned = row["redaction_state"] == "tombstoned"
+    raw_text, raw_truncated = _safe_text("" if tombstoned else row["raw_text"])
+    visible_text, visible_truncated = _safe_text("" if tombstoned else row["visible_text"])
+    memory_text, memory_truncated = _safe_text("" if tombstoned else row["memory_text"])
     return {
         "event_id": row["event_id"],
         "turn_id": row["turn_id"],
@@ -113,10 +114,11 @@ def _event_projection(row: sqlite3.Row) -> dict[str, Any]:
         "stream": row["stream"] if "stream" in row.keys() else row["channel"],
         "source": row["source"],
         "redaction_state": row["redaction_state"],
+        "tombstoned": tombstoned,
         "raw_text": raw_text,
         "visible_text": visible_text,
         "memory_text": memory_text,
-        "media_refs": _safe_media_refs(row["media_refs_json"]),
+        "media_refs": [] if tombstoned else _safe_media_refs(row["media_refs_json"]),
         "truncated_fields": [
             name
             for name, truncated in (

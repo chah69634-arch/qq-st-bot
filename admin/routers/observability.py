@@ -93,6 +93,27 @@ async def memory_event_ledger(_auth=Depends(require_scopes("state.read"))):
 
 
 @router.get(
+    "/observability/memory-event-migration",
+    summary="读取 Memory Event 历史迁移进度（不返回正文或本地路径）",
+)
+async def memory_event_migration(
+    uid: str,
+    char_id: str,
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.asset_registry import get_registry
+    from core.memory.event_migration import migration_status
+    from core.memory.scope import MemoryScope
+
+    try:
+        get_registry().resolve(char_id, "character")
+        scope = MemoryScope.reality_scope(uid, char_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail={"code": "invalid_scope"}) from None
+    return {"scope": {"uid": uid, "char_id": char_id, "realm": "reality"}, **migration_status(scope)}
+
+
+@router.get(
     "/observability/memory-event-edges",
     summary="读取 Memory Event 确定性关联边统计",
 )

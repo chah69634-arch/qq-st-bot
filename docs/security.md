@@ -139,6 +139,16 @@ live; an orphaned receipt becomes terminal `interrupted_unknown` with
 possibly side-effecting turn automatically. A caller must intentionally submit
 a new client turn ID after deciding what to do.
 
+## Memory Event migration and retention access
+
+Historical Memory Event migration is an offline command and has no HTTP write
+endpoint. Its persisted progress is exposed only through
+`GET /observability/memory-event-migration`, which requires `state.read` and
+returns no source text, media data, checksum contents, or local paths.
+`DELETE /memory-events/{event_id}` requires `admin`; it creates a tombstone
+only. Physical evidence/media deletion remains unavailable pending explicit
+owner retention policy confirmation.
+
 ## P4 现状（五类当前标准持有者）
 
 首次配置脚本当前默认维护五条标准记录。既有部署可能额外保留历史 `sensor-service` token；它不再对应运行客户端，确认无调用后可通过管理面停用或删除。`GET /auth/tokens` 可核实 label/scopes（不含明文）：

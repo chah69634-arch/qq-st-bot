@@ -147,6 +147,35 @@ read-only Memory Event tools remain the explicit second-phase path: only an
 active owner Path C function-calling turn can request event evidence, while
 automatic shadow results remain disabled for prompt injection.
 
+## Memory Event 10: legacy migration, retention, and forget semantics
+
+`scripts/migrate_memory_events.py --uid <uid> --char-id <char_id>` defaults to
+a read-only dry run. It scans legacy Markdown `event_log` plus short-term,
+mid-term, episodic, and storyline stores without rewriting any legacy file or
+calling an LLM. The report records total, parsed, malformed,
+`legacy_unknown`, duplicate, and conflict counts. Unknown Markdown blocks keep
+only a stable `filename#sha256-prefix` reference in the evidence ledger; the
+migrator never guesses actor, original time, or causality.
+
+`--apply` requires a new, verified offline `backup-state` snapshot on an
+explicit protected volume. It imports at most one bounded batch per invocation
+and persists content-free progress at `event_migration_state.json`; reruns use
+deterministic IDs, so interruption is safe and old Markdown fallback remains
+available if migration fails. `GET /observability/memory-event-migration`
+(`state.read`) exposes only counters and status, never source text or local
+paths.
+
+Retention is explicit: ledger rows retain raw text, media references and their
+hash/description metadata; old Markdown day files and full-log rotations are
+gzip archives. `DELETE /memory-events/{event_id}` is an idempotent tombstone,
+not a physical delete: it clears raw/visible/memory text and media references,
+preserves event identity, timing/provenance fields, relation edges, and any
+derived-memory lineage. Derived memories are marked for manual review rather
+than silently rewritten. The old broad `DELETE /memory/{uid}/event-log/{date}`
+endpoint returns `409 physical_delete_disabled_pending_owner_policy`. No
+physical deletion of evidence or media is available until the owner confirms a
+separate retention/forget policy.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径

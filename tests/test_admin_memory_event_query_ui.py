@@ -12,11 +12,14 @@ def test_memory_event_query_page_is_registered_and_cache_busted():
 
     assert 'data-page="observe-memory-events"' in index
     assert 'id="page-observe-memory-events"' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-204-event-shadow-recall-1'" in core
-    assert '<script src="/static/js/core.js?v=brief-204-event-shadow-recall-1"></script>' in index
-    assert '<script src="/static/js/observability.js?v=brief-199-memory-events-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-205-memory-event-retention-1'" in core
+    assert '<script src="/static/js/core.js?v=brief-205-memory-event-retention-1"></script>' in index
+    assert '<script src="/static/js/observability.js?v=brief-205-memory-event-retention-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=brief-205-memory-event-retention-1"></script>' in index
     assert "loadMemoryEventSearch" in script
     assert "/memory-events/query-trace" in script
+    assert "tombstoneMemoryEvent" in script
+    assert "/observability/memory-event-migration" in script
     assert 'id="event-query-result"' in fragment
 
 
@@ -31,6 +34,6 @@ def test_shadow_recall_rollout_controls_are_registered_and_cache_busted():
     assert "loadEventShadowRecallSettings" in settings
     assert "saveEventShadowRecallSettings" in settings
     assert "loadEventShadowRecallSettings();" in runtime
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-204-event-shadow-recall-1'" in core
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-205-memory-event-retention-1'" in core
     assert '<script src="/static/js/settings.js?v=brief-204-event-shadow-recall-1"></script>' in index
     assert '<script src="/static/js/runtime-config.js?v=brief-204-event-shadow-recall-1"></script>' in index

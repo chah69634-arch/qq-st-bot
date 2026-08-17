@@ -148,6 +148,35 @@ async function loadMemoryEventQueryTrace() {
   }
 }
 
+async function tombstoneMemoryEvent() {
+  const output = _memoryEventResult();
+  if (output) output.textContent = t('common.loading', '处理中...');
+  try {
+    const scope = _memoryEventScope();
+    const eventId = _memoryEventId();
+    const confirmed = window.confirm(t(
+      'memory_events.tombstone_confirm',
+      '这会清空该事件的文本与媒体引用，并保留墓碑和关系边。物理删除当前不可用。继续？',
+    ));
+    if (!confirmed) return;
+    _showMemoryEventResult(await api('DELETE', `/memory-events/${encodeURIComponent(eventId)}?${_memoryEventParams(scope)}`));
+  } catch (error) {
+    if (output) output.textContent = `${t('memory_events.operation_failed', '操作失败')}：${error.message}`;
+  }
+}
+
+async function loadMemoryEventMigrationStatus() {
+  const output = _memoryEventResult();
+  if (output) output.textContent = t('common.loading', '加载中...');
+  try {
+    const scope = _memoryEventScope();
+    const params = new URLSearchParams({uid: scope.uid, char_id: scope.charId});
+    _showMemoryEventResult(await api('GET', `/observability/memory-event-migration?${params}`));
+  } catch (error) {
+    if (output) output.textContent = `${t('common.load_failed', '加载失败')}：${error.message}`;
+  }
+}
+
 // ══════════════════════════════════════════════════════════
 //  观测页：隐性状态
 // ══════════════════════════════════════════════════════════
