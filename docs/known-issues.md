@@ -176,6 +176,7 @@ Brief 104 §3 已落地两块基础设施，供后续判断：
 
 - SEC-AUTH-2 P4 后半：各持有方切换新 token；ESP32 重烧录；Watch Shortcut 与管理面板换值；全部确认后再轮换 legacy secret。
 - `data/runtime/auth/audit.jsonl` 的历史 `ip=testclient` 噪音不作为当前问题：不删除既有审计记录；2026-08-02 已补回归测试，测试环境的真实 401 审计必须落在活动测试沙箱，不能再写生产台账。
+- **浏览器系统代理导致远程管理面板首次请求失败** — `observe` / Brief 194。桌面端已提供 desktop-only 的 loopback native bridge；普通浏览器直接访问远程 tailnet hostname 仍由用户的 DIRECT/PAC 决定，手机端不继承该 bridge。待 Windows 系统代理开启且远程 hostname 未列入 DIRECT 的实机 whoami、设置读写和上传验收完成后关闭本观察项。
 
 ## 本轮已核对关闭
 

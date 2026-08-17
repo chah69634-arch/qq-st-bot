@@ -370,6 +370,18 @@ ack 和游标推进，不得另造一套消息真值。
 这些项目不是本次文档任务擅自扩大的实现范围；它们是按代码、现有 `known-issues` 和三仓
 接口调用点复核后保留的未闭环项。完成后应逐项更新状态，不要删除历史证据。
 
+## 8.1 管理面板 native bridge（Brief 194）
+
+管理面板的 no-proxy 浏览器入口由 `Emerald-client` Tauri Rust 拥有：桌面端临时启动仅绑定
+`127.0.0.1` 的随机端口和内存 capability，将浏览器 HTTP 请求转发到当前保存的 `backendBase`。
+上游使用 Rust `reqwest` `.no_proxy()`，不会改变后端监听地址、鉴权 scope、token 传递方式或
+普通 tailnet/browser 直连路径。bridge 不是新的 backend transport 或鉴权边界，浏览器仍自行
+携带 scoped token；手机端不继承该入口，状态为 desktop-only。
+
+当前管理面板代码只使用 HTTP fetch，未发现管理面 WebSocket / SSE 消费者；WS relay 因此保留为
+后续 roadmap，不把它写成现行协议。bridge 的状态由桌面端命令管理，不产生后端落盘状态或新增
+观测端点。实机系统代理开启下的 Windows 浏览器 whoami、设置读写和上传验证仍标记为 `observe`。
+
 ## 9. 维护规则
 
 1. 后端先改 router/contract，再更新本文件、`docs/api-reference.md` 和对应客户端文档。
