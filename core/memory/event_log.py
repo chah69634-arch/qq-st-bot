@@ -590,7 +590,7 @@ def delete_day(user_id: str, date_str: str, *, char_id: str = DEFAULT_CHAR_ID) -
         return False
 
 
-def cleanup_event_log(user_id: str) -> None:
+def cleanup_event_log(user_id: str, *, char_id: str) -> None:
     """归档超出窗口的按天文件，并对 full_log.md 按大小滚动。
     按天文件：>= day_archive_days 天的 .md → .md.gz（search 窗口 30 天不受影响）。
     full_log.md：超过 full_log_max_size_mb → gzip 归档 + 清空。
@@ -600,12 +600,13 @@ def cleanup_event_log(user_id: str) -> None:
 
     cfg = get_config().get("forensic_logs", {}).get("event_log", {})
     cutoff_days = int(cfg.get("day_archive_days", 30))
-    dir_path = _event_log_write_dir(user_id)
+    require_character_id(char_id)
+    dir_path = _event_log_write_dir(user_id, char_id=char_id)
     archived = archive_old_day_files(dir_path, cutoff_days=cutoff_days)
     if archived:
-        logger.info("[event_log] 已归档 %d 个按天文件 (uid=%s)", archived, user_id)
+        logger.info("[event_log] 已归档 %d 个按天文件 (uid=%s char=%s)", archived, user_id, char_id)
 
-    full_log = _full_log_file_write(user_id)
+    full_log = _full_log_file_write(user_id, char_id=char_id)
     max_bytes = int(cfg.get("full_log_max_size_mb", 10) * 1024 * 1024)
     keep_n = int(cfg.get("full_log_keep", 3))
     rotate_jsonl_if_needed(full_log, max_bytes=max_bytes, keep_n=keep_n)

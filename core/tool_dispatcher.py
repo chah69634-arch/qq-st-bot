@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from core.config_loader import get_config
-from core.character_name_provider import get_active_char_name
+from core.character_name_provider import get_active_char_name, get_char_name
 from core.error_handler import log_error
 from core.tools.garden_tools import water_garden
 
@@ -127,10 +127,10 @@ async def _search_diary_wrapper(user_id: str, query: str = "") -> str:
     return await search_diary_for_user(user_id, query)
 
 
-async def _get_profile_wrapper(user_id: str) -> str:
+async def _get_profile_wrapper(user_id: str, *, char_id: str) -> str:
     """召回用户画像。"""
     from core.memory import user_profile
-    profile = user_profile.load(user_id)
+    profile = user_profile.load(user_id, char_id=char_id)
     if not profile:
         return "暂无用户画像"
     parts = []
@@ -144,11 +144,11 @@ async def _get_profile_wrapper(user_id: str) -> str:
     return "\n".join(parts) if parts else "暂无详细信息"
 
 
-async def _get_episodic_wrapper(user_id: str, topic: str = "") -> str:
+async def _get_episodic_wrapper(user_id: str, topic: str = "", *, char_id: str) -> str:
     """召回情景记忆。"""
     from core.memory.episodic_memory import retrieve, format_for_prompt
-    memories = retrieve(user_id=user_id, topic=topic, top_k=3)
-    return format_for_prompt(memories, char_name=get_active_char_name()) if memories else "暂无相关记忆"
+    memories = retrieve(user_id=user_id, topic=topic, top_k=3, char_id=char_id)
+    return format_for_prompt(memories, char_name=get_char_name(char_id)) if memories else "暂无相关记忆"
 
 
 async def _revise_memory_wrapper(user_id: str, episode_id: str, correction: str, *, char_id: str) -> str:
@@ -208,6 +208,15 @@ from pathlib import Path as _Path
 # ─── 全局模式闸 ─────────────────────────────────────────────────────────────────
 
 _MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "phone_control"})
+_SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({"get_profile", "get_episodic"})
+
+
+def _require_memory_read_scope(user_id: str, char_id: str) -> None:
+    """Reject a memory read before a wrapper can fall back to another bucket."""
+    from core.memory.scope import MemoryScope
+    from core.sandbox import safe_user_id
+
+    MemoryScope.reality_scope(safe_user_id(user_id), char_id)
 _DANGER_MODE_TTL_SECONDS: int = 7200  # 2 小时后自动回 safe
 
 # Action ownership is static for desktop protocol v0.1.  This is deliberately
@@ -1986,9 +1995,11 @@ async def _execute_structured_impl(
         await _notify_status("queued")
         if tool_info.get("self_management"):
             result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
+        elif tool_name in _SCOPED_MEMORY_READ_TOOLS:
+            _require_memory_read_scope(user_id, char_id)
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in (
             "add_reminder", "read_diary", "read_watch", "search_diary",
-            "get_profile", "get_episodic",
         ):
             result = await func(user_id=user_id, **tool_args)
         elif tool_name in (

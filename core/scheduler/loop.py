@@ -728,10 +728,19 @@ async def _check_log_maintenance():
     ret = _cfg_retention()
     # 每个 GC 步骤独立保护：单步失败不阻塞其余步骤，也不导致 loop 挂掉
     try:
+        from core.asset_registry import get_registry
         from core.memory.event_log import cleanup_event_log
-        cleanup_event_log(oid)
+
+        for _character in get_registry().list_all("character"):
+            try:
+                cleanup_event_log(oid, char_id=_character.id)
+            except Exception as _character_error:
+                log_error(
+                    f"scheduler.log_maintenance.event_log[{_character.id}]",
+                    _character_error,
+                )
     except Exception as e:
-        log_error("scheduler.log_maintenance.event_log", e)
+        log_error("scheduler.log_maintenance.event_log.registry", e)
     try:
         from core.tools.reminder import prune_done_reminders
         prune_done_reminders(oid, cutoff_days=int(ret.get("reminders", {}).get("prune_done_days", 30)))

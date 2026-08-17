@@ -1,5 +1,17 @@
 # docs/memory.md — 记忆子系统设计
 
+## Memory Event 01: scope-safe retention
+
+The episodic/profile read tools require the current `uid + char_id` scope. The
+dispatcher passes that scope explicitly and rejects an empty scope before a
+reader runs; no non-default character may fall back to the configured default.
+
+Event-log retention is likewise character-scoped. `cleanup_event_log()` takes
+an explicit `char_id`, and scheduler maintenance enumerates all registered
+characters. Each character is cleaned independently so one failed bucket does
+not prevent retention for the others. Archive windows, rotation counts, and
+full-log size limits are unchanged.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径
