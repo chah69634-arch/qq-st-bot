@@ -208,7 +208,9 @@ from pathlib import Path as _Path
 # ─── 全局模式闸 ─────────────────────────────────────────────────────────────────
 
 _MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "phone_control"})
-_SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({"get_profile", "get_episodic"})
+_SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({
+    "get_profile", "get_episodic", "search_events", "expand_event_window", "get_related_events",
+})
 
 
 def _require_memory_read_scope(user_id: str, char_id: str) -> None:
@@ -887,6 +889,58 @@ _TOOL_REGISTRY["get_episodic"] = {
         "required": [],
     },
     "trace_args": ["topic"],
+}
+
+_TOOL_REGISTRY["search_events"] = {
+    "func": __import__("core.tools.event_tools", fromlist=["search_events_wrapper"]).search_events_wrapper,
+    "description": "在当前 reality 事件账本中检索具体证据，为后续窗口或关联读取提供 event_id。只读、范围受限，不从摘要推断事件。",
+    "dangerous": False,
+    "category": "memory",
+    "parameters": {"type": "object", "properties": {
+        "query": {"type": "string", "maxLength": 256},
+        "actor": {"type": "string", "maxLength": 64},
+        "kind": {"type": "string", "maxLength": 64},
+        "source": {"type": "string", "maxLength": 128},
+        "occurred_after": {"type": ["number", "null"]},
+        "occurred_before": {"type": ["number", "null"]},
+        "cursor": {"type": "string", "maxLength": 1024},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+    }, "required": []},
+    "examples": ["查找上次关于考试的原始事件", "找最近的 desktop owner_chat 事件"],
+    "keywords": ["查找事件", "原始事件", "事件证据", "event_id"],
+    "trace_args": ["actor", "kind", "source"],
+}
+
+_TOOL_REGISTRY["expand_event_window"] = {
+    "func": __import__("core.tools.event_tools", fromlist=["expand_event_window_wrapper"]).expand_event_window_wrapper,
+    "description": "读取一个已知 event_id 的确定性时间窗口，返回事件正文和前后事件。只读，最多各20条。",
+    "dangerous": False,
+    "category": "memory",
+    "parameters": {"type": "object", "properties": {
+        "event_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "before": {"type": "integer", "minimum": 0, "maximum": 20},
+        "after": {"type": "integer", "minimum": 0, "maximum": 20},
+    }, "required": ["event_id"]},
+    "examples": ["展开这个事件前后发生了什么", "查看该 event_id 的上下文"],
+    "keywords": ["展开事件", "前后上下文", "事件窗口"],
+    "trace_args": ["event_id"],
+}
+
+_TOOL_REGISTRY["get_related_events"] = {
+    "func": __import__("core.tools.event_tools", fromlist=["get_related_events_wrapper"]).get_related_events_wrapper,
+    "description": "读取已知 event_id 的确定性关联事件边。只读、单跳、最多20条，可按 relation_types 过滤。",
+    "dangerous": False,
+    "category": "memory",
+    "parameters": {"type": "object", "properties": {
+        "event_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "relation_types": {"type": "array", "items": {"type": "string", "maxLength": 64}, "maxItems": 20},
+        "cursor": {"type": "string", "maxLength": 1024},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+        "depth": {"type": "integer", "minimum": 1, "maximum": 1},
+    }, "required": ["event_id"]},
+    "examples": ["查看这个事件关联的同轮事件", "找该事件的确定性关联"],
+    "keywords": ["关联事件", "同轮事件", "事件关系"],
+    "trace_args": ["event_id", "relation_types"],
 }
 
 _TOOL_REGISTRY["revise_memory"] = {
@@ -1837,17 +1891,34 @@ async def _execute_structured_impl(
         return _execution_outcome("tool_failed")
 
     # Brief 27：工具动作痕迹层，execute() 每条 return 前落一条精简痕迹（origin 闸门拒绝除外）。
+    _trace_started = _time.perf_counter()
+    _trace_truncated = False
+    _trace_failure_reason = ""
+
     def _trace(status: str, digest_source=None) -> None:
         try:
             from core.memory import action_trace
+            trace_kwargs = {}
+            if tool_name in {"search_events", "expand_event_window", "get_related_events"}:
+                trace_kwargs = {
+                    "scope": {"uid": user_id, "char_id": char_id, "realm": "reality"},
+                    "truncated": _trace_truncated,
+                    "failure_reason": _trace_failure_reason or (status if status != "ok" else ""),
+                    "duration_ms": int(max(0.0, (_time.perf_counter() - _trace_started) * 1000)),
+                }
             action_trace.record(
                 user_id, char_id,
                 tool=tool_name, origin=origin, status=status,
                 args_digest=action_trace.build_args_digest(tool_name, tool_args),
                 result_digest=action_trace.build_result_digest(tool_name, digest_source),
+                **trace_kwargs,
             )
         except Exception as _at_err:
             logger.debug("[tool_dispatcher] action_trace record error: %s", _at_err)
+
+    if tool_name in {"search_events", "expand_event_window", "get_related_events"} and is_group:
+        _trace("failed", "reality_event_tools_forbidden_in_group")
+        return _execution_outcome("tool_failed")
 
     async def _notify_status(kind: str, *, attempt: int = 1) -> None:
         """UI-only hook; it runs after dispatcher gates and never affects execution."""
@@ -2033,6 +2104,8 @@ async def _execute_structured_impl(
         from core.tools.tool_result import to_tool_result
         tool_result = to_tool_result(result)
         safe_summary = tool_result.safe_summary
+        _trace_truncated = bool((tool_result.meta or {}).get("truncated"))
+        _trace_failure_reason = str((tool_result.meta or {}).get("failure_reason") or "")[:128]
         logger.info(
             "[tool_dispatcher] 工具执行完成: tool=%s result_len=%d safe_len=%d",
             tool_name,
@@ -2053,7 +2126,12 @@ async def _execute_structured_impl(
             except Exception as _rec_err:
                 logger.warning("[tool_dispatcher] persist record error: %s", _rec_err)
 
-        _trace("ok", safe_summary)
+        execution_status = str((tool_result.meta or {}).get("execution_status") or "")
+        if execution_status == "outcome_unknown":
+            _trace("outcome_unknown", tool_name if tool_name in {"search_events", "expand_event_window", "get_related_events"} else safe_summary)
+            await _notify_status("outcome_unknown")
+            return _execution_outcome("outcome_unknown", safe_summary)
+        _trace("ok", tool_name if tool_name in {"search_events", "expand_event_window", "get_related_events"} else safe_summary)
         await _notify_status("finished")
         return _execution_outcome("tool_executed", f"工具已执行：{tool_name}，结果：{safe_summary}")
     except TypeError as e:

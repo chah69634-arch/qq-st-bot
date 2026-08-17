@@ -2,6 +2,28 @@
 
 ---
 
+## Memory Event read tools (Brief 201)
+
+Path C owner-private function calling may expose the three read-only tools
+`search_events`, `expand_event_window`, and `get_related_events` when the
+effective tool-loop exposure includes category `memory`. They always receive
+the frozen `uid + char_id` dispatcher scope and can read only the `reality`
+event ledger; Path A, Dream, Stage, group, scheduler, and write paths do not
+expose them.
+
+`search_events` is the bounded seed lookup. `expand_event_window` reads a
+deterministic temporal window, while `get_related_events` follows only
+deterministic stored edges at depth 1. Each result includes `event_id`, time,
+actor, topics/kind, source, turn ID, bounded evidence text, and relation
+metadata where applicable. Per call limits are 20 events, 12,000 output
+characters, 1,200 evidence characters per event, and one relation hop.
+
+Tool results are untrusted data and are framed through the normal tool-result
+boundary. Query failures, missing events, invalid scopes, and limit violations
+return a structured `outcome_unknown` payload; they never claim success. Calls
+are recorded in the existing action trace with bounded arguments and status,
+but raw evidence is not written to `short_term`, `event_log`, or action trace.
+
 ## Intiface / 硬件工具冻结（Brief 151）
 
 `toy_vibrate`、`toy_stop`、`toy_pattern` 与 `toy_job_status` 的实现和注册表条目保留，

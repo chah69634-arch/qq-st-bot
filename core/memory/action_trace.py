@@ -145,6 +145,10 @@ def record(
     args_digest: str = "",
     result_digest: str = "",
     echo_event_log: bool = True,
+    scope: dict | None = None,
+    truncated: bool | None = None,
+    failure_reason: str = "",
+    duration_ms: int | None = None,
 ) -> None:
     """落一条痕迹，环形上限 30 条。fail-open：异常只 log，不抛出。"""
     if not _enabled():
@@ -152,14 +156,27 @@ def record(
     try:
         path = _trace_path(uid, char_id)
         entries = _load(path)
-        entries.append({
+        entry = {
             "ts": time.time(),
             "tool": tool,
             "origin": origin,
             "args_digest": args_digest,
             "result_digest": result_digest,
             "status": status,
-        })
+        }
+        if scope is not None:
+            entry["scope"] = {
+                "uid": str(scope.get("uid") or "")[:128],
+                "char_id": str(scope.get("char_id") or "")[:128],
+                "realm": str(scope.get("realm") or "reality")[:32],
+            }
+        if truncated is not None:
+            entry["truncated"] = bool(truncated)
+        if failure_reason:
+            entry["failure_reason"] = str(failure_reason)[:128]
+        if duration_ms is not None:
+            entry["duration_ms"] = max(0, int(duration_ms))
+        entries.append(entry)
         entries = entries[-_MAX_ENTRIES:]
         path.parent.mkdir(parents=True, exist_ok=True)
         safe_write_json(path, entries)

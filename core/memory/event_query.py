@@ -128,6 +128,23 @@ def _event_projection(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _event_projection_with_topics(
+    connection: sqlite3.Connection,
+    scope: MemoryScope,
+    row: sqlite3.Row,
+) -> dict[str, Any]:
+    projected = _event_projection(row)
+    try:
+        topic_rows = connection.execute(
+            "SELECT topic FROM event_topics WHERE uid = ? AND char_id = ? AND event_id = ? ORDER BY topic ASC LIMIT 20",
+            (scope.uid, scope.character_id, row["event_id"]),
+        ).fetchall()
+        projected["topics"] = [str(item[0])[:128] for item in topic_rows]
+    except sqlite3.Error:
+        projected["topics"] = []
+    return projected
+
+
 def _find(connection: sqlite3.Connection, scope: MemoryScope, event_id: str) -> sqlite3.Row | None:
     return connection.execute(
         "SELECT * FROM events WHERE uid = ? AND char_id = ? AND realm = ? AND event_id = ?",
@@ -143,7 +160,7 @@ def get_event(scope: MemoryScope, event_id: str) -> dict[str, Any] | None:
     with event_store._lock_for(path):
         try:
             row = _find(connection, scope, event_id)
-            return _event_projection(row) if row is not None else None
+            return _event_projection_with_topics(connection, scope, row) if row is not None else None
         except sqlite3.Error as exc:
             raise EventQueryError("database_error") from exc
         finally:
@@ -178,9 +195,9 @@ def window(scope: MemoryScope, event_id: str, *, before: int, after: int) -> dic
             before_rows = before_rows[:before]
             after_rows = after_rows[:after]
             return {
-                "event": _event_projection(target),
-                "before": [_event_projection(row) for row in reversed(before_rows)],
-                "after": [_event_projection(row) for row in after_rows],
+                "event": _event_projection_with_topics(connection, scope, target),
+                "before": [_event_projection_with_topics(connection, scope, row) for row in reversed(before_rows)],
+                "after": [_event_projection_with_topics(connection, scope, row) for row in after_rows],
                 "truncation_reason": "window_limit" if has_more_before or has_more_after else "",
             }
         except sqlite3.Error as exc:
@@ -244,7 +261,7 @@ def related(scope: MemoryScope, event_id: str, *, cursor: str, limit: int) -> di
                     "edge_created_at": row["created_at"],
                     "direction": "outgoing" if row["from_event_id"] == event_id else "incoming",
                     "related_event_id": other_id,
-                    "event": _event_projection(row) if row["event_id"] is not None else None,
+                    "event": _event_projection_with_topics(connection, scope, row) if row["event_id"] is not None else None,
                 })
             return {
                 "items": items,
@@ -310,7 +327,7 @@ def search(
             has_more = len(rows) > limit
             rows = rows[:limit]
             return {
-                "items": [_event_projection(row) for row in rows],
+                "items": [_event_projection_with_topics(connection, scope, row) for row in rows],
                 "next_cursor": _encode_cursor({"v": 1, "kind": "search", "occurred_at": rows[-1]["occurred_at"], "seq": rows[-1]["seq"], "event_id": rows[-1]["event_id"]}) if has_more and rows else "",
                 "truncation_reason": "limit" if has_more else "",
             }
