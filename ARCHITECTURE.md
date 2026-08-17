@@ -209,6 +209,11 @@ run_llm ──→ reply
 post_process ──写──→ data/ 目录各文件
 ```
 
+Memory Event model edge proposals are deliberately outside this flow. The
+scheduler reads only a bounded ledger window and writes unreviewed candidates
+back to the scoped ledger; proposals never enter prompt construction, recall,
+event_log, short-term, episodic, or identity writers.
+
 ---
 
 ## 数据目录结构

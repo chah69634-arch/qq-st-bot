@@ -31,6 +31,7 @@ FLAGS = {
     "web_autosearch": ("web_autosearch", "enabled", "自主联网搜索"),
     "performance_mapping": ("performance_mapping", "enabled", "表演标注映射"),
     "private_exchange": ("private_exchange", "enabled", "角色私下往来"),
+    "event_edge_proposer": ("event_edge_proposer", "enabled", "Memory Event 候选关联边"),
 }
 RESTART_REQUIRED_FLAGS = frozenset({"qq"})
 _DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})

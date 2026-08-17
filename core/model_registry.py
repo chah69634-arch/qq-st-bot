@@ -119,7 +119,7 @@ def _synth_legacy_presets(cfg: dict) -> dict:
         "api_protocol": "chat_completions",
         "params": {k: llm[k] for k in _known_params if k in llm},
     }
-    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge", "scenario_reconcile")
+    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge", "scenario_reconcile", "event_edge_proposer")
     return {
         "active_routing": "default",
         "defaults": {},
@@ -291,6 +291,7 @@ def resolve_category_info(
         "source": source,
         "provider_kind": preset.get("provider_kind", "openai"),
         "model": preset.get("model", ""),
+        "model_version": preset.get("model_version", ""),
     }
 
 

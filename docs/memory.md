@@ -106,6 +106,25 @@ an edge; read projections retain it as `dangling` when an endpoint is absent.
 `state.read`) exposes relation counts, dangling endpoints, duplicate writes,
 and failed edge writes without returning evidence text.
 
+## Memory Event 08: model edge proposals
+
+`event_edge_proposer` is a disabled-by-default scheduler maintenance task. It
+submits only a bounded, one-scope reality event window to the configured
+`event_edge_proposer` model category and accepts strict JSON candidates for
+`same_topic`, `follows_up`, `possible_cause`, `contradicts`, or `supports`.
+Candidates are written to `event_edge_proposals` with their model/preset/version,
+prompt hash, confidence, short reason, timestamp, and `proposed` status. They
+are never read by prompts, `event_log`, short-term memory, episodic memory,
+identity, deterministic `event_edges`, or recall.
+
+The same scoped SQLite ledger persists proposal-run accounting, so per-scope
+cooldown and daily call/token budgets survive restart. Parse, timeout, scope,
+and write failures record a content-free run result and write no candidate.
+`GET /observability/memory-event-edge-proposals?uid=...&char_id=...` requires
+`state.read` and returns only run, candidate, failure, daily budget, and
+relation-type counters. `possible_cause` remains explicitly tentative; there
+is no acceptance or review workflow in this phase.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径

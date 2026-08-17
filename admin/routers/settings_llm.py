@@ -515,6 +515,9 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
             "scenario_reconcile": resolve_category_info(
                 "scenario_reconcile", profile_name=profile_name
             ),
+            "event_edge_proposer": resolve_category_info(
+                "event_edge_proposer", profile_name=profile_name
+            ),
         }
         for profile_name in mp.get("routing_profiles", {})
     }
@@ -617,7 +620,10 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
             {
                 "name": name,
                 "categories": dict(mapping),
-                "effective": {"scenario_reconcile": resolve_category_info("scenario_reconcile", profile_name=name)},
+                "effective": {
+                    "scenario_reconcile": resolve_category_info("scenario_reconcile", profile_name=name),
+                    "event_edge_proposer": resolve_category_info("event_edge_proposer", profile_name=name),
+                },
             }
             for name, mapping in profiles.items()
         ],

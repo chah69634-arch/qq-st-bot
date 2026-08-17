@@ -488,9 +488,10 @@ async function loadFeatureFlags() {
 async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { const result = await api('PUT', '/settings/feature-flags', { flags }); toast(result.message || t('common.saved', '已保存'), result.reload_status === 'restart_required' ? 'err' : 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
 let _mrEditingPresetName = null;
-const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'scenario_reconcile'];
+const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'scenario_reconcile', 'event_edge_proposer'];
 const MR_CATEGORY_DESC = {
   scenario_reconcile: 'Scenario assistant-turn semantic stage reconciliation; conservative background call.',
+  event_edge_proposer: 'Bounded background proposal of unreviewed Memory Event relations; this never changes recall or facts.',
   chat:           '角色的正式回复，用户实际看到的每一句话（建议配主力模型）',
   intent:         '判断要不要触发某个动作的轻量辅助判断（便宜模型即可）',
   probe:          '每轮先判断要不要调用工具的轻量探针（便宜模型即可）',

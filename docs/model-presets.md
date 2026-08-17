@@ -114,6 +114,7 @@ model_presets:
       summary:        deepseek-default
       detect_emotion: deepseek-default
       consolidation:  deepseek-default
+      event_edge_proposer: deepseek-default # optional bounded Memory Event candidate relations
       perform:        deepseek-default   # 句级表演意图映射（仅 performance_mapping.provider=llm 时用到）
 
     claude-main:                 # 主对话走 Claude，杂活留 DS 省钱
@@ -124,6 +125,7 @@ model_presets:
       summary:        deepseek-default
       detect_emotion: deepseek-default
       consolidation:  deepseek-default
+      event_edge_proposer: deepseek-default
       perform:        deepseek-default
 ```
 

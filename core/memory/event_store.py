@@ -22,10 +22,13 @@ from core.memory.scope import MemoryScope, require_character_id
 logger = logging.getLogger(__name__)
 
 SCHEMA_NAME = "memory_event_ledger"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 EDGE_RELATION_TYPES = frozenset({
     "previous", "next", "same_turn", "reply_to", "triggered_by",
     "derived_from", "correction_of", "media_of",
+})
+PROPOSAL_RELATION_TYPES = frozenset({
+    "same_topic", "follows_up", "possible_cause", "contradicts", "supports",
 })
 
 _LOCKS: dict[str, threading.RLock] = {}
@@ -197,11 +200,49 @@ CREATE TABLE IF NOT EXISTS event_topics (
     created_at REAL NOT NULL,
     PRIMARY KEY(uid, char_id, event_id, topic)
 );
+CREATE TABLE IF NOT EXISTS event_edge_proposals (
+    proposal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT NOT NULL,
+    char_id TEXT NOT NULL,
+    realm TEXT NOT NULL,
+    from_event_id TEXT NOT NULL,
+    to_event_id TEXT NOT NULL,
+    relation_type TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    model TEXT NOT NULL,
+    preset TEXT NOT NULL,
+    model_version TEXT NOT NULL DEFAULT '',
+    prompt_hash TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'proposed',
+    UNIQUE(uid, char_id, realm, from_event_id, to_event_id, relation_type)
+);
+CREATE TABLE IF NOT EXISTS event_edge_proposer_runs (
+    run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT NOT NULL,
+    char_id TEXT NOT NULL,
+    realm TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    day_key TEXT NOT NULL,
+    input_count INTEGER NOT NULL,
+    candidate_count INTEGER NOT NULL DEFAULT 0,
+    token_budget INTEGER NOT NULL,
+    model TEXT NOT NULL,
+    preset TEXT NOT NULL,
+    model_version TEXT NOT NULL DEFAULT '',
+    prompt_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    error_code TEXT NOT NULL DEFAULT ''
+);
 CREATE INDEX IF NOT EXISTS idx_events_occurred_at ON events(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_events_turn_id ON events(turn_id);
 CREATE INDEX IF NOT EXISTS idx_events_actor ON events(actor);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 CREATE INDEX IF NOT EXISTS idx_events_realm ON events(realm);
+CREATE INDEX IF NOT EXISTS idx_event_edge_proposals_scope ON event_edge_proposals(uid, char_id, realm, created_at);
+CREATE INDEX IF NOT EXISTS idx_event_edge_proposer_runs_scope ON event_edge_proposer_runs(uid, char_id, realm, created_at);
+CREATE INDEX IF NOT EXISTS idx_event_edge_proposer_runs_day ON event_edge_proposer_runs(uid, char_id, realm, day_key);
 """
 
 
@@ -421,7 +462,9 @@ def schema_status(scope: MemoryScope) -> SchemaStatus:
                         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
                     ).fetchall()
                 )
-            healthy = version == SCHEMA_VERSION and {"events", "event_edges", "event_topics"} <= set(tables)
+            healthy = version == SCHEMA_VERSION and {
+                "events", "event_edges", "event_topics", "event_edge_proposals", "event_edge_proposer_runs",
+            } <= set(tables)
             return SchemaStatus(SCHEMA_NAME, SCHEMA_VERSION, version, True, healthy, tables, "" if healthy else "schema_mismatch")
         except Exception as exc:
             logger.warning("[event_store] schema status failed: %s", exc)
@@ -570,6 +613,186 @@ def edge_observability_snapshot(scope: MemoryScope) -> dict[str, Any]:
     with _OBSERVABILITY_LOCK:
         result["duplicate_writes"] = int(_EDGE_OBSERVABILITY["duplicates"])
         result["failed_writes"] = int(_EDGE_OBSERVABILITY["failed"])
+    return result
+
+
+def recent_events_for_proposal(scope: MemoryScope, *, limit: int = 8) -> list[dict[str, Any]]:
+    """Read a bounded, scope-frozen event window for the proposer only."""
+    if not isinstance(limit, int) or limit < 1 or limit > 50:
+        raise ValueError("invalid_event_window")
+    path = _path(scope)
+    if not path.exists():
+        return []
+    with _lock_for(path):
+        try:
+            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) as connection:
+                connection.row_factory = sqlite3.Row
+                rows = connection.execute(
+                    """SELECT event_id, occurred_at, actor, kind, channel,
+                              COALESCE(NULLIF(memory_text, ''), visible_text) AS text
+                       FROM events WHERE uid=? AND char_id=? AND realm=?
+                       ORDER BY occurred_at DESC, seq DESC, event_id DESC LIMIT ?""",
+                    (scope.uid, scope.character_id, scope.domain, limit),
+                ).fetchall()
+            return [
+                {
+                    "event_id": str(row["event_id"]),
+                    "occurred_at": float(row["occurred_at"] or 0),
+                    "actor": str(row["actor"] or ""),
+                    "kind": str(row["kind"] or ""),
+                    "channel": str(row["channel"] or ""),
+                    "text": str(row["text"] or "")[:512],
+                }
+                for row in reversed(rows)
+            ]
+        except Exception as exc:
+            logger.warning("[event_store] proposal event window failed: %s", exc)
+            return []
+
+
+def proposal_budget_snapshot(scope: MemoryScope, day_key: str) -> dict[str, int]:
+    """Return persisted per-day call/token usage without creating a ledger."""
+    path = _path(scope)
+    if not path.exists():
+        return {"calls": 0, "tokens": 0}
+    with _lock_for(path):
+        try:
+            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) as connection:
+                row = connection.execute(
+                    """SELECT COUNT(*), COALESCE(SUM(token_budget), 0)
+                       FROM event_edge_proposer_runs
+                       WHERE uid=? AND char_id=? AND realm=? AND day_key=?""",
+                    (scope.uid, scope.character_id, scope.domain, day_key),
+                ).fetchone()
+            return {"calls": int(row[0] or 0), "tokens": int(row[1] or 0)}
+        except Exception:
+            return {"calls": 0, "tokens": 0}
+
+
+def latest_proposer_run_at(scope: MemoryScope) -> float:
+    path = _path(scope)
+    if not path.exists():
+        return 0.0
+    with _lock_for(path):
+        try:
+            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) as connection:
+                row = connection.execute(
+                    """SELECT COALESCE(MAX(created_at), 0) FROM event_edge_proposer_runs
+                       WHERE uid=? AND char_id=? AND realm=?""",
+                    (scope.uid, scope.character_id, scope.domain),
+                ).fetchone()
+            return float(row[0] or 0.0)
+        except Exception:
+            return 0.0
+
+
+def append_edge_proposal(scope: MemoryScope, proposal: Mapping[str, Any]) -> bool:
+    """Insert one validated model proposal; never touches deterministic edges."""
+    if not isinstance(proposal, Mapping):
+        raise ValueError("invalid_proposal")
+    relation = str(proposal.get("relation_type") or "")
+    from_id = str(proposal.get("from_event_id") or "").strip()
+    to_id = str(proposal.get("to_event_id") or "").strip()
+    reason = str(proposal.get("reason") or "").strip()[:240]
+    try:
+        confidence = float(proposal.get("confidence"))
+    except (TypeError, ValueError):
+        raise ValueError("invalid_proposal") from None
+    if relation not in PROPOSAL_RELATION_TYPES or not from_id or not to_id or from_id == to_id:
+        raise ValueError("invalid_proposal")
+    if not reason or not 0.0 <= confidence <= 1.0:
+        raise ValueError("invalid_proposal")
+    path = _prepare_write_path(scope)
+    model = str(proposal.get("model") or "")[:160]
+    preset = str(proposal.get("preset") or "")[:160]
+    model_version = str(proposal.get("model_version") or "")[:80]
+    prompt_hash = str(proposal.get("prompt_hash") or "")[:128]
+    created_at = float(proposal.get("created_at") or time.time())
+    with _lock_for(path):
+        with _connect(path) as connection:
+            _initialize(connection)
+            endpoints = connection.execute(
+                """SELECT COUNT(*) FROM events
+                   WHERE uid=? AND char_id=? AND realm=? AND event_id IN (?, ?)""",
+                (scope.uid, scope.character_id, scope.domain, from_id, to_id),
+            ).fetchone()[0]
+            if endpoints != 2:
+                raise ValueError("invalid_proposal_scope")
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO event_edge_proposals
+                   (uid, char_id, realm, from_event_id, to_event_id, relation_type,
+                    reason, confidence, model, preset, model_version, prompt_hash,
+                    created_at, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed')""",
+                (scope.uid, scope.character_id, scope.domain, from_id, to_id, relation,
+                 reason, confidence, model, preset, model_version, prompt_hash, created_at),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+
+def record_proposer_run(scope: MemoryScope, *, day_key: str, input_count: int,
+                        candidate_count: int, token_budget: int, model: str,
+                        preset: str, model_version: str, prompt_hash: str,
+                        status: str, error_code: str = "") -> None:
+    path = _prepare_write_path(scope)
+    with _lock_for(path):
+        with _connect(path) as connection:
+            _initialize(connection)
+            connection.execute(
+                """INSERT INTO event_edge_proposer_runs
+                   (uid, char_id, realm, created_at, day_key, input_count,
+                    candidate_count, token_budget, model, preset, model_version,
+                    prompt_hash, status, error_code)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (scope.uid, scope.character_id, scope.domain, time.time(), day_key,
+                 int(input_count), int(candidate_count), int(token_budget),
+                 str(model)[:160], str(preset)[:160], str(model_version)[:80],
+                 str(prompt_hash)[:128], str(status)[:32], str(error_code)[:64]),
+            )
+            connection.commit()
+
+
+def edge_proposal_observability_snapshot(
+    scope: MemoryScope, *, day_key: str = "", daily_call_limit: int = 0,
+    daily_token_limit: int = 0,
+) -> dict[str, Any]:
+    """Content-free proposal/run counters for the admin observability surface."""
+    result: dict[str, Any] = {
+        "scope": {"uid": scope.uid, "char_id": scope.character_id, "realm": scope.domain},
+        "runs": 0, "candidate_count": 0, "failed_count": 0, "duplicate_count": 0,
+        "by_relation": {}, "daily": {"day_key": day_key, "calls": 0, "tokens": 0,
+                                       "call_limit": daily_call_limit, "token_limit": daily_token_limit},
+    }
+    path = _path(scope)
+    if not path.exists():
+        return result
+    with _lock_for(path):
+        try:
+            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) as connection:
+                run_row = connection.execute(
+                    """SELECT COUNT(*), COALESCE(SUM(candidate_count), 0),
+                              COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0)
+                       FROM event_edge_proposer_runs WHERE uid=? AND char_id=? AND realm=?""",
+                    (scope.uid, scope.character_id, scope.domain),
+                ).fetchone()
+                result["runs"], result["candidate_count"], result["failed_count"] = map(int, run_row)
+                for row in connection.execute(
+                    """SELECT relation_type, COUNT(*) FROM event_edge_proposals
+                       WHERE uid=? AND char_id=? AND realm=? GROUP BY relation_type""",
+                    (scope.uid, scope.character_id, scope.domain),
+                ):
+                    result["by_relation"][str(row[0])] = int(row[1])
+                if day_key:
+                    day = connection.execute(
+                        """SELECT COUNT(*), COALESCE(SUM(token_budget), 0)
+                           FROM event_edge_proposer_runs
+                           WHERE uid=? AND char_id=? AND realm=? AND day_key=?""",
+                        (scope.uid, scope.character_id, scope.domain, day_key),
+                    ).fetchone()
+                    result["daily"]["calls"], result["daily"]["tokens"] = map(int, day)
+        except Exception:
+            result["error_code"] = "database_error"
     return result
 
 

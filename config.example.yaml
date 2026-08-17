@@ -672,6 +672,15 @@ scheduler:
     enabled: true
     max_size_mb: 5
     keep: 3
+event_edge_proposer:
+  # Disabled by default: only writes unreviewed candidate relations to the scoped evidence ledger.
+  enabled: false
+  cooldown_seconds: 21600
+  event_window_size: 8
+  max_candidates_per_run: 6
+  max_daily_calls: 4
+  max_daily_tokens: 1600
+  max_tokens_per_call: 400
 error:
   max_retries: 3
   retry_delay_seconds: 2

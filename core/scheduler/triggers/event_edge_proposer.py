@@ -1,0 +1,199 @@
+"""Bounded, model-proposed Memory Event relations (Brief 203).
+
+This maintenance trigger never enters a prompt, recall, or fact-writing path.
+It only records unreviewed proposals in the scoped evidence ledger.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import time
+from datetime import datetime, timezone
+from typing import Any
+
+from core.memory.event_store import PROPOSAL_RELATION_TYPES
+
+logger = logging.getLogger(__name__)
+
+_DEFAULTS = {
+    "enabled": False,
+    "cooldown_seconds": 6 * 3600,
+    "event_window_size": 8,
+    "max_candidates_per_run": 6,
+    "max_daily_calls": 4,
+    "max_daily_tokens": 1600,
+    "max_tokens_per_call": 400,
+}
+_SYSTEM_PROMPT = """You propose tentative relations between the supplied event records.
+Return only a JSON array. Every item must have from_event_id, to_event_id,
+relation_type, reason, and confidence. relation_type must be one of:
+same_topic, follows_up, possible_cause, contradicts, supports.
+Only relate supplied IDs. Do not assert certainty: possible_cause is always a
+possibility. Keep reason under 240 characters. Return [] when no relation is useful."""
+
+
+def _config() -> dict[str, int | bool]:
+    from core.config_loader import get_config
+
+    raw = get_config().get("event_edge_proposer", {})
+    cfg: dict[str, int | bool] = dict(_DEFAULTS)
+    if not isinstance(raw, dict):
+        return cfg
+    cfg["enabled"] = bool(raw.get("enabled", cfg["enabled"]))
+    for key, lower, upper in (
+        ("cooldown_seconds", 60, 7 * 24 * 3600),
+        ("event_window_size", 2, 20),
+        ("max_candidates_per_run", 1, 12),
+        ("max_daily_calls", 1, 24),
+        ("max_daily_tokens", 64, 20_000),
+        ("max_tokens_per_call", 64, 2_000),
+    ):
+        try:
+            cfg[key] = min(upper, max(lower, int(raw.get(key, cfg[key]))))
+        except (TypeError, ValueError):
+            pass
+    return cfg
+
+
+def _day_key(now: float | None = None) -> str:
+    return datetime.fromtimestamp(now or time.time(), timezone.utc).date().isoformat()
+
+
+def _prompt(events: list[dict[str, Any]]) -> str:
+    return _SYSTEM_PROMPT + "\n\nEvents:\n" + json.dumps(
+        events, ensure_ascii=False, separators=(",", ":")
+    )
+
+
+def _prompt_hash(prompt: str) -> str:
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+
+def _parse_candidates(raw: str, event_ids: set[str], maximum: int) -> list[dict[str, Any]]:
+    """Validate the complete model response before permitting any proposal write."""
+    value = json.loads(raw)
+    if not isinstance(value, list) or len(value) > maximum:
+        raise ValueError("invalid_json")
+    candidates: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {
+            "from_event_id", "to_event_id", "relation_type", "reason", "confidence",
+        }:
+            raise ValueError("invalid_json")
+        from_id = str(item["from_event_id"]).strip()
+        to_id = str(item["to_event_id"]).strip()
+        relation = str(item["relation_type"]).strip()
+        reason = str(item["reason"]).strip()
+        try:
+            confidence = float(item["confidence"])
+        except (TypeError, ValueError):
+            raise ValueError("invalid_json") from None
+        if (
+            from_id not in event_ids or to_id not in event_ids or from_id == to_id
+            or relation not in PROPOSAL_RELATION_TYPES or not reason or len(reason) > 240
+            or not 0.0 <= confidence <= 1.0
+        ):
+            raise ValueError("invalid_json")
+        candidates.append({
+            "from_event_id": from_id, "to_event_id": to_id,
+            "relation_type": relation, "reason": reason, "confidence": confidence,
+        })
+    return candidates
+
+
+async def _propose_scope(uid: str, char_id: str, cfg: dict[str, int | bool]) -> None:
+    from core.memory import event_store
+    from core.memory.scope import MemoryScope
+    from core.model_registry import resolve_category_info
+
+    scope = MemoryScope.reality_scope(uid, char_id)
+    now = time.time()
+    if now - event_store.latest_proposer_run_at(scope) < int(cfg["cooldown_seconds"]):
+        return
+    day_key = _day_key(now)
+    budget = event_store.proposal_budget_snapshot(scope, day_key)
+    call_limit = int(cfg["max_daily_calls"])
+    token_limit = int(cfg["max_daily_tokens"])
+    token_budget = min(int(cfg["max_tokens_per_call"]), token_limit - budget["tokens"])
+    if budget["calls"] >= call_limit or token_budget < 64:
+        return
+
+    events = event_store.recent_events_for_proposal(scope, limit=int(cfg["event_window_size"]))
+    if len(events) < 2:
+        return
+    prompt = _prompt(events)
+    prompt_hash = _prompt_hash(prompt)
+    model_info = resolve_category_info("event_edge_proposer", char_id=char_id)
+    model = str(model_info.get("model") or "")
+    preset = str(model_info.get("effective_preset") or "")
+    model_version = str(model_info.get("model_version") or model)
+
+    try:
+        from core import llm_client
+
+        raw = await llm_client.chat(
+            [{"role": "system", "content": prompt}],
+            max_tokens_override=token_budget,
+            call_category="event_edge_proposer",
+            char_id=char_id,
+        )
+        candidates = _parse_candidates(
+            raw or "", {event["event_id"] for event in events}, int(cfg["max_candidates_per_run"])
+        )
+    except Exception as exc:
+        event_store.record_proposer_run(
+            scope, day_key=day_key, input_count=len(events), candidate_count=0,
+            token_budget=token_budget, model=model, preset=preset, model_version=model_version,
+            prompt_hash=prompt_hash, status="failed", error_code="invalid_output" if isinstance(exc, ValueError) else "model_error",
+        )
+        logger.warning("[event_edge_proposer] proposal failed uid=%s char_id=%s code=%s", uid, char_id,
+                       "invalid_output" if isinstance(exc, ValueError) else "model_error")
+        return
+
+    inserted = 0
+    try:
+        for candidate in candidates:
+            inserted += int(event_store.append_edge_proposal(scope, {
+                **candidate, "model": model, "preset": preset, "model_version": model_version,
+                "prompt_hash": prompt_hash, "created_at": now,
+            }))
+        event_store.record_proposer_run(
+            scope, day_key=day_key, input_count=len(events), candidate_count=len(candidates),
+            token_budget=token_budget, model=model, preset=preset, model_version=model_version,
+            prompt_hash=prompt_hash, status="ok",
+        )
+    except Exception:
+        event_store.record_proposer_run(
+            scope, day_key=day_key, input_count=len(events), candidate_count=0,
+            token_budget=token_budget, model=model, preset=preset, model_version=model_version,
+            prompt_hash=prompt_hash, status="failed", error_code="write_error",
+        )
+        logger.exception("[event_edge_proposer] write failed uid=%s char_id=%s", uid, char_id)
+        return
+    logger.info("[event_edge_proposer] uid=%s char_id=%s proposed=%d inserted=%d", uid, char_id, len(candidates), inserted)
+
+
+async def _check_event_edge_proposer() -> None:
+    """Scheduler-only candidate generation; it never emits or changes memory facts."""
+    cfg = _config()
+    if not cfg["enabled"]:
+        return
+    from core.scheduler.loop import _is_ready, _mark
+    from core.asset_registry import get_registry
+    from core.memory.locks import uid_lock
+    from core.sandbox import get_paths
+
+    if not _is_ready("event_edge_proposer"):
+        return
+    _mark("event_edge_proposer")
+    for character in get_registry().list_all("character"):
+        char_id = character.id
+        char_root = get_paths().memory_char_root(char_id=char_id)
+        if not char_root.exists():
+            continue
+        for directory in char_root.iterdir():
+            if not directory.is_dir() or not (directory / "event_store.sqlite").exists():
+                continue
+            async with uid_lock(directory.name):
+                await _propose_scope(directory.name, char_id, cfg)

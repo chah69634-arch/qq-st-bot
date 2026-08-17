@@ -159,6 +159,18 @@ control for ordinary `read`/`write` policy and confirmation flags. Existing
 `actuate`, `emergency`, and `unrestricted` policies are marked high risk and
 cannot be changed by the agent.
 
+## Brief 203 Memory Event candidate relations
+
+`event_edge_proposer.enabled` is exposed through the existing hot-reloaded
+`GET/PUT /settings/feature-flags` desktop Runtime Configuration surface. The
+feature is disabled by default and never sends a turn. Its bounded runtime
+settings live in `event_edge_proposer` (`cooldown_seconds`, event window,
+per-run candidates, daily call budget, and daily token budget); the dedicated
+`event_edge_proposer` routing category is selectable on the desktop Model
+Routing page. `GET /observability/memory-event-edge-proposals` requires
+`state.read` and returns only content-free counters and daily budget use. No
+desktop or mobile channel consumes candidate-edge records.
+
 ## Brief 158 TTS resource selection
 
 The admin TTS status card queries `/tts-config?char_id=<logical-id>` and
