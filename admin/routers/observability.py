@@ -83,6 +83,16 @@ async def runtime_signals(_auth=Depends(require_scopes("state.read"))):
 
 
 @router.get(
+    "/observability/memory-event-ledger",
+    summary="读取 Memory Event 账本双写健康度",
+)
+async def memory_event_ledger(_auth=Depends(require_scopes("state.read"))):
+    from core.memory.event_store import observability_snapshot
+
+    return observability_snapshot()
+
+
+@router.get(
     "/observability/llm-debug-requests",
     summary="读取 LLM 请求调试快照（高敏感）",
     description="仅当 llm_debug_requests.enabled 为真时才会产生快照；内容含 prompt 与工具 schema。",

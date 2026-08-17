@@ -727,6 +727,8 @@ async def _qq_reality_reply_adapter(
             web_echo=web_echo,
             coplay_echo=coplay_echo,
             loop_executed=loop_executed,
+            event_channel="qq",
+            visible_assistant_text="\n".join(clean),
         )
     except Exception as _ts_err:
         _log_error("qq_reality_reply_adapter.turn_sink", _ts_err)

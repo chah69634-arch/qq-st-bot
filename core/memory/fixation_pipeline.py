@@ -577,6 +577,110 @@ CONVERSATIONAL_TRIGGERS: frozenset[str] = frozenset({
 })
 
 
+def _append_event_ledger(
+    *,
+    uid: str,
+    char_id: str,
+    turn_id: str,
+    user_msg: str,
+    reply: str | None,
+    visible_reply: str | None,
+    raw_user_text: str | None,
+    trigger_name: str,
+    channel: str,
+    source: str,
+    media_refs: list[dict] | None,
+    envelope,
+    occurred_at: float,
+) -> None:
+    """Best-effort dual-write of message evidence; never affects legacy memory."""
+    try:
+        from core.memory.event_store import append_event
+
+        scope = MemoryScope.reality_scope(uid, char_id)
+        ledger_source = source or str(getattr(getattr(envelope, "source", None), "value", "") or "")
+        ledger_channel = channel or ("scheduler" if trigger_name else "unknown")
+        common = {
+            "turn_id": turn_id,
+            "occurred_at": occurred_at,
+            "ingested_at": time.time(),
+            "realm": "reality",
+            "channel": ledger_channel,
+            "source": ledger_source,
+            "media_refs_json": media_refs or [],
+            "redaction_state": "memory_cleaned",
+        }
+        records: list[dict] = []
+        if not trigger_name:
+            raw_text = raw_user_text if raw_user_text is not None else user_msg
+            records.append({
+                **common,
+                "event_id": f"{turn_id}:user",
+                "seq": 0,
+                "actor": "user",
+                "kind": "user_message",
+                "raw_payload_json": {"role": "user"},
+                "raw_text": raw_text,
+                "visible_text": raw_text,
+                "memory_text": user_msg,
+            })
+        if reply is not None:
+            visible_text = visible_reply if visible_reply is not None else reply
+            records.append({
+                **common,
+                "event_id": f"{turn_id}:assistant",
+                "seq": len(records),
+                "actor": "assistant",
+                "kind": "trigger_assistant" if trigger_name else "assistant_message",
+                "raw_payload_json": {"role": "assistant", "trigger_name": trigger_name},
+                "raw_text": visible_text,
+                "visible_text": visible_text,
+                "memory_text": reply,
+            })
+
+        for record in records:
+            result = append_event(scope, record)
+            if result.ok:
+                continue
+            try:
+                from core.runtime_signal_observability import record as record_signal
+
+                record_signal(
+                    category="memory_event_ledger",
+                    code="append_failed",
+                    status="attention",
+                    context={
+                        "character": char_id,
+                        "realm": "reality",
+                        "kind": str(record["kind"]),
+                        "error": result.error_code,
+                    },
+                )
+            except Exception:
+                pass
+            logger.warning(
+                "[fixation] event ledger append failed turn_id=%s kind=%s code=%s",
+                turn_id,
+                record["kind"],
+                result.error_code,
+            )
+    except Exception as exc:
+        # The evidence ledger is additive in this phase. Its failure must not
+        # block short_term, event_log, send, or the slow queue.
+        try:
+            from core.runtime_signal_observability import record as record_signal
+
+            record_signal(
+                category="memory_event_ledger",
+                code="append_exception",
+                status="attention",
+                context={"character": char_id, "realm": "reality"},
+            )
+        except Exception:
+            pass
+        logger.warning("[fixation] event ledger dual-write failed: %s", exc)
+
+
 def capture_turn(
     uid: str,
     user_msg: str,
@@ -589,6 +693,11 @@ def capture_turn(
     char_id: str = DEFAULT_CHAR_ID,
     audit_extras: dict | None = None,
     source: str = "",
+    event_channel: str = "",
+    event_source: str = "",
+    visible_reply: str | None = None,
+    raw_user_text: str | None = None,
+    media_refs: list[dict] | None = None,
 ) -> str:
     """
     生成 turn_id，写 short_term + event_log。
@@ -680,6 +789,22 @@ def capture_turn(
             event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id, source=source)
             if _scrubbed_reply is not None else True,
         ]
+
+    _append_event_ledger(
+        uid=uid,
+        char_id=char_id,
+        turn_id=turn_id,
+        user_msg=user_msg,
+        reply=_scrubbed_reply,
+        visible_reply=visible_reply,
+        raw_user_text=raw_user_text,
+        trigger_name=trigger_name,
+        channel=event_channel,
+        source=source or event_source,
+        media_refs=media_refs,
+        envelope=envelope,
+        occurred_at=ts,
+    )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
 

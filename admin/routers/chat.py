@@ -6,6 +6,7 @@ POST /chat — 接收消息，走完整 Pipeline，返回回复 + 好感度
 """
 
 import asyncio
+import hashlib
 import logging
 import math
 import time
@@ -51,6 +52,7 @@ async def run_owner_chat_turn(
     fanout="all",
     provenance_source: str = "",
     schedule_slow: bool = True,
+    media_refs: list[dict] | None = None,
 ) -> dict:
     """
     手机/桌宠共用的 owner 对话入口。
@@ -352,6 +354,9 @@ async def run_owner_chat_turn(
             loop_executed=_loop_active,
             provenance_source=provenance_source,
             schedule_slow=schedule_slow,
+            event_channel=provenance_channel,
+            raw_user_text=_probe_text,
+            media_refs=media_refs,
         )
         _t_post = time.monotonic() - _t0
 
@@ -638,7 +643,16 @@ async def upload_ingest(
         full_message = media_context + ("\n" + message if message else "")
         # trusted_user_text = original message body before media prepend;
         # probe must not see file content to prevent injection via uploaded docs.
-        response = await run_owner_chat_turn(full_message, channel, trusted_user_text=message)
+        response = await run_owner_chat_turn(
+            full_message,
+            channel,
+            trusted_user_text=message,
+            media_refs=[{
+                "kind": "file",
+                "filename": Path(fname).name,
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }],
+        )
         response["stored_path"] = str(stored_path)
         return response
 
@@ -650,6 +664,14 @@ async def upload_ingest(
                 raise HTTPException(status_code=413, detail="图片超过 10MB 上限")
             items.append((data, item.filename or "image"))
 
+        media_refs = [
+            {
+                "kind": "image",
+                "filename": Path(filename).name,
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+            for data, filename in items
+        ]
         descriptions = await media_processor.ingest_image_bytes(items)
         if descriptions is None:
             raise HTTPException(status_code=422, detail="图片识别失败")
@@ -662,7 +684,12 @@ async def upload_ingest(
         full_message = media_context + ("\n" + message if message else "")
         # trusted_user_text = original message body before media prepend;
         # probe must not see image descriptions to prevent injection via uploaded images.
-        response = await run_owner_chat_turn(full_message, channel, trusted_user_text=message)
+        response = await run_owner_chat_turn(
+            full_message,
+            channel,
+            trusted_user_text=message,
+            media_refs=media_refs,
+        )
         response["stored_paths"] = media_processor.LAST_IMAGE_STORED_PATHS
         return response
 

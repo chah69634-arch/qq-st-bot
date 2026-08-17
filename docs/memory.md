@@ -25,6 +25,22 @@ Schema version and table health are available through the read-only
 `memory.read` scope. A missing ledger is reported without creating a file;
 corrupt or unsupported databases fail closed with a status error.
 
+## Memory Event 03: reality dual-write
+
+`capture_turn()` now generates stable `{turn_id}:user` and `{turn_id}:assistant`
+event IDs and appends them to the scoped ledger in addition to the existing
+short-term/event-log writes. Trigger turns append the assistant event only.
+The ledger keeps the frozen scope, channel/source, raw user text, visible
+assistant text, memory-cleaned text, and media filename/hash references; it
+does not store OCR descriptions as media evidence.
+
+Ledger failure is fail-open for the existing send, short-term, event-log, and
+slow-queue paths, while emitting a redacted runtime signal. Process-local
+write health is exposed at `GET /observability/memory-event-ledger` under
+`state.read`; it reports success rate, failures, and character/realm counts
+without event content or user IDs. This phase does not add prompt retrieval or
+change memory ranking.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径

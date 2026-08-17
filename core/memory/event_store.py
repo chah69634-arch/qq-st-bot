@@ -27,6 +27,15 @@ SCHEMA_VERSION = 1
 _LOCKS: dict[str, threading.RLock] = {}
 _LOCKS_GUARD = threading.Lock()
 _PATH_GUARD = threading.RLock()
+_OBSERVABILITY_LOCK = threading.Lock()
+_OBSERVABILITY: dict[str, Any] = {
+    "attempted": 0,
+    "written": 0,
+    "duplicates": 0,
+    "failed": 0,
+    "by_character": {},
+    "by_realm": {},
+}
 
 
 @dataclass(frozen=True)
@@ -188,7 +197,13 @@ def _prepare_write_path(scope: MemoryScope) -> Path:
 
     with _PATH_GUARD:
         get_paths().root_dir().mkdir(parents=True, exist_ok=True)
-        return _path(scope)
+        path = _path(scope)
+        # DataPaths validates with Path.resolve(). On Windows, resolving a
+        # nested non-existent path while another writer creates it can produce
+        # a transient false sandbox-escape result, so prepare it under the
+        # same guard as resolution.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
 
 
 def _lock_for(path: Path) -> threading.RLock:
@@ -202,6 +217,53 @@ def _connect(path: Path) -> sqlite3.Connection:
     connection.execute("PRAGMA busy_timeout=5000")
     connection.execute("PRAGMA journal_mode=WAL")
     return connection
+
+
+def _observe_append(result: AppendResult, scope: object) -> AppendResult:
+    """Update redacted, process-local write health counters."""
+    char_id = str(getattr(scope, "character_id", "") or "unknown")
+    realm = str(getattr(scope, "domain", "") or "unknown")
+
+    def update(bucket: dict[str, Any]) -> None:
+        bucket["attempted"] = int(bucket.get("attempted", 0)) + 1
+        if result.inserted:
+            bucket["written"] = int(bucket.get("written", 0)) + 1
+        elif result.ok:
+            bucket["duplicates"] = int(bucket.get("duplicates", 0)) + 1
+        else:
+            bucket["failed"] = int(bucket.get("failed", 0)) + 1
+
+    with _OBSERVABILITY_LOCK:
+        update(_OBSERVABILITY)
+        for group, key in (("by_character", char_id), ("by_realm", realm)):
+            buckets = _OBSERVABILITY[group]
+            update(buckets.setdefault(key, {}))
+    return result
+
+
+def observability_snapshot() -> dict[str, Any]:
+    """Return a read-only, content-free projection of ledger write health."""
+    with _OBSERVABILITY_LOCK:
+        attempted = int(_OBSERVABILITY["attempted"])
+        successful = int(_OBSERVABILITY["written"]) + int(_OBSERVABILITY["duplicates"])
+        return {
+            "scope": "process",
+            "attempted": attempted,
+            "written": int(_OBSERVABILITY["written"]),
+            "duplicates": int(_OBSERVABILITY["duplicates"]),
+            "failed": int(_OBSERVABILITY["failed"]),
+            "success_rate": successful / attempted if attempted else None,
+            "by_character": {key: dict(value) for key, value in _OBSERVABILITY["by_character"].items()},
+            "by_realm": {key: dict(value) for key, value in _OBSERVABILITY["by_realm"].items()},
+        }
+
+
+def _reset_observability_for_tests() -> None:
+    with _OBSERVABILITY_LOCK:
+        for key in ("attempted", "written", "duplicates", "failed"):
+            _OBSERVABILITY[key] = 0
+        _OBSERVABILITY["by_character"] = {}
+        _OBSERVABILITY["by_realm"] = {}
 
 
 def _initialize(connection: sqlite3.Connection) -> None:
@@ -220,9 +282,11 @@ def initialize(scope: MemoryScope) -> SchemaStatus:
         path = _prepare_write_path(scope)
     except (TypeError, ValueError):
         return SchemaStatus(SCHEMA_NAME, SCHEMA_VERSION, None, False, False, error_code="invalid_scope")
+    except Exception as exc:
+        logger.warning("[event_store] initialize path preparation failed: %s", exc)
+        return SchemaStatus(SCHEMA_NAME, SCHEMA_VERSION, None, False, False, error_code="database_error")
     with _lock_for(path):
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
             with _connect(path) as connection:
                 _initialize(connection)
             return schema_status(scope)
@@ -243,19 +307,21 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
         path = _prepare_write_path(scope)
     except (AttributeError, TypeError, ValueError) as exc:
         logger.warning("[event_store] invalid scope: %s", exc)
-        return AppendResult(False, False, event_id, "invalid_scope")
+        return _observe_append(AppendResult(False, False, event_id, "invalid_scope"), scope)
+    except Exception as exc:
+        logger.warning("[event_store] path preparation failed: %s", exc)
+        return _observe_append(AppendResult(False, False, event_id, "database_error"), scope)
     try:
         record = event if isinstance(event, EventRecord) else EventRecord.from_mapping(event)
         record = record.normalized(scope)
     except (TypeError, ValueError, KeyError):
-        return AppendResult(False, False, event_id, "invalid_event")
+        return _observe_append(AppendResult(False, False, event_id, "invalid_event"), scope)
 
     columns = tuple(EventRecord.__dataclass_fields__)
     values = tuple(getattr(record, field) for field in columns)
     placeholders = ", ".join("?" for _ in columns)
     with _lock_for(path):
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
             with _connect(path) as connection:
                 _initialize(connection)
                 connection.execute(
@@ -263,12 +329,12 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
                     values,
                 )
                 connection.commit()
-            return AppendResult(True, True, record.event_id)
+            return _observe_append(AppendResult(True, True, record.event_id), scope)
         except sqlite3.IntegrityError:
-            return AppendResult(True, False, record.event_id, "duplicate")
+            return _observe_append(AppendResult(True, False, record.event_id, "duplicate"), scope)
         except Exception as exc:
             logger.warning("[event_store] append failed: %s", exc)
-            return AppendResult(False, False, record.event_id, "database_error")
+            return _observe_append(AppendResult(False, False, record.event_id, "database_error"), scope)
 
 
 def schema_status(scope: MemoryScope) -> SchemaStatus:

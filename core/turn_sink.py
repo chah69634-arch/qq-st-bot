@@ -203,6 +203,10 @@ async def record_assistant_turn(
     loop_executed: bool = False,
     provenance_source: str = "",
     schedule_slow: bool = True,
+    event_channel: str = "",
+    visible_assistant_text: Optional[str] = None,
+    raw_user_text: Optional[str] = None,
+    media_refs: Optional[list[dict]] = None,
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -253,6 +257,10 @@ async def record_assistant_turn(
     from core.response_processor import strip_render_tags as _strip_tags
     from core.reality_output_scrubber import scrub_reality_output_text as _scrub
     memory_text = _scrub(_strip_tags(assistant_text)) or ""
+    visible_text = _strip_tags(visible_assistant_text or assistant_text) or (visible_assistant_text or assistant_text)
+    ledger_channel = event_channel or exclude_origin_channel or (
+        "scheduler" if source != TurnSource.USER_CHAT else "unknown"
+    )
 
     post_info: dict | None = None
     async with _maybe_conversation_gate(uid, bypass_gate):
@@ -274,6 +282,11 @@ async def record_assistant_turn(
                 web_echo=web_echo,
                 coplay_echo=coplay_echo,
                 provenance_source=provenance_source,
+                event_channel=ledger_channel,
+                event_source=source.value,
+                visible_reply=visible_text,
+                raw_user_text=raw_user_text,
+                media_refs=media_refs,
             )
         else:
             if schedule_slow:
@@ -293,6 +306,11 @@ async def record_assistant_turn(
                         coplay_echo=coplay_echo,
                         loop_executed=loop_executed,
                         provenance_source=provenance_source,
+                        event_channel=ledger_channel,
+                        event_source=source.value,
+                        visible_reply=visible_text,
+                        raw_user_text=raw_user_text,
+                        media_refs=media_refs,
                     )
                 )
 

@@ -1446,6 +1446,11 @@ class Pipeline:
         web_echo: bool = False,
         coplay_echo: bool = False,
         provenance_source: str = "",
+        event_channel: str = "",
+        event_source: str = "",
+        visible_reply: str | None = None,
+        raw_user_text: str | None = None,
+        media_refs: list[dict] | None = None,
     ) -> dict:
         """
         Brief 37：send 前必须走完的关键路径——只做毫秒级本地落盘（capture_turn），
@@ -1541,7 +1546,23 @@ class Pipeline:
                     else "coplay" if coplay_echo
                     else ""
                 )
-                _turn_id = _capture_turn(user_id, content, reply, "neutral", turn_id=_turn_id, trigger_name=trigger_name, envelope=envelope, char_id=char_id, audit_extras=audit_extras, source=_source)
+                _turn_id = _capture_turn(
+                    user_id,
+                    content,
+                    reply,
+                    "neutral",
+                    turn_id=_turn_id,
+                    trigger_name=trigger_name,
+                    envelope=envelope,
+                    char_id=char_id,
+                    audit_extras=audit_extras,
+                    source=_source,
+                    event_channel=event_channel,
+                    event_source=event_source,
+                    visible_reply=visible_reply,
+                    raw_user_text=raw_user_text,
+                    media_refs=media_refs,
+                )
                 _critical_written = True
                 logger.debug(f"[pipeline.post_process_critical] capture_turn: {_turn_id}")
                 # 语义索引：event_log 条目异步写入向量库（fail-open）
@@ -1803,6 +1824,11 @@ class Pipeline:
         coplay_echo: bool = False,
         loop_executed: bool = False,
         provenance_source: str = "",
+        event_channel: str = "",
+        event_source: str = "",
+        visible_reply: str | None = None,
+        raw_user_text: str | None = None,
+        media_refs: list[dict] | None = None,
     ):
         """
         Brief 37 拆分前的组合入口：依次 await post_process_critical()（落盘）与
@@ -1822,6 +1848,9 @@ class Pipeline:
             trigger_name=trigger_name, envelope=envelope, audit_extras=audit_extras,
             frozen_scope=frozen_scope, web_echo=web_echo, coplay_echo=coplay_echo,
             provenance_source=provenance_source,
+            event_channel=event_channel, event_source=event_source,
+            visible_reply=visible_reply, raw_user_text=raw_user_text,
+            media_refs=media_refs,
         )
         slow_result = await self.post_process_slow(
             user_id, content, reply, critical_result,
