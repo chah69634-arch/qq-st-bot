@@ -1,0 +1,26 @@
+<div class="page-header">
+  <h1 class="page-title" data-i18n="memory_events.title">事件证据账本</h1>
+  <p class="page-subtitle" data-i18n="overview.readonly">只读</p>
+</div>
+
+<section class="card">
+  <div class="form-grid">
+    <label><span data-i18n="memory_events.uid">用户 ID</span><input id="event-query-uid" type="text" autocomplete="off"></label>
+    <label><span data-i18n="memory_events.char_id">角色 ID</span><input id="event-query-char-id" type="text" autocomplete="off"></label>
+    <label><span data-i18n="memory_events.event_id">事件 ID</span><input id="event-query-event-id" type="text" autocomplete="off"></label>
+    <label><span data-i18n="memory_events.search">搜索词</span><input id="event-query-text" type="search" autocomplete="off"></label>
+    <label><span data-i18n="memory_events.before">前序条数</span><input id="event-query-before" type="number" min="0" max="50" value="10"></label>
+    <label><span data-i18n="memory_events.after">后序条数</span><input id="event-query-after" type="number" min="0" max="50" value="10"></label>
+  </div>
+  <div class="form-actions">
+    <button type="button" class="btn btn-primary" data-action="loadMemoryEventSearch" data-i18n="memory_events.search">搜索</button>
+    <button type="button" class="btn btn-ghost" data-action="loadMemoryEvent" data-i18n="memory_events.event">事件</button>
+    <button type="button" class="btn btn-ghost" data-action="loadMemoryEventWindow" data-i18n="memory_events.window">前后文</button>
+    <button type="button" class="btn btn-ghost" data-action="loadMemoryEventRelated" data-i18n="memory_events.related">关联</button>
+    <button type="button" class="btn btn-ghost" data-action="loadMemoryEventQueryTrace" data-i18n="memory_events.trace">审计</button>
+  </div>
+</section>
+
+<section class="card">
+  <pre id="event-query-result" class="raw-output" data-i18n="memory_events.waiting">等待查询</pre>
+</section>

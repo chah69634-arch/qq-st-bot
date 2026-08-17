@@ -41,6 +41,32 @@ write health is exposed at `GET /observability/memory-event-ledger` under
 without event content or user IDs. This phase does not add prompt retrieval or
 change memory ranking.
 
+## Memory Event 04: evidence query observability
+
+`GET /memory-events/search`, `GET /memory-events/{event_id}`, its deterministic
+`/window` and `/related` projections, plus `GET /memory-events/query-trace`,
+form a read-only admin observability surface under `memory.read`. Every query
+requires an explicit `uid + char_id + realm=reality` scope; the router validates
+the character ID and every SQLite predicate includes that frozen scope. A
+missing event in another user, character, or realm is therefore indistinguishable
+from an ordinary `event_not_found` response.
+
+The query adapter never initializes, migrates, or writes the ledger database.
+It reads evidence fields and safe metadata, omits the raw transport payload,
+and projects media references through the `kind` / `filename` / `sha256`
+allowlist so local paths and credentials do not escape. Results are bounded:
+the context window is capped at 50 entries on either side, lists at 100, and
+search/related pagination uses validated opaque cursors. Corrupt or unsupported
+ledgers fail closed for this observability request only.
+
+Each lookup appends a redacted, per-scope query trace recording only timestamp,
+query type, hit count, truncation reason, outcome, and the frozen `uid`,
+character, and realm scope. It
+never records search text, event IDs, raw evidence, payloads, tokens, or paths.
+The trace endpoint is the required read-only projection for this new persisted
+audit state. These endpoints are admin-panel observability only: they do not
+feed Reality/Dream prompts, memory ranking, chat, or the role tool loop.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径

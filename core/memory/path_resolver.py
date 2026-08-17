@@ -22,6 +22,7 @@ REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "history",
     "event_log",
     "event_store",
+    "event_query_trace",
     "mid_term",
     "episodic",
     "memory_index",
@@ -123,6 +124,9 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
 
     if artifact == "event_store":
         return paths.event_store(uid, char_id=char_id)
+
+    if artifact == "event_query_trace":
+        return paths.user_memory_root(uid, char_id=char_id) / "event_query_trace.jsonl"
 
     if artifact == "mid_term":
         return paths.user_memory_root(uid, char_id=char_id) / "mid_term.json"

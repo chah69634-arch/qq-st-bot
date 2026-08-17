@@ -52,7 +52,7 @@ from admin.routers import (
     group, group_dream, relationship_facts,
     transcribe, provenance,
     auth_tokens, coplay, perception, spend, growth, observability, wake_bridge, integrations, autonomy, self_management,
-    phone_control, control_center, user_data, deployment, companion,
+    phone_control, control_center, user_data, deployment, companion, event_memory,
 )
 
 # chess 路由依赖 python-chess（requirements-full.txt 的可选依赖，见 cc-tasks/92 §1），
@@ -65,6 +65,7 @@ except ImportError as _e:
 
 app.include_router(users.router,          prefix="/users",     tags=["用户"])
 app.include_router(memory.router,         prefix="/memory",    tags=["记忆"])
+app.include_router(event_memory.router,   prefix="",           tags=["记忆事件"])
 app.include_router(relations.router,      prefix="/relations", tags=["关系"])
 app.include_router(system.router,         prefix="",           tags=["系统"])
 app.include_router(lorebook.router,       prefix="",           tags=["世界书"])

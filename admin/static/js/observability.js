@@ -56,6 +56,99 @@ async function loadObserveMemory() {
 }
 
 // ══════════════════════════════════════════════════════════
+//  观测页：Memory Event 证据账本
+// ══════════════════════════════════════════════════════════
+function _memoryEventScope() {
+  const uid = (document.getElementById('event-query-uid')?.value || '').trim();
+  const charId = (document.getElementById('event-query-char-id')?.value || '').trim();
+  if (!uid || !charId) throw new Error('请输入用户 ID 和角色 ID');
+  return {uid, charId};
+}
+
+function _memoryEventId() {
+  const eventId = (document.getElementById('event-query-event-id')?.value || '').trim();
+  if (!eventId) throw new Error('请输入事件 ID');
+  return eventId;
+}
+
+function _memoryEventResult() {
+  return document.getElementById('event-query-result');
+}
+
+function _showMemoryEventResult(value) {
+  const output = _memoryEventResult();
+  if (output) output.textContent = JSON.stringify(value, null, 2);
+}
+
+function _memoryEventParams(scope) {
+  return new URLSearchParams({uid: scope.uid, char_id: scope.charId, realm: 'reality'});
+}
+
+async function loadMemoryEventSearch() {
+  const output = _memoryEventResult();
+  if (output) output.textContent = '加载中…';
+  try {
+    const scope = _memoryEventScope();
+    const params = _memoryEventParams(scope);
+    const text = (document.getElementById('event-query-text')?.value || '').trim();
+    if (text) params.set('q', text);
+    _showMemoryEventResult(await api('GET', `/memory-events/search?${params}`));
+  } catch (error) {
+    if (output) output.textContent = `加载失败：${error.message}`;
+  }
+}
+
+async function loadMemoryEvent() {
+  const output = _memoryEventResult();
+  if (output) output.textContent = '加载中…';
+  try {
+    const scope = _memoryEventScope();
+    const eventId = _memoryEventId();
+    _showMemoryEventResult(await api('GET', `/memory-events/${encodeURIComponent(eventId)}?${_memoryEventParams(scope)}`));
+  } catch (error) {
+    if (output) output.textContent = `加载失败：${error.message}`;
+  }
+}
+
+async function loadMemoryEventWindow() {
+  const output = _memoryEventResult();
+  if (output) output.textContent = '加载中…';
+  try {
+    const scope = _memoryEventScope();
+    const eventId = _memoryEventId();
+    const params = _memoryEventParams(scope);
+    params.set('before', document.getElementById('event-query-before')?.value || '10');
+    params.set('after', document.getElementById('event-query-after')?.value || '10');
+    _showMemoryEventResult(await api('GET', `/memory-events/${encodeURIComponent(eventId)}/window?${params}`));
+  } catch (error) {
+    if (output) output.textContent = `加载失败：${error.message}`;
+  }
+}
+
+async function loadMemoryEventRelated() {
+  const output = _memoryEventResult();
+  if (output) output.textContent = '加载中…';
+  try {
+    const scope = _memoryEventScope();
+    const eventId = _memoryEventId();
+    _showMemoryEventResult(await api('GET', `/memory-events/${encodeURIComponent(eventId)}/related?${_memoryEventParams(scope)}`));
+  } catch (error) {
+    if (output) output.textContent = `加载失败：${error.message}`;
+  }
+}
+
+async function loadMemoryEventQueryTrace() {
+  const output = _memoryEventResult();
+  if (output) output.textContent = '加载中…';
+  try {
+    const scope = _memoryEventScope();
+    _showMemoryEventResult(await api('GET', `/memory-events/query-trace?${_memoryEventParams(scope)}`));
+  } catch (error) {
+    if (output) output.textContent = `加载失败：${error.message}`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 //  观测页：隐性状态
 // ══════════════════════════════════════════════════════════
 async function loadObserveHidden() {
