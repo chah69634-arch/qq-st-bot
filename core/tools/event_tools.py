@@ -127,7 +127,10 @@ async def get_related_events_wrapper(
     if len(allowed) > 20 or any(len(value) > 64 for value in allowed):
         return _unknown("relation_filter_exceeded", event_id=event_id)
     try:
-        result = event_query.related(_scope(user_id, char_id), event_id, cursor=cursor, limit=limit)
+        result = event_query.related(
+            _scope(user_id, char_id), event_id, cursor=cursor, limit=limit,
+            relation_types=allowed or None,
+        )
     except event_query.EventQueryError as exc:
         return _query_error(exc, event_id=event_id)
     if result is None:

@@ -93,6 +93,21 @@ async def memory_event_ledger(_auth=Depends(require_scopes("state.read"))):
 
 
 @router.get(
+    "/observability/memory-event-edges",
+    summary="读取 Memory Event 确定性关联边统计",
+)
+async def memory_event_edges(
+    uid: str,
+    char_id: str,
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.memory.event_store import edge_observability_snapshot
+    from core.memory.scope import MemoryScope
+
+    return edge_observability_snapshot(MemoryScope.reality_scope(uid, char_id))
+
+
+@router.get(
     "/observability/llm-debug-requests",
     summary="读取 LLM 请求调试快照（高敏感）",
     description="仅当 llm_debug_requests.enabled 为真时才会产生快照；内容含 prompt 与工具 schema。",

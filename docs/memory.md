@@ -86,6 +86,26 @@ The trace endpoint is the required read-only projection for this new persisted
 audit state. These endpoints are admin-panel observability only: they do not
 feed Reality/Dream prompts, memory ranking, chat, or the role tool loop.
 
+## Memory Event 07: deterministic evidence edges
+
+The scoped evidence ledger writes only deterministic, system-origin relation
+edges in the same SQLite transaction as an event. `previous`/`next` are
+limited to one `uid + char_id + realm + stream`; `same_turn` and `reply_to`
+connect the owner/assistant pair, while `triggered_by`, `derived_from`,
+`correction_of`, and `media_of` require an explicit stored event ID. No edge
+uses an LLM or text matching.
+
+Every edge carries `from_event_id`, `to_event_id`, `relation_type`,
+`origin=system`, `confidence=1`, `created_at`, and its schema version. Both
+endpoints must exist in the frozen scope/realm before insertion, so a failed
+event write rolls its edges back too. Event deletion/redaction never retargets
+an edge; read projections retain it as `dangling` when an endpoint is absent.
+
+`get_related_events` remains a bounded, depth-one read of these stored edges.
+`GET /observability/memory-event-edges?uid=...&char_id=...` (under
+`state.read`) exposes relation counts, dangling endpoints, duplicate writes,
+and failed edge writes without returning evidence text.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径

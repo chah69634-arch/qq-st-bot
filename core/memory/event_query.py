@@ -110,6 +110,7 @@ def _event_projection(row: sqlite3.Row) -> dict[str, Any]:
         "kind": row["kind"],
         "actor": row["actor"],
         "channel": row["channel"],
+        "stream": row["stream"] if "stream" in row.keys() else row["channel"],
         "source": row["source"],
         "redaction_state": row["redaction_state"],
         "raw_text": raw_text,
@@ -225,7 +226,14 @@ def _decode_cursor(cursor: str, expected_kind: str, event_id: str = "") -> dict[
     return decoded
 
 
-def related(scope: MemoryScope, event_id: str, *, cursor: str, limit: int) -> dict[str, Any] | None:
+def related(
+    scope: MemoryScope,
+    event_id: str,
+    *,
+    cursor: str,
+    limit: int,
+    relation_types: set[str] | None = None,
+) -> dict[str, Any] | None:
     decoded = _decode_cursor(cursor, "related", event_id)
     edge_after = int(decoded.get("edge_id", 0)) if decoded else 0
     if edge_after < 0:
@@ -238,34 +246,69 @@ def related(scope: MemoryScope, event_id: str, *, cursor: str, limit: int) -> di
         try:
             if _find(connection, scope, event_id) is None:
                 return None
+            relation_types = relation_types or set()
+            relation_sql = ""
+            relation_params: tuple[Any, ...] = ()
+            if relation_types:
+                placeholders = ", ".join("?" for _ in relation_types)
+                relation_sql = f" AND COALESCE(NULLIF(e.relation_type, ''), e.edge_type) IN ({placeholders})"
+                relation_params = tuple(sorted(relation_types))
             rows = connection.execute(
-                """SELECT e.edge_id, e.edge_type, e.created_at, e.from_event_id, e.to_event_id,
+                """SELECT e.edge_id, e.edge_type,
+                   COALESCE(NULLIF(e.relation_type, ''), e.edge_type) AS relation_type,
+                   e.origin, e.confidence, e.schema_version, e.created_at,
+                   e.from_event_id, e.to_event_id,
                    related.*
                 FROM event_edges AS e
                 LEFT JOIN events AS related
                   ON related.uid = e.uid AND related.char_id = e.char_id
                  AND related.realm = ?
                  AND related.event_id = CASE WHEN e.from_event_id = ? THEN e.to_event_id ELSE e.from_event_id END
-                WHERE e.uid = ? AND e.char_id = ? AND (e.from_event_id = ? OR e.to_event_id = ?) AND e.edge_id > ?
-                ORDER BY e.edge_id ASC LIMIT ?""",
-                (scope.domain, event_id, scope.uid, scope.character_id, event_id, event_id, edge_after, limit + 1),
+                WHERE e.uid = ? AND e.char_id = ? AND (e.from_event_id = ? OR e.to_event_id = ?) AND e.edge_id > ?"""
+                + relation_sql + " ORDER BY e.edge_id ASC LIMIT ?",
+                (scope.domain, event_id, scope.uid, scope.character_id, event_id, event_id, edge_after, *relation_params, 1001),
             ).fetchall()
-            has_more = len(rows) > limit
-            rows = rows[:limit]
-            items = []
+            # One event can have several deterministic relations to the same
+            # neighbour (for example same_turn + reply_to).  Paginate unique
+            # neighbours so a short page does not repeat that neighbour before
+            # exposing the next event.  Edges for one append are contiguous,
+            # so advancing through the repeated edge ids is deterministic.
+            selected: list[sqlite3.Row] = []
+            selected_ids: set[str] = set()
+            cursor_edge_id = edge_after
+            has_more = False
             for row in rows:
+                other_id = row["to_event_id"] if row["from_event_id"] == event_id else row["from_event_id"]
+                if other_id in selected_ids:
+                    cursor_edge_id = row["edge_id"]
+                    continue
+                if len(selected) >= limit:
+                    has_more = True
+                    break
+                selected.append(row)
+                selected_ids.add(other_id)
+                cursor_edge_id = row["edge_id"]
+            if len(rows) == 1001 and not has_more:
+                has_more = True
+            items = []
+            for row in selected:
                 other_id = row["to_event_id"] if row["from_event_id"] == event_id else row["from_event_id"]
                 items.append({
                     "edge_id": row["edge_id"],
-                    "edge_type": row["edge_type"],
+                    "edge_type": row["relation_type"] or row["edge_type"],
+                    "relation_type": row["relation_type"] or row["edge_type"],
+                    "origin": row["origin"],
+                    "confidence": row["confidence"],
+                    "schema_version": row["schema_version"],
                     "edge_created_at": row["created_at"],
                     "direction": "outgoing" if row["from_event_id"] == event_id else "incoming",
                     "related_event_id": other_id,
+                    "dangling": row["event_id"] is None,
                     "event": _event_projection_with_topics(connection, scope, row) if row["event_id"] is not None else None,
                 })
             return {
                 "items": items,
-                "next_cursor": _encode_cursor({"v": 1, "kind": "related", "event_id": event_id, "edge_id": rows[-1]["edge_id"]}) if has_more and rows else "",
+                "next_cursor": _encode_cursor({"v": 1, "kind": "related", "event_id": event_id, "edge_id": cursor_edge_id}) if has_more and selected else "",
                 "truncation_reason": "limit" if has_more else "",
             }
         except sqlite3.Error as exc:

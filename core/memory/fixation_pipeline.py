@@ -592,6 +592,7 @@ def _append_event_ledger(
     media_refs: list[dict] | None,
     envelope,
     occurred_at: float,
+    relation_hints: dict[str, str] | None = None,
 ) -> None:
     """Best-effort dual-write of message evidence; never affects legacy memory."""
     try:
@@ -610,6 +611,7 @@ def _append_event_ledger(
             "media_refs_json": media_refs or [],
             "redaction_state": "memory_cleaned",
         }
+        hints = {str(key): str(value) for key, value in (relation_hints or {}).items() if value}
         records: list[dict] = []
         if not trigger_name:
             raw_text = raw_user_text if raw_user_text is not None else user_msg
@@ -623,6 +625,10 @@ def _append_event_ledger(
                 "raw_text": raw_text,
                 "visible_text": raw_text,
                 "memory_text": user_msg,
+                "relation_hints_json": {
+                    key: value for key, value in hints.items()
+                    if key in {"reply_to", "derived_from", "correction_of", "media_of"}
+                },
             })
         if reply is not None:
             visible_text = visible_reply if visible_reply is not None else reply
@@ -636,6 +642,10 @@ def _append_event_ledger(
                 "raw_text": visible_text,
                 "visible_text": visible_text,
                 "memory_text": reply,
+                "relation_hints_json": {
+                    key: value for key, value in hints.items()
+                    if key in {"triggered_by", "derived_from", "correction_of", "media_of"}
+                },
             })
 
         for record in records:
@@ -698,6 +708,11 @@ def capture_turn(
     visible_reply: str | None = None,
     raw_user_text: str | None = None,
     media_refs: list[dict] | None = None,
+    reply_to_event_id: str = "",
+    triggered_by_event_id: str = "",
+    derived_from_event_id: str = "",
+    correction_of_event_id: str = "",
+    media_of_event_id: str = "",
 ) -> str:
     """
     生成 turn_id，写 short_term + event_log。
@@ -804,6 +819,13 @@ def capture_turn(
         media_refs=media_refs,
         envelope=envelope,
         occurred_at=ts,
+        relation_hints={
+            "reply_to": reply_to_event_id,
+            "triggered_by": triggered_by_event_id,
+            "derived_from": derived_from_event_id,
+            "correction_of": correction_of_event_id,
+            "media_of": media_of_event_id,
+        },
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")

@@ -140,3 +140,66 @@ def test_event_store_status_endpoint_is_read_only(sandbox):
     assert result["user_id"] == scope.uid
     assert result["char_id"] == TEST_CHAR_ID
     assert result["schema_version"] == event_store.SCHEMA_VERSION
+
+
+def test_event_store_writes_deterministic_edges_and_explicit_cross_turn_links(sandbox):
+    from core.memory import event_store
+
+    scope = _scope("event-edge-owner", TEST_CHAR_ID)
+    first = _event("edge-first", turn_id="turn-1", seq=0, occurred_at=1.0, stream="desktop-main")
+    second = _event("edge-second", turn_id="turn-2", seq=0, occurred_at=2.0, stream="desktop-main")
+    user = _event("edge-user", turn_id="turn-3", seq=0, occurred_at=3.0, actor="user")
+    assistant = _event(
+        "edge-assistant", turn_id="turn-3", seq=1, occurred_at=3.0,
+        actor="assistant", triggered_by_event_id="edge-first",
+        derived_from_event_id="edge-second", correction_of_event_id="edge-first",
+        media_of_event_id="edge-user",
+    )
+    for item in (first, second, user, assistant):
+        assert event_store.append_event(scope, item).ok
+
+    path = event_store.resolve_path(scope, "event_store")
+    with sqlite3.connect(path) as connection:
+        rows = connection.execute(
+            "SELECT from_event_id, to_event_id, relation_type, origin, confidence, schema_version "
+            "FROM event_edges ORDER BY edge_id"
+        ).fetchall()
+    relations = {(row[0], row[1], row[2]) for row in rows}
+    assert ("edge-first", "edge-second", "next") in relations
+    assert ("edge-second", "edge-first", "previous") in relations
+    assert ("edge-user", "edge-assistant", "same_turn") in relations
+    assert ("edge-assistant", "edge-user", "reply_to") in relations
+    assert ("edge-assistant", "edge-first", "triggered_by") in relations
+    assert ("edge-assistant", "edge-second", "derived_from") in relations
+    assert ("edge-assistant", "edge-first", "correction_of") in relations
+    assert ("edge-assistant", "edge-user", "media_of") in relations
+    assert all(row[3:] == ("system", 1.0, event_store.SCHEMA_VERSION) for row in rows)
+
+    snapshot = event_store.edge_observability_snapshot(scope)
+    assert snapshot["edge_count"] == len(rows)
+    assert snapshot["dangling_count"] == 0
+    assert snapshot["by_relation"]["same_turn"] == 1
+
+
+def test_event_edges_are_realm_scoped_atomic_and_report_dangling_endpoints(sandbox, monkeypatch):
+    from core.memory import event_query, event_store
+
+    scope = _scope("event-edge-boundary", TEST_CHAR_ID)
+    assert event_store.append_event(scope, _event("edge-good", occurred_at=1.0)).ok
+    assert event_store.append_event(scope, _event("edge-dream", realm="dream")).error_code == "invalid_event"
+
+    original_edge_builder = event_store._ensure_deterministic_edges
+    monkeypatch.setattr(event_store, "_ensure_deterministic_edges", lambda *_args: (_ for _ in ()).throw(RuntimeError("edge fail")))
+    failed = event_store.append_event(scope, _event("edge-rollback", occurred_at=2.0))
+    assert failed.error_code == "database_error"
+    assert event_query.get_event(scope, "edge-rollback") is None
+
+    monkeypatch.setattr(event_store, "_ensure_deterministic_edges", original_edge_builder)
+    assert event_store.append_event(scope, _event("edge-next", occurred_at=2.0)).ok
+    path = event_store.resolve_path(scope, "event_store")
+    with sqlite3.connect(path) as connection:
+        connection.execute("DELETE FROM events WHERE event_id = ?", ("edge-good",))
+    related = event_query.related(scope, "edge-next", cursor="", limit=10)
+    assert related is not None
+    assert any(item["related_event_id"] == "edge-good" and item["dangling"] for item in related["items"])
+    assert event_store.edge_observability_snapshot(scope)["dangling_count"] >= 1
