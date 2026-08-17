@@ -52,6 +52,7 @@ def append(
     after_gist: str = "",
     trigger_signal: str = "",
     turn_id: str = "",
+    source_event_ids: list[str] | None = None,
     origin: dict | None = None,
 ) -> None:
     """Append one provenance record.  Never raises — must not block the write path."""
@@ -59,6 +60,7 @@ def append(
         if origin is None:
             from core.observe.prompt_capture import _capture_origin
             origin = _capture_origin.get()
+        from core.memory.lineage import normalize_source_event_ids
         record = {
             "ts": time.time(),
             "turn_id": turn_id,
@@ -67,6 +69,7 @@ def append(
             "before_gist": before_gist[:120] if before_gist else "",
             "after_gist": after_gist[:120] if after_gist else "",
             "trigger_signal": trigger_signal[:120] if trigger_signal else "",
+            "source_event_ids": normalize_source_event_ids(source_event_ids),
             "origin": origin,
         }
         path = _log_path(uid, char_id)

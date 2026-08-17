@@ -111,6 +111,69 @@ async def get_memory_event_query_trace(
     }
 
 
+@router.get("/memory-events/lineage/episodes/{episode_id}", summary="追溯情景记忆的事件证据")
+async def get_episode_lineage(
+    episode_id: str = Path(..., min_length=1, max_length=256),
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    realm: str = Query("reality", max_length=16),
+    _auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import lineage
+
+    scope = _scope(uid, char_id, realm)
+    try:
+        result = lineage.resolve_episode(uid, episode_id, char_id=char_id)
+    except EventQueryError as exc:
+        raise _query_error(scope, "lineage_episode", exc)
+    if result is None:
+        _trace(scope, "lineage_episode", None, outcome="not_found")
+        raise HTTPException(status_code=404, detail={"code": "episode_not_found"})
+    _trace(scope, "lineage_episode", {"items": result.get("events", [])})
+    return {"scope": {"uid": uid, "char_id": char_id, "realm": realm}, **result}
+
+
+@router.get("/memory-events/lineage/storyline/{arc_id}/nodes/{node_id}", summary="追溯故事线节点的事件证据")
+async def get_storyline_node_lineage(
+    arc_id: str = Path(..., min_length=1, max_length=256),
+    node_id: str = Path(..., min_length=1, max_length=256),
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    realm: str = Query("reality", max_length=16),
+    _auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import lineage
+
+    scope = _scope(uid, char_id, realm)
+    try:
+        result = lineage.resolve_storyline_node(uid, arc_id, node_id, char_id=char_id)
+    except EventQueryError as exc:
+        raise _query_error(scope, "lineage_storyline", exc)
+    if result is None:
+        _trace(scope, "lineage_storyline", None, outcome="not_found")
+        raise HTTPException(status_code=404, detail={"code": "storyline_node_not_found"})
+    _trace(scope, "lineage_storyline", {"items": result.get("events", [])})
+    return {"scope": {"uid": uid, "char_id": char_id, "realm": realm}, **result}
+
+
+@router.get("/memory-events/lineage/dry-run", summary="统计可确定回填的 Memory Event 血缘")
+async def get_memory_event_lineage_dry_run(
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    realm: str = Query("reality", max_length=16),
+    _auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import lineage
+
+    scope = _scope(uid, char_id, realm)
+    try:
+        result = lineage.dry_run(uid, char_id=char_id)
+    except EventQueryError as exc:
+        raise _query_error(scope, "lineage_dry_run", exc)
+    _trace(scope, "lineage_dry_run", None)
+    return {"scope": {"uid": uid, "char_id": char_id, "realm": realm}, **result}
+
+
 @router.get("/memory-events/{event_id}", summary="读取单条 scoped Memory Event 证据")
 async def get_memory_event(
     event_id: str = Path(..., min_length=1, max_length=256),

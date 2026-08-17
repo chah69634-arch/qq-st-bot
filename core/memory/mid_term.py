@@ -56,6 +56,7 @@ def append(
     tags: list[str] | None = None,
     mid_id: str | None = None,
     source_turn_id: str | None = None,
+    source_event_ids: list[str] | None = None,
     *,
     char_id: str = DEFAULT_CHAR_ID,
     source: str = "",
@@ -83,6 +84,7 @@ def append(
         events = [e for e in events if now - e.get("ts", 0) < EXPIRE_SECONDS]
         if len(events) >= MAX_EVENTS:
             events = events[-(MAX_EVENTS - 1):]
+        from core.memory.lineage import normalize_source_event_ids
         entry: dict = {
             "ts": now,
             "occurred_at": occurred_at if isinstance(occurred_at, (int, float)) else now,
@@ -90,6 +92,7 @@ def append(
             "tags": tags or [],
             "mid_id": mid_id,
             "source_turn_id": source_turn_id,
+            "source_event_ids": normalize_source_event_ids(source_event_ids),
             "promoted_to_episodic_id": None,
             "source": source,
             "memory_strength": max(0.0, min(1.0, float(memory_strength))),

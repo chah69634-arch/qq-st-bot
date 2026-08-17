@@ -190,10 +190,17 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = DEFAULT_CHAR_ID
         return
 
     # 血缘 exact-dup：新 episode 的 source_mid_ids 与任意存量重叠 → 跳过
+    from core.memory.lineage import normalize_source_event_ids
+    episode["source_event_ids"] = normalize_source_event_ids(episode.get("source_event_ids"))
+    new_events = set(episode.get("source_event_ids") or [])
     new_mids = set(episode.get("source_mid_ids") or [])
-    if new_mids:
+    if new_events or new_mids:
         for existing in memories:
-            if new_mids & set(existing.get("source_mid_ids") or []):
+            existing_events = set(existing.get("source_event_ids") or [])
+            duplicate = bool(new_events & existing_events) if new_events and existing_events else bool(
+                new_mids & set(existing.get("source_mid_ids") or [])
+            )
+            if duplicate:
                 logger.info(f"[episodic] 血缘重复跳过: {episode.get('id')} ∩ {existing.get('id')}")
                 return
 

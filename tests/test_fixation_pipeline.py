@@ -397,6 +397,7 @@ async def test_summarize_to_midterm_writes_mid_term(sandbox):
     assert len(events) == 1
     assert events[0]["mid_id"] == mid_id
     assert events[0]["source_turn_id"] == turn_id
+    assert events[0]["source_event_ids"] == [f"{turn_id}:user", f"{turn_id}:assistant"]
     assert events[0]["promoted_to_episodic_id"] is None
 
 

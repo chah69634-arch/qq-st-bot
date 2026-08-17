@@ -199,7 +199,13 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
         )
         return 0
 
-    applied = _apply_ops(uid, char_id, ops)
+    from core.memory.lineage import normalize_source_event_ids
+    source_event_ids = normalize_source_event_ids([
+        event_id
+        for entry in [*new_episodes, *inbox_entries]
+        for event_id in (entry.get("source_event_ids") or [])
+    ])
+    applied = _apply_ops(uid, char_id, ops, source_event_ids=source_event_ids)
 
     now = time.time()
     sl.save_meta(
@@ -217,7 +223,7 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
     return applied
 
 
-def _apply_ops(uid: str, char_id: str, ops: list) -> int:
+def _apply_ops(uid: str, char_id: str, ops: list, *, source_event_ids: list[str] | None = None) -> int:
     """按 §1 写 API 逐条落盘。arc_title 作为 LLM 侧句柄解析回 arc_id（本批新开的弧线也纳入映射）。"""
     from core.memory import storyline as sl
 
@@ -252,6 +258,7 @@ def _apply_ops(uid: str, char_id: str, ops: list) -> int:
                     uid, char_id=char_id, arc_id=arc_id,
                     summary=str(op.get("summary", ""))[:80],
                     ts=ts, span=span,
+                    source_ids=source_event_ids,
                 )
                 if node_id is not None:
                     applied += 1

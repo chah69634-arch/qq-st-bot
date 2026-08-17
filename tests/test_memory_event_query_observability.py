@@ -79,6 +79,9 @@ def test_memory_event_query_contract_is_present_in_openapi(sandbox, monkeypatch)
         "/memory-events/{event_id}/window",
         "/memory-events/{event_id}/related",
         "/memory-events/query-trace",
+        "/memory-events/lineage/episodes/{episode_id}",
+        "/memory-events/lineage/storyline/{arc_id}/nodes/{node_id}",
+        "/memory-events/lineage/dry-run",
     ):
         assert path in schema["paths"]
 

@@ -837,6 +837,7 @@ async def summarize_to_midterm(
     返回 mid_id（已写入）或 None（跳过）。
     """
     from core.memory import locks, mid_term as _mt
+    from core.memory.lineage import event_ids_for_turn
     from core import llm_client
     from core.post_process import slow_queue
 
@@ -871,6 +872,7 @@ async def summarize_to_midterm(
             tags=tags,
             mid_id=mid_id,
             source_turn_id=turn_id,
+            source_event_ids=event_ids_for_turn(turn_id, is_trigger_turn=bool(trigger_name)),
             occurred_at=_parse_turn_ms(turn_id),
             **append_kwargs,
         )
@@ -881,6 +883,7 @@ async def summarize_to_midterm(
             after_gist=summary[:120],
             trigger_signal=(user_msg or "")[:120],
             turn_id=turn_id,
+            source_event_ids=event_ids_for_turn(turn_id, is_trigger_turn=bool(trigger_name)),
         )
 
     duration_ms = int((time.time() - _ts_start) * 1000)
@@ -921,6 +924,7 @@ async def reflect_to_episodic(
     返回 ep_id（已写入）或 None（跳过）。
     """
     from core.memory import locks, mid_term as _mt
+    from core.memory.lineage import normalize_source_event_ids
     from core.memory.episodic_memory import write_episode, _load_memories, _save_memories, _rebuild_index
     from core import llm_client
     from core.post_process import slow_queue
@@ -1058,6 +1062,9 @@ async def reflect_to_episodic(
             "last_retrieved": None,
             # 血缘字段
             "source_mid_ids": [e.get("mid_id") for e in to_process if e.get("mid_id")],
+            "source_event_ids": normalize_source_event_ids(
+                [event_id for e in to_process for event_id in (e.get("source_event_ids") or [])]
+            ),
             "consolidated_at": None,
         }
         event_time = _parse_event_time_hint(data.get("event_time_hint", ""))
@@ -1089,8 +1096,22 @@ async def reflect_to_episodic(
         if _dup_ep is not None:
             _dup_ep["last_retrieved"] = time.time()
             _dup_ep["retrieval_count"] = _dup_ep.get("retrieval_count", 0) + 1
+            _dup_ep["source_event_ids"] = normalize_source_event_ids([
+                *(_dup_ep.get("source_event_ids") or []),
+                *(episode.get("source_event_ids") or []),
+            ])
             _save_memories(uid, existing_eps, char_id=char_id)
             _rebuild_index(uid, existing_eps, char_id=char_id)
+            from core.memory.provenance_log import append as _prov_append
+            _prov_append(
+                uid, char_id,
+                artifact="episodic",
+                field=str(_dup_ep.get("id") or ""),
+                after_gist=(_dup_ep.get("narrative_summary") or "")[:120],
+                trigger_signal="core_dedup_merge",
+                turn_id=str(_dup_ep.get("id") or ""),
+                source_event_ids=_dup_ep.get("source_event_ids"),
+            )
             _reset(_fail_key)
             logger.info(
                 "[fixation.reflect_to_episodic] core 记忆去重合并 uid=%s dup=%s",
@@ -1111,6 +1132,7 @@ async def reflect_to_episodic(
                 after_gist=(episode.get("narrative_summary") or "")[:120],
                 trigger_signal=summaries_text[:120],
                 turn_id=ep_id,
+                source_event_ids=episode.get("source_event_ids"),
             )
             # 语义索引（fail-open，不阻塞主流程）
             try:
@@ -1194,6 +1216,7 @@ async def handler_storyline_evicted_input(payload: dict) -> None:
             ),
             "ts": e.get("occurred_at") or e.get("timestamp") or time.time(),
             "strength": e.get("strength", 0.0),
+            "source_event_ids": list(e.get("source_event_ids") or []),
         }
         for e in episodes
     ]
@@ -1215,6 +1238,7 @@ async def handler_storyline_evicted_input(payload: dict) -> None:
         field="inbox",
         after_gist="；".join(en["summary"] for en in entries)[:120],
         trigger_signal="evict_to_inbox",
+        source_event_ids=[event_id for entry in entries for event_id in (entry.get("source_event_ids") or [])],
     )
 
 

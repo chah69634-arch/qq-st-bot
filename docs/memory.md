@@ -51,6 +51,25 @@ the character ID and every SQLite predicate includes that frozen scope. A
 missing event in another user, character, or realm is therefore indistinguishable
 from an ordinary `event_not_found` response.
 
+## Memory Event 05: derived-memory lineage
+
+`source_event_ids` is the primary evidence lineage field for newly written
+mid-term and episodic memories. `source_turn_id` and `source_mid_ids` remain
+compatibility fields only. Reflection copies the event IDs from its mid-term
+snapshot, so mid-term expiry cannot break an episodic record's route to raw
+evidence. Evicted episodic snapshots retain the same IDs in
+`storyline_inbox.json`; the weekly storyline aggregator passes their union to
+new append-only node `source_ids`.
+
+Every derived write records its source event range in the fail-open provenance
+ledger. `GET /memory-events/lineage/episodes/{episode_id}` and
+`GET /memory-events/lineage/storyline/{arc_id}/nodes/{node_id}` resolve only
+stored IDs under `memory.read`; they never infer a relationship from summary
+text. Missing events and records predating this field return `legacy_unknown`.
+`GET /memory-events/lineage/dry-run` reports only deterministic backfill
+candidates and never modifies stored data. Storyline nodes remain append-only,
+so legacy nodes are not backfilled.
+
 The query adapter never initializes, migrates, or writes the ledger database.
 It reads evidence fields and safe metadata, omits the raw transport payload,
 and projects media references through the `kind` / `filename` / `sha256`

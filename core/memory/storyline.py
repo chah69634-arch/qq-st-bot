@@ -119,8 +119,31 @@ def append_to_inbox(uid: str, entries: list[dict], *, char_id: str = DEFAULT_CHA
         return
     p = _inbox_file(uid, char_id=char_id)
     p.parent.mkdir(parents=True, exist_ok=True)
+    from core.memory.lineage import normalize_source_event_ids
     current = load_inbox(uid, char_id=char_id)
-    current.extend(entries)
+    # Queue retries may redeliver the same evicted episode. Keep the first
+    # snapshot while unioning its deterministic evidence range.
+    seen: dict[str, dict] = {
+        str(entry.get("id")): entry
+        for entry in current
+        if isinstance(entry, dict) and entry.get("id")
+    }
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        copied = dict(entry)
+        copied["source_event_ids"] = normalize_source_event_ids(copied.get("source_event_ids"))
+        entry_id = str(copied.get("id") or "")
+        existing = seen.get(entry_id) if entry_id else None
+        if existing is not None:
+            existing["source_event_ids"] = normalize_source_event_ids([
+                *(existing.get("source_event_ids") or []),
+                *(copied.get("source_event_ids") or []),
+            ])
+            continue
+        current.append(copied)
+        if entry_id:
+            seen[entry_id] = copied
     current = current[-MAX_INBOX_ENTRIES:]
     safe_write_json(p, current)
 
@@ -257,13 +280,15 @@ def append_node(
         )
         return None
 
+    from core.memory.lineage import normalize_source_event_ids
     span_val = list(span) if span else [ts, ts]
+    clean_source_ids = normalize_source_event_ids(source_ids)
     arc["nodes"].append({
         "node_id": nid,
         "ts": ts,
         "span": span_val,
         "summary": summary[:80],
-        "source_ids": list(source_ids or []),
+        "source_ids": clean_source_ids,
     })
     arc["updated_at"] = time.time()
     _save(uid, data, char_id=char_id)
@@ -272,6 +297,7 @@ def append_node(
     _prov_append(
         uid, char_id, artifact="storyline", field=arc_id,
         after_gist=summary[:120], trigger_signal="append_node",
+        source_event_ids=clean_source_ids,
     )
     return nid
 
