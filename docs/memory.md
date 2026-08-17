@@ -125,6 +125,28 @@ and write failures record a content-free run result and write no candidate.
 relation-type counters. `possible_cause` remains explicitly tentative; there
 is no acceptance or review workflow in this phase.
 
+## Memory Event 09: shadow recall rollout
+
+`event_shadow_recall` runs a bounded, read-only query against the reality event
+ledger in parallel with the existing episodic/event-log recall. It is disabled
+globally by default; `uids` and `char_ids` are optional hot-reload allowlists
+for a small grey rollout. Any enabled scope still sends only the legacy recall
+result to the model.
+
+The shadow trace is appended to the existing `recall_trace` record and contains
+seed/new `event_id`s plus counts, approximate character/token budgets, a
+Jaccard overlap rate against legacy IDs, scope rejection count, truncation and
+timeout/error status. It never contains event evidence, never creates a memory
+write, and never enters prompt layers, consolidation, Dream, Stage, or
+source-isolated turns. The hard timeout is fail-open: a timeout or error leaves
+the old path unchanged.
+
+`GET /observability/memory-event-shadow-recall?uid=...&char_id=...` (scope
+`state.read`) returns the content-free per-day shadow metrics. The existing
+read-only Memory Event tools remain the explicit second-phase path: only an
+active owner Path C function-calling turn can request event evidence, while
+automatic shadow results remain disabled for prompt injection.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径

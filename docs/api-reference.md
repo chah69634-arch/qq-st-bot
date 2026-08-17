@@ -38,6 +38,7 @@ scope；只读端点通常允许对应的 read scope。
 | GET/PUT/POST | `/characters*` | characters | 管理面角色卡 |
 | GET/POST/PUT/DELETE | `/memory/{user_id}/*` | memory | 管理面记忆浏览与删除 |
 | GET | `/memory-events/search`、`/memory-events/{event_id}`、`/memory-events/{event_id}/window`、`/memory-events/{event_id}/related`、`/memory-events/query-trace`、`/memory-events/lineage/*` | `memory.read` | 管理面 scoped Memory Event 证据检索与派生记忆血缘；显式 `uid + char_id + realm=reality`，仅只读，lineage 只按已存 `source_event_ids` 回溯，旧数据或已删除事件返回 `legacy_unknown`，dry-run 不写回 |
+| GET | `/observability/memory-event-shadow-recall` | `state.read` | Memory Event 09 shadow recall 的只读灰度指标；不返回查询正文或事件证据 |
 | GET/PUT/PATCH/DELETE | `/users/*`、`/relations/*`、`/relationship-facts/*` | users / relations | 管理面用户与关系 |
 | GET/POST/PUT/DELETE | `/lorebook*`、`/jailbreak-entries*` | prompt_assets | 管理面 Prompt 资产 |
 | GET/POST/PUT/DELETE | `/scheduler/*`、`/garden/*`、`/mood/*` | scheduler | 管理面状态和手动触发 |

@@ -62,6 +62,7 @@
 | 群聊梦境（Dream Stage，Brief 100：仅 sandbox、零回流、hard_exit 绝对） | `core/stage/dream_runtime.py`（`run_dream_stage_turn()`）/ `core/stage/dream_views.py`（`DreamStageCharacterView`）/ `core/stage/dream_state.py` + `dream_store.py` + `dream_settings.py`；端点 `admin/routers/group_dream.py`；详见 `docs/stage.md` §六 |
 | 情景记忆 | `core/memory/episodic_memory.py` |
 | 查询侧时间意图解析（Brief 48：解析"上周/前天/N天前"等，供 episodic/event_log/向量预取按时间窗过滤召回，纯规则无 LLM） | `core/memory/temporal_query.py` → `parse_query_time_range()`；接线点 `core/pipeline.py::fetch_context()` |
+| Memory Event shadow recall（Brief 204：默认关闭、按 uid/char 灰度；并行 reality 事件账本评估只写 recall trace，不进 prompt；观测 `/observability/memory-event-shadow-recall`） | `core/memory/event_shadow_recall.py` → `run_shadow_recall()`；接线点 `core/pipeline.py::fetch_context()` |
 | 情景记忆淘汰暂存（遗忘=降级而非删除；上限裁剪批次存进 storyline_inbox，等周频聚合统一消费；原即时 digest 压缩已退役） | `core/memory/fixation_pipeline.py` → `handler_storyline_evicted_input()` |
 | storyline 叙事弧层（append-only 存储 + 写API open_arc/append_node/set_arc_status；周频聚合 storyline_weekly；tagged 召回层 6h_storyline，Brief 80） | `core/memory/storyline.py` / `core/scheduler/triggers/storyline_weekly.py` |
 | event_log 过期前抢救持久事实（age 27-29 天，产出走 important_facts 冲突裁决入口，不发言） | `core/scheduler/triggers/event_log_salvage.py` |

@@ -171,6 +171,20 @@ Routing page. `GET /observability/memory-event-edge-proposals` requires
 `state.read` and returns only content-free counters and daily budget use. No
 desktop or mobile channel consumes candidate-edge records.
 
+## Brief 204 Memory Event shadow recall
+
+`event_shadow_recall.enabled` is exposed through the hot-reloaded feature flag
+surface and defaults to false. The dedicated
+`GET/PUT /settings/event-shadow-recall` endpoint manages bounded `uids` and
+`char_ids` allowlists for grey rollout; these scopes may be enabled while the
+global flag remains off. Shadow recall runs in parallel with the legacy read
+path, records only event IDs and content-free metrics in `recall_trace`, and
+never changes prompt injection or memory writes. Use
+`GET /observability/memory-event-shadow-recall` (`state.read`) to inspect
+status, budget, overlap, rejection, truncation, and timeout counters. Turning
+the flag off or clearing the allowlists immediately falls back to the legacy
+path after config reload.
+
 ## Brief 158 TTS resource selection
 
 The admin TTS status card queries `/tts-config?char_id=<logical-id>` and

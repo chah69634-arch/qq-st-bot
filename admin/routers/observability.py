@@ -129,6 +129,69 @@ async def memory_event_edge_proposals(
 
 
 @router.get(
+    "/observability/memory-event-shadow-recall",
+    summary="读取 Memory Event shadow recall 灰度指标",
+    description=(
+        "只返回 shadow recall 的状态、计数、字符/token 预算、重叠率、"
+        "scope 拒绝、截断和超时原因；不会返回查询正文或事件证据。"
+    ),
+)
+async def memory_event_shadow_recall(
+    uid: str,
+    char_id: str,
+    date: str = "",
+    limit: int = Query(20, ge=1, le=100),
+    _auth=Depends(require_scopes("state.read")),
+):
+    import json
+    from datetime import datetime
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+
+    date_str = date or datetime.now().strftime("%Y-%m-%d")
+    scope = MemoryScope.reality_scope(uid, char_id)
+    trace_file = resolve_path(scope, "recall_trace") / f"{date_str}.jsonl"
+    try:
+        read_limit = min(100, max(1, int(limit)))
+    except (TypeError, ValueError):
+        read_limit = 20
+    records: list[dict] = []
+    if trace_file.exists():
+        try:
+            for line in trace_file.read_text(encoding="utf-8").splitlines()[-read_limit:]:
+                try:
+                    item = json.loads(line)
+                except Exception:
+                    continue
+                shadow = item.get("event_shadow_recall")
+                if isinstance(shadow, dict):
+                    records.append({
+                        key: shadow.get(key)
+                        for key in (
+                            "status", "enabled", "seed_event_ids", "new_event_ids",
+                            "expand_count", "related_count", "candidate_count", "chars",
+                            "tokens", "old_chars", "old_tokens", "overlap_rate",
+                            "scope_rejections", "truncation_reason", "timeout_reason",
+                            "elapsed_ms",
+                        )
+                    })
+        except Exception:
+            records = []
+    status_counts: dict[str, int] = {}
+    for item in records:
+        status = str(item.get("status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    return {
+        "uid": uid,
+        "char_id": char_id,
+        "date": date_str,
+        "records": records,
+        "count": len(records),
+        "status_counts": status_counts,
+    }
+
+
+@router.get(
     "/observability/llm-debug-requests",
     summary="读取 LLM 请求调试快照（高敏感）",
     description="仅当 llm_debug_requests.enabled 为真时才会产生快照；内容含 prompt 与工具 schema。",

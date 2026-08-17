@@ -297,6 +297,23 @@ class Pipeline:
         # C: recall_policy="none" 跳过 episodic/event_search/web_recall 检索层（RC6）。
         _skip_recall = _low_info or recall_policy == "none"
 
+        # Memory Event 09: schedule the bounded, read-only event-ledger shadow
+        # query alongside the legacy recall work.  Its result is awaited only
+        # when writing the diagnostic trace below; it never enters prompt data.
+        _shadow_recall_task = None
+        if not _skip_recall:
+            try:
+                from core.memory.event_shadow_recall import run_shadow_recall as _run_shadow_recall
+                _shadow_recall_task = asyncio.create_task(
+                    _run_shadow_recall(
+                        scope,
+                        content,
+                        old_chars=0,
+                    )
+                )
+            except Exception as _shadow_schedule_error:
+                logger.debug("[pipeline.fetch_context] event shadow schedule skipped: %s", _shadow_schedule_error)
+
         # X2: compute query embedding once (fail-open), then get all semantic hits sync.
         # query_vec is passed down to event_log.search and episodic.retrieve so each
         # can do a source-filtered vs.query internally without re-embedding.
@@ -552,6 +569,46 @@ class Pipeline:
             from core.recall_trace import write_trace as _write_recall_trace
             from core.memory.mood_state import get_intensity as _get_intensity
             from datetime import datetime as _dt
+            _shadow_recall = {
+                "enabled": False,
+                "status": "skipped_legacy_recall" if _skip_recall else "disabled",
+                "seed_event_ids": [],
+                "new_event_ids": [],
+                "expand_count": 0,
+                "related_count": 0,
+                "candidate_count": 0,
+                "chars": 0,
+                "tokens": 0,
+                "old_chars": 0,
+                "old_tokens": 0,
+                "overlap_rate": 0.0,
+                "scope_rejections": 0,
+                "truncation_reason": "",
+                "timeout_reason": "",
+                "elapsed_ms": 0,
+            }
+            if _shadow_recall_task is not None:
+                _old_ids = [
+                    item.get("id") for item in (*_episodic_trace, *_episodic_fallback_trace)
+                    if isinstance(item, dict)
+                ]
+                _old_ids.extend(
+                    item[0] for item in _semantic_hits
+                    if isinstance(item, (list, tuple)) and item
+                )
+                _old_chars = len(event_search_result or "") + len(episodic_result or "") + len(episodic_fallback_result or "")
+                # The helper has its own hard timeout; cancellation is fail-open
+                # so a trace problem cannot change the generated response.
+                _shadow_recall = await _shadow_recall_task
+                if _shadow_recall.get("enabled"):
+                    _shadow_recall["old_chars"] = _old_chars
+                    _shadow_recall["old_tokens"] = (_old_chars + 3) // 4
+                    _new_ids = {str(value) for value in (_shadow_recall.get("new_event_ids") or []) if value}
+                    _old_id_set = {str(value) for value in _old_ids if value}
+                    _union = _new_ids | _old_id_set
+                    _shadow_recall["overlap_rate"] = round(
+                        len(_new_ids & _old_id_set) / len(_union), 4
+                    ) if _union else 0.0
             _write_recall_trace(uid, char_id, {
                 "ts": _dt.now().isoformat(timespec="seconds"),
                 "uid": uid,
@@ -569,6 +626,7 @@ class Pipeline:
                 # docs/known-issues.md）。
                 "semantic_hits": [(h[0], round(h[1], 4)) for h in _semantic_hits],
                 "web_recall_hits": _web_recall_hits,
+                "event_shadow_recall": _shadow_recall,
                 "parsed_time_range": (
                     [round(_since_ts, 3) if _since_ts is not None else None,
                      round(_until_ts, 3) if _until_ts is not None else None]

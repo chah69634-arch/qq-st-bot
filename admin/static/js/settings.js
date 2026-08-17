@@ -486,6 +486,35 @@ async function loadFeatureFlags() {
   } catch (e) { el.innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { const result = await api('PUT', '/settings/feature-flags', { flags }); toast(result.message || t('common.saved', '已保存'), result.reload_status === 'restart_required' ? 'err' : 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
+
+function _shadowListValue(id) {
+  return [...new Set((document.getElementById(id)?.value || '')
+    .split(/[\n,]/).map(value => value.trim()).filter(Boolean))];
+}
+
+async function loadEventShadowRecallSettings() {
+  const enabled = document.getElementById('event-shadow-enabled');
+  if (!enabled) return;
+  try {
+    const settings = await api('GET', '/settings/event-shadow-recall');
+    enabled.checked = Boolean(settings.enabled);
+    document.getElementById('event-shadow-uids').value = (settings.uids || []).join('\n');
+    document.getElementById('event-shadow-char-ids').value = (settings.char_ids || []).join('\n');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function saveEventShadowRecallSettings() {
+  try {
+    await api('PUT', '/settings/event-shadow-recall', {
+      enabled: Boolean(document.getElementById('event-shadow-enabled')?.checked),
+      uids: _shadowListValue('event-shadow-uids'),
+      char_ids: _shadowListValue('event-shadow-char-ids'),
+    });
+    toast(t('common.saved', '已保存'), 'ok');
+    loadEventShadowRecallSettings();
+    loadFeatureFlags();
+  } catch (e) { toast(e.message, 'err'); }
+}
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
 let _mrEditingPresetName = null;
 const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'scenario_reconcile', 'event_edge_proposer'];

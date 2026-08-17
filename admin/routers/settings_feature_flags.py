@@ -32,6 +32,7 @@ FLAGS = {
     "performance_mapping": ("performance_mapping", "enabled", "表演标注映射"),
     "private_exchange": ("private_exchange", "enabled", "角色私下往来"),
     "event_edge_proposer": ("event_edge_proposer", "enabled", "Memory Event 候选关联边"),
+    "event_shadow_recall": ("event_shadow_recall", "enabled", "Memory Event shadow recall"),
 }
 RESTART_REQUIRED_FLAGS = frozenset({"qq"})
 _DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
@@ -39,6 +40,12 @@ _DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
 
 class FeatureFlagsUpdate(BaseModel):
     flags: dict[str, bool]
+
+
+class EventShadowRecallUpdate(BaseModel):
+    enabled: bool | None = None
+    uids: list[str] | None = None
+    char_ids: list[str] | None = None
 
 
 @router.get("/settings/feature-flags", summary="读取功能开关白名单")
@@ -85,3 +92,41 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
         ),
     })
     return result
+
+
+def _shadow_settings() -> dict:
+    cfg = get_config().get("event_shadow_recall") or {}
+    return {
+        "enabled": bool(cfg.get("enabled", False)),
+        "uids": [str(value) for value in (cfg.get("uids") or []) if str(value)],
+        "char_ids": [str(value) for value in (cfg.get("char_ids") or []) if str(value)],
+    }
+
+
+@router.get("/settings/event-shadow-recall", summary="读取 Memory Event shadow recall 灰度设置")
+async def get_event_shadow_recall_settings(auth=Depends(require_scopes("admin"))):
+    return _shadow_settings()
+
+
+@router.put("/settings/event-shadow-recall", summary="更新 Memory Event shadow recall 灰度设置")
+async def update_event_shadow_recall_settings(
+    body: EventShadowRecallUpdate,
+    auth=Depends(require_scopes("admin")),
+):
+    full_cfg = read_config_file(CONFIG_FILE)
+    section = full_cfg.setdefault("event_shadow_recall", {})
+    if body.enabled is not None:
+        section["enabled"] = bool(body.enabled)
+    for key, values in (("uids", body.uids), ("char_ids", body.char_ids)):
+        if values is None:
+            continue
+        cleaned = []
+        for value in values[:100]:
+            value = str(value).strip()
+            if value and len(value) <= 128:
+                cleaned.append(value)
+        section[key] = sorted(set(cleaned))
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    return {**_shadow_settings(), "reload_status": "reloaded"}

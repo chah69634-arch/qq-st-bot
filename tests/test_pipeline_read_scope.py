@@ -492,6 +492,57 @@ def test_recall_policy_none_skips_episodic_event_search_and_web_recall(
     assert identity_calls == [1], "recall_policy=none 不应影响 user_identity 状态层"
 
 
+def test_recall_policy_none_skips_event_shadow_recall(
+    chars_tree, monkeypatch, sandbox, registry
+):
+    """No legacy recall means no incomparable Memory Event shadow sample."""
+    import core.memory.event_shadow_recall as _shadow
+
+    pipeline = _make_pipeline("character_b", registry)
+    _write_active(sandbox, "character_b")
+    _apply_base_stubs(monkeypatch)
+    calls: list = []
+
+    async def _shadow_spy(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"enabled": True, "status": "ok"}
+
+    monkeypatch.setattr(_shadow, "run_shadow_recall", _shadow_spy)
+    asyncio.run(pipeline.fetch_context(user_id="u1", content="今天", recall_policy="none"))
+
+    assert calls == []
+
+
+def test_event_shadow_trace_stays_out_of_fetch_context_result(
+    chars_tree, monkeypatch, sandbox, registry
+):
+    """Shadow IDs are trace-only and cannot become an implicit prompt input."""
+    import core.memory.event_shadow_recall as _shadow
+    import core.recall_trace as _trace
+
+    pipeline = _make_pipeline("character_b", registry)
+    _write_active(sandbox, "character_b")
+    _apply_base_stubs(monkeypatch)
+    traces: list[dict] = []
+
+    async def _shadow_spy(*args, **kwargs):
+        return {
+            "enabled": True, "status": "ok", "seed_event_ids": ["event-a"],
+            "new_event_ids": ["event-a", "event-b"], "expand_count": 1,
+            "related_count": 1, "candidate_count": 2, "chars": 20,
+            "tokens": 5, "old_chars": 0, "old_tokens": 0,
+            "overlap_rate": 0.0, "scope_rejections": 0,
+            "truncation_reason": "", "timeout_reason": "",
+        }
+
+    monkeypatch.setattr(_shadow, "run_shadow_recall", _shadow_spy)
+    monkeypatch.setattr(_trace, "write_trace", lambda _uid, _char_id, record: traces.append(record))
+    context = asyncio.run(pipeline.fetch_context(user_id="u1", content="具体话题"))
+
+    assert "event_shadow_recall" not in context
+    assert traces[-1]["event_shadow_recall"]["new_event_ids"] == ["event-a", "event-b"]
+
+
 def test_recall_policy_seed_default_still_calls_episodic_retrieve(
     chars_tree, monkeypatch, sandbox, registry
 ):

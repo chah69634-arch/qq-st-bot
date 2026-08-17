@@ -788,6 +788,13 @@ docstring 与新增模板漏网，已在 Brief 25 §3 P0 收敛掉）。
 - **全局开关**（单用户系统），进程内热生效，无需重启；下一轮 `build_prompt()` 调用即生效。
 - **fail-open**：开关文件缺失或损坏 → `get_state()` 返回全启用默认值，绝不 raise。
 
+Memory Event 09 的 shadow recall 也遵守这一边界：它可以在 `fetch_context()`
+期间并行读取一个有限 reality event 窗口，但结果只写入 `recall_trace` 的
+`event_shadow_recall` 诊断字段，不创建 prompt layer。角色若在 owner Path C
+工具循环中明确调用 `search_events` / `expand_event_window` /
+`get_related_events`，工具结果才会作为当前轮 `tool_result` 出现；Dream、Stage、
+主动触发和自动注入均不会暴露 shadow 事件链。
+
 ### 存储
 
 `core/data_paths.py::prompt_layer_ablation()` → `data/runtime/prompt_layer_ablation.json`：

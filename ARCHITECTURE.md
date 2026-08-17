@@ -216,6 +216,13 @@ event_log, short-term, episodic, or identity writers.
 
 ---
 
+Memory Event shadow recall is likewise outside the model path. During
+`fetch_context()` a greylisted scope may run a bounded reality-ledger query in
+parallel with legacy recall. It appends only event IDs and aggregate metrics to
+`recall_trace`; timeout, error, or rollback leaves the legacy prompt path
+unchanged. Explicit owner Path C Memory Event tools remain the only route that
+can return event evidence to a model turn.
+
 ## 数据目录结构
 
 > 所有 `data/` 运行时路径必须通过 `core/sandbox.get_paths()` 获取，不得硬编码；

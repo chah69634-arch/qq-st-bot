@@ -681,6 +681,19 @@ event_edge_proposer:
   max_daily_calls: 4
   max_daily_tokens: 1600
   max_tokens_per_call: 400
+event_shadow_recall:
+  # Disabled by default: the event-ledger path is diagnostic only and never
+  # injects event text into the prompt.  uids/char_ids are optional greylist
+  # overrides for a small rollout while enabled remains false.
+  enabled: false
+  uids: []
+  char_ids: []
+  seed_limit: 3
+  window_before: 2
+  window_after: 2
+  max_related_per_seed: 4
+  timeout_ms: 120
+  max_trace_ids: 24
 error:
   max_retries: 3
   retry_delay_seconds: 2
