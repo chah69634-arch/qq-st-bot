@@ -1,7 +1,7 @@
 # Brief 206-213 · Memory Event Ledger 审查修复批次
 
-> 状态：completed / MER-01..09 已关闭
-> 最终提交：MER-09 原子提交（本提交）
+> 状态：completed / MER-01..10 已关闭
+> 最终提交：MER-10 post-gate 原子提交
 > 前置：Brief 195-205 已实现，但尚不能按完整事件链验收
 > 目标：先消除默认聊天路径风险和错误证据，再恢复灰度功能，最后补齐关系与主题能力。
 
@@ -60,6 +60,7 @@ MER-03、04、05 在 MER-02 后可分别施工，但仍须各自测试、检查�
 
 ## 最终结论
 
-MER-01..08 的独立提交与 MER-09 最终闸门均已完成。MER-09 覆盖热路径、迁移、
-storyline、shadow、proposer、source metrics、观测和文档的一次性收口；相关关系类型的
-未接生产入口仍按 roadmap 管理，不以伪造事件换取关闭状态。
+MER-01..08 的独立提交、MER-09 闸门与 MER-10 post-gate 纠偏均已完成。MER-09 后的
+只读复核曾重开关闭结论；MER-10 补齐 Markdown 正式召回隔离、真实 migration dry-run、
+storyline 双来源 cursor v3、并行有界 shadow、proposer 双端 source policy 及失败观测后，
+以 focused 回归和差异闸门重新关闭。未接生产入口的关系类型仍按 roadmap 管理。

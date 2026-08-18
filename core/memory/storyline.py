@@ -29,7 +29,7 @@ from core.sandbox import safe_user_id
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 2
-CURSOR_VERSION = 2
+CURSOR_VERSION = 3
 
 MAX_ACTIVE_ARCS = 8       # 软上限：由聚合 prompt 感知并自行收敛（关闭旧弧线），不做代码强制淘汰
 MAX_TOTAL_ARCS = 24       # 硬上限：超出时淘汰最旧的 closed arc（见 _evict_if_needed）
@@ -47,7 +47,10 @@ def _default_data() -> dict:
         "version": SCHEMA_VERSION,
         "meta": {
             "last_aggregated_at": 0.0,
-            "event_log_cursor": {"version": CURSOR_VERSION, "day": "", "offset": 0},
+            "event_log_cursor": {"version": CURSOR_VERSION, "sources": {
+                "canonical": {"day": "", "offset": 0},
+                "legacy": {"day": "", "offset": 0},
+            }},
             "consumed_material_ids": [],
             "aggregation": {"status": "idle", "last_failure_code": "", "last_batch_at": 0.0},
         },
@@ -201,6 +204,17 @@ def commit_batch(
     committed["version"] = SCHEMA_VERSION
     _save(uid, committed, char_id=char_id)
     _record_batch_provenance(uid, committed, char_id=char_id)
+
+
+def record_failure(uid: str, *, char_id: str = DEFAULT_CHAR_ID, code: str, stage: str) -> None:
+    """Persist content-free failure state without advancing business cursors."""
+    data = load(uid, char_id=char_id)
+    aggregation = data.setdefault("meta", {}).setdefault("aggregation", {})
+    aggregation.update({
+        "status": "failed", "last_failure_code": str(code)[:64],
+        "last_failure_stage": str(stage)[:32], "last_failure_at": time.time(),
+    })
+    _save(uid, data, char_id=char_id)
 
 
 def _record_batch_provenance(uid: str, data: dict, *, char_id: str) -> None:

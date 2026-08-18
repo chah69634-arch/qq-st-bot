@@ -8,6 +8,7 @@ not a reason to alter the normal recall path.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import threading
 import time
@@ -19,7 +20,11 @@ from core.memory import event_store
 from core.memory.source_policy import is_isolated
 from core.memory.scope import MemoryScope
 
-_SHADOW_RUN_LOCK = threading.Lock()
+_SHADOW_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="event-shadow",
+)
+_SCOPE_LOCKS: dict[tuple[str, str, str], threading.Lock] = {}
+_SCOPE_LOCKS_GUARD = threading.Lock()
 logger = logging.getLogger(__name__)
 
 DEFAULTS: dict[str, Any] = {
@@ -31,6 +36,7 @@ DEFAULTS: dict[str, Any] = {
     "window_after": 2,
     "max_related_per_seed": 4,
     "timeout_ms": 120,
+    "sqlite_timeout_ms": 40,
     "max_trace_ids": 24,
 }
 
@@ -50,6 +56,7 @@ def config() -> dict[str, Any]:
         ("window_after", 0, 8),
         ("max_related_per_seed", 0, 8),
         ("timeout_ms", 20, 500),
+        ("sqlite_timeout_ms", 5, 100),
         ("max_trace_ids", 1, 64),
     ):
         try:
@@ -57,6 +64,12 @@ def config() -> dict[str, Any]:
         except (TypeError, ValueError):
             result[key] = DEFAULTS[key]
     return result
+
+
+def _scope_lock(scope: MemoryScope) -> threading.Lock:
+    key = (scope.uid, str(scope.character_id or ""), scope.domain)
+    with _SCOPE_LOCKS_GUARD:
+        return _SCOPE_LOCKS.setdefault(key, threading.Lock())
 
 
 def _values(raw: Any) -> set[str]:
@@ -218,7 +231,8 @@ def _run_sync(
     occurred_before: float | None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
-    if not _SHADOW_RUN_LOCK.acquire(blocking=False):
+    run_lock = _scope_lock(scope)
+    if not run_lock.acquire(blocking=False):
         return {"status": "busy", "timeout_reason": "prior_run_active", "elapsed_ms": 0}
     seed_ids: list[str] = []
     new_ids: list[str] = []
@@ -234,6 +248,7 @@ def _run_sync(
             occurred_after=occurred_after, occurred_before=occurred_before, cursor="",
             limit=int(settings["seed_limit"]),
             order="desc",
+            busy_timeout_ms=int(settings["sqlite_timeout_ms"]),
         )
         candidates = seeds.get("items", [])
         seen: set[str] = set()
@@ -269,7 +284,11 @@ def _run_sync(
             if len(new_ids) >= int(settings["max_trace_ids"]):
                 truncation_reason = truncation_reason or "trace_id_limit"
                 break
-            window = event_query.window(scope, event_id, before=int(settings["window_before"]), after=int(settings["window_after"]))
+            window = event_query.window(
+                scope, event_id, before=int(settings["window_before"]),
+                after=int(settings["window_after"]),
+                busy_timeout_ms=int(settings["sqlite_timeout_ms"]),
+            )
             if window:
                 for item in [*window.get("before", []), *window.get("after", [])]:
                     if cancelled.is_set():
@@ -281,7 +300,10 @@ def _run_sync(
                     _add(item)
             if int(settings["max_related_per_seed"]) <= 0 or cancelled.is_set():
                 continue
-            related = event_query.related(scope, event_id, cursor="", limit=int(settings["max_related_per_seed"]), relation_types=None)
+            related = event_query.related(
+                scope, event_id, cursor="", limit=int(settings["max_related_per_seed"]),
+                relation_types=None, busy_timeout_ms=int(settings["sqlite_timeout_ms"]),
+            )
             for item in related.get("items", []) if related else []:
                 event = item.get("event")
                 if not event:
@@ -312,15 +334,13 @@ def _run_sync(
             "seed_order": "temporal_desc",
         }
     finally:
-        _SHADOW_RUN_LOCK.release()
+        run_lock.release()
 
 
-async def run_shadow_recall(
+async def run_shadow_query(
     scope: MemoryScope,
     query: str,
     *,
-    old_ids: Iterable[Any] = (),
-    old_results: Iterable[Any] = (),
     old_chars: int = 0,
     occurred_after: float | None = None,
     occurred_before: float | None = None,
@@ -332,7 +352,8 @@ async def run_shadow_recall(
         cfg.update(settings)
         for key, low, high in (
             ("seed_limit", 1, 8), ("window_before", 0, 8), ("window_after", 0, 8),
-            ("max_related_per_seed", 0, 8), ("timeout_ms", 20, 500), ("max_trace_ids", 1, 64),
+            ("max_related_per_seed", 0, 8), ("timeout_ms", 20, 500),
+            ("sqlite_timeout_ms", 5, 100), ("max_trace_ids", 1, 64),
         ):
             try:
                 cfg[key] = min(high, max(low, int(cfg[key])))
@@ -356,24 +377,29 @@ async def run_shadow_recall(
         "truncation_reason": "",
         "timeout_reason": "",
         "elapsed_ms": 0,
+        "timeout_ms": int(cfg["timeout_ms"]),
+        "sqlite_timeout_ms": int(cfg["sqlite_timeout_ms"]),
         **_comparison_defaults(),
     }
     if not base["enabled"]:
         return base
+    cfg["sqlite_timeout_ms"] = min(
+        int(cfg["sqlite_timeout_ms"]), max(5, int(cfg["timeout_ms"]) // 2),
+    )
+    base["sqlite_timeout_ms"] = int(cfg["sqlite_timeout_ms"])
     cancelled = threading.Event()
-    legacy_results = list(old_results) or list(old_ids)
     try:
+        loop = asyncio.get_running_loop()
         result = await asyncio.wait_for(
-            asyncio.to_thread(
-                _run_sync, scope, query, cfg, cancelled, occurred_after, occurred_before,
+            loop.run_in_executor(
+                _SHADOW_EXECUTOR, _run_sync, scope, query, cfg, cancelled,
+                occurred_after, occurred_before,
             ),
             timeout=float(cfg["timeout_ms"]) / 1000.0,
         )
         result = {**base, **result, "enabled": True}
         result["old_chars"] = max(0, int(old_chars))
         result["old_tokens"] = (max(0, int(old_chars)) + 3) // 4
-        if result["status"] == "ok":
-            return compare_legacy_results(result, legacy_results, scope=scope)
         return result
     except asyncio.TimeoutError:
         cancelled.set()
@@ -383,3 +409,40 @@ async def run_shadow_recall(
         logger.warning("[event_shadow_recall] run failed: %s", type(exc).__name__, exc_info=True)
         base.update({"status": "error", "timeout_reason": type(exc).__name__[:64]})
         return base
+
+
+def finalize_shadow_recall(
+    result: dict[str, Any], *, scope: MemoryScope, old_results: Iterable[Any] = (),
+    old_ids: Iterable[Any] = (), old_chars: int = 0,
+) -> dict[str, Any]:
+    finalized = dict(result)
+    finalized["old_chars"] = max(0, int(old_chars))
+    finalized["old_tokens"] = (finalized["old_chars"] + 3) // 4
+    if finalized.get("status") == "ok":
+        return compare_legacy_results(
+            finalized, list(old_results) or list(old_ids), scope=scope,
+        )
+    finalized.pop("new_event_turns", None)
+    return finalized
+
+
+async def run_shadow_recall(
+    scope: MemoryScope,
+    query: str,
+    *,
+    old_ids: Iterable[Any] = (),
+    old_results: Iterable[Any] = (),
+    old_chars: int = 0,
+    occurred_after: float | None = None,
+    occurred_before: float | None = None,
+    settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compatibility wrapper for direct callers."""
+    result = await run_shadow_query(
+        scope, query, old_chars=old_chars, occurred_after=occurred_after,
+        occurred_before=occurred_before, settings=settings,
+    )
+    return finalize_shadow_recall(
+        result, scope=scope, old_results=old_results, old_ids=old_ids,
+        old_chars=old_chars,
+    )

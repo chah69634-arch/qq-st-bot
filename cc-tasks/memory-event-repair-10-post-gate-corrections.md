@@ -3,7 +3,7 @@
 > 严重度：critical / high
 > 施工方式：单张原子工单，一次完成；内部按阻断顺序施工，不拆成互相覆盖的临时补丁
 > 依赖：MER-01 至 MER-09 当前实现
-> 状态：open
+> 状态：completed
 
 ## 一、背景与目标
 
@@ -212,18 +212,18 @@ pytest -n auto tests/test_memory_event_repairs.py tests/test_memory_event_read_t
 
 ## 六、最终验收闸门
 
-- [ ] 正式 `event_log.search`、trace 和 prompt 不再出现 isolated source 正文。
-- [ ] migration 同 ID 不同 source 稳定计 conflict，dry-run 数字来自现有 ledger 只读对比。
-- [ ] dry-run 零写入，apply 仍需已验证备份且冲突不推进。
-- [ ] storyline 真正消费 current/legacy union，旧 cursor 和同日 append 均不漏不重。
-- [ ] storyline 空过滤批次和失败状态均可观测，cursor/inbox/node 原子语义不回归。
-- [ ] shadow 与旧召回并行、只比较一次，timeout worker/slot 有界释放。
-- [ ] proposer 的读取和写入两端均拒绝 isolated source。
-- [ ] shadow/proposer 默认关闭，角色工具/admin/Dream/Stage 边界保持原合同。
-- [ ] 相关 focused tests 使用 `pytest -n auto` 通过。
-- [ ] `git diff --check` 通过，工作树无本系列 untracked/运行数据文件。
-- [ ] 文档、known issues、接口总账、管理面观测与代码一致。
-- [ ] 单独 Git commit 完成后，MER-09/MER-10 状态才可同时改为 completed。
+- [x] 正式 `event_log.search`、trace 和 prompt 不再出现 isolated source 正文。
+- [x] migration 同 ID 不同 source 稳定计 conflict，dry-run 数字来自现有 ledger 只读对比。
+- [x] dry-run 零写入，apply 仍需已验证备份且冲突不推进。
+- [x] storyline 真正消费 current/legacy union，旧 cursor 和同日 append 均不漏不重。
+- [x] storyline 空过滤批次和失败状态均可观测，cursor/inbox/node 原子语义不回归。
+- [x] shadow 与旧召回并行、只比较一次，timeout worker/slot 有界释放。
+- [x] proposer 的读取和写入两端均拒绝 isolated source。
+- [x] shadow/proposer 默认关闭，角色工具/admin/Dream/Stage 边界保持原合同。
+- [x] 相关 focused tests 使用 `pytest -n auto` 通过。
+- [x] `git diff --check` 通过，工作树无本系列 untracked/运行数据文件。
+- [x] 文档、known issues、接口总账、管理面观测与代码一致。
+- [x] 单独 Git commit 完成后，MER-09/MER-10 状态才可同时改为 completed。
 
 ---
 

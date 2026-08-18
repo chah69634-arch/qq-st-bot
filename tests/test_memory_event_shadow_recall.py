@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 
 from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
@@ -75,6 +76,7 @@ def test_shadow_recall_collects_scoped_ids_and_metrics(sandbox):
     assert result["old_unmapped_count"] == 0
     assert result["turn_overlap_rate"] == 0.0
     assert result["scope_rejections"] == 0
+    assert result["sqlite_timeout_ms"] < result["timeout_ms"]
     assert "evidence about topic" not in json.dumps({k: result[k] for k in result if k.endswith("ids")})
 
 
@@ -148,11 +150,13 @@ def test_shadow_trace_observability_omits_query_text(sandbox):
             "old_chars": 20, "old_tokens": 5, "overlap_rate": 0.25,
             "scope_rejections": 0, "truncation_reason": "", "timeout_reason": "",
             "elapsed_ms": 1,
+            "timeout_ms": 120, "sqlite_timeout_ms": 40,
         },
     })
     result = asyncio.run(memory_event_shadow_recall(uid, TEST_CHAR_ID, _auth=None))
     assert result["status_counts"] == {"ok": 1}
     assert result["records"][0]["new_event_ids"] == ["shadow-event-1", "shadow-event-2"]
+    assert result["records"][0]["sqlite_timeout_ms"] == 40
     assert "query" not in result["records"][0]
 
 
@@ -211,3 +215,25 @@ def test_shadow_turn_in_ledger_but_not_new_recall_is_mapped_and_omitted(sandbox)
                                       [{"turn_id": "omitted"}], scope=scope)
     assert compared["old_mapped_count"] == 1
     assert compared["omitted_event_count"] == 1
+
+
+def test_shadow_runs_different_scopes_in_parallel(monkeypatch):
+    from core.memory import event_shadow_recall
+
+    barrier = threading.Barrier(2, timeout=1.0)
+
+    def concurrent_search(*_args, **_kwargs):
+        barrier.wait()
+        return {"items": [], "next_cursor": "", "truncation_reason": ""}
+
+    monkeypatch.setattr(event_shadow_recall.event_query, "search", concurrent_search)
+
+    async def run_both():
+        cfg = {"enabled": True, "timeout_ms": 300, "max_related_per_seed": 0}
+        return await asyncio.gather(
+            event_shadow_recall.run_shadow_query(_scope("shadow-parallel-a"), "topic", settings=cfg),
+            event_shadow_recall.run_shadow_query(_scope("shadow-parallel-b"), "topic", settings=cfg),
+        )
+
+    results = asyncio.run(run_both())
+    assert [result["status"] for result in results] == ["ok", "ok"]

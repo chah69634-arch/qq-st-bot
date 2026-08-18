@@ -36,8 +36,6 @@ _MAX_FILES_PER_RUN = 3
 _MAX_SALVAGED_DATES = 60
 
 _DAY_FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
-_SOURCE_RE = re.compile(r"\bsource:(\S+)")
-
 _SALVAGE_SYSTEM_PROMPT = """\
 你是一个信息抢救分析器。下面是一天完整的对话日志，这天的记录即将过期归档。
 请只提取其中【仍然为真的持久事实】：明确的偏好、身份信息、生活状态、承诺。
@@ -157,18 +155,15 @@ def _mark_salvaged(uid: str, date_str: str, *, char_id: str) -> None:
 def _block_has_source(block_lines: list) -> bool:
     """块的 meta 行（`> ...`）是否带非空 source: 标记（web/dream_echo/coplay）。
     Brief 79 §2：这类块来自被固化链隔离的外部信息回流，不得进入抢救 LLM 输入。"""
-    for line in block_lines:
-        s = line.strip()
-        if s.startswith(">") and _SOURCE_RE.search(s):
-            return True
-    return False
+    from core.memory.event_log_source import block_is_recallable
+    return not block_is_recallable(block_lines)
 
 
 def _filter_salvageable_text(raw_text: str) -> tuple[str, int]:
     """按块过滤掉带 source 标记的内容，返回 (过滤后文本, 跳过块数)。"""
-    from core.memory.event_log import _split_blocks
+    from core.memory.event_log_source import split_blocks
 
-    blocks = _split_blocks(raw_text)
+    blocks = split_blocks(raw_text)
     kept = [b for b in blocks if not _block_has_source(b)]
     skipped = len(blocks) - len(kept)
     filtered_text = "\n".join("\n".join(b) for b in kept)

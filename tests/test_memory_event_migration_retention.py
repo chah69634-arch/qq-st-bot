@@ -184,6 +184,56 @@ def test_migration_default_scans_current_and_legacy_with_inventory_only_assets(s
     assert plan["artifacts"]["episodic"]["current_items"] == 0
 
 
+def test_migration_same_identity_different_source_is_conflict_and_order_stable(sandbox):
+    from core.memory import event_migration
+
+    current = _scope("migration-source-conflict")
+    current_dir = event_migration.current_event_log_dir(current)
+    legacy_dir = event_migration.legacy_event_log_dir(current)
+    current_dir.mkdir(parents=True, exist_ok=True)
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    body = "## 10:00\n**用户**：same event\n> speaker:user turn_id:same-turn\n---\n"
+    (current_dir / "2026-08-06.md").write_text(body, encoding="utf-8")
+    (legacy_dir / "2026-08-06.md").write_text(
+        body.replace("turn_id:same-turn", "turn_id:same-turn source:web"), encoding="utf-8",
+    )
+    first = event_migration.scan_legacy(current)
+    second = event_migration.scan_legacy(current)
+    assert first["plan_conflict"] == second["plan_conflict"] == 1
+    assert first["conflict"] == second["conflict"] == 1
+    assert first["would_write"] == second["would_write"] == 0
+
+
+def test_migration_dry_run_reports_schema_mismatch_without_would_write(sandbox, tmp_path, monkeypatch):
+    from core.memory import event_migration
+
+    root = _legacy_log(tmp_path / "migration-schema-root")
+    scope = _scope("migration-schema-mismatch")
+    monkeypatch.setattr(
+        event_migration.event_store, "migration_evidence_status",
+        lambda *_args, **_kwargs: ("schema_mismatch", None),
+    )
+    plan = event_migration.scan_legacy(scope, source_dir=root)
+    assert plan["comparison_status"] == "schema_mismatch"
+    assert plan["would_write"] == 0
+    assert plan["ledger_classifications"][plan["entries"][0].event_id] == "schema_mismatch"
+
+
+def test_migration_locked_status_is_explicit_and_does_not_advance(sandbox, tmp_path, monkeypatch):
+    from core.memory import event_migration
+
+    scope = _scope("migration-locked")
+    plan = event_migration.scan_legacy(scope, source_dir=_legacy_log(tmp_path / "locked"))
+    monkeypatch.setattr(
+        event_migration.event_store, "migration_evidence_status",
+        lambda *_args, **_kwargs: ("locked", None),
+    )
+    result = event_migration.apply_batch(scope, plan, batch_size=10, backup={"verified": True})
+    assert result["status"] == "paused"
+    assert result["next_offset"] == 0
+    assert result["last_error"] == "locked"
+
+
 def test_migration_status_retains_content_free_sources_and_inventory(sandbox, tmp_path):
     from core.memory import event_migration
 

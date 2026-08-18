@@ -507,7 +507,7 @@ def test_recall_policy_none_skips_event_shadow_recall(
         calls.append((args, kwargs))
         return {"enabled": True, "status": "ok"}
 
-    monkeypatch.setattr(_shadow, "run_shadow_recall", _shadow_spy)
+    monkeypatch.setattr(_shadow, "run_shadow_query", _shadow_spy)
     asyncio.run(pipeline.fetch_context(user_id="u1", content="今天", recall_policy="none"))
 
     assert calls == []
@@ -535,7 +535,7 @@ def test_event_shadow_trace_stays_out_of_fetch_context_result(
             "truncation_reason": "", "timeout_reason": "",
         }
 
-    monkeypatch.setattr(_shadow, "run_shadow_recall", _shadow_spy)
+    monkeypatch.setattr(_shadow, "run_shadow_query", _shadow_spy)
     monkeypatch.setattr(_trace, "write_trace", lambda _uid, _char_id, record: traces.append(record))
     context = asyncio.run(pipeline.fetch_context(user_id="u1", content="具体话题"))
 

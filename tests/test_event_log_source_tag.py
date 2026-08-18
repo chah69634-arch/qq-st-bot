@@ -7,6 +7,7 @@ tests/test_event_log_source_tag.py — Brief 79 §1 event_log 来源标记
   3. fixation_pipeline.capture_turn(source=...) 透传给 event_log.append。
 """
 from __future__ import annotations
+import asyncio
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from core.memory import event_log
@@ -59,3 +60,43 @@ def test_capture_turn_forwards_source_to_event_log(sandbox):
 
     text = _day_text(sandbox, uid)
     assert "source:coplay" in text
+
+
+def test_search_filters_isolated_and_unknown_blocks_before_scoring(sandbox):
+    uid = "event-log-source-search"
+    event_log.append(uid, "user", "ordinary-anchor", char_id=TEST_CHAR_ID)
+    event_log.append(uid, "assistant", "ordinary-answer", char_id=TEST_CHAR_ID)
+    event_log.append(uid, "user", "web-secret-anchor", char_id=TEST_CHAR_ID, source="web")
+    event_log.append(uid, "assistant", "web-secret-answer", char_id=TEST_CHAR_ID, source="web")
+    event_log.append(uid, "user", "unknown-secret-anchor", char_id=TEST_CHAR_ID, source="unregistered")
+
+    ordinary, ordinary_trace = asyncio.run(event_log.search(
+        uid, "ordinary-anchor", char_id=TEST_CHAR_ID, return_trace=True,
+    ))
+    isolated, isolated_trace = asyncio.run(event_log.search(
+        uid, "web-secret-anchor", char_id=TEST_CHAR_ID, return_trace=True,
+    ))
+    unknown, unknown_trace = asyncio.run(event_log.search(
+        uid, "unknown-secret-anchor", char_id=TEST_CHAR_ID, return_trace=True,
+    ))
+
+    assert "ordinary-anchor" in ordinary
+    assert ordinary_trace
+    assert "web-secret" not in isolated and isolated_trace == []
+    assert "unknown-secret" not in unknown and unknown_trace == []
+
+
+def test_old_event_log_vector_blob_cannot_boost_ranking(sandbox, monkeypatch):
+    uid = "event-log-old-vector"
+    event_log.append(uid, "user", "unrelated ordinary text", char_id=TEST_CHAR_ID)
+
+    async def old_blob(*_args, **_kwargs):
+        return [(f"recent:{uid}", 0.0, 1.0)]
+
+    monkeypatch.setattr("core.memory.vector_store.query_async", old_blob)
+    result, trace = asyncio.run(event_log.search(
+        uid, "missing semantic target", char_id=TEST_CHAR_ID,
+        return_trace=True, query_vec=[1.0],
+    ))
+    assert result == ""
+    assert trace == []

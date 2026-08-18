@@ -1866,3 +1866,36 @@ already-consumed inputs and cannot duplicate nodes.
 Default source-policy observability reports
 `policy_filtered_query_count`, the number of queries that applied the policy.
 The deprecated `rejected` field remains zero and is not an event count.
+
+# Memory Event MER-10 post-gate corrections (Brief 215)
+
+Legacy Markdown recall, salvage, and storyline aggregation share
+`core.memory.event_log_source`. Blocks with `web`, `dream_echo`, `coplay`, or
+an unrecognized explicit source are removed before keyword scoring, trace
+construction, prompt rendering, or consolidation. Event-log vector rebuilds
+index only filtered text under the `recent-safe-v2:` identity; older shared
+blobs are ignored by recall scoring.
+
+Migration dry-run performs a short-budget, read-only comparison against an
+existing ledger and never creates SQLite or state files. Plan duplicates and
+conflicts are distinct from ledger duplicates and conflicts. State version 3
+resets v2 offsets, and `locked`, `busy`, and `schema_mismatch` remain explicit
+indeterminate outcomes with `would_write=0`. Apply still requires a verified
+offline backup, rechecks each event, and never advances past a conflict.
+
+Storyline event-log cursor version 3 keeps independent canonical and legacy
+`{day, offset}` checkpoints. Stable block receipts filter conservative v1/v2
+rescans before LLM input. An isolated-only scan atomically advances only these
+checkpoints without invoking the LLM; model, validation, commit, and inbox
+cleanup failures persist content-free aggregation status without weakening
+the existing receipt-based retry contract. The admin projection exposes only
+cursor version, checkpoint summaries, inbox/receipt counts, and aggregation
+status.
+
+Shadow ledger reads start alongside legacy recall, use a four-worker bounded
+executor, serialize only the same scope, and set SQLite busy timeout below the
+wall-clock budget. Raw event-to-turn mappings survive until one final legacy
+comparison. The proposer first selects event IDs and sources, filters isolated
+events before projecting text, and validates both proposal endpoints again at
+write time. Shadow recall and edge proposal generation remain disabled by
+default and do not enter the Reality prompt.

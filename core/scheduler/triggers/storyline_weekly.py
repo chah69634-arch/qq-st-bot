@@ -184,7 +184,9 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
     data = sl.load(uid, char_id=char_id)
     meta = data["meta"]
     last_aggregated_at = float(meta.get("last_aggregated_at") or 0.0)
-    cursor = meta.get("event_log_cursor") or {"version": sl.CURSOR_VERSION, "day": "", "offset": 0}
+    cursor = meta.get("event_log_cursor") or {"version": sl.CURSOR_VERSION, "sources": {
+        "canonical": {"day": "", "offset": 0}, "legacy": {"day": "", "offset": 0},
+    }}
     consumed = set(meta.get("consumed_material_ids") or [])
 
     # 输入 1：上次聚合后新增的 episodic（含已被 identity 固化的）
@@ -203,16 +205,29 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
             raw_inbox_entries = sl.load_inbox(uid, char_id=char_id)
         except OSError:
             logger.warning("[storyline_weekly] receipt cleanup retry deferred uid=%s char=%s", uid, char_id)
+            try:
+                sl.record_failure(uid, char_id=char_id, code="inbox_cleanup_failed", stage="cleanup")
+            except Exception:
+                pass
     inbox_entries = [
         entry for entry in raw_inbox_entries
         if sl.stable_material_id("inbox", entry) not in consumed
     ]
 
     # 输入 3：event_log 自 cursor 以来的日文件，过滤 source: 非空块
-    event_log_text, next_cursor, event_material_ids = _collect_event_log_since(uid, char_id, cursor)
-    event_material_ids = [value for value in event_material_ids if value not in consumed]
+    event_log_text, next_cursor, event_material_ids = _collect_event_log_since(
+        uid, char_id, cursor, consumed_ids=consumed,
+    )
 
     if not new_episodes and not inbox_entries and not event_log_text.strip():
+        if next_cursor != cursor:
+            try:
+                sl.commit_batch(
+                    uid, data, char_id=char_id, last_aggregated_at=last_aggregated_at,
+                    event_log_cursor=next_cursor, consumed_material_ids=[],
+                )
+            except Exception:
+                logger.warning("[storyline_weekly] empty checkpoint failed uid=%s char=%s", uid, char_id)
         return 0  # 无新素材，幂等 no-op，不调用 LLM
 
     materials = _build_materials(new_episodes, inbox_entries)
@@ -255,6 +270,10 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
             "[storyline_weekly] LLM 输出不合法，本轮放弃不动 cursor uid=%s char=%s err=%s",
             uid, char_id, e,
         )
+        try:
+            sl.record_failure(uid, char_id=char_id, code="invalid_llm_output", stage="llm")
+        except Exception:
+            pass
         return 0
 
     material_map = {item["material_id"]: item["source_event_ids"] for item in materials}
@@ -263,24 +282,44 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
             "[storyline_weekly] LLM 返回非法 material ID，本轮不动 cursor uid=%s char=%s",
             uid, char_id,
         )
+        try:
+            sl.record_failure(uid, char_id=char_id, code="invalid_material_ids", stage="validation")
+        except Exception:
+            pass
         return 0
     try:
         planned, applied = _plan_ops(data, ops, material_sources=material_map)
     except ValueError as exc:
         logger.error("[storyline_weekly] batch rejected uid=%s char=%s code=%s", uid, char_id, exc)
+        try:
+            sl.record_failure(uid, char_id=char_id, code=str(exc), stage="validation")
+        except Exception:
+            pass
         return 0
 
     now = time.time()
     consumed_ids = [item["material_id"] for item in materials] + event_material_ids
-    sl.commit_batch(
-        uid, planned, char_id=char_id, last_aggregated_at=now,
-        event_log_cursor=next_cursor, consumed_material_ids=consumed_ids,
-    )
+    try:
+        sl.commit_batch(
+            uid, planned, char_id=char_id, last_aggregated_at=now,
+            event_log_cursor=next_cursor, consumed_material_ids=consumed_ids,
+        )
+    except Exception:
+        logger.exception("[storyline_weekly] batch commit failed uid=%s char=%s", uid, char_id)
+        try:
+            sl.record_failure(uid, char_id=char_id, code="storyline_write_failed", stage="commit")
+        except Exception:
+            pass
+        return 0
     if inbox_entries:
         try:
             sl.clear_consumed_inbox(uid, set(consumed_ids), char_id=char_id)
         except OSError:
             logger.warning("[storyline_weekly] inbox cleanup deferred uid=%s char=%s", uid, char_id)
+            try:
+                sl.record_failure(uid, char_id=char_id, code="inbox_cleanup_failed", stage="cleanup")
+            except Exception:
+                pass
 
     logger.info(
         "[storyline_weekly] 聚合完成 uid=%s char=%s ops=%d/%d episodes=%d inbox=%d",
@@ -380,41 +419,72 @@ def _plan_ops(data: dict, ops: list, *, material_sources: dict[str, list[str]] |
     return planned, len(ops)
 
 
-def _collect_event_log_since(uid: str, char_id: str, cursor: object) -> tuple[str, dict, list[str]]:
-    """读取 cursor 之后（不含）的 event_log 日文件，过滤 source: 非空块。
-    返回 (拼接后的过滤文本, 处理到的最新日期字符串)——latest 为空表示无新日文件。"""
-    from core.memory.event_log import list_days
+def _collect_event_log_since(
+    uid: str, char_id: str, cursor: object, *, consumed_ids: set[str] | None = None,
+) -> tuple[str, dict, list[str]]:
+    """Read canonical and legacy files with independent physical checkpoints."""
+    from core.memory.event_log import _block_key
+    from core.memory.event_log_source import block_is_recallable, split_blocks
     from core.memory.path_resolver import resolve_path
     from core.memory.scope import MemoryScope
-    from core.scheduler.triggers.event_log_salvage import _filter_salvageable_text
+    from core.sandbox import get_paths
 
     legacy_day = cursor if isinstance(cursor, str) else ""
-    cursor_day = str(cursor.get("day") or "") if isinstance(cursor, dict) and cursor.get("version") == 2 else legacy_day
-    cursor_offset = int(cursor.get("offset") or 0) if isinstance(cursor, dict) and cursor.get("version") == 2 else 0
-    days = sorted(d for d in list_days(uid, char_id=char_id) if d >= cursor_day)
-    if not days:
-        return "", {"version": 2, "day": cursor_day, "offset": cursor_offset}, []
-
+    v2_day = str(cursor.get("day") or "") if isinstance(cursor, dict) and cursor.get("version") == 2 else legacy_day
+    v2_offset = int(cursor.get("offset") or 0) if isinstance(cursor, dict) and cursor.get("version") == 2 else 0
+    checkpoints = (cursor.get("sources") or {}) if isinstance(cursor, dict) and cursor.get("version") == 3 else {
+        "canonical": {"day": v2_day, "offset": v2_offset},
+        "legacy": {"day": v2_day, "offset": 0},
+    }
     scope = MemoryScope.reality_scope(uid, char_id)
-    log_dir = resolve_path(scope, "event_log")
-    parts = []
+    directories = {
+        "canonical": resolve_path(scope, "event_log"),
+        "legacy": get_paths()._p("event_log") / uid,
+    }
+    consumed_ids = consumed_ids or set()
+    parts: list[str] = []
     material_ids: list[str] = []
-    next_cursor = {"version": 2, "day": cursor_day, "offset": cursor_offset}
-    for date_str in days:
-        day_file = log_dir / f"{date_str}.md"
-        if not day_file.exists():
-            continue
-        try:
-            raw_bytes = day_file.read_bytes()
-        except OSError:
-            continue
-        start = cursor_offset if date_str == cursor_day and cursor_offset <= len(raw_bytes) else 0
-        raw = raw_bytes[start:].decode("utf-8", errors="ignore")
-        filtered, _skipped = _filter_salvageable_text(raw)
-        if filtered.strip():
-            parts.append(f"[{date_str}]\n{filtered}")
-            for block in (value.strip() for value in filtered.split("---") if value.strip()):
-                material_ids.append(f"eventlog:{hashlib.sha256((date_str + ':' + block).encode()).hexdigest()[:24]}")
-        next_cursor = {"version": 2, "day": date_str, "offset": len(raw_bytes)}
-
-    return "\n\n".join(parts), next_cursor, material_ids
+    next_sources: dict[str, dict[str, object]] = {}
+    seen_keys: set[str] = set()
+    for source_name, directory in directories.items():
+        checkpoint = checkpoints.get(source_name) or {"day": "", "offset": 0}
+        start_day = str(checkpoint.get("day") or "")
+        start_offset = int(checkpoint.get("offset") or 0)
+        next_checkpoint: dict[str, object] = {"day": start_day, "offset": start_offset}
+        files = sorted(directory.glob("????-??-??.md")) if directory.is_dir() else []
+        for day_file in files:
+            day = day_file.stem
+            if day < start_day:
+                continue
+            try:
+                raw_bytes = day_file.read_bytes()
+            except OSError:
+                continue
+            offset = start_offset if day == start_day and start_offset <= len(raw_bytes) else 0
+            raw = raw_bytes[offset:].decode("utf-8", errors="ignore")
+            kept: list[str] = []
+            for block in split_blocks(raw):
+                if not block_is_recallable(block):
+                    continue
+                block_key = _block_key(block)
+                material_id = f"eventlog:{hashlib.sha256((day + ':' + block_key).encode()).hexdigest()[:24]}"
+                legacy_material_id = f"eventlog:{hashlib.sha256((day + ':' + '\n'.join(block).strip()).encode()).hexdigest()[:24]}"
+                if (
+                    not block_key
+                    or block_key in seen_keys
+                    or material_id in consumed_ids
+                    or legacy_material_id in consumed_ids
+                ):
+                    continue
+                seen_keys.add(block_key)
+                kept.append("\n".join(block))
+                material_ids.append(material_id)
+            if kept:
+                parts.append(f"[{day}/{source_name}]\n" + "\n".join(kept))
+            next_checkpoint = {"day": day, "offset": len(raw_bytes)}
+        next_sources[source_name] = next_checkpoint
+    canonical = next_sources["canonical"]
+    return "\n\n".join(parts), {
+        "version": 3, "sources": next_sources,
+        "day": canonical["day"], "offset": canonical["offset"],
+    }, material_ids

@@ -202,7 +202,7 @@ async def memory_event_shadow_recall(
                             "new_turn_count", "extra_event_count", "omitted_event_count",
                             "comparison_scope_rejections",
                             "scope_rejections", "truncation_reason", "timeout_reason",
-                            "elapsed_ms",
+                            "elapsed_ms", "timeout_ms", "sqlite_timeout_ms",
                         )
                     })
         except Exception:

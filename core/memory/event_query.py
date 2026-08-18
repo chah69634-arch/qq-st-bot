@@ -40,7 +40,7 @@ def _path(scope: MemoryScope) -> Path:
         raise EventQueryError("invalid_scope") from exc
 
 
-def _connect(scope: MemoryScope) -> tuple[Path, sqlite3.Connection] | None:
+def _connect(scope: MemoryScope, *, busy_timeout_ms: int = 5000) -> tuple[Path, sqlite3.Connection] | None:
     path = _path(scope)
     if not path.exists():
         return None
@@ -48,10 +48,10 @@ def _connect(scope: MemoryScope) -> tuple[Path, sqlite3.Connection] | None:
         connection = sqlite3.connect(
             f"{path.resolve().as_uri()}?mode=ro",
             uri=True,
-            timeout=5.0,
+            timeout=max(0.001, busy_timeout_ms / 1000.0),
             check_same_thread=False,
         )
-        connection.execute("PRAGMA busy_timeout=5000")
+        connection.execute(f"PRAGMA busy_timeout={max(1, int(busy_timeout_ms))}")
         connection.execute("PRAGMA query_only=ON")
         connection.row_factory = sqlite3.Row
         version = int(connection.execute("PRAGMA user_version").fetchone()[0])
@@ -208,8 +208,9 @@ def window(
     after: int,
     source: str = "",
     include_isolated: bool = False,
+    busy_timeout_ms: int = 5000,
 ) -> dict[str, Any] | None:
-    opened = _connect(scope)
+    opened = _connect(scope, busy_timeout_ms=busy_timeout_ms)
     if opened is None:
         return None
     path, connection = opened
@@ -283,12 +284,13 @@ def related(
     relation_types: set[str] | None = None,
     source: str = "",
     include_isolated: bool = False,
+    busy_timeout_ms: int = 5000,
 ) -> dict[str, Any] | None:
     decoded = _decode_cursor(cursor, "related", event_id)
     edge_after = int(decoded.get("edge_id", 0)) if decoded else 0
     if edge_after < 0:
         raise EventQueryError("invalid_cursor")
-    opened = _connect(scope)
+    opened = _connect(scope, busy_timeout_ms=busy_timeout_ms)
     if opened is None:
         return None
     path, connection = opened
@@ -403,6 +405,7 @@ def search(
     cursor: str,
     limit: int,
     order: str = "asc",
+    busy_timeout_ms: int = 5000,
 ) -> dict[str, Any]:
     if order not in {"asc", "desc"} or (order == "desc" and cursor):
         raise EventQueryError("invalid_cursor")
@@ -442,7 +445,7 @@ def search(
             raise EventQueryError("invalid_cursor") from None
         where.append("(occurred_at > ? OR (occurred_at = ? AND (seq > ? OR (seq = ? AND event_id > ?))))")
         params.extend([occurred_at, occurred_at, seq, seq, event_id])
-    opened = _connect(scope)
+    opened = _connect(scope, busy_timeout_ms=busy_timeout_ms)
     if opened is None:
         return {"items": [], "next_cursor": "", "truncation_reason": ""}
     path, connection = opened

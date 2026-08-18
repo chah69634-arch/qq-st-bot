@@ -263,11 +263,13 @@ async def rebuild(uid: str, char_id: str) -> int:
             count += 1
 
         from core.memory.event_log import get_recent_days as _get_recent
+        from core.memory.event_log_source import filter_recallable_text
         import time as _time
         recent_text = _get_recent(uid, days=30, char_id=char_id)
+        recent_text, _source_filtered = filter_recallable_text(recent_text)
         if recent_text:
             await upsert(
-                uid, char_id, "event_log", f"recent_{uid}",
+                uid, char_id, "event_log", f"recent-safe-v2:{uid}",
                 _time.time(), recent_text[:2000],
             )
             count += 1

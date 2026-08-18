@@ -31,7 +31,7 @@ _TURN_RE = re.compile(r"\bturn_id:([^\s]+)")
 _SOURCE_RE = re.compile(r"\bsource:([^\s]+)")
 _TRIGGER_RE = re.compile(r"\btrigger:([^\s]+)")
 _ALLOWED_SOURCES = frozenset({"", "web", "dream_echo", "coplay", "legacy_migration"})
-STATE_VERSION = 2
+STATE_VERSION = 3
 _LEGACY_ARTIFACTS = (
     ("short_term", "history", "history"),
     ("mid_term", "mid_term", "mid_term"),
@@ -121,7 +121,8 @@ def migration_status(scope: MemoryScope) -> dict[str, Any]:
         "parsed", "malformed", "legacy_unknown", "duplicate", "conflict",
         "written", "failed", "backup", "updated_at", "last_error", "sources",
         "artifacts", "already_live", "would_write", "source_isolated",
-        "unknown_source", "assistant_trigger_unknown_time",
+        "unknown_source", "assistant_trigger_unknown_time", "plan_duplicate",
+        "plan_conflict", "ledger_duplicate", "ledger_conflict", "comparison_status",
     }
     return {key: state[key] for key in allowed if key in state}
 
@@ -266,33 +267,28 @@ def _event_log_sources(scope: MemoryScope, source_dir: Path | None) -> list[tupl
     return [("current", current_event_log_dir(scope)), ("legacy", legacy_event_log_dir(scope))]
 
 
-def _deduplicate_entries(entries: list[MigrationEntry]) -> tuple[list[MigrationEntry], int, int]:
+def _entry_identity(entry: MigrationEntry) -> tuple[Any, ...]:
+    return (
+        entry.turn_id, entry.actor, entry.source, entry.text, entry.seq,
+        entry.occurred_at, entry.kind, entry.unknown_time, entry.unknown_source,
+    )
+
+
+def _deduplicate_entries(entries: list[MigrationEntry]) -> tuple[list[MigrationEntry], int, int, set[str]]:
     """Keep the first deterministic event ID and classify duplicate/conflict plans."""
     unique: dict[str, MigrationEntry] = {}
     duplicate = conflict = 0
+    conflicted: set[str] = set()
     for entry in entries:
         existing = unique.get(entry.event_id)
         if existing is None:
             unique[entry.event_id] = entry
-        elif (
-            existing.kind,
-            existing.actor,
-            existing.text,
-            existing.turn_id,
-            existing.seq,
-            existing.occurred_at,
-        ) == (
-            entry.kind,
-            entry.actor,
-            entry.text,
-            entry.turn_id,
-            entry.seq,
-            entry.occurred_at,
-        ):
+        elif _entry_identity(existing) == _entry_identity(entry):
             duplicate += 1
         else:
             conflict += 1
-    return list(unique.values()), duplicate, conflict
+            conflicted.add(entry.event_id)
+    return list(unique.values()), duplicate, conflict, conflicted
 
 
 def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[str, Any]:
@@ -320,7 +316,7 @@ def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[s
             source_counts[source_kind] += len(file_entries)
             parsed += file_parsed
             malformed += file_malformed
-    entries, duplicate, conflict = _deduplicate_entries(entries)
+    entries, plan_duplicate, plan_conflict, conflicted_event_ids = _deduplicate_entries(entries)
     parsed = sum(1 for entry in entries if entry.kind == "legacy_message")
     malformed = sum(1 for entry in entries if entry.kind == "legacy_unknown")
     artifacts: dict[str, dict[str, int | bool | str]] = {}
@@ -336,16 +332,66 @@ def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[s
             "legacy_items": legacy_count,
             "malformed": current_invalid + legacy_invalid,
         }
+    already_live = ledger_duplicate = ledger_conflict = 0
+    would_write = 0
+    comparison_status = "missing_ledger"
+    indeterminate = False
+    ledger_classifications: dict[str, str] = {}
+    for entry in entries:
+        if entry.event_id in conflicted_event_ids:
+            continue
+        status, existing = event_store.migration_evidence_status(scope, entry.event_id)
+        if status in {"missing_ledger", "not_found"}:
+            ledger_classifications[entry.event_id] = "would_write"
+            comparison_status = "ok" if status == "not_found" else comparison_status
+            would_write += 1
+            continue
+        if status != "ok" or existing is None:
+            ledger_classifications[entry.event_id] = status
+            comparison_status = status
+            indeterminate = True
+            continue
+        comparison_status = "ok"
+        expected = entry.event()
+        same = (
+            existing["turn_id"] == expected["turn_id"]
+            and existing["actor"] == expected["actor"]
+            and existing["source"] == expected["source"]
+            and existing["text_fingerprint"] == event_store.safe_text_fingerprint(expected)
+        )
+        live_equivalent = (
+            expected["source"] == "legacy_migration"
+            and existing["source"] not in {"legacy_migration", "web", "dream_echo", "coplay", "legacy_unknown"}
+            and existing["turn_id"] == expected["turn_id"]
+            and existing["actor"] == expected["actor"]
+            and existing["text_fingerprint"] == event_store.safe_text_fingerprint(expected)
+        )
+        if live_equivalent:
+            ledger_classifications[entry.event_id] = "already_live"
+            already_live += 1
+        elif same:
+            ledger_classifications[entry.event_id] = "duplicate"
+            ledger_duplicate += 1
+        else:
+            ledger_classifications[entry.event_id] = "conflict"
+            ledger_conflict += 1
     return {
         "entries": entries,
         "total": len(entries),
         "parsed": parsed,
         "malformed": malformed,
         "legacy_unknown": malformed,
-        "duplicate": duplicate,
-        "conflict": conflict,
-        "already_live": 0,
-        "would_write": len(entries),
+        "duplicate": plan_duplicate + ledger_duplicate,
+        "conflict": plan_conflict + ledger_conflict,
+        "plan_duplicate": plan_duplicate,
+        "plan_conflict": plan_conflict,
+        "ledger_duplicate": ledger_duplicate,
+        "ledger_conflict": ledger_conflict,
+        "already_live": already_live,
+        "would_write": 0 if indeterminate else would_write,
+        "comparison_status": comparison_status,
+        "conflicted_event_ids": conflicted_event_ids,
+        "ledger_classifications": ledger_classifications,
         "source_isolated": sum(entry.source in {"web", "dream_echo", "coplay"} for entry in entries),
         "unknown_source": sum(entry.unknown_source for entry in entries),
         "assistant_trigger_unknown_time": sum(bool(entry.actor == "legacy_unknown" and entry.trigger and entry.unknown_time) for entry in entries),
@@ -384,11 +430,16 @@ def apply_batch(
         "parsed": int(plan["parsed"]),
         "malformed": int(plan["malformed"]),
         "legacy_unknown": int(plan["legacy_unknown"]),
-        "duplicate": int(previous.get("duplicate", 0)) if same_source else int(plan["duplicate"]),
-        "conflict": int(previous.get("conflict", 0)) if same_source else int(plan["conflict"]),
+        "duplicate": int(plan["duplicate"]),
+        "conflict": int(plan["conflict"]),
+        "plan_duplicate": int(plan.get("plan_duplicate", 0)),
+        "plan_conflict": int(plan.get("plan_conflict", 0)),
+        "ledger_duplicate": int(plan.get("ledger_duplicate", 0)),
+        "ledger_conflict": int(plan.get("ledger_conflict", 0)),
+        "comparison_status": str(plan.get("comparison_status") or ""),
         "written": int(previous.get("written", 0)) if same_source else 0,
         "failed": int(previous.get("failed", 0)) if same_source else 0,
-        "already_live": int(previous.get("already_live", 0)) if same_source else 0,
+        "already_live": int(plan.get("already_live", 0)),
         "would_write": int(plan.get("would_write", len(entries))),
         "source_isolated": int(plan.get("source_isolated", 0)),
         "unknown_source": int(plan.get("unknown_source", 0)),
@@ -399,10 +450,18 @@ def apply_batch(
         "last_error": "",
     }
     for index, entry in enumerate(entries[start:start + batch_size], start=start):
-        existing = event_store.migration_evidence(scope, entry.event_id)
+        if entry.event_id in set(plan.get("conflicted_event_ids") or ()):
+            state["last_error"] = "plan_conflict"
+            break
+        evidence_status, existing = event_store.migration_evidence_status(scope, entry.event_id)
+        if evidence_status not in {"ok", "not_found", "missing_ledger"}:
+            state["last_error"] = evidence_status
+            state["failed"] += 1
+            break
         if existing is not None:
             expected = entry.event()
             from core.memory.source_policy import is_isolated
+            planned_classification = (plan.get("ledger_classifications") or {}).get(entry.event_id)
             source_matches = (
                 existing["source"] == expected["source"]
                 or (expected["source"] == "legacy_migration" and not is_isolated(existing["source"]))
@@ -414,11 +473,20 @@ def apply_batch(
                 and existing["text_fingerprint"] == event_store.safe_text_fingerprint(expected)
             )
             if same_identity:
-                state["already_live"] += 1
-                state["duplicate"] += 1
+                if expected["source"] == "legacy_migration" and existing["source"] != "legacy_migration":
+                    if planned_classification != "already_live":
+                        state["already_live"] += 1
+                        state["would_write"] = max(0, state["would_write"] - 1)
+                elif planned_classification != "duplicate":
+                    state["duplicate"] += 1
+                    state["ledger_duplicate"] += 1
+                    state["would_write"] = max(0, state["would_write"] - 1)
                 state["next_offset"] = index + 1
                 continue
-            state["conflict"] += 1
+            if planned_classification != "conflict":
+                state["conflict"] += 1
+                state["ledger_conflict"] += 1
+                state["would_write"] = max(0, state["would_write"] - 1)
             state["last_error"] = "conflict"
             break
         result = event_store.append_event(scope, entry.event())

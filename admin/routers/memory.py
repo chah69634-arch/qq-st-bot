@@ -82,14 +82,7 @@ async def get_storyline_state(
     return {
         "user_id": user_id,
         "char_id": resolved,
-        "meta": {
-            "last_aggregated_at": data["meta"].get("last_aggregated_at", 0.0),
-            "event_log_cursor": data["meta"].get("event_log_cursor", {}),
-            "cursor_version": (data["meta"].get("event_log_cursor") or {}).get("version", 1)
-                if isinstance(data["meta"].get("event_log_cursor"), dict) else 1,
-            "consumed_count": len(data["meta"].get("consumed_material_ids") or []),
-            "aggregation": data["meta"].get("aggregation") or {},
-        },
+        "meta": _storyline_meta_projection(data["meta"]),
         "inbox_count": inbox_count,
         "arcs": [
             {
@@ -102,6 +95,27 @@ async def get_storyline_state(
             }
             for a in data["arcs"]
         ],
+    }
+
+
+def _storyline_meta_projection(meta: dict) -> dict:
+    cursor = meta.get("event_log_cursor") or {}
+    version = int(cursor.get("version", 1)) if isinstance(cursor, dict) else 1
+    sources = cursor.get("sources") if isinstance(cursor, dict) else None
+    checkpoints = {}
+    if isinstance(sources, dict):
+        for name in ("canonical", "legacy"):
+            checkpoint = sources.get(name) or {}
+            checkpoints[name] = {
+                "day": str(checkpoint.get("day") or ""),
+                "offset": max(0, int(checkpoint.get("offset") or 0)),
+            }
+    return {
+        "last_aggregated_at": meta.get("last_aggregated_at", 0.0),
+        "cursor_version": version,
+        "event_log_checkpoints": checkpoints,
+        "consumed_count": len(meta.get("consumed_material_ids") or []),
+        "aggregation": meta.get("aggregation") or {},
     }
 
 

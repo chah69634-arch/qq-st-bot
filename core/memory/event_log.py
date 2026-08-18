@@ -130,18 +130,8 @@ def _parse_intensity(block_lines: list) -> int:
 
 def _split_blocks(text: str) -> list:
     """把日志文本按 ## HH:MM 时间块切分，返回 list[list[str]]"""
-    blocks: list = []
-    current: list = []
-    for line in text.splitlines():
-        if line.startswith("## "):
-            if current:
-                blocks.append(current)
-            current = [line]
-        else:
-            current.append(line)
-    if current:
-        blocks.append(current)
-    return blocks
+    from core.memory.event_log_source import split_blocks
+    return split_blocks(text)
 
 
 def _block_key(block_lines: list) -> str:
@@ -368,6 +358,10 @@ async def search(
     )
     if not recent_text:
         return ("", []) if return_trace else ""
+    from core.memory.event_log_source import filter_recallable_text
+    recent_text, _source_filtered = filter_recallable_text(recent_text)
+    if not recent_text.strip():
+        return ("", []) if return_trace else ""
 
     from core.text_match import ngram_tokens
     from core.config_loader import _char_name
@@ -384,7 +378,7 @@ async def search(
             from core.memory import vector_store as _vs
             from core.memory.vector_store import dist_to_sim as _d2s
             _el_hits = await _vs.query_async(user_id, char_id, query_vec, k=1, sources=["event_log"])
-            if _el_hits:
+            if _el_hits and str(_el_hits[0][0]).startswith("recent-safe-v2:"):
                 _el_sem_sim = _d2s(_el_hits[0][1])
         except Exception as _se:
             logger.debug("[event_log.search] semantic lookup failed: %s", _se)

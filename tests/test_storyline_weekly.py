@@ -160,6 +160,98 @@ def test_event_log_cursor_consumes_same_day_append_only_once(sandbox):
     assert cursor2["offset"] > cursor["offset"]
 
 
+def test_event_log_union_reads_canonical_and_legacy_with_independent_checkpoints(sandbox):
+    from core.scheduler.triggers.storyline_weekly import _collect_event_log_since
+
+    uid = "storyline-physical-union"
+    day = datetime.now().strftime("%Y-%m-%d")
+    _write_day_file(
+        sandbox, TEST_CHAR_ID, uid, day,
+        "## 09:00\n**user**: canonical-only\n---\n",
+    )
+    legacy_dir = sandbox._p("event_log") / uid
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    (legacy_dir / f"{day}.md").write_text(
+        "## 10:00\n**user**: legacy-only\n---\n", encoding="utf-8",
+    )
+
+    text, cursor, material_ids = _collect_event_log_since(uid, TEST_CHAR_ID, "")
+    assert "canonical-only" in text and "legacy-only" in text
+    assert cursor["version"] == 3
+    assert cursor["sources"]["canonical"]["offset"] > 0
+    assert cursor["sources"]["legacy"]["offset"] > 0
+    assert len(material_ids) == 2
+
+
+def test_v2_cursor_rescan_is_stopped_by_legacy_receipt(sandbox):
+    import hashlib
+    from core.scheduler.triggers.storyline_weekly import _collect_event_log_since
+
+    uid = "storyline-v2-receipt"
+    day = datetime.now().strftime("%Y-%m-%d")
+    block = "## 09:00\n**user**: already-consumed"
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, day, block + "\n---\n")
+    old_receipt = f"eventlog:{hashlib.sha256((day + ':' + block).encode()).hexdigest()[:24]}"
+
+    text, cursor, material_ids = _collect_event_log_since(
+        uid, TEST_CHAR_ID, {"version": 2, "day": day, "offset": 0},
+        consumed_ids={old_receipt},
+    )
+    assert text == "" and material_ids == []
+    assert cursor["version"] == 3
+    assert cursor["sources"]["canonical"]["offset"] > 0
+
+
+def test_isolated_only_event_log_advances_checkpoint_without_llm(sandbox, fake_llm):
+    from core.memory import storyline as sl
+    from core.scheduler.triggers.storyline_weekly import _aggregate_one
+
+    uid = "storyline-isolated-checkpoint"
+    day = datetime.now().strftime("%Y-%m-%d")
+    _write_day_file(
+        sandbox, TEST_CHAR_ID, uid, day,
+        "## 09:00\n**user**: isolated-body\n> speaker:user source:web\n---\n",
+    )
+    assert asyncio.run(_aggregate_one(TEST_CHAR_ID, uid)) == 0
+    fake_llm.chat.assert_not_awaited()
+    meta = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]
+    assert meta["event_log_cursor"]["version"] == 3
+    assert meta["event_log_cursor"]["sources"]["canonical"]["offset"] > 0
+
+
+def test_invalid_llm_records_content_free_failure_without_cursor_advance(sandbox, fake_llm):
+    from core.memory import storyline as sl
+    from core.scheduler.triggers.storyline_weekly import _aggregate_one
+
+    uid = "storyline-failure-observe"
+    _write_episode(uid, TEST_CHAR_ID, "failure material", ts=time.time())
+    before = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]["event_log_cursor"]
+    fake_llm.chat = AsyncMock(return_value="invalid-json")
+    assert asyncio.run(_aggregate_one(TEST_CHAR_ID, uid)) == 0
+    meta = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]
+    assert meta["event_log_cursor"] == before
+    assert meta["aggregation"]["status"] == "failed"
+    assert meta["aggregation"]["last_failure_code"] == "invalid_llm_output"
+
+
+def test_storyline_admin_meta_projection_is_content_free():
+    from admin.routers.memory import _storyline_meta_projection
+
+    projected = _storyline_meta_projection({
+        "last_aggregated_at": 12.0,
+        "event_log_cursor": {"version": 3, "sources": {
+            "canonical": {"day": "2026-08-18", "offset": 10},
+            "legacy": {"day": "2026-08-17", "offset": 20},
+        }},
+        "consumed_material_ids": ["eventlog:private-id"],
+        "aggregation": {"status": "failed", "last_failure_code": "invalid_llm_output"},
+    })
+    assert projected["cursor_version"] == 3
+    assert projected["event_log_checkpoints"]["legacy"]["offset"] == 20
+    assert projected["consumed_count"] == 1
+    assert "private-id" not in str(projected)
+
+
 # ── 4. 非法 JSON → fail-open，不动 cursor ────────────────────────────────────
 
 def test_invalid_llm_output_does_not_advance_cursor(sandbox, fake_llm):

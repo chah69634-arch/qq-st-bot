@@ -207,13 +207,16 @@ additional production sources.
 | H1 | Brief 88：`user_hidden_state` 现实侧写入链已全量接线——`RealityEventType` 扩至 5 类（新增 `BODY_TOPIC` / `AFFECTION_EXPRESSED`）；对话侧判定落在新模块 `core/memory/user_hidden_state_reality_signals.py`，挂 `pipeline.post_process_slow` detect_emotion 之后，trigger 轮零参与；`NO_INTERACTION` 挂现有 `hidden_state_decay` 12h tick，presence gap ≥24h 且逻辑日未记账时 accrue，去重 stamp 落盘于 `hidden_state_no_interaction_stamp.json`；`body_memory` 长期层经 `integrate_body_cue_and_save` 接线，仅在调用方 envelope.can_write_memory=True 时写入；`hidden_state_debug` 观测端点新增 `trigger_counts`。见 `cc-tasks/88-hidden_state现实侧接线-全量信号映射.md`；测试 `tests/test_hidden_state_reality_signals_brief88.py`。 |
 | P3 | Brief 102：`build()` 强制裁剪后从最终 `messages` 按 `_layer`（含 `_report_layer` 覆盖）重算 `layers_activated`，新增 `layers_before_trim` 保留裁剪前全集；`_layers` 构建期累加器已删除。`6c_episodic` fallback 分支新增 `_report_layer="6c_episodic_fallback"`，保持与 `_layer` 共享消融规则的同时不破坏 memeval `layers_absent` 对"命中检索 vs 兜底注入"的区分。测试 `tests/test_prompt_trim_layers_recompute.py`。 |
 | SCM-1 | Self Capability P0 only stores capability IDs and safe state in its audit. Before adding more MCP-facing capability metadata, review every new log and UI projection to ensure no complete connection URL, header, bearer token, or raw tool payload is persisted or returned. |
-# Memory Event repair status (Brief 214)
+# Memory Event repair status (Brief 214-215)
 
 - `closed`: append schema maintenance/linear migration work, duplicate legacy
   import, source-loss migration, storyline partial commits/date-only cursor,
   double shadow comparison, oldest-seed selection, permissive proposer
-  discovery, and isolated-inventory `COUNT(*)` observability were closed by
-  MER-09.
+  discovery, and isolated-inventory `COUNT(*)` observability were addressed by
+  MER-09. Its gate was reopened by the post-gate audit, then closed by MER-10
+  after Markdown recall isolation, real migration dry-run, dual-source
+  storyline cursor v3, parallel bounded shadow reads, and proposer source
+  filtering passed the focused regression matrix.
 - `roadmap`: production producers for `triggered_by`, `derived_from`,
   `correction_of`, and `media_of` remain limited to evidence-backed call sites.
   No synthetic stimulus/media events were added to close the repair gate.

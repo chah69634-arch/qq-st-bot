@@ -178,3 +178,31 @@ def test_scheduler_scope_timeout_releases_discovery_loop(sandbox, monkeypatch):
 
     asyncio.run(proposer._check_event_edge_proposer())
     assert proposer.discovery_observability_snapshot()["timed_out_scopes"] >= 1
+
+
+def test_proposer_filters_isolated_sources_before_text_projection_and_write(sandbox):
+    from core.memory import event_store
+
+    scope = _scope("proposal-source-policy")
+    for event_id, source, occurred_at in (
+        ("proposal-ordinary", "user_chat", 1),
+        ("proposal-web", "web", 2),
+        ("proposal-dream", "dream_echo", 3),
+    ):
+        assert event_store.append_event(scope, {
+            "event_id": event_id, "turn_id": event_id, "occurred_at": occurred_at,
+            "realm": "reality", "kind": "owner_chat", "actor": "user",
+            "source": source, "memory_text": f"private {source} body",
+        }).inserted
+
+    projected = event_store.recent_events_for_proposal(scope, limit=3)
+    assert [item["event_id"] for item in projected] == ["proposal-ordinary"]
+    proposal = {
+        "from_event_id": "proposal-ordinary", "to_event_id": "proposal-web",
+        "relation_type": "same_topic", "reason": "must be rejected", "confidence": 0.5,
+    }
+    with pytest.raises(ValueError, match="invalid_proposal_source"):
+        event_store.append_edge_proposal(scope, proposal)
+    observed = event_store.edge_proposal_observability_snapshot(scope)
+    assert observed["source_policy"]["input_count"] >= 3
+    assert observed["source_policy"]["filtered_count"] >= 3

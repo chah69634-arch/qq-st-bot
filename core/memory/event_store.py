@@ -48,6 +48,9 @@ _OBSERVABILITY: dict[str, Any] = {
 _EDGE_OBSERVABILITY: dict[str, Any] = {
     "attempted": 0, "written": 0, "duplicates": 0, "failed": 0,
 }
+_PROPOSER_SOURCE_OBSERVABILITY: dict[str, int] = {
+    "input_count": 0, "filtered_count": 0,
+}
 _HOT_PATH_OBSERVABILITY: dict[str, int] = {
     "append_count": 0,
     "append_ms_total": 0,
@@ -386,6 +389,8 @@ def _reset_observability_for_tests() -> None:
     with _OBSERVABILITY_LOCK:
         for key in _EDGE_OBSERVABILITY:
             _EDGE_OBSERVABILITY[key] = 0
+        for key in _PROPOSER_SOURCE_OBSERVABILITY:
+            _PROPOSER_SOURCE_OBSERVABILITY[key] = 0
         for key in _HOT_PATH_OBSERVABILITY:
             _HOT_PATH_OBSERVABILITY[key] = 0
 
@@ -673,6 +678,52 @@ def migration_evidence(scope: MemoryScope, event_id: str) -> dict[str, str] | No
             return None
 
 
+def migration_evidence_status(scope: MemoryScope, event_id: str) -> tuple[str, dict[str, str] | None]:
+    """Read-only, short-budget evidence classification for migration dry-run."""
+    try:
+        path = _path(scope)
+    except (AttributeError, TypeError, ValueError):
+        return "invalid_scope", None
+    if not path.is_file():
+        return "missing_ledger", None
+    try:
+        with sqlite3.connect(
+            f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.05,
+        ) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+            connection.execute("PRAGMA busy_timeout=50")
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if version != SCHEMA_VERSION:
+                return "schema_mismatch", None
+            columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(events)")}
+            required = {"event_id", "turn_id", "actor", "source", "raw_text", "visible_text", "memory_text"}
+            if not required.issubset(columns):
+                return "schema_mismatch", None
+            row = connection.execute(
+                """SELECT turn_id, actor, source, raw_text, visible_text, memory_text
+                   FROM events WHERE uid=? AND char_id=? AND realm=? AND event_id=?""",
+                (scope.uid, scope.character_id, scope.domain, str(event_id)),
+            ).fetchone()
+        if row is None:
+            return "not_found", None
+        return "ok", {
+            "turn_id": str(row["turn_id"] or ""),
+            "actor": str(row["actor"] or ""),
+            "source": str(row["source"] or ""),
+            "text_fingerprint": safe_text_fingerprint(row),
+        }
+    except sqlite3.OperationalError as exc:
+        message = str(exc).lower()
+        if "locked" in message:
+            return "locked", None
+        if "busy" in message:
+            return "busy", None
+        return "database_error", None
+    except (sqlite3.Error, OSError, ValueError):
+        return "database_error", None
+
+
 def event_ids_for_turn(scope: MemoryScope, turn_id: str) -> list[str]:
     """Map a legacy turn identity into its actual visible ledger events."""
     if not turn_id:
@@ -933,12 +984,38 @@ def recent_events_for_proposal(scope: MemoryScope, *, limit: int = 8) -> list[di
         try:
             with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) as connection:
                 connection.row_factory = sqlite3.Row
-                rows = connection.execute(
-                    """SELECT event_id, occurred_at, actor, kind, channel,
-                              COALESCE(NULLIF(memory_text, ''), visible_text) AS text
+                candidates = connection.execute(
+                    """SELECT event_id, source
                        FROM events WHERE uid=? AND char_id=? AND realm=?
                        ORDER BY occurred_at DESC, seq DESC, event_id DESC LIMIT ?""",
-                    (scope.uid, scope.character_id, scope.domain, limit),
+                    (scope.uid, scope.character_id, scope.domain, min(200, limit * 4)),
+                ).fetchall()
+                from core.memory.source_policy import is_isolated
+                filtered_count = len(candidates) - sum(
+                    not is_isolated(row["source"]) for row in candidates
+                )
+                with _OBSERVABILITY_LOCK:
+                    _PROPOSER_SOURCE_OBSERVABILITY["input_count"] += len(candidates)
+                    _PROPOSER_SOURCE_OBSERVABILITY["filtered_count"] += filtered_count
+                from core.memory.source_policy import sql_predicate
+                source_clause, source_params = sql_predicate()
+                allowed_rows = connection.execute(
+                    """SELECT event_id FROM events
+                       WHERE uid=? AND char_id=? AND realm=?""" + source_clause + """
+                       ORDER BY occurred_at DESC, seq DESC, event_id DESC LIMIT ?""",
+                    (scope.uid, scope.character_id, scope.domain, *source_params, limit),
+                ).fetchall()
+                allowed_ids = [str(row["event_id"]) for row in allowed_rows]
+                if not allowed_ids:
+                    return []
+                placeholders = ", ".join("?" for _ in allowed_ids)
+                rows = connection.execute(
+                    f"""SELECT event_id, occurred_at, actor, kind, channel,
+                                COALESCE(NULLIF(memory_text, ''), visible_text) AS text
+                         FROM events WHERE uid=? AND char_id=? AND realm=?
+                           AND event_id IN ({placeholders})
+                         ORDER BY occurred_at DESC, seq DESC, event_id DESC""",
+                    (scope.uid, scope.character_id, scope.domain, *allowed_ids),
                 ).fetchall()
             return [
                 {
@@ -1065,12 +1142,17 @@ def append_edge_proposal(scope: MemoryScope, proposal: Mapping[str, Any]) -> boo
     with _lock_for(path):
         with _connect(path) as connection:
             endpoints = connection.execute(
-                """SELECT COUNT(*) FROM events
+                """SELECT event_id, source FROM events
                    WHERE uid=? AND char_id=? AND realm=? AND event_id IN (?, ?)""",
                 (scope.uid, scope.character_id, scope.domain, from_id, to_id),
-            ).fetchone()[0]
-            if endpoints != 2:
+            ).fetchall()
+            if len(endpoints) != 2:
                 raise ValueError("invalid_proposal_scope")
+            from core.memory.source_policy import is_isolated
+            if any(is_isolated(row[1]) for row in endpoints):
+                with _OBSERVABILITY_LOCK:
+                    _PROPOSER_SOURCE_OBSERVABILITY["filtered_count"] += 1
+                raise ValueError("invalid_proposal_source")
             cursor = connection.execute(
                 """INSERT OR IGNORE INTO event_edge_proposals
                    (uid, char_id, realm, from_event_id, to_event_id, relation_type,
@@ -1118,6 +1200,8 @@ def edge_proposal_observability_snapshot(
         "by_relation": {}, "daily": {"day_key": day_key, "calls": 0, "tokens": 0,
                                        "call_limit": daily_call_limit, "token_limit": daily_token_limit},
     }
+    with _OBSERVABILITY_LOCK:
+        result["source_policy"] = dict(_PROPOSER_SOURCE_OBSERVABILITY)
     path = _path(scope)
     if not path.exists():
         return result

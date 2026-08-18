@@ -333,11 +333,18 @@ class Pipeline:
         loop = asyncio.get_event_loop()
         if _skip_recall:
             event_search_task = None
+            shadow_search_task = None
         else:
             event_search_task = asyncio.create_task(
                 event_log.search(uid, content, llm_client, char_id=char_id,
                                  return_trace=True, query_vec=_query_vec,
                                  since_ts=_since_ts, until_ts=_until_ts)
+            )
+            from core.memory.event_shadow_recall import run_shadow_query as _run_shadow_query
+            shadow_search_task = asyncio.create_task(
+                _run_shadow_query(
+                    scope, content, occurred_after=_since_ts, occurred_before=_until_ts,
+                )
             )
         profile_future = loop.run_in_executor(
             None, lambda: user_profile.load(uid, char_id=char_id)
@@ -602,10 +609,10 @@ class Pipeline:
                     for item in _event_log_trace
                     if isinstance(item, dict)
                 )
-                from core.memory.event_shadow_recall import run_shadow_recall as _run_shadow_recall
-                _shadow_recall = await _run_shadow_recall(
-                    scope, content, old_results=_legacy_shadow_results, old_chars=_old_chars,
-                    occurred_after=_since_ts, occurred_before=_until_ts,
+                from core.memory.event_shadow_recall import finalize_shadow_recall as _finalize_shadow_recall
+                _shadow_recall = _finalize_shadow_recall(
+                    await shadow_search_task, scope=scope,
+                    old_results=_legacy_shadow_results, old_chars=_old_chars,
                 )
             _write_recall_trace(uid, char_id, {
                 "ts": _dt.now().isoformat(timespec="seconds"),

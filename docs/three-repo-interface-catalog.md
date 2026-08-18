@@ -406,3 +406,15 @@ it does not return prompts, raw material, or complete receipt IDs. Memory Event
 migration/shadow/proposer/ledger observability remains backend-only and
 content-free. The four evidence relations without complete production
 producers remain `roadmap`, not advertised as cross-client capabilities.
+
+# Brief 215 / MER-10 backend-only post-gate closure
+
+No desktop, mobile, WebSocket, or relay contract changed. The storyline admin
+projection now reports cursor v3 with separate canonical/legacy checkpoint
+summaries, bounded receipt count, inbox pending count, and content-free latest
+aggregation success/failure state. Migration observability distinguishes plan
+and ledger duplicate/conflict counts plus explicit read-only comparison
+status. Shadow observability retains bounded timeout/busy/cancelled outcomes;
+proposer observability adds content-free source-policy input/filtered counts.
+All remain under the existing `memory.read` or `state.read` scopes, and no
+prompt text, evidence body, or complete receipt/event-ID inventory is exposed.
