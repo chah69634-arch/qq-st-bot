@@ -14,6 +14,8 @@ open_arc() / append_node() / set_arc_status() 三个函数——不存在修改�
 from __future__ import annotations
 
 import json
+import copy
+import hashlib
 import logging
 import time
 import uuid
@@ -26,7 +28,8 @@ from core.sandbox import safe_user_id
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+CURSOR_VERSION = 2
 
 MAX_ACTIVE_ARCS = 8       # 软上限：由聚合 prompt 感知并自行收敛（关闭旧弧线），不做代码强制淘汰
 MAX_TOTAL_ARCS = 24       # 硬上限：超出时淘汰最旧的 closed arc（见 _evict_if_needed）
@@ -42,7 +45,12 @@ class StorylineCorruptError(Exception):
 def _default_data() -> dict:
     return {
         "version": SCHEMA_VERSION,
-        "meta": {"last_aggregated_at": 0.0, "event_log_cursor": ""},
+        "meta": {
+            "last_aggregated_at": 0.0,
+            "event_log_cursor": {"version": CURSOR_VERSION, "day": "", "offset": 0},
+            "consumed_material_ids": [],
+            "aggregation": {"status": "idle", "last_failure_code": "", "last_batch_at": 0.0},
+        },
         "arcs": [],
     }
 
@@ -76,12 +84,15 @@ def load(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
         raise StorylineCorruptError(str(p)) from e
     data.setdefault("version", SCHEMA_VERSION)
     data.setdefault("meta", {"last_aggregated_at": 0.0, "event_log_cursor": ""})
+    data["meta"].setdefault("consumed_material_ids", [])
+    data["meta"].setdefault("aggregation", {"status": "idle", "last_failure_code": "", "last_batch_at": 0.0})
     data.setdefault("arcs", [])
     return data
 
 
 def _save(uid: str, data: dict, *, char_id: str = DEFAULT_CHAR_ID) -> None:
-    safe_write_json(_write_file(uid, char_id=char_id), data)
+    if not safe_write_json(_write_file(uid, char_id=char_id), data):
+        raise OSError("storyline_write_failed")
 
 
 def save_meta(uid: str, *, char_id: str = DEFAULT_CHAR_ID, last_aggregated_at: float, event_log_cursor: str) -> None:
@@ -151,6 +162,62 @@ def append_to_inbox(uid: str, entries: list[dict], *, char_id: str = DEFAULT_CHA
 def clear_inbox(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
     """周频聚合消费完 inbox 后清空。"""
     safe_write_json(_inbox_file(uid, char_id=char_id), [])
+
+
+def clear_consumed_inbox(uid: str, consumed_ids: set[str], *, char_id: str = DEFAULT_CHAR_ID) -> None:
+    """Remove only inputs covered by an already-durable storyline receipt."""
+    remaining = [
+        entry for entry in load_inbox(uid, char_id=char_id)
+        if stable_material_id("inbox", entry) not in consumed_ids
+    ]
+    if not safe_write_json(_inbox_file(uid, char_id=char_id), remaining):
+        raise OSError("storyline_inbox_cleanup_failed")
+
+
+def stable_material_id(kind: str, value: object) -> str:
+    raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return f"{kind}:{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:24]}"
+
+
+def commit_batch(
+    uid: str,
+    data: dict,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    last_aggregated_at: float,
+    event_log_cursor: dict,
+    consumed_material_ids: list[str],
+) -> None:
+    """Atomically persist arcs, cursor and bounded idempotency receipt."""
+    committed = copy.deepcopy(data)
+    meta = committed.setdefault("meta", {})
+    receipts = list(dict.fromkeys([*(meta.get("consumed_material_ids") or []), *consumed_material_ids]))[-1000:]
+    meta.update({
+        "last_aggregated_at": float(last_aggregated_at),
+        "event_log_cursor": dict(event_log_cursor),
+        "consumed_material_ids": receipts,
+        "aggregation": {"status": "committed", "last_failure_code": "", "last_batch_at": time.time()},
+    })
+    committed["version"] = SCHEMA_VERSION
+    _save(uid, committed, char_id=char_id)
+    _record_batch_provenance(uid, committed, char_id=char_id)
+
+
+def _record_batch_provenance(uid: str, data: dict, *, char_id: str) -> None:
+    from core.memory.lineage import normalize_source_event_ids
+    from core.memory.provenance_log import append as _prov_append
+
+    source_ids = normalize_source_event_ids([
+        event_id
+        for arc in data.get("arcs", [])
+        for node in arc.get("nodes", [])
+        for event_id in node.get("source_ids", [])
+    ])
+    _prov_append(
+        uid, char_id, artifact="storyline", field="aggregation_batch",
+        after_gist=f"arcs={len(data.get('arcs', []))}",
+        trigger_signal="storyline_batch_commit", source_event_ids=source_ids,
+    )
 
 
 def list_recallable_arcs(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:

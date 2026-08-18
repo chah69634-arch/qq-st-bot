@@ -86,7 +86,7 @@ def test_migration_is_batched_idempotent_and_recovers_after_failure(sandbox, tmp
     assert completed["written"] == 2
     assert completed["duplicate"] == 1
     unknown = next(entry for entry in plan["entries"] if entry.kind == "legacy_unknown")
-    event = event_query.get_event(scope, unknown.event_id)
+    event = event_query.get_event(scope, unknown.event_id, source="legacy_unknown")
     assert event is not None
     assert event["raw_text"] == ""
     assert event["visible_text"].startswith("[legacy_unknown:")
@@ -98,12 +98,49 @@ def test_migration_conflict_is_counted_without_overwrite(sandbox, tmp_path):
     scope = _scope("migration-conflict")
     plan = event_migration.scan_legacy(scope, source_dir=_legacy_log(tmp_path / "legacy"))
     entry = plan["entries"][0]
-    assert event_store.append_event(scope, {**entry.event(), "raw_payload_json": {"legacy_ref": "other"}}).inserted
+    assert event_store.append_event(scope, {**entry.event(), "memory_text": "different evidence"}).inserted
     status = event_migration.apply_batch(scope, plan, batch_size=10, backup={"verified": True})
     # The deterministic plan has collapsed the repeated legacy block.  It may
     # not overwrite an occupied ID with different provenance.
     assert status["conflict"] == 1
     assert status["duplicate"] == 1
+
+
+def test_migration_counts_existing_live_canonical_event_without_duplicate(sandbox, tmp_path):
+    from core.memory import event_migration, event_store
+
+    root = tmp_path / "already-live"
+    root.mkdir()
+    (root / "2026-08-05.md").write_text(
+        "## 09:30\n**用户**：已经在线双写\n> speaker:user turn_id:live-turn\n---\n",
+        encoding="utf-8",
+    )
+    scope = _scope("migration-already-live")
+    plan = event_migration.scan_legacy(scope, source_dir=root)
+    assert event_store.append_event(scope, {
+        **plan["entries"][0].event(), "source": "user_chat",
+    }).inserted
+    status = event_migration.apply_batch(scope, plan, batch_size=10, backup={"verified": True})
+    assert status["already_live"] == 1 and status["written"] == 0
+
+
+def test_migration_preserves_isolated_source_and_unknown_trigger_time(sandbox, tmp_path):
+    from core.memory import event_migration
+
+    root = tmp_path / "legacy-sources"
+    root.mkdir()
+    (root / "2026-08-04.md").write_text(
+        "**角色**：定时问候\n> speaker:assistant trigger:daily_check\n---\n"
+        "## 11:00\n**用户**：外部资料\n> speaker:user turn_id:web-turn source:web\n---\n",
+        encoding="utf-8",
+    )
+    plan = event_migration.scan_legacy(_scope("migration-source-policy"), source_dir=root)
+    web = next(entry for entry in plan["entries"] if entry.turn_id == "web-turn")
+    trigger = next(entry for entry in plan["entries"] if entry.trigger)
+    assert web.event_id == "web-turn:user" and web.source == "web"
+    assert trigger.kind == "legacy_unknown" and trigger.occurred_at == 0.0 and trigger.unknown_time
+    assert plan["source_isolated"] == 1
+    assert plan["assistant_trigger_unknown_time"] == 1
 
 
 def test_migration_parses_each_message_actor_and_turn_id(sandbox, tmp_path):

@@ -397,3 +397,12 @@ ack 和游标推进，不得另造一套消息真值。
 5. 新增功能开关时，必须说明默认值、作用域、effective state、管理面入口，以及桌面/手机
    是否需要对应设置；不把“配置存在”写成“用户可配置”。
 6. 三仓都必须维护本总账入口；若跨仓文件位置变化，先更新链接和权威来源，再改调用方。
+# Brief 214 / MER-09 backend-only closure
+
+No desktop or mobile wire contract changed. Existing `memory.read` and
+`state.read` scopes remain in force. Storyline admin projection now exposes a
+redacted aggregation status, cursor version, inbox count, and consumed count;
+it does not return prompts, raw material, or complete receipt IDs. Memory Event
+migration/shadow/proposer/ledger observability remains backend-only and
+content-free. The four evidence relations without complete production
+producers remain `roadmap`, not advertised as cross-client capabilities.

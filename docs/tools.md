@@ -850,3 +850,10 @@ class ToolResult:
 
 当前 `core/tool_dispatcher.py` 中未发现 `_desktop_launch_netease_wrapper` / `_desktop_play_netease_wrapper` 这类旧 wrapper。
 网易云播放只保留 `play_song`：搜索歌曲 ID 后推送 `{"type": "play_netease", "song_id": ...}`。
+# Memory Event source boundary (Brief 214)
+
+Owner/Path C event-read tools retain their existing origin and scope gates.
+Their default queries exclude `web`, `dream_echo`, `coplay`, and conservative
+`legacy_unknown` evidence. Explicit source selection remains an authenticated
+admin-only forensic capability; role tools cannot request isolated sources.
+The repair adds no tool, desktop/mobile protocol, or prompt injection path.

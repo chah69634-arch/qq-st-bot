@@ -297,24 +297,9 @@ class Pipeline:
         # C: recall_policy="none" 跳过 episodic/event_search/web_recall 检索层（RC6）。
         _skip_recall = _low_info or recall_policy == "none"
 
-        # Memory Event 09: schedule the bounded, read-only event-ledger shadow
-        # query alongside the legacy recall work.  Its result is awaited only
-        # when writing the diagnostic trace below; it never enters prompt data.
+        # Memory Event shadow runs once after legacy results are available, so
+        # comparison never observes an artificial empty legacy result set.
         _shadow_recall_task = None
-        if not _skip_recall:
-            try:
-                from core.memory.event_shadow_recall import run_shadow_recall as _run_shadow_recall
-                _shadow_recall_task = asyncio.create_task(
-                    _run_shadow_recall(
-                        scope,
-                        content,
-                        old_chars=0,
-                        occurred_after=_since_ts,
-                        occurred_before=_until_ts,
-                    )
-                )
-            except Exception as _shadow_schedule_error:
-                logger.debug("[pipeline.fetch_context] event shadow schedule skipped: %s", _shadow_schedule_error)
 
         # X2: compute query embedding once (fail-open), then get all semantic hits sync.
         # query_vec is passed down to event_log.search and episodic.retrieve so each
@@ -598,35 +583,30 @@ class Pipeline:
                 "timeout_reason": "",
                 "elapsed_ms": 0,
             }
-            if _shadow_recall_task is not None:
+            if not _skip_recall:
                 _old_chars = len(event_search_result or "") + len(episodic_result or "") + len(episodic_fallback_result or "")
-                # The helper has its own hard timeout; cancellation is fail-open
-                # so a trace problem cannot change the generated response.
-                _shadow_recall = await _shadow_recall_task
-                if _shadow_recall.get("enabled"):
-                    from core.memory.event_shadow_recall import compare_legacy_results as _compare_shadow_legacy
-                    _legacy_shadow_results = [
-                        {
-                            "source_event_ids": item.get("source_event_ids") or [],
-                            "source_turn_id": item.get("source_turn_id") or "",
-                            "scope": {"uid": uid, "char_id": char_id, "realm": "reality"},
-                        }
-                        for item in (*episodic_memories, *episodic_fallback)
-                        if isinstance(item, dict)
-                    ]
-                    _legacy_shadow_results.extend(
-                        {
-                            "turn_id": item.get("turn_id") or "",
-                            "scope": {"uid": uid, "char_id": char_id, "realm": "reality"},
-                        }
-                        for item in _event_log_trace
-                        if isinstance(item, dict)
-                    )
-                    _shadow_recall = _compare_shadow_legacy(
-                        _shadow_recall, _legacy_shadow_results, scope=scope,
-                    )
-                    _shadow_recall["old_chars"] = _old_chars
-                    _shadow_recall["old_tokens"] = (_old_chars + 3) // 4
+                _legacy_shadow_results = [
+                    {
+                        "source_event_ids": item.get("source_event_ids") or [],
+                        "source_turn_id": item.get("source_turn_id") or "",
+                        "scope": {"uid": uid, "char_id": char_id, "realm": "reality"},
+                    }
+                    for item in (*episodic_memories, *episodic_fallback)
+                    if isinstance(item, dict)
+                ]
+                _legacy_shadow_results.extend(
+                    {
+                        "turn_id": item.get("turn_id") or "",
+                        "scope": {"uid": uid, "char_id": char_id, "realm": "reality"},
+                    }
+                    for item in _event_log_trace
+                    if isinstance(item, dict)
+                )
+                from core.memory.event_shadow_recall import run_shadow_recall as _run_shadow_recall
+                _shadow_recall = await _run_shadow_recall(
+                    scope, content, old_results=_legacy_shadow_results, old_chars=_old_chars,
+                    occurred_after=_since_ts, occurred_before=_until_ts,
+                )
             _write_recall_trace(uid, char_id, {
                 "ts": _dt.now().isoformat(timespec="seconds"),
                 "uid": uid,

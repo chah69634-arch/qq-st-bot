@@ -105,13 +105,17 @@ def test_valid_ops_applied_and_cursor_advances(sandbox, fake_llm):
     _write_episode(uid, TEST_CHAR_ID, "决定转行做程序员", ts=time.time())
 
     from core.memory import storyline as sl
-    sl.append_to_inbox(uid, [{"id": "old1", "summary": "旧碎片", "ts": time.time(), "strength": 0.3}],
+    inbox_entry = {"id": "old1", "summary": "旧碎片", "ts": time.time(), "strength": 0.3}
+    sl.append_to_inbox(uid, [inbox_entry],
                         char_id=TEST_CHAR_ID)
+    episode = __import__("core.memory.episodic_memory", fromlist=["_load_memories"])._load_memories(uid, char_id=TEST_CHAR_ID)[0]
+    episode_material_id = sl.stable_material_id("episode", episode)
 
+    node_ts = time.time()
     fake_llm.chat = AsyncMock(return_value=json.dumps([
         {"op": "open_arc", "title": "职业转型", "tags": ["topic.learning"]},
         {"op": "append_node", "arc_title": "职业转型", "summary": "决定转行做程序员",
-             "ts": time.time(), "span": [time.time(), time.time()], "source_material_ids": ["m001"]},
+             "ts": node_ts, "span": [node_ts, node_ts], "source_material_ids": [episode_material_id]},
     ], ensure_ascii=False))
 
     _run_weekly()
@@ -123,6 +127,37 @@ def test_valid_ops_applied_and_cursor_advances(sandbox, fake_llm):
     assert len(arc["nodes"]) == 1
     assert data["meta"]["last_aggregated_at"] > 0
     assert sl.load_inbox(uid, char_id=TEST_CHAR_ID) == []
+
+
+def test_invalid_batch_is_all_or_nothing(sandbox):
+    from core.memory import storyline as sl
+    from core.scheduler.triggers.storyline_weekly import _apply_ops
+
+    uid = "storyline-atomic-invalid"
+    before = sl.load(uid, char_id=TEST_CHAR_ID)
+    with pytest.raises(ValueError):
+        _apply_ops(uid, TEST_CHAR_ID, [
+            {"op": "open_arc", "title": "有效标题", "tags": []},
+            {"op": "append_node", "arc_title": "不存在", "summary": "无效", "ts": time.time(),
+             "span": [time.time(), time.time()], "source_material_ids": []},
+        ], material_sources={})
+    assert sl.load(uid, char_id=TEST_CHAR_ID) == before
+
+
+def test_event_log_cursor_consumes_same_day_append_only_once(sandbox):
+    from core.scheduler.triggers.storyline_weekly import _collect_event_log_since
+
+    uid = "storyline-same-day-cursor"
+    day = datetime.now().strftime("%Y-%m-%d")
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, day, "## 09:00\n**用户**：第一段\n---\n")
+    first, cursor, first_ids = _collect_event_log_since(uid, TEST_CHAR_ID, "")
+    assert "第一段" in first and first_ids
+    path = sandbox.memory_char_root(char_id=TEST_CHAR_ID) / uid / "event_log" / f"{day}.md"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("## 10:00\n**用户**：第二段\n---\n")
+    second, cursor2, second_ids = _collect_event_log_since(uid, TEST_CHAR_ID, cursor)
+    assert "第一段" not in second and "第二段" in second and second_ids
+    assert cursor2["offset"] > cursor["offset"]
 
 
 # ── 4. 非法 JSON → fail-open，不动 cursor ────────────────────────────────────

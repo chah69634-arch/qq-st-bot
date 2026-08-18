@@ -8,15 +8,19 @@ not a reason to alter the normal recall path.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 from typing import Any, Iterable
 
 from core.config_loader import get_config
 from core.memory import event_query
+from core.memory import event_store
+from core.memory.source_policy import is_isolated
 from core.memory.scope import MemoryScope
 
 _SHADOW_RUN_LOCK = threading.Lock()
+logger = logging.getLogger(__name__)
 
 DEFAULTS: dict[str, Any] = {
     "enabled": False,
@@ -155,6 +159,10 @@ def compare_legacy_results(
                 metrics["old_unmapped_count"] += 1
                 metrics["comparison_scope_rejections"] += 1
                 continue
+            if is_isolated(item.get("source")):
+                metrics["old_unmapped_count"] += 1
+                metrics["comparison_scope_rejections"] += 1
+                continue
             source_ids = item.get("source_event_ids")
             if isinstance(source_ids, (list, tuple, set, frozenset)):
                 explicit_event_ids.update(str(value) for value in source_ids if value)
@@ -169,7 +177,7 @@ def compare_legacy_results(
         mapped = bool(explicit_event_ids)
         mapped_old_events.update(explicit_event_ids)
         if turn_id:
-            turn_event_ids = {event_id for event_id, event_turn in event_turns.items() if event_turn == turn_id}
+            turn_event_ids = set(event_store.event_ids_for_turn(scope, turn_id))
             if turn_event_ids:
                 mapped_old_events.update(turn_event_ids)
                 mapped_old_turns.add(turn_id)
@@ -225,14 +233,9 @@ def _run_sync(
             scope, text=str(query or "")[:256], actor="", kind="", source="",
             occurred_after=occurred_after, occurred_before=occurred_before, cursor="",
             limit=int(settings["seed_limit"]),
+            order="desc",
         )
-        # event_query.search is chronological for cursor stability. Shadow evaluates
-        # temporal recency explicitly, rather than accidentally retaining the oldest hits.
-        candidates = sorted(
-            seeds.get("items", []),
-            key=lambda item: (float(item.get("occurred_at") or 0), int(item.get("seq") or 0), str(item.get("event_id") or "")),
-            reverse=True,
-        )
+        candidates = seeds.get("items", [])
         seen: set[str] = set()
 
         def _add(item: dict[str, Any]) -> bool:
@@ -377,5 +380,6 @@ async def run_shadow_recall(
         base.update({"status": "timeout", "timeout_reason": "budget_exceeded"})
         return base
     except Exception as exc:
+        logger.warning("[event_shadow_recall] run failed: %s", type(exc).__name__, exc_info=True)
         base.update({"status": "error", "timeout_reason": type(exc).__name__[:64]})
         return base

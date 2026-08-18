@@ -9,10 +9,14 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-ISOLATED_SOURCES = frozenset({"web", "dream_echo", "coplay"})
+ISOLATED_SOURCES = frozenset({"web", "dream_echo", "coplay", "legacy_unknown"})
 
 _LOCK = threading.Lock()
-_OBSERVABILITY: dict[str, int] = {"rejected": 0}
+_OBSERVABILITY: dict[str, int] = {
+    "policy_filtered_query_count": 0,
+    # Compatibility field. It no longer estimates rejected rows.
+    "rejected": 0,
+}
 
 
 def normalize(source: object) -> str:
@@ -40,11 +44,15 @@ def sql_predicate(column: str = "source", *, include_isolated: bool = False) -> 
     return f" AND COALESCE({column}, '') NOT IN ({placeholders})", tuple(sorted(ISOLATED_SOURCES))
 
 
-def record_rejections(count: int) -> None:
-    if count <= 0:
-        return
+def record_filtered_query() -> None:
     with _LOCK:
-        _OBSERVABILITY["rejected"] += int(count)
+        _OBSERVABILITY["policy_filtered_query_count"] += 1
+
+
+def record_rejections(count: int) -> None:
+    """Deprecated compatibility shim; count inventory is intentionally ignored."""
+    if count > 0:
+        record_filtered_query()
 
 
 def observability_snapshot() -> dict[str, int]:
@@ -54,4 +62,5 @@ def observability_snapshot() -> dict[str, int]:
 
 def _reset_observability_for_tests() -> None:
     with _LOCK:
+        _OBSERVABILITY["policy_filtered_query_count"] = 0
         _OBSERVABILITY["rejected"] = 0

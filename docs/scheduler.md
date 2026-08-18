@@ -1160,3 +1160,18 @@ None` 等方式正确区分"没有数据"与"很久以前"，本就不受冷启�
 `docs/prompt-layers.md` `3_relation`）。`desktop_wake` Path B 不再构造首轮或重开 seed
 prompt；它只提供 `desktop_session_reopened` 这一当前事实，是否读取有界历史、使用工具或
 发言由 autonomy runner 决定。
+# Memory Event maintenance final contracts (Brief 214)
+
+`storyline_weekly` uses an all-or-nothing plan. Invalid op types, fields, arc
+references, material IDs, limits, status, spans, future timestamps, or
+non-monotonic timestamps reject the complete batch without advancing the
+cursor or cleaning the inbox. A successful atomic storyline commit advances
+the version-2 day/byte cursor and receipt before idempotent inbox cleanup.
+
+`event_edge_proposer` discovery only considers the canonical existing
+`.sqlite3` path. Its read-only health check requires the exact ledger version,
+all five tables, required columns, and matching scope. Discovery classifies
+`missing`, `version_mismatch`, `table_missing`, `column_missing`,
+`scope_mismatch`, `database_error`, and `timeout`; it never creates or upgrades
+a ledger. Proposal writes revalidate that contract and remain disabled by
+default.

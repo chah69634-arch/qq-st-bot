@@ -8,6 +8,7 @@ through the public API.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import sqlite3
 import threading
@@ -34,6 +35,7 @@ PROPOSAL_RELATION_TYPES = frozenset({
 _LOCKS: dict[str, threading.RLock] = {}
 _LOCKS_GUARD = threading.Lock()
 _PATH_GUARD = threading.RLock()
+_VERIFIED_SCHEMA_PATHS: set[str] = set()
 _OBSERVABILITY_LOCK = threading.Lock()
 _OBSERVABILITY: dict[str, Any] = {
     "attempted": 0,
@@ -53,6 +55,9 @@ _HOT_PATH_OBSERVABILITY: dict[str, int] = {
     "stream_queries": 0,
     "turn_queries": 0,
     "edges_removed": 0,
+    "busy": 0,
+    "locked": 0,
+    "schema_mismatch": 0,
 }
 
 # Ledger writes run before visible fanout.  The in-process per-ledger lock
@@ -104,7 +109,9 @@ class EventRecord:
         if self.char_id and self.char_id != scope.character_id:
             raise ValueError("event char_id does not match scope character_id")
         now = time.time()
-        occurred_at = float(self.occurred_at or now)
+        occurred_at = float(self.occurred_at if self.occurred_at is not None else now)
+        if occurred_at == 0.0 and self.kind != "legacy_unknown":
+            occurred_at = now
         ingested_at = float(self.ingested_at or now)
         realm = str(self.realm or "reality")
         if realm != scope.domain:
@@ -424,7 +431,10 @@ def initialize(scope: MemoryScope) -> SchemaStatus:
         try:
             with _connect(path) as connection:
                 _initialize(connection)
-            return schema_status(scope)
+            status = schema_status(scope)
+            if status.healthy:
+                _VERIFIED_SCHEMA_PATHS.add(str(path))
+            return status
         except Exception as exc:
             logger.warning("[event_store] initialize failed: %s", exc)
             return SchemaStatus(SCHEMA_NAME, SCHEMA_VERSION, None, path.exists(), False, error_code="database_error")
@@ -469,8 +479,19 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
     append_started = time.perf_counter()
     with _lock_for(path):
         try:
+            if not path.exists():
+                status = initialize(scope)
+                if not status.healthy:
+                    code = status.error_code or "schema_mismatch"
+                    return _observe_append(AppendResult(False, False, record.event_id, code), scope)
+            elif str(path) not in _VERIFIED_SCHEMA_PATHS:
+                status = schema_status(scope)
+                if not status.healthy:
+                    with _OBSERVABILITY_LOCK:
+                        _HOT_PATH_OBSERVABILITY["schema_mismatch"] += int(status.error_code == "schema_mismatch")
+                    return _observe_append(AppendResult(False, False, record.event_id, status.error_code or "schema_mismatch"), scope)
+                _VERIFIED_SCHEMA_PATHS.add(str(path))
             with _connect(path) as connection:
-                _initialize(connection)
                 connection.execute(
                     f"INSERT INTO events ({', '.join(columns)}) VALUES ({placeholders})",
                     values,
@@ -483,7 +504,6 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
             # edges when the original transaction pre-dated edge generation.
             try:
                 with _connect(path) as repair:
-                    _initialize(repair)
                     existing = repair.execute(
                         "SELECT * FROM events WHERE uid = ? AND char_id = ? AND realm = ? AND event_id = ?",
                         (scope.uid, scope.character_id, scope.domain, record.event_id),
@@ -494,6 +514,15 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
             except Exception:
                 pass
             return _observe_append(AppendResult(True, False, record.event_id, "duplicate"), scope)
+        except sqlite3.OperationalError as exc:
+            message = str(exc).lower()
+            code = "locked" if "locked" in message else "busy" if "busy" in message else "database_error"
+            if code in {"locked", "busy"}:
+                with _OBSERVABILITY_LOCK:
+                    _HOT_PATH_OBSERVABILITY[code] += 1
+            _edge_observe("failed")
+            logger.warning("[event_store] append failed: %s", code)
+            return _observe_append(AppendResult(False, False, record.event_id, code), scope)
         except Exception as exc:
             _edge_observe("failed")
             logger.warning("[event_store] append failed: %s", exc)
@@ -602,6 +631,70 @@ def migration_marker(scope: MemoryScope, event_id: str) -> str | None:
             return str(marker) if isinstance(marker, str) else None
         except (sqlite3.Error, json.JSONDecodeError, TypeError, ValueError):
             return None
+
+
+def safe_text_fingerprint(event: Mapping[str, Any]) -> str:
+    """Content-safe identity digest shared by live/legacy duplicate checks."""
+    def value(key: str) -> Any:
+        try:
+            return event[key]
+        except (KeyError, TypeError):
+            return None
+    text = str(value("memory_text") or value("visible_text") or value("raw_text") or "")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def migration_evidence(scope: MemoryScope, event_id: str) -> dict[str, str] | None:
+    """Return only identity fields and a text digest for the offline importer."""
+    try:
+        path = _path(scope)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if not path.exists():
+        return None
+    with _lock_for(path):
+        try:
+            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25) as connection:
+                connection.row_factory = sqlite3.Row
+                row = connection.execute(
+                    """SELECT turn_id, actor, source, raw_text, visible_text, memory_text
+                       FROM events WHERE uid=? AND char_id=? AND realm=? AND event_id=?""",
+                    (scope.uid, scope.character_id, scope.domain, str(event_id)),
+                ).fetchone()
+            if row is None:
+                return None
+            return {
+                "turn_id": str(row["turn_id"] or ""),
+                "actor": str(row["actor"] or ""),
+                "source": str(row["source"] or ""),
+                "text_fingerprint": safe_text_fingerprint(row),
+            }
+        except sqlite3.Error:
+            return None
+
+
+def event_ids_for_turn(scope: MemoryScope, turn_id: str) -> list[str]:
+    """Map a legacy turn identity into its actual visible ledger events."""
+    if not turn_id:
+        return []
+    try:
+        path = _path(scope)
+    except (AttributeError, TypeError, ValueError):
+        return []
+    if not path.exists():
+        return []
+    from core.memory.source_policy import sql_predicate
+    predicate, params = sql_predicate()
+    with _lock_for(path):
+        try:
+            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25) as connection:
+                rows = connection.execute(
+                    "SELECT event_id FROM events WHERE uid=? AND char_id=? AND realm=? AND turn_id=?" + predicate,
+                    (scope.uid, scope.character_id, scope.domain, str(turn_id), *params),
+                ).fetchall()
+            return [str(row[0]) for row in rows]
+        except sqlite3.Error:
+            return []
 
 
 def schema_status(scope: MemoryScope) -> SchemaStatus:
@@ -865,20 +958,48 @@ def recent_events_for_proposal(scope: MemoryScope, *, limit: int = 8) -> list[di
 
 def existing_ledger_is_healthy(scope: MemoryScope) -> bool:
     """Check a pre-existing ledger without creating or migrating one."""
+    return existing_ledger_health_code(scope) == "ok"
+
+
+def existing_ledger_health_code(scope: MemoryScope) -> str:
+    """Strict read-only proposer health classification."""
     path = _path(scope)
     if not path.is_file():
-        return False
+        return "missing"
     with _lock_for(path):
         try:
             with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25) as connection:
+                connection.execute("PRAGMA query_only=ON")
+                version = int(connection.execute("PRAGMA user_version").fetchone()[0])
                 names = {
                     str(row[0]) for row in connection.execute(
                         "SELECT name FROM sqlite_master WHERE type='table'"
                     )
                 }
-            return {"events", "event_edge_proposals", "event_edge_proposer_runs"}.issubset(names)
+                required = {
+                    "events": {"event_id", "uid", "char_id", "realm", "occurred_at", "seq", "actor", "kind", "channel", "memory_text", "visible_text"},
+                    "event_edges": {"uid", "char_id", "from_event_id", "to_event_id", "relation_type"},
+                    "event_topics": {"uid", "char_id", "event_id", "topic"},
+                    "event_edge_proposals": {"uid", "char_id", "realm", "from_event_id", "to_event_id", "relation_type"},
+                    "event_edge_proposer_runs": {"uid", "char_id", "realm", "created_at", "day_key", "token_budget", "status"},
+                }
+                if version != SCHEMA_VERSION:
+                    return "version_mismatch"
+                if not set(required).issubset(names):
+                    return "table_missing"
+                for table, columns in required.items():
+                    actual = {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")}
+                    if not columns.issubset(actual):
+                        return "column_missing"
+                scoped = connection.execute(
+                    "SELECT 1 FROM events WHERE (uid<>? OR char_id<>? OR realm<>?) LIMIT 1",
+                    (scope.uid, scope.character_id, scope.domain),
+                ).fetchone()
+            return "ok" if scoped is None else "scope_mismatch"
+        except sqlite3.OperationalError as exc:
+            return "timeout" if "locked" in str(exc).lower() or "busy" in str(exc).lower() else "database_error"
         except (sqlite3.Error, OSError, ValueError):
-            return False
+            return "database_error"
 
 
 def proposal_budget_snapshot(scope: MemoryScope, day_key: str) -> dict[str, int]:
@@ -933,7 +1054,9 @@ def append_edge_proposal(scope: MemoryScope, proposal: Mapping[str, Any]) -> boo
         raise ValueError("invalid_proposal")
     if not reason or not 0.0 <= confidence <= 1.0:
         raise ValueError("invalid_proposal")
-    path = _prepare_write_path(scope)
+    path = _path(scope)
+    if not existing_ledger_is_healthy(scope):
+        raise RuntimeError("schema_mismatch")
     model = str(proposal.get("model") or "")[:160]
     preset = str(proposal.get("preset") or "")[:160]
     model_version = str(proposal.get("model_version") or "")[:80]
@@ -941,7 +1064,6 @@ def append_edge_proposal(scope: MemoryScope, proposal: Mapping[str, Any]) -> boo
     created_at = float(proposal.get("created_at") or time.time())
     with _lock_for(path):
         with _connect(path) as connection:
-            _initialize(connection)
             endpoints = connection.execute(
                 """SELECT COUNT(*) FROM events
                    WHERE uid=? AND char_id=? AND realm=? AND event_id IN (?, ?)""",
@@ -966,10 +1088,11 @@ def record_proposer_run(scope: MemoryScope, *, day_key: str, input_count: int,
                         candidate_count: int, token_budget: int, model: str,
                         preset: str, model_version: str, prompt_hash: str,
                         status: str, error_code: str = "") -> None:
-    path = _prepare_write_path(scope)
+    path = _path(scope)
+    if not existing_ledger_is_healthy(scope):
+        raise RuntimeError("schema_mismatch")
     with _lock_for(path):
         with _connect(path) as connection:
-            _initialize(connection)
             connection.execute(
                 """INSERT INTO event_edge_proposer_runs
                    (uid, char_id, realm, created_at, day_key, input_count,

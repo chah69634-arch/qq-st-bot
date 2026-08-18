@@ -28,6 +28,10 @@ _TIME_RE = re.compile(r"^##\s+(\d{2}:\d{2})\s*$")
 _MESSAGE_RE = re.compile(r"^\*\*([^*]+)\*\*[：:](.*)$")
 _SPEAKER_RE = re.compile(r"\bspeaker:(user|assistant)\b")
 _TURN_RE = re.compile(r"\bturn_id:([^\s]+)")
+_SOURCE_RE = re.compile(r"\bsource:([^\s]+)")
+_TRIGGER_RE = re.compile(r"\btrigger:([^\s]+)")
+_ALLOWED_SOURCES = frozenset({"", "web", "dream_echo", "coplay", "legacy_migration"})
+STATE_VERSION = 2
 _LEGACY_ARTIFACTS = (
     ("short_term", "history", "history"),
     ("mid_term", "mid_term", "mid_term"),
@@ -47,6 +51,10 @@ class MigrationEntry:
     text: str = ""
     turn_id: str = ""
     seq: int = 0
+    source: str = "legacy_migration"
+    trigger: str = ""
+    unknown_time: bool = False
+    unknown_source: bool = False
 
     def event(self) -> dict[str, Any]:
         unknown = self.kind == "legacy_unknown"
@@ -62,13 +70,16 @@ class MigrationEntry:
             "actor": self.actor,
             "channel": "legacy_markdown",
             "stream": "legacy_markdown",
-            "source": "legacy_migration",
+            "source": self.source,
             # The original Markdown remains in place.  The ledger stores a
             # stable reference and hash, not a second raw copy for unknowns.
             "raw_payload_json": {
                 "legacy_ref": self.legacy_ref,
                 "legacy_block_sha256": self.block_hash,
                 "legacy_unknown": unknown,
+                "legacy_time_unknown": self.unknown_time,
+                "legacy_trigger": self.trigger,
+                "legacy_source_unknown": self.unknown_source,
             },
             "raw_text": "" if unknown else self.text,
             "visible_text": reference if unknown else self.text,
@@ -109,7 +120,8 @@ def migration_status(scope: MemoryScope) -> dict[str, Any]:
         "state_version", "status", "source_digest", "total", "next_offset",
         "parsed", "malformed", "legacy_unknown", "duplicate", "conflict",
         "written", "failed", "backup", "updated_at", "last_error", "sources",
-        "artifacts",
+        "artifacts", "already_live", "would_write", "source_isolated",
+        "unknown_source", "assistant_trigger_unknown_time",
     }
     return {key: state[key] for key in allowed if key in state}
 
@@ -127,20 +139,28 @@ def _date_time(path: Path, time_text: str | None) -> float | None:
         return None
 
 
-def _message_metadata(block: list[str], start: int, end: int) -> tuple[str, str]:
+def _message_metadata(block: list[str], start: int, end: int) -> tuple[str, str, str, str]:
     """Read only metadata belonging to one rendered Markdown message."""
     speaker = ""
     turn_id = ""
+    source = ""
+    trigger = ""
     for line in block[start + 1:end]:
         if not line.lstrip().startswith(">"):
             continue
         speaker_match = _SPEAKER_RE.search(line)
         turn_match = _TURN_RE.search(line)
+        source_match = _SOURCE_RE.search(line)
+        trigger_match = _TRIGGER_RE.search(line)
         if speaker_match:
             speaker = speaker_match.group(1)
         if turn_match:
             turn_id = turn_match.group(1).strip()
-    return speaker, turn_id
+        if source_match:
+            source = source_match.group(1).strip()
+        if trigger_match:
+            trigger = trigger_match.group(1).strip()
+    return speaker, turn_id, source, trigger
 
 
 def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, int]:
@@ -153,10 +173,13 @@ def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, in
             if current:
                 blocks.append(current)
             current = [line]
-        elif current:
+        elif line.strip() == "---":
+            if current:
+                current.append(line)
+                blocks.append(current)
+                current = []
+        elif current or line.strip():
             current.append(line)
-        elif line.strip():
-            blocks.append([line])
     if current:
         blocks.append(current)
 
@@ -179,18 +202,22 @@ def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, in
             # speaker metadata is admitted; contradictory fake metadata stays
             # a legacy_unknown reference.
             next_index = message_indices[position + 1] if position + 1 < len(message_indices) else len(block)
-            speaker, turn_id = _message_metadata(block, index, next_index)
+            speaker, turn_id, source, trigger = _message_metadata(block, index, next_index)
+            source_unknown = source not in _ALLOWED_SOURCES
+            preserved_source = source if source in {"web", "dream_echo", "coplay"} else "legacy_migration"
             if label.strip() == "用户":
                 actor = "user" if speaker in {"", "user"} else ""
             else:
                 actor = "assistant" if speaker == "assistant" else ""
-            if actor not in {"user", "assistant"} or occurred_at is None:
+            trigger_unknown_time = actor == "assistant" and bool(trigger) and occurred_at is None
+            if actor not in {"user", "assistant"} or occurred_at is None or source_unknown:
                 # A valid user message in the same block must not make an
                 # unrelated ambiguous assistant line silently disappear.
                 event_id = f"legacy-{_sha(f'{legacy_ref}:{index}:unknown')[:40]}"
                 entries.append(MigrationEntry(
-                    event_id, legacy_ref, block_hash, time.time(), "legacy_unknown",
-                    "legacy_unknown", turn_id=turn_id,
+                    event_id, legacy_ref, block_hash, 0.0, "legacy_unknown",
+                    "legacy_unknown", turn_id=turn_id, source="legacy_unknown",
+                    trigger=trigger, unknown_time=occurred_at is None, unknown_source=source_unknown,
                 ))
                 malformed += 1
                 continue
@@ -202,10 +229,11 @@ def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, in
             if not body:
                 continue
             stable_ref = f"{path.name}:{turn_id}:{actor}" if turn_id else f"{legacy_ref}:{index}:{actor}"
-            event_id = f"legacy-{_sha(stable_ref)[:40]}"
+            event_id = f"{turn_id}:{actor}" if turn_id else f"legacy-{_sha(stable_ref)[:40]}"
             entries.append(MigrationEntry(
                 event_id, legacy_ref, block_hash, occurred_at, "legacy_message", actor, body,
                 turn_id=turn_id or f"legacy:{block_hash[:24]}", seq=0 if actor == "user" else 1,
+                source=preserved_source, trigger=trigger, unknown_time=trigger_unknown_time,
             ))
             emitted += 1
             parsed += 1
@@ -213,7 +241,7 @@ def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, in
             # Import time is explicitly not a claim about original occurrence.
             # The original actor/time/causality remain unknown in the retained MD.
             event_id = f"legacy-{_sha(f'{legacy_ref}:unknown')[:40]}"
-            entries.append(MigrationEntry(event_id, legacy_ref, block_hash, time.time(), "legacy_unknown", "legacy_unknown"))
+            entries.append(MigrationEntry(event_id, legacy_ref, block_hash, 0.0, "legacy_unknown", "legacy_unknown", source="legacy_unknown", unknown_time=True))
             malformed += 1
     return entries, parsed, malformed
 
@@ -316,6 +344,11 @@ def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[s
         "legacy_unknown": malformed,
         "duplicate": duplicate,
         "conflict": conflict,
+        "already_live": 0,
+        "would_write": len(entries),
+        "source_isolated": sum(entry.source in {"web", "dream_echo", "coplay"} for entry in entries),
+        "unknown_source": sum(entry.unknown_source for entry in entries),
+        "assistant_trigger_unknown_time": sum(bool(entry.actor == "legacy_unknown" and entry.trigger and entry.unknown_time) for entry in entries),
         "source_digest": _sha("\n".join(source_digests)),
         "sources": source_counts,
         "artifacts": artifacts,
@@ -336,11 +369,14 @@ def apply_batch(
         raise ValueError("backup_not_verified")
     entries = list(plan["entries"])
     previous = read_state(scope)
-    same_source = previous.get("source_digest") == plan["source_digest"]
+    same_source = (
+        previous.get("state_version") == STATE_VERSION
+        and previous.get("source_digest") == plan["source_digest"]
+    )
     start = int(previous.get("next_offset", 0)) if same_source else 0
     start = max(0, min(start, len(entries)))
     state: dict[str, Any] = {
-        "state_version": 1,
+        "state_version": STATE_VERSION,
         "status": "running",
         "source_digest": plan["source_digest"],
         "total": len(entries),
@@ -352,12 +388,39 @@ def apply_batch(
         "conflict": int(previous.get("conflict", 0)) if same_source else int(plan["conflict"]),
         "written": int(previous.get("written", 0)) if same_source else 0,
         "failed": int(previous.get("failed", 0)) if same_source else 0,
+        "already_live": int(previous.get("already_live", 0)) if same_source else 0,
+        "would_write": int(plan.get("would_write", len(entries))),
+        "source_isolated": int(plan.get("source_isolated", 0)),
+        "unknown_source": int(plan.get("unknown_source", 0)),
+        "assistant_trigger_unknown_time": int(plan.get("assistant_trigger_unknown_time", 0)),
         "backup": dict(backup),
         "sources": dict(plan.get("sources") or {}),
         "artifacts": dict(plan.get("artifacts") or {}),
         "last_error": "",
     }
     for index, entry in enumerate(entries[start:start + batch_size], start=start):
+        existing = event_store.migration_evidence(scope, entry.event_id)
+        if existing is not None:
+            expected = entry.event()
+            from core.memory.source_policy import is_isolated
+            source_matches = (
+                existing["source"] == expected["source"]
+                or (expected["source"] == "legacy_migration" and not is_isolated(existing["source"]))
+            )
+            same_identity = (
+                existing["turn_id"] == expected["turn_id"]
+                and existing["actor"] == expected["actor"]
+                and source_matches
+                and existing["text_fingerprint"] == event_store.safe_text_fingerprint(expected)
+            )
+            if same_identity:
+                state["already_live"] += 1
+                state["duplicate"] += 1
+                state["next_offset"] = index + 1
+                continue
+            state["conflict"] += 1
+            state["last_error"] = "conflict"
+            break
         result = event_store.append_event(scope, entry.event())
         if result.inserted:
             state["written"] += 1

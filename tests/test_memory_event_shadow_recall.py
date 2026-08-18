@@ -50,7 +50,7 @@ def test_shadow_recall_collects_scoped_ids_and_metrics(sandbox):
     result = asyncio.run(run_shadow_recall(
         _scope("shadow-enabled"),
         "topic",
-        old_ids=["shadow-event-0", "legacy-id"],
+        old_ids=["shadow-event-2", "legacy-id"],
         old_chars=800,
         settings={
             "enabled": True,
@@ -63,8 +63,8 @@ def test_shadow_recall_collects_scoped_ids_and_metrics(sandbox):
         },
     ))
     assert result["status"] == "ok"
-    assert result["seed_event_ids"] == ["shadow-event-1", "shadow-event-0"]
-    assert "shadow-event-0" in result["new_event_ids"]
+    assert result["seed_event_ids"] == ["shadow-event-3", "shadow-event-2"]
+    assert "shadow-event-2" in result["new_event_ids"]
     assert result["candidate_count"] >= 2
     assert result["chars"] > 0
     assert result["tokens"] == (result["chars"] + 3) // 4
@@ -163,10 +163,16 @@ def test_shadow_recall_does_not_add_a_prompt_parameter():
     assert "event_shadow_recall" not in inspect.signature(build).parameters
 
 
-def test_shadow_comparison_maps_source_events_and_turns_but_not_episodic_ids():
+def test_shadow_comparison_maps_source_events_and_turns_but_not_episodic_ids(sandbox):
     from core.memory.event_shadow_recall import compare_legacy_results
+    from core.memory.event_store import append_event
 
     scope = _scope("shadow-mapping")
+    for event_id, actor in (("event-user", "user"), ("event-assistant", "assistant")):
+        assert append_event(scope, {
+            "event_id": event_id, "turn_id": "turn-shared", "occurred_at": 1,
+            "realm": "reality", "kind": "owner_chat", "actor": actor,
+        }).ok
     result = {
         "new_event_ids": ["event-user", "event-assistant", "event-extra"],
         "new_turn_ids": ["turn-shared", "turn-extra"],
@@ -192,3 +198,16 @@ def test_shadow_comparison_maps_source_events_and_turns_but_not_episodic_ids():
     assert compared["extra_event_count"] == 1
     assert compared["event_coverage"] == 1.0
     assert compared["comparison_scope_rejections"] == 1
+
+
+def test_shadow_turn_in_ledger_but_not_new_recall_is_mapped_and_omitted(sandbox):
+    from core.memory.event_shadow_recall import compare_legacy_results
+    from core.memory.event_store import append_event
+
+    scope = _scope("shadow-omitted-turn")
+    assert append_event(scope, {"event_id": "omitted:user", "turn_id": "omitted", "occurred_at": 1,
+                                "realm": "reality", "kind": "owner_chat", "actor": "user"}).ok
+    compared = compare_legacy_results({"new_event_ids": [], "new_turn_ids": [], "new_event_turns": {}},
+                                      [{"turn_id": "omitted"}], scope=scope)
+    assert compared["old_mapped_count"] == 1
+    assert compared["omitted_event_count"] == 1

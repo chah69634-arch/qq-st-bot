@@ -1838,3 +1838,31 @@ DELETE /memory/{uid}/event-log/{YYYY-MM-DD}
 - 唯一回流面是 `action_trace` 的一行“练习发生过”事实；兴趣新增、状态迁移、升级、笔记学习和 MCP 解锁均写 provenance。
 - `practice.enabled: false` 是 58-61 共用的默认关闭总闸。
 
+# Memory Event MER-09 final repair gate (Brief 214)
+
+The Reality ledger now has separate maintenance and realtime contracts.
+`event_store.initialize()` is the only create/upgrade entry point; once a path
+has been verified, `append_event()` performs only the bounded event insert and
+indexed adjacency/turn/relation work. Realtime writes never execute schema DDL
+or migration updates. Busy, locked, and schema-mismatch outcomes are
+content-free process counters and remain fail-open to the legacy memory/send
+path.
+
+Legacy migration state version 2 binds progress to both the state version and
+source digest. Trusted `turn_id + actor` uses the live canonical event ID;
+matching live evidence is counted as `already_live`, while mismatched evidence
+stops at the current offset as a conflict. `web`, `dream_echo`, and `coplay`
+sources remain isolated. Unknown sources and assistant triggers without a
+provable message time become `legacy_unknown`; neither file date, the previous
+block time, nor import time is represented as their occurrence time.
+
+Storyline aggregation schema/cursor version 2 validates the complete model op
+batch on an in-memory copy and atomically commits arcs, nodes, cursor, and a
+bounded consumed-material receipt. The cursor is `{version, day, offset}`, so
+later appends to the same day remain visible. Inbox cleanup follows the durable
+receipt; a crash between main-file commit and cleanup can only leave retryable,
+already-consumed inputs and cannot duplicate nodes.
+
+Default source-policy observability reports
+`policy_filtered_query_count`, the number of queries that applied the policy.
+The deprecated `rejected` field remains zero and is not an event count.

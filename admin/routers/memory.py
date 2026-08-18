@@ -82,7 +82,14 @@ async def get_storyline_state(
     return {
         "user_id": user_id,
         "char_id": resolved,
-        "meta": data["meta"],
+        "meta": {
+            "last_aggregated_at": data["meta"].get("last_aggregated_at", 0.0),
+            "event_log_cursor": data["meta"].get("event_log_cursor", {}),
+            "cursor_version": (data["meta"].get("event_log_cursor") or {}).get("version", 1)
+                if isinstance(data["meta"].get("event_log_cursor"), dict) else 1,
+            "consumed_count": len(data["meta"].get("consumed_material_ids") or []),
+            "aggregation": data["meta"].get("aggregation") or {},
+        },
         "inbox_count": inbox_count,
         "arcs": [
             {

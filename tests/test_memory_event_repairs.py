@@ -120,15 +120,16 @@ def test_storyline_nodes_expand_only_selected_material_sources(sandbox):
     _apply_ops(uid, TEST_CHAR_ID, [
         {"op": "open_arc", "title": "topic A", "tags": []},
         {"op": "append_node", "arc_title": "topic A", "summary": "A", "ts": 1,
-         "source_material_ids": ["m001"]},
+         "span": [1, 1], "source_material_ids": ["m001"]},
     ], material_sources={"m001": ["a:user"], "m002": ["b:user"]})
     node = storyline.load(uid, char_id=TEST_CHAR_ID)["arcs"][0]["nodes"][0]
     assert node["source_ids"] == ["a:user"]
 
-    assert _apply_ops(uid, TEST_CHAR_ID, [
-        {"op": "append_node", "arc_title": "topic A", "summary": "bad", "ts": 2,
-         "source_material_ids": ["m404"]},
-    ], material_sources={"m001": ["a:user"]}) == 0
+    with pytest.raises(ValueError, match="invalid_material_ids"):
+        _apply_ops(uid, TEST_CHAR_ID, [
+            {"op": "append_node", "arc_title": "topic A", "summary": "bad", "ts": 2,
+             "span": [2, 2], "source_material_ids": ["m404"]},
+        ], material_sources={"m001": ["a:user"]})
     assert len(storyline.load(uid, char_id=TEST_CHAR_ID)["arcs"][0]["nodes"]) == 1
 
 
@@ -146,6 +147,9 @@ async def test_role_tools_hide_isolated_sources_and_admin_can_select_them(sandbo
         occurred_before=None, cursor="", limit=10,
     )
     assert [item["event_id"] for item in default["items"]] == ["ordinary"]
+    source_metrics = event_store.observability_snapshot()["source_policy"]
+    assert source_metrics["policy_filtered_query_count"] >= 1
+    assert source_metrics["rejected"] == 0
     forensic = event_query.search(
         scope, text="", actor="", kind="", source="web", occurred_after=None,
         occurred_before=None, cursor="", limit=10,

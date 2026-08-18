@@ -88,14 +88,17 @@ def test_legacy_lineage_is_unknown_and_dry_run_does_not_write_back(sandbox):
 
 
 def test_storyline_aggregator_passes_episode_event_range_to_new_node(sandbox):
+    import time
     from core.memory import storyline
     from core.scheduler.triggers.storyline_weekly import _apply_ops
 
     uid = "lineage-weekly"
     source_ids = ["turn-a:user", "turn-a:assistant"]
+    node_ts = time.time()
     _apply_ops(uid, TEST_CHAR_ID, [
         {"op": "open_arc", "title": "weekly lineage", "tags": []},
-        {"op": "append_node", "arc_title": "weekly lineage", "summary": "node", "ts": 1_800_000_100},
+        {"op": "append_node", "arc_title": "weekly lineage", "summary": "node", "ts": node_ts,
+         "span": [node_ts, node_ts]},
     ], source_event_ids=source_ids)
 
     node = storyline.load(uid, char_id=TEST_CHAR_ID)["arcs"][0]["nodes"][0]

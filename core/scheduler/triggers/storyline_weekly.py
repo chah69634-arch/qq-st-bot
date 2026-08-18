@@ -19,6 +19,8 @@ LLM 失败 / 输出不合法：本轮放弃、不动 cursor、下周重来（fai
 from __future__ import annotations
 
 import json as _json
+import copy
+import hashlib
 import logging
 import re
 import time
@@ -126,6 +128,7 @@ def _format_existing_arcs(arcs: list[dict]) -> str:
 def _build_materials(new_episodes: list[dict], inbox_entries: list[dict]) -> list[dict]:
     """Assign prompt-safe IDs to evidence-bearing aggregation input only."""
     from core.memory.lineage import normalize_source_event_ids
+    from core.memory.storyline import stable_material_id
 
     materials: list[dict] = []
     for kind, entries, timestamp_key, content_keys in (
@@ -137,7 +140,7 @@ def _build_materials(new_episodes: list[dict], inbox_entries: list[dict]) -> lis
                 continue
             summary = next((str(entry.get(key) or "").strip() for key in content_keys if entry.get(key)), "")
             materials.append({
-                "material_id": f"m{len(materials) + 1:03d}",
+                "material_id": stable_material_id(kind, entry),
                 "kind": kind,
                 "ts": float(entry.get(timestamp_key) or 0.0),
                 "summary": summary,
@@ -181,20 +184,33 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
     data = sl.load(uid, char_id=char_id)
     meta = data["meta"]
     last_aggregated_at = float(meta.get("last_aggregated_at") or 0.0)
-    cursor = meta.get("event_log_cursor") or ""
+    cursor = meta.get("event_log_cursor") or {"version": sl.CURSOR_VERSION, "day": "", "offset": 0}
+    consumed = set(meta.get("consumed_material_ids") or [])
 
     # 输入 1：上次聚合后新增的 episodic（含已被 identity 固化的）
     all_episodes = _load_memories(uid, char_id=char_id)
     new_episodes = [
         e for e in all_episodes
         if float(e.get("timestamp", 0.0)) > last_aggregated_at
+        and sl.stable_material_id("episode", e) not in consumed
     ]
 
     # 输入 2：storyline_inbox 的淘汰批次碎片
-    inbox_entries = sl.load_inbox(uid, char_id=char_id)
+    raw_inbox_entries = sl.load_inbox(uid, char_id=char_id)
+    if consumed and any(sl.stable_material_id("inbox", entry) in consumed for entry in raw_inbox_entries):
+        try:
+            sl.clear_consumed_inbox(uid, consumed, char_id=char_id)
+            raw_inbox_entries = sl.load_inbox(uid, char_id=char_id)
+        except OSError:
+            logger.warning("[storyline_weekly] receipt cleanup retry deferred uid=%s char=%s", uid, char_id)
+    inbox_entries = [
+        entry for entry in raw_inbox_entries
+        if sl.stable_material_id("inbox", entry) not in consumed
+    ]
 
     # 输入 3：event_log 自 cursor 以来的日文件，过滤 source: 非空块
-    event_log_text, latest_day = _collect_event_log_since(uid, char_id, cursor)
+    event_log_text, next_cursor, event_material_ids = _collect_event_log_since(uid, char_id, cursor)
+    event_material_ids = [value for value in event_material_ids if value not in consumed]
 
     if not new_episodes and not inbox_entries and not event_log_text.strip():
         return 0  # 无新素材，幂等 no-op，不调用 LLM
@@ -248,16 +264,23 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
             uid, char_id,
         )
         return 0
-    applied = _apply_ops(uid, char_id, ops, material_sources=material_map)
+    try:
+        planned, applied = _plan_ops(data, ops, material_sources=material_map)
+    except ValueError as exc:
+        logger.error("[storyline_weekly] batch rejected uid=%s char=%s code=%s", uid, char_id, exc)
+        return 0
 
     now = time.time()
-    sl.save_meta(
-        uid, char_id=char_id,
-        last_aggregated_at=now,
-        event_log_cursor=latest_day or cursor,
+    consumed_ids = [item["material_id"] for item in materials] + event_material_ids
+    sl.commit_batch(
+        uid, planned, char_id=char_id, last_aggregated_at=now,
+        event_log_cursor=next_cursor, consumed_material_ids=consumed_ids,
     )
     if inbox_entries:
-        sl.clear_inbox(uid, char_id=char_id)
+        try:
+            sl.clear_consumed_inbox(uid, set(consumed_ids), char_id=char_id)
+        except OSError:
+            logger.warning("[storyline_weekly] inbox cleanup deferred uid=%s char=%s", uid, char_id)
 
     logger.info(
         "[storyline_weekly] 聚合完成 uid=%s char=%s ops=%d/%d episodes=%d inbox=%d",
@@ -274,80 +297,90 @@ def _apply_ops(
     material_sources: dict[str, list[str]] | None = None,
     source_event_ids: list[str] | None = None,
 ) -> int:
-    """按 §1 写 API 逐条落盘。arc_title 作为 LLM 侧句柄解析回 arc_id（本批新开的弧线也纳入映射）。"""
+    """Compatibility entry point: validate fully, then persist once."""
     from core.memory import storyline as sl
-
-    data = sl.load(uid, char_id=char_id)
-    title_to_id = {a["title"]: a["arc_id"] for a in data["arcs"]}
-    applied = 0
-    now = time.time()
-
-    for op in ops:
-        if not isinstance(op, dict):
-            continue
-        kind = op.get("op")
-        try:
-            if kind == "open_arc":
-                title = str(op.get("title", ""))[:20]
-                if not title:
-                    continue
-                arc_id = sl.open_arc(uid, char_id=char_id, title=title, tags=op.get("tags") or [])
-                title_to_id[title] = arc_id
-                applied += 1
-            elif kind == "append_node":
-                arc_id = title_to_id.get(str(op.get("arc_title", "")))
-                if not arc_id:
-                    logger.warning(
-                        "[storyline_weekly] append_node 引用未知 arc_title，跳过 uid=%s title=%r",
-                        uid, op.get("arc_title"),
-                    )
-                    continue
-                ts = float(op.get("ts") or now)
-                span = op.get("span")
-                if material_sources is not None:
-                    material_ids = op.get("source_material_ids")
-                    if not isinstance(material_ids, list):
-                        logger.warning("[storyline_weekly] append_node 缺少 source_material_ids，跳过 uid=%s", uid)
-                        continue
-                    clean_ids = [str(value).strip() for value in material_ids]
-                    if (
-                        len(clean_ids) > 50
-                        or any(not value or value not in material_sources for value in clean_ids)
-                        or len(set(clean_ids)) != len(clean_ids)
-                    ):
-                        logger.warning("[storyline_weekly] append_node source_material_ids 非法，跳过 uid=%s", uid)
-                        continue
-                    from core.memory.lineage import normalize_source_event_ids
-                    node_source_ids = normalize_source_event_ids([
-                        event_id
-                        for material_id in clean_ids
-                        for event_id in material_sources[material_id]
-                    ])
-                else:
-                    # Compatibility path for direct callers predating material IDs.
-                    node_source_ids = source_event_ids
-                node_id = sl.append_node(
-                    uid, char_id=char_id, arc_id=arc_id,
-                    summary=str(op.get("summary", ""))[:80],
-                    ts=ts, span=span,
-                    source_ids=node_source_ids,
-                )
-                if node_id is not None:
-                    applied += 1
-            elif kind == "set_status":
-                arc_id = title_to_id.get(str(op.get("arc_title", "")))
-                status = op.get("status")
-                if not arc_id or status not in ("active", "dormant", "closed"):
-                    continue
-                if sl.set_arc_status(uid, char_id=char_id, arc_id=arc_id, status=status):
-                    applied += 1
-        except Exception as e:
-            logger.error("[storyline_weekly] apply op 失败 uid=%s op=%r err=%s", uid, op, e)
-
+    planned, applied = _plan_ops(
+        sl.load(uid, char_id=char_id), ops, material_sources=material_sources,
+        fallback_source_event_ids=source_event_ids,
+    )
+    sl._save(uid, planned, char_id=char_id)
+    sl._record_batch_provenance(uid, planned, char_id=char_id)
     return applied
 
 
-def _collect_event_log_since(uid: str, char_id: str, cursor: str) -> tuple[str, str]:
+def _plan_ops(data: dict, ops: list, *, material_sources: dict[str, list[str]] | None,
+              fallback_source_event_ids: list[str] | None = None) -> tuple[dict, int]:
+    """Validate and apply a complete batch to an in-memory copy."""
+    from core.memory import storyline as sl
+    from core.memory.lineage import normalize_source_event_ids
+
+    if not isinstance(ops, list):
+        raise ValueError("invalid_ops")
+    planned = copy.deepcopy(data)
+    title_to_arc = {str(a.get("title")): a for a in planned.get("arcs", [])}
+    now = time.time()
+    for index, op in enumerate(ops):
+        if not isinstance(op, dict) or op.get("op") not in {"open_arc", "append_node", "set_status"}:
+            raise ValueError("invalid_op")
+        kind = op["op"]
+        if kind == "open_arc":
+            title = op.get("title")
+            tags = op.get("tags", [])
+            if not isinstance(title, str) or not title.strip() or len(title) > 20 or not isinstance(tags, list):
+                raise ValueError("invalid_open_arc")
+            if any(not isinstance(tag, str) or tag not in sl._valid_tags() for tag in tags):
+                raise ValueError("invalid_tag")
+            if title in title_to_arc:
+                continue
+            if sum(a.get("status") == "active" for a in planned["arcs"]) >= sl.MAX_ACTIVE_ARCS:
+                raise ValueError("active_arc_limit")
+            digest = hashlib.sha256(f"{title}:{index}".encode()).hexdigest()[:12]
+            arc = {"arc_id": f"arc_{digest}", "title": title, "status": "active", "tags": sorted(set(tags)),
+                   "nodes": [], "created_at": now, "updated_at": now}
+            planned["arcs"].append(arc)
+            title_to_arc[title] = arc
+        elif kind == "append_node":
+            title, summary = op.get("arc_title"), op.get("summary")
+            arc = title_to_arc.get(title) if isinstance(title, str) else None
+            if arc is None or not isinstance(summary, str) or not summary.strip() or len(summary) > 80:
+                raise ValueError("invalid_append_node")
+            if len(arc.get("nodes", [])) >= sl.MAX_NODES_PER_ARC:
+                raise ValueError("node_limit")
+            try:
+                ts = float(op["ts"])
+                span = op["span"]
+                if not isinstance(span, list) or len(span) != 2:
+                    raise ValueError
+                span = [float(span[0]), float(span[1])]
+            except (KeyError, TypeError, ValueError):
+                raise ValueError("invalid_time") from None
+            if ts > now + 300 or span[0] > span[1] or not span[0] <= ts <= span[1]:
+                raise ValueError("invalid_time")
+            if arc["nodes"] and ts < float(arc["nodes"][-1]["ts"]):
+                raise ValueError("non_monotonic_time")
+            ids = op.get("source_material_ids")
+            if material_sources is not None:
+                if not isinstance(ids, list) or len(ids) > 50 or len(ids) != len(set(ids)) or any(i not in material_sources for i in ids):
+                    raise ValueError("invalid_material_ids")
+                sources = normalize_source_event_ids([eid for mid in ids for eid in material_sources[mid]])
+            else:
+                sources = normalize_source_event_ids(fallback_source_event_ids)
+            nid = hashlib.sha256(f"{arc['arc_id']}:{index}:{summary}:{ts}".encode()).hexdigest()[:12]
+            arc["nodes"].append({"node_id": f"n_{nid}", "ts": ts, "span": span, "summary": summary, "source_ids": sources})
+            arc["updated_at"] = now
+        else:
+            title, status = op.get("arc_title"), op.get("status")
+            arc = title_to_arc.get(title) if isinstance(title, str) else None
+            if arc is None or status not in {"active", "dormant", "closed"}:
+                raise ValueError("invalid_status")
+            arc["status"] = status
+            arc["updated_at"] = now
+    if len(planned["arcs"]) > sl.MAX_TOTAL_ARCS:
+        raise ValueError("total_arc_limit")
+    return planned, len(ops)
+
+
+def _collect_event_log_since(uid: str, char_id: str, cursor: object) -> tuple[str, dict, list[str]]:
     """读取 cursor 之后（不含）的 event_log 日文件，过滤 source: 非空块。
     返回 (拼接后的过滤文本, 处理到的最新日期字符串)——latest 为空表示无新日文件。"""
     from core.memory.event_log import list_days
@@ -355,23 +388,33 @@ def _collect_event_log_since(uid: str, char_id: str, cursor: str) -> tuple[str, 
     from core.memory.scope import MemoryScope
     from core.scheduler.triggers.event_log_salvage import _filter_salvageable_text
 
-    days = sorted(d for d in list_days(uid, char_id=char_id) if d > cursor)
+    legacy_day = cursor if isinstance(cursor, str) else ""
+    cursor_day = str(cursor.get("day") or "") if isinstance(cursor, dict) and cursor.get("version") == 2 else legacy_day
+    cursor_offset = int(cursor.get("offset") or 0) if isinstance(cursor, dict) and cursor.get("version") == 2 else 0
+    days = sorted(d for d in list_days(uid, char_id=char_id) if d >= cursor_day)
     if not days:
-        return "", ""
+        return "", {"version": 2, "day": cursor_day, "offset": cursor_offset}, []
 
     scope = MemoryScope.reality_scope(uid, char_id)
     log_dir = resolve_path(scope, "event_log")
     parts = []
+    material_ids: list[str] = []
+    next_cursor = {"version": 2, "day": cursor_day, "offset": cursor_offset}
     for date_str in days:
         day_file = log_dir / f"{date_str}.md"
         if not day_file.exists():
             continue
         try:
-            raw = day_file.read_text(encoding="utf-8")
+            raw_bytes = day_file.read_bytes()
         except OSError:
             continue
+        start = cursor_offset if date_str == cursor_day and cursor_offset <= len(raw_bytes) else 0
+        raw = raw_bytes[start:].decode("utf-8", errors="ignore")
         filtered, _skipped = _filter_salvageable_text(raw)
         if filtered.strip():
             parts.append(f"[{date_str}]\n{filtered}")
+            for block in (value.strip() for value in filtered.split("---") if value.strip()):
+                material_ids.append(f"eventlog:{hashlib.sha256((date_str + ':' + block).encode()).hexdigest()[:24]}")
+        next_cursor = {"version": 2, "day": date_str, "offset": len(raw_bytes)}
 
-    return "\n\n".join(parts), days[-1]
+    return "\n\n".join(parts), next_cursor, material_ids

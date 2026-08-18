@@ -116,6 +116,43 @@ def test_event_store_upgrade_and_corrupt_database_fail_closed(sandbox):
     assert result.ok is False and result.error_code == "database_error"
 
 
+def test_healthy_append_trace_has_no_schema_maintenance(sandbox, monkeypatch):
+    from core.memory import event_store
+
+    scope = _scope("event-store-hot-trace", TEST_CHAR_ID)
+    assert event_store.initialize(scope).healthy
+    statements: list[str] = []
+    original_connect = event_store._connect
+
+    def traced(path):
+        connection = original_connect(path)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(event_store, "_connect", traced)
+    assert event_store.append_event(scope, _event("event-hot-trace")).inserted
+    normalized = [statement.upper() for statement in statements]
+    assert not any("CREATE " in statement or "ALTER " in statement for statement in normalized)
+    assert not any("PRAGMA TABLE_INFO" in statement for statement in normalized)
+    assert not any(statement.lstrip().startswith("UPDATE EVENT_EDGES SET SCHEMA_VERSION") for statement in normalized)
+    assert len(statements) < 30
+
+
+def test_append_schema_mismatch_is_stable_and_does_not_upgrade(sandbox):
+    from core.memory import event_store
+
+    scope = _scope("event-store-schema-mismatch", TEST_CHAR_ID)
+    path = event_store.resolve_path(scope, "event_store")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as connection:
+        connection.execute("CREATE TABLE events (event_id TEXT PRIMARY KEY)")
+        connection.execute("PRAGMA user_version=999")
+    result = event_store.append_event(scope, _event("must-not-write"))
+    assert result.error_code == "schema_mismatch"
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 999
+
+
 def test_event_store_rejects_cross_scope_and_invalid_scope_without_writes(sandbox):
     from core.memory import event_store
     from core.memory.scope import MemoryScope

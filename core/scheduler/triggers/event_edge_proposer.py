@@ -35,6 +35,12 @@ _DISCOVERY: dict[str, int | float] = {
     "candidate_directories": 0,
     "missing_ledgers": 0,
     "unhealthy_ledgers": 0,
+    "version_mismatch": 0,
+    "table_missing": 0,
+    "column_missing": 0,
+    "database_error": 0,
+    "scope_mismatch": 0,
+    "timeout": 0,
     "eligible_scopes": 0,
     "completed_scopes": 0,
     "timed_out_scopes": 0,
@@ -225,6 +231,9 @@ async def _check_event_edge_proposer() -> None:
         "character_roots": 0, "candidate_directories": 0, "missing_ledgers": 0,
         "unhealthy_ledgers": 0, "eligible_scopes": 0, "completed_scopes": 0,
         "timed_out_scopes": 0, "failed_scopes": 0,
+        "version_mismatch": 0, "table_missing": 0, "column_missing": 0,
+        "database_error": 0, "scope_mismatch": 0,
+        "timeout": 0,
     }
     for character in get_registry().list_all("character"):
         char_id = character.id
@@ -241,8 +250,11 @@ async def _check_event_edge_proposer() -> None:
             if not ledger_path.is_file():
                 counters["missing_ledgers"] += 1
                 continue
-            if not event_store.existing_ledger_is_healthy(scope):
+            health_code = event_store.existing_ledger_health_code(scope)
+            if health_code != "ok":
                 counters["unhealthy_ledgers"] += 1
+                if health_code in counters:
+                    counters[health_code] += 1
                 continue
             counters["eligible_scopes"] += 1
 

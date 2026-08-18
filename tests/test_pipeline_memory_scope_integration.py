@@ -549,7 +549,7 @@ async def test_regression_post_process_char_id_forwarding(
 
     def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None,
                 trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None,
-                source=""):
+                source="", event_channel="", event_source="", **_kwargs):
         captured.append(char_id)
         return turn_id or f"{uid}_spy"
 

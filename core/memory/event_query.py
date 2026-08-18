@@ -149,17 +149,9 @@ def _event_projection_with_topics(
     return projected
 
 
-def _observe_default_source_filter(connection: sqlite3.Connection, scope: MemoryScope) -> None:
-    """Account for excluded isolated evidence without recording its content."""
-    try:
-        placeholders = ", ".join("?" for _ in source_policy.ISOLATED_SOURCES)
-        count = connection.execute(
-            f"SELECT COUNT(*) FROM events WHERE uid=? AND char_id=? AND realm=? AND source IN ({placeholders})",
-            (scope.uid, scope.character_id, scope.domain, *sorted(source_policy.ISOLATED_SOURCES)),
-        ).fetchone()[0]
-        source_policy.record_rejections(int(count))
-    except sqlite3.Error:
-        return
+def _observe_default_source_filter() -> None:
+    """Count filtered queries, not the current inventory of isolated rows."""
+    source_policy.record_filtered_query()
 
 
 def _find(
@@ -199,7 +191,7 @@ def get_event(
     with event_store._lock_for(path):
         try:
             if not source and not include_isolated:
-                _observe_default_source_filter(connection, scope)
+                _observe_default_source_filter()
             row = _find(connection, scope, event_id, source=source, include_isolated=include_isolated)
             return _event_projection_with_topics(connection, scope, row) if row is not None else None
         except sqlite3.Error as exc:
@@ -224,7 +216,7 @@ def window(
     with event_store._lock_for(path):
         try:
             if not source and not include_isolated:
-                _observe_default_source_filter(connection, scope)
+                _observe_default_source_filter()
             target = _find(connection, scope, event_id, source=source, include_isolated=include_isolated)
             if target is None:
                 return None
@@ -303,7 +295,7 @@ def related(
     with event_store._lock_for(path):
         try:
             if not source and not include_isolated:
-                _observe_default_source_filter(connection, scope)
+                _observe_default_source_filter()
             if _find(connection, scope, event_id, source=source, include_isolated=include_isolated) is None:
                 return None
             relation_types = relation_types or set()
@@ -410,7 +402,10 @@ def search(
     occurred_before: float | None,
     cursor: str,
     limit: int,
+    order: str = "asc",
 ) -> dict[str, Any]:
+    if order not in {"asc", "desc"} or (order == "desc" and cursor):
+        raise EventQueryError("invalid_cursor")
     decoded = _decode_cursor(cursor, "search")
     if occurred_after is not None and occurred_before is not None and occurred_after > occurred_before:
         raise EventQueryError("invalid_time_range")
@@ -454,9 +449,10 @@ def search(
     with event_store._lock_for(path):
         try:
             if not source:
-                _observe_default_source_filter(connection, scope)
+                _observe_default_source_filter()
+            direction = "DESC" if order == "desc" else "ASC"
             rows = connection.execute(
-                f"SELECT * FROM events WHERE {' AND '.join(where)} ORDER BY occurred_at ASC, seq ASC, event_id ASC LIMIT ?",
+                f"SELECT * FROM events WHERE {' AND '.join(where)} ORDER BY occurred_at {direction}, seq {direction}, event_id {direction} LIMIT ?",
                 (*params, limit + 1),
             ).fetchall()
             has_more = len(rows) > limit
