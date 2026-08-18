@@ -337,11 +337,13 @@ async def handle_message(message: dict):
     image_urls = message.get("image_urls", [])
     file_info = message.get("file_info")
     media_context = ""
+    media_refs: list[dict[str, str]] = []
 
     if file_info:
         try:
-            from core.media_processor import process_file
-            file_text = await process_file(file_info)
+            from core.media_processor import process_file_with_evidence
+            file_text, file_ref = await process_file_with_evidence(file_info)
+            media_refs.append(file_ref)
             if file_text:
                 fname = file_info.get("name", "文件")
                 media_context = f"（你发来了一个文件：{fname}，内容如下），回应必须细腻且有分量。回应长度不少于150字，不要因为克制就缩短回应。\n{file_text[:3000]}"
@@ -351,8 +353,9 @@ async def handle_message(message: dict):
 
     if image_urls and not media_context:
         try:
-            from core.media_processor import process_image
-            img_desc = await process_image(image_urls[0], content)
+            from core.media_processor import process_image_with_evidence
+            img_desc, image_ref = await process_image_with_evidence(image_urls[0], content)
+            media_refs.append(image_ref)
             if img_desc:
                 media_context = f"（你发来了一张图片，图片内容：{img_desc}，回应必须细腻且有分量）"
                 logger.info(f"[handle_message] 图片已识别: {img_desc[:50]}")
@@ -480,6 +483,8 @@ async def handle_message(message: dict):
             web_echo=bool(context.get("web_recall_result")),
             coplay_echo=_coplay_is_active(user_id, char_id=_char_id),
             loop_executed=_loop_active,
+            raw_user_text=_trusted_user_text,
+            media_refs=media_refs,
         )
 
 
@@ -669,6 +674,8 @@ async def _qq_reality_reply_adapter(
     coplay_echo: bool = False,
     loop_executed: bool = False,
     memory_reply: str | None = None,
+    raw_user_text: str | None = None,
+    media_refs: list[dict] | None = None,
 ) -> None:
     """
     QQ LLM_ASSISTANT_REPLY 统一出口（R1-D: turn_sink 统一链路）。
@@ -729,6 +736,8 @@ async def _qq_reality_reply_adapter(
             loop_executed=loop_executed,
             event_channel="qq",
             visible_assistant_text="\n".join(clean),
+            raw_user_text=raw_user_text,
+            media_refs=media_refs,
         )
     except Exception as _ts_err:
         _log_error("qq_reality_reply_adapter.turn_sink", _ts_err)

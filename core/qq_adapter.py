@@ -233,7 +233,7 @@ def _parse_event(raw: dict) -> dict | None:
         content = re.sub(r"\[CQ:at,[^\]]*\]", "", content).strip()
         content = content.replace(f"@{_self_id}", "").strip()
 
-    if not content:
+    if not content and not image_urls and not file_info:
         return None
 
     # 提取发送者信息

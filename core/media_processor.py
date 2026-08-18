@@ -67,23 +67,39 @@ async def download_bytes(url: str) -> bytes | None:
 
 
 async def process_image(url: str, user_text: str = "") -> str | None:
-    """
-    下载图片并用vision模型识别，返回描述文字
-    """
+    """Compatibility wrapper returning only the vision description."""
+    description, _evidence = await process_image_with_evidence(url, user_text)
+    return description
+
+
+def _media_ref(kind: str, filename: str, data: bytes | None, *, availability: str = "available") -> dict[str, str]:
+    """Build the ledger-safe media projection without retaining a path or URL."""
+    ref = {
+        "kind": kind,
+        "filename": Path(filename or kind).name or kind,
+        "availability": availability,
+    }
+    if data:
+        ref["sha256"] = _hash_bytes(data)
+    return ref
+
+
+async def process_image_with_evidence(url: str, user_text: str = "") -> tuple[str | None, dict[str, str]]:
+    """Process one QQ image once and return its description plus safe evidence."""
     try:
         data = await download_bytes(url)
         if not data:
-            return None
+            return None, _media_ref("image", _guess_image_filename(url, b""), None, availability="unavailable")
 
         filename = _guess_image_filename(url, data)
         result = await ingest_image_bytes([(data, filename)])
         if not result:
-            return None
-        return result[0]
+            return None, _media_ref("image", filename, data, availability="unavailable")
+        return result[0], _media_ref("image", filename, data)
 
     except Exception as e:
         log_error("media_processor.process_image", e)
-    return None
+    return None, _media_ref("image", _guess_image_filename(url, b""), None, availability="unavailable")
 
 
 def _hash_bytes(data: bytes) -> str:
@@ -401,12 +417,15 @@ async def ingest_file_bytes(data: bytes, filename: str) -> tuple[str, Path] | No
 
 
 async def process_file(file_info: dict) -> str | None:
-    """
-    下载并读取文件内容
-    支持txt和docx，返回文本内容
-    """
+    """Compatibility wrapper returning only extracted file text."""
+    text, _evidence = await process_file_with_evidence(file_info)
+    return text
+
+
+async def process_file_with_evidence(file_info: dict) -> tuple[str | None, dict[str, str]]:
+    """Process one QQ file once and return text plus a safe media reference."""
+    name = Path(str(file_info.get("name", "") or "file")).name or "file"
     try:
-        name = file_info.get("name", "")
         url = file_info.get("url", "")
         file_id = file_info.get("file_id", "")
         data = None
@@ -437,19 +456,21 @@ async def process_file(file_info: dict) -> str | None:
 
         if not data:
             logger.warning(f"[media_processor] 文件内容获取失败: {name}")
-            return None
+            return None, _media_ref("file", name, None, availability="unavailable")
+
+        evidence = _media_ref("file", name, data)
 
         result = await ingest_file_bytes(data, name)
         if result is None:
             suffix = Path(name).suffix.lower()
             if suffix and suffix not in SUPPORTED_SUFFIXES:
-                return f"（收到了一个{suffix}文件：{name}，暂时只能读取txt和docx格式）"
-            return None
+                return f"（收到了一个{suffix}文件：{name}，暂时只能读取txt和docx格式）", evidence
+            return None, {**evidence, "availability": "unavailable"}
 
         text, stored_path = result
         logger.info(f"[media_processor] 文件已落盘: {stored_path}")
-        return text if text else None
+        return text if text else None, evidence
 
     except Exception as e:
         log_error("media_processor.process_file", e)
-    return None
+    return None, _media_ref("file", name, None, availability="unavailable")
