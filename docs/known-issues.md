@@ -159,6 +159,18 @@ Brief 104 §3 已落地两块基础设施，供后续判断：
 
 ## design-backlog
 
+### Memory Event external relation endpoints
+
+**status:** `open` / `roadmap`
+
+`triggered_by`, `derived_from`, `correction_of`, and `media_of` are written
+only when both endpoints already exist in the same reality ledger. Scheduler,
+sensor, stimulus, and media references do not yet have a shared typed event
+node contract, so the system deliberately does not synthesize IDs or dangling
+edges for them. A future implementation needs an explicit read-only reference
+node lifecycle plus scoped endpoint validation before these relations can gain
+additional production sources.
+
 **2026-07-16 全部拍板关闭**，裁决与理由见 `DESIGN.md` §十一（决策 3–8）。摘要：
 
 - D7：**不回流**（自产内容不固化原则）。

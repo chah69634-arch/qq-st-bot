@@ -593,10 +593,11 @@ def _append_event_ledger(
     envelope,
     occurred_at: float,
     relation_hints: dict[str, str] | None = None,
+    topics: set[str] | None = None,
 ) -> None:
     """Best-effort dual-write of message evidence; never affects legacy memory."""
     try:
-        from core.memory.event_store import append_event
+        from core.memory.event_store import append_event, append_topics
 
         scope = MemoryScope.reality_scope(uid, char_id)
         ledger_source = source or str(getattr(getattr(envelope, "source", None), "value", "") or "")
@@ -651,6 +652,7 @@ def _append_event_ledger(
         for record in records:
             result = append_event(scope, record)
             if result.ok:
+                append_topics(scope, result.event_id, topics or set())
                 continue
             try:
                 from core.runtime_signal_observability import record as record_signal
@@ -805,6 +807,11 @@ def capture_turn(
             if _scrubbed_reply is not None else True,
         ]
 
+    try:
+        from core.tag_rules import get_tags
+        _event_topics = set(get_tags(user_msg))
+    except Exception:
+        _event_topics = set()
     _append_event_ledger(
         uid=uid,
         char_id=char_id,
@@ -826,6 +833,7 @@ def capture_turn(
             "correction_of": correction_of_event_id,
             "media_of": media_of_event_id,
         },
+        topics=_event_topics,
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")

@@ -144,6 +144,11 @@ async def get_related_events_wrapper(
             "type": item.get("edge_type", ""),
             "direction": item.get("direction", ""),
             "edge_id": item.get("edge_id"),
+            "relations": [
+                {"type": relation.get("relation_type") or relation.get("edge_type", ""),
+                 "direction": relation.get("direction", ""), "edge_id": relation.get("edge_id")}
+                for relation in item.get("relations", [])
+            ],
         })
         if related:
             items.append(related)

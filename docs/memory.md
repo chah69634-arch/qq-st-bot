@@ -90,10 +90,19 @@ feed Reality/Dream prompts, memory ranking, chat, or the role tool loop.
 
 The scoped evidence ledger writes only deterministic, system-origin relation
 edges in the same SQLite transaction as an event. `previous`/`next` are
-limited to one `uid + char_id + realm + stream`; `same_turn` and `reply_to`
-connect the owner/assistant pair, while `triggered_by`, `derived_from`,
-`correction_of`, and `media_of` require an explicit stored event ID. No edge
-uses an LLM or text matching.
+limited to one `uid + char_id + realm + stream`; the normal owner turn
+produces `same_turn` and `reply_to` for its stored user/assistant pair.
+`triggered_by`, `derived_from`, `correction_of`, and `media_of` require an
+explicit stored event ID in the same ledger. No edge uses an LLM or text
+matching, and external stimulus or media references are not forged into event
+nodes merely to create an edge.
+
+At the same turn boundary, controlled `tag_rules` tags are computed once and
+stored in `event_topics` for each successfully appended turn event. This is
+rule-only, fail-open metadata: a topic write failure cannot affect message
+evidence, and model-proposed relations never become deterministic topics.
+`related` keeps its legacy first relation fields and also returns `relations[]`
+for every relation between a returned neighbour pair.
 
 Every edge carries `from_event_id`, `to_event_id`, `relation_type`,
 `origin=system`, `confidence=1`, `created_at`, and its schema version. Both

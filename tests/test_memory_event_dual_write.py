@@ -50,6 +50,28 @@ def test_capture_turn_dual_writes_distinct_message_events_with_frozen_scope(sand
     assert '"sha256":"' in events[0][9]
 
 
+def test_capture_turn_writes_rule_topics_and_complete_same_turn_relations(sandbox, monkeypatch):
+    from core.memory import event_query
+    from core.memory.fixation_pipeline import capture_turn
+    from core.memory.scope import MemoryScope
+    from core.write_envelope import stamp_user_chat
+
+    monkeypatch.setattr("core.tag_rules.get_tags", lambda _text: {"topic.fixture", "topic.work"})
+    uid = "ledger-topic-owner"
+    turn_id = capture_turn(
+        uid, "controlled topic input", "controlled reply", envelope=stamp_user_chat(),
+        char_id=TEST_CHAR_ID, turn_id="turn-topic-001",
+    )
+    scope = MemoryScope.reality_scope(uid, TEST_CHAR_ID)
+    assert event_query.get_event(scope, f"{turn_id}:user")["topics"] == ["topic.fixture", "topic.work"]
+    assert event_query.get_event(scope, f"{turn_id}:assistant")["topics"] == ["topic.fixture", "topic.work"]
+    related = event_query.related(scope, f"{turn_id}:assistant", cursor="", limit=10)
+    assert related and len(related["items"]) == 1
+    assert {"same_turn", "reply_to"} <= {
+        relation["relation_type"] for relation in related["items"][0]["relations"]
+    }
+
+
 @pytest.mark.parametrize("channel", ["qq", "desktop", "mobile", "scheduler"])
 def test_capture_turn_keeps_turn_id_alignment_for_reality_channels(sandbox, channel):
     from core.memory.fixation_pipeline import capture_turn

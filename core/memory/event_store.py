@@ -14,7 +14,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope, require_character_id
@@ -504,6 +504,35 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
                 _HOT_PATH_OBSERVABILITY["append_ms_total"] += round(
                     (time.perf_counter() - append_started) * 1000
                 )
+
+
+def append_topics(scope: MemoryScope, event_id: str, topics: Iterable[str]) -> bool:
+    """Attach controlled rule tags to an existing event, independently of append."""
+    normalized = sorted({str(topic).strip()[:128] for topic in topics if str(topic).strip()})[:20]
+    if not normalized:
+        return True
+    try:
+        path = _path(scope)
+        if not path.exists():
+            return False
+        with _lock_for(path):
+            with _connect(path) as connection:
+                exists = connection.execute(
+                    "SELECT 1 FROM events WHERE uid=? AND char_id=? AND realm=? AND event_id=?",
+                    (scope.uid, scope.character_id, scope.domain, event_id),
+                ).fetchone()
+                if exists is None:
+                    return False
+                connection.executemany(
+                    """INSERT OR IGNORE INTO event_topics
+                       (uid, char_id, event_id, topic, score, created_at) VALUES (?, ?, ?, ?, 1.0, ?)""",
+                    [(scope.uid, scope.character_id, event_id, topic, time.time()) for topic in normalized],
+                )
+                connection.commit()
+        return True
+    except Exception:
+        logger.warning("[event_store] topic append failed", exc_info=True)
+        return False
 
 
 def tombstone_event(scope: MemoryScope, event_id: str) -> TombstoneResult:

@@ -341,26 +341,39 @@ def related(
             # neighbours so a short page does not repeat that neighbour before
             # exposing the next event.  Edges for one append are contiguous,
             # so advancing through the repeated edge ids is deterministic.
-            selected: list[sqlite3.Row] = []
-            selected_ids: set[str] = set()
+            selected: list[list[sqlite3.Row]] = []
+            selected_by_id: dict[str, list[sqlite3.Row]] = {}
             cursor_edge_id = edge_after
             has_more = False
             for row in rows:
                 other_id = row["to_event_id"] if row["from_event_id"] == event_id else row["from_event_id"]
-                if other_id in selected_ids:
+                if other_id in selected_by_id:
+                    selected_by_id[other_id].append(row)
                     cursor_edge_id = row["edge_id"]
                     continue
                 if len(selected) >= limit:
                     has_more = True
                     break
-                selected.append(row)
-                selected_ids.add(other_id)
+                group = [row]
+                selected.append(group)
+                selected_by_id[other_id] = group
                 cursor_edge_id = row["edge_id"]
             if len(rows) == 1001 and not has_more:
                 has_more = True
             items = []
-            for row in selected:
+            for group in selected:
+                row = group[0]
                 other_id = row["to_event_id"] if row["from_event_id"] == event_id else row["from_event_id"]
+                relations = [{
+                    "edge_id": edge["edge_id"],
+                    "edge_type": edge["relation_type"] or edge["edge_type"],
+                    "relation_type": edge["relation_type"] or edge["edge_type"],
+                    "origin": edge["origin"],
+                    "confidence": edge["confidence"],
+                    "schema_version": edge["schema_version"],
+                    "edge_created_at": edge["created_at"],
+                    "direction": "outgoing" if edge["from_event_id"] == event_id else "incoming",
+                } for edge in group]
                 items.append({
                     "edge_id": row["edge_id"],
                     "edge_type": row["relation_type"] or row["edge_type"],
@@ -372,6 +385,7 @@ def related(
                     "direction": "outgoing" if row["from_event_id"] == event_id else "incoming",
                     "related_event_id": other_id,
                     "dangling": row["event_id"] is None,
+                    "relations": relations,
                     "event": _event_projection_with_topics(connection, scope, row) if row["event_id"] is not None else None,
                 })
             return {
