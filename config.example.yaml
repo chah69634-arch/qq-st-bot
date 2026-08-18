@@ -681,6 +681,8 @@ event_edge_proposer:
   max_daily_calls: 4
   max_daily_tokens: 1600
   max_tokens_per_call: 400
+  # Bounds one discovered owner scope, including lock acquisition and model call.
+  scope_timeout_seconds: 30
 event_shadow_recall:
   # Disabled by default: the event-ledger path is diagnostic only and never
   # injects event text into the prompt.  uids/char_ids are optional greylist

@@ -834,6 +834,24 @@ def recent_events_for_proposal(scope: MemoryScope, *, limit: int = 8) -> list[di
             return []
 
 
+def existing_ledger_is_healthy(scope: MemoryScope) -> bool:
+    """Check a pre-existing ledger without creating or migrating one."""
+    path = _path(scope)
+    if not path.is_file():
+        return False
+    with _lock_for(path):
+        try:
+            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25) as connection:
+                names = {
+                    str(row[0]) for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+            return {"events", "event_edge_proposals", "event_edge_proposer_runs"}.issubset(names)
+        except (sqlite3.Error, OSError, ValueError):
+            return False
+
+
 def proposal_budget_snapshot(scope: MemoryScope, day_key: str) -> dict[str, int]:
     """Return persisted per-day call/token usage without creating a ledger."""
     path = _path(scope)

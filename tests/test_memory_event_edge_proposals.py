@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
@@ -115,3 +116,65 @@ def test_proposal_observability_route_is_exposed():
     from admin.admin_server import app
 
     assert "/observability/memory-event-edge-proposals" in app.openapi()["paths"]
+
+
+def test_scheduler_discovers_only_existing_healthy_sqlite3_ledgers(sandbox, monkeypatch):
+    from core.memory.path_resolver import resolve_path
+    from core.scheduler import loop
+    from core.scheduler.triggers import event_edge_proposer as proposer
+
+    uid = "proposal-discovery-owner"
+    _seed(uid)
+    missing_scope = _scope("proposal-discovery-missing")
+    resolve_path(missing_scope, "event_store").parent.mkdir(parents=True)
+    unhealthy_scope = _scope("proposal-discovery-unhealthy")
+    unhealthy_path = resolve_path(unhealthy_scope, "event_store")
+    unhealthy_path.parent.mkdir(parents=True)
+    unhealthy_path.write_text("not a sqlite ledger", encoding="utf-8")
+    calls: list[tuple[str, str]] = []
+
+    async def fake_propose(found_uid, char_id, _cfg):
+        calls.append((found_uid, char_id))
+
+    monkeypatch.setattr(proposer, "_config", lambda: {
+        "enabled": True, "scope_timeout_seconds": 1,
+    })
+    monkeypatch.setattr(proposer, "_propose_scope", fake_propose)
+    monkeypatch.setattr(loop, "_is_ready", lambda _name: True)
+    monkeypatch.setattr(loop, "_mark", lambda _name: None)
+    monkeypatch.setattr(
+        "core.asset_registry.get_registry",
+        lambda: SimpleNamespace(list_all=lambda _kind: [SimpleNamespace(id=TEST_CHAR_ID)]),
+    )
+
+    asyncio.run(proposer._check_event_edge_proposer())
+    assert calls == [(uid, TEST_CHAR_ID)]
+    discovery = proposer.discovery_observability_snapshot()
+    assert discovery["eligible_scopes"] >= 1
+    assert discovery["missing_ledgers"] >= 1
+    assert discovery["unhealthy_ledgers"] >= 1
+
+
+def test_scheduler_scope_timeout_releases_discovery_loop(sandbox, monkeypatch):
+    from core.scheduler import loop
+    from core.scheduler.triggers import event_edge_proposer as proposer
+
+    uid = "proposal-timeout-owner"
+    _seed(uid)
+
+    async def slow_propose(*_args):
+        await asyncio.sleep(1)
+
+    monkeypatch.setattr(proposer, "_config", lambda: {
+        "enabled": True, "scope_timeout_seconds": 0.01,
+    })
+    monkeypatch.setattr(proposer, "_propose_scope", slow_propose)
+    monkeypatch.setattr(loop, "_is_ready", lambda _name: True)
+    monkeypatch.setattr(loop, "_mark", lambda _name: None)
+    monkeypatch.setattr(
+        "core.asset_registry.get_registry",
+        lambda: SimpleNamespace(list_all=lambda _kind: [SimpleNamespace(id=TEST_CHAR_ID)]),
+    )
+
+    asyncio.run(proposer._check_event_edge_proposer())
+    assert proposer.discovery_observability_snapshot()["timed_out_scopes"] >= 1

@@ -8,6 +8,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import asyncio
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -24,6 +26,20 @@ _DEFAULTS = {
     "max_daily_calls": 4,
     "max_daily_tokens": 1600,
     "max_tokens_per_call": 400,
+    "scope_timeout_seconds": 30,
+}
+_DISCOVERY_LOCK = threading.Lock()
+_DISCOVERY: dict[str, int | float] = {
+    "runs": 0,
+    "character_roots": 0,
+    "candidate_directories": 0,
+    "missing_ledgers": 0,
+    "unhealthy_ledgers": 0,
+    "eligible_scopes": 0,
+    "completed_scopes": 0,
+    "timed_out_scopes": 0,
+    "failed_scopes": 0,
+    "updated_at": 0.0,
 }
 _SYSTEM_PROMPT = """You propose tentative relations between the supplied event records.
 Return only a JSON array. Every item must have from_event_id, to_event_id,
@@ -48,12 +64,27 @@ def _config() -> dict[str, int | bool]:
         ("max_daily_calls", 1, 24),
         ("max_daily_tokens", 64, 20_000),
         ("max_tokens_per_call", 64, 2_000),
+        ("scope_timeout_seconds", 1, 120),
     ):
         try:
             cfg[key] = min(upper, max(lower, int(raw.get(key, cfg[key]))))
         except (TypeError, ValueError):
             pass
     return cfg
+
+
+def _record_discovery(**counts: int) -> None:
+    with _DISCOVERY_LOCK:
+        _DISCOVERY["runs"] = int(_DISCOVERY["runs"]) + 1
+        for key, value in counts.items():
+            _DISCOVERY[key] = int(_DISCOVERY.get(key, 0)) + int(value)
+        _DISCOVERY["updated_at"] = time.time()
+
+
+def discovery_observability_snapshot() -> dict[str, int | float]:
+    """Process-local, content-free scheduler discovery counters."""
+    with _DISCOVERY_LOCK:
+        return dict(_DISCOVERY)
 
 
 def _day_key(now: float | None = None) -> str:
@@ -181,19 +212,51 @@ async def _check_event_edge_proposer() -> None:
         return
     from core.scheduler.loop import _is_ready, _mark
     from core.asset_registry import get_registry
+    from core.memory import event_store
     from core.memory.locks import uid_lock
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
     from core.sandbox import get_paths
 
     if not _is_ready("event_edge_proposer"):
         return
     _mark("event_edge_proposer")
+    counters = {
+        "character_roots": 0, "candidate_directories": 0, "missing_ledgers": 0,
+        "unhealthy_ledgers": 0, "eligible_scopes": 0, "completed_scopes": 0,
+        "timed_out_scopes": 0, "failed_scopes": 0,
+    }
     for character in get_registry().list_all("character"):
         char_id = character.id
         char_root = get_paths().memory_char_root(char_id=char_id)
         if not char_root.exists():
             continue
+        counters["character_roots"] += 1
         for directory in char_root.iterdir():
-            if not directory.is_dir() or not (directory / "event_store.sqlite").exists():
+            if not directory.is_dir():
                 continue
-            async with uid_lock(directory.name):
-                await _propose_scope(directory.name, char_id, cfg)
+            counters["candidate_directories"] += 1
+            scope = MemoryScope.reality_scope(directory.name, char_id)
+            ledger_path = resolve_path(scope, "event_store")
+            if not ledger_path.is_file():
+                counters["missing_ledgers"] += 1
+                continue
+            if not event_store.existing_ledger_is_healthy(scope):
+                counters["unhealthy_ledgers"] += 1
+                continue
+            counters["eligible_scopes"] += 1
+
+            async def _run_scope() -> None:
+                async with uid_lock(scope.uid):
+                    await _propose_scope(scope.uid, char_id, cfg)
+
+            try:
+                await asyncio.wait_for(_run_scope(), timeout=float(cfg["scope_timeout_seconds"]))
+                counters["completed_scopes"] += 1
+            except TimeoutError:
+                counters["timed_out_scopes"] += 1
+                logger.warning("[event_edge_proposer] scope timed out char_id=%s", char_id)
+            except Exception:
+                counters["failed_scopes"] += 1
+                logger.exception("[event_edge_proposer] scope failed char_id=%s", char_id)
+    _record_discovery(**counters)

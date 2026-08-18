@@ -165,11 +165,12 @@ cannot be changed by the agent.
 `GET/PUT /settings/feature-flags` desktop Runtime Configuration surface. The
 feature is disabled by default and never sends a turn. Its bounded runtime
 settings live in `event_edge_proposer` (`cooldown_seconds`, event window,
-per-run candidates, daily call budget, and daily token budget); the dedicated
-`event_edge_proposer` routing category is selectable on the desktop Model
-Routing page. `GET /observability/memory-event-edge-proposals` requires
-`state.read` and returns only content-free counters and daily budget use. No
-desktop or mobile channel consumes candidate-edge records.
+per-run candidates, daily call/token budget, and `scope_timeout_seconds`);
+the dedicated `event_edge_proposer` routing category is selectable on the
+desktop Model Routing page. `GET /observability/memory-event-edge-proposals`
+requires `state.read` and returns only content-free counters, daily budget use,
+and process-local discovery/timeout counts. No desktop or mobile channel
+consumes candidate-edge records.
 
 ## Brief 204 Memory Event shadow recall
 

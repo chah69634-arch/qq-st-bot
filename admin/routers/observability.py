@@ -139,14 +139,16 @@ async def memory_event_edge_proposals(
 ):
     from core.memory.event_store import edge_proposal_observability_snapshot
     from core.memory.scope import MemoryScope
-    from core.scheduler.triggers.event_edge_proposer import _config, _day_key
+    from core.scheduler.triggers.event_edge_proposer import _config, _day_key, discovery_observability_snapshot
 
     cfg = _config()
-    return edge_proposal_observability_snapshot(
+    result = edge_proposal_observability_snapshot(
         MemoryScope.reality_scope(uid, char_id), day_key=_day_key(),
         daily_call_limit=int(cfg["max_daily_calls"]),
         daily_token_limit=int(cfg["max_daily_tokens"]),
     )
+    result["discovery"] = discovery_observability_snapshot()
+    return result
 
 
 @router.get(

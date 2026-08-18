@@ -117,13 +117,18 @@ prompt hash, confidence, short reason, timestamp, and `proposed` status. They
 are never read by prompts, `event_log`, short-term memory, episodic memory,
 identity, deterministic `event_edges`, or recall.
 
-The same scoped SQLite ledger persists proposal-run accounting, so per-scope
-cooldown and daily call/token budgets survive restart. Parse, timeout, scope,
-and write failures record a content-free run result and write no candidate.
+The scheduler discovers only existing, healthy canonical `.sqlite3` ledgers;
+it never creates a ledger while scanning character directories. Each eligible
+scope, including lock acquisition and the model call, is bounded by
+`scope_timeout_seconds` (default 30 seconds). The same scoped SQLite ledger
+persists proposal-run accounting, so per-scope cooldown and daily call/token
+budgets survive restart. Parse, timeout, scope, and write failures record a
+content-free run result and write no candidate.
 `GET /observability/memory-event-edge-proposals?uid=...&char_id=...` requires
-`state.read` and returns only run, candidate, failure, daily budget, and
-relation-type counters. `possible_cause` remains explicitly tentative; there
-is no acceptance or review workflow in this phase.
+`state.read` and returns only run, candidate, failure, daily budget,
+relation-type, and process-local discovery/timeout counters.
+`possible_cause` remains explicitly tentative; there is no acceptance or
+review workflow in this phase.
 
 ## Memory Event 09: shadow recall rollout
 
