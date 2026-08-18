@@ -4,6 +4,7 @@ import asyncio
 import json
 import threading
 import time
+from datetime import datetime, timedelta
 
 from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
@@ -187,6 +188,35 @@ def test_shadow_observability_empty_scope_and_auth_are_explicit(sandbox, monkeyp
     assert result["latest_date"] == ""
     assert "records" in result and result["records"] == []
     assert "event_id" not in response.text and "query" not in response.text
+
+
+def test_shadow_observability_ignores_disabled_traces_and_finds_recent_real_run(sandbox, monkeypatch):
+    from admin.routers.observability import memory_event_shadow_recall
+    from core.memory.path_resolver import resolve_path
+    from core.recall_trace import write_trace
+
+    uid = "shadow-disabled-history"
+    write_trace(uid, TEST_CHAR_ID, {
+        "event_shadow_recall": {"status": "disabled", "enabled": False},
+    })
+    old_day = (datetime.now().date() - timedelta(days=2)).isoformat()
+    trace_dir = resolve_path(_scope(uid), "recall_trace")
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    (trace_dir / f"{old_day}.jsonl").write_text(json.dumps({
+        "event_shadow_recall": {
+            "status": "ok", "enabled": True, "event_coverage": 0.75,
+        },
+    }) + "\n", encoding="utf-8")
+    monkeypatch.setattr("core.memory.event_shadow_recall.config", lambda: {
+        "enabled": True, "uids": [], "char_ids": [],
+        "timeout_ms": 120, "sqlite_timeout_ms": 40,
+    })
+
+    result = asyncio.run(memory_event_shadow_recall(uid, TEST_CHAR_ID, _auth=None))
+    assert result["effective_state"] == "enabled-and-running"
+    assert result["latest_date"] == old_day
+    assert result["summary"]["calls"] == 1
+    assert result["status_counts"] == {"ok": 1}
 
 
 def test_shadow_recall_does_not_add_a_prompt_parameter():

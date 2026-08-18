@@ -1,8 +1,8 @@
 # Brief 216 · MER-11 · Memory Event 最终边界修正与控制面观测收口
 
-> 状态：completed  
-> 依赖：MER-10（`ed8f97c`）  
-> 施工方式：单张一次性工单；先只读核对，再实现、验证、独立提交  
+> 状态：completed（代码）/ deployment pending
+> 依赖：MER-10（`ed8f97c`）
+> 施工方式：单张一次性工单；先只读核对，再实现、验证、独立提交
 > 范围：只修代码、测试、管理面与文档，不自动迁移服务器历史数据
 
 ## 1. 目标
@@ -147,15 +147,15 @@ prompt、token 原文、事件内容或敏感路径：
 
 ## 7. 验收标准
 
-- [ ] MER-10 复核的四个确定性问题全部有代码修正和回归测试。
-- [ ] migration dry-run 在真实服务器样本上只读运行并输出合法 JSON。
-- [ ] shadow/proposer 的 desired、effective、运行和失败状态在管理面可区分。
-- [ ] 两类观测不泄露正文、prompt、token 原文、事件证据或本机路径。
-- [ ] shadow/proposer 仍默认关闭，不进入正式 prompt，不写派生记忆。
-- [ ] 事件工具、admin forensic、Dream/Stage、source isolation 和原有聊天路径不回退。
-- [ ] 相关测试使用 `pytest -n auto` 通过，`git diff --check` 通过。
-- [ ] 只改代码、测试、文档和管理面资源；不提交 `data/`、`userdata/` 或服务器运行产物。
-- [ ] 完成后立即创建独立 Git commit，再把本工单状态改为 completed。
+- [x] MER-10 复核的四个确定性问题全部有代码修正和回归测试。
+- [ ] migration dry-run 在真实服务器样本上只读运行并输出合法 JSON（部署后执行）。
+- [x] shadow/proposer 的 desired、effective、运行和失败状态在管理面可区分。
+- [x] 两类观测不泄露正文、prompt、token 原文、事件证据或本机路径。
+- [x] shadow/proposer 仍默认关闭，不进入正式 prompt，不写派生记忆。
+- [x] 事件工具、admin forensic、Dream/Stage、source isolation 和原有聊天路径不回退。
+- [x] 相关测试使用 `pytest -n auto` 通过，`git diff --check` 通过。
+- [x] 只改代码、测试、文档和管理面资源；不提交 `data/`、`userdata/` 或服务器运行产物。
+- [x] 完成后立即创建独立 Git commit，再把本工单状态改为 completed。
 
 ## 8. 上线顺序
 

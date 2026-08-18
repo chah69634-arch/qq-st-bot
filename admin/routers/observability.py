@@ -194,45 +194,76 @@ async def memory_event_shadow_recall(
     _auth=Depends(require_scopes("state.read")),
 ):
     import json
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from core.memory.path_resolver import resolve_path
     from core.memory.scope import MemoryScope
 
-    date_str = date or datetime.now().strftime("%Y-%m-%d")
     scope = MemoryScope.reality_scope(uid, char_id)
-    trace_file = resolve_path(scope, "recall_trace") / f"{date_str}.jsonl"
     try:
         read_limit = min(100, max(1, int(limit)))
     except (TypeError, ValueError):
         read_limit = 20
-    records: list[dict] = []
-    if trace_file.exists():
+
+    today = datetime.now().date()
+    if date:
         try:
-            for line in trace_file.read_text(encoding="utf-8").splitlines()[-read_limit:]:
+            candidate_dates = [datetime.strptime(date, "%Y-%m-%d").date()]
+        except ValueError:
+            raise HTTPException(status_code=422, detail="invalid_date") from None
+    else:
+        # A disabled trace is written on ordinary turns, so look for the most
+        # recent real run instead of treating today's audit file as proof of work.
+        candidate_dates = [today - timedelta(days=offset) for offset in range(31)]
+
+    def _read_records(day) -> list[dict]:
+        trace_file = resolve_path(scope, "recall_trace") / f"{day.isoformat()}.jsonl"
+        if not trace_file.exists():
+            return []
+        result: list[dict] = []
+        try:
+            lines = trace_file.read_text(encoding="utf-8").splitlines()
+            for line in reversed(lines):
                 try:
                     item = json.loads(line)
                 except Exception:
                     continue
                 shadow = item.get("event_shadow_recall")
-                if isinstance(shadow, dict):
-                    records.append({
-                        key: shadow.get(key)
-                        for key in (
-                            "status", "enabled", "seed_order", "comparison_mode",
-                            "expand_count", "related_count", "candidate_count", "chars",
-                            "tokens", "old_chars", "old_tokens", "overlap_rate",
-                            "event_overlap_rate", "turn_overlap_rate", "event_overlap_count",
-                            "turn_overlap_count", "event_coverage", "old_result_count",
-                            "old_mapped_count", "old_unmapped_count", "old_mapped_event_count",
-                            "new_mapped_count", "new_unmapped_count", "new_event_count",
-                            "new_turn_count", "extra_event_count", "omitted_event_count",
-                            "comparison_scope_rejections",
-                            "scope_rejections", "truncation_reason", "timeout_reason",
-                            "elapsed_ms", "timeout_ms", "sqlite_timeout_ms",
-                        )
-                    })
+                if not isinstance(shadow, dict) or str(shadow.get("status") or "") == "disabled":
+                    continue
+                result.append({
+                    key: shadow.get(key)
+                    for key in (
+                        "status", "enabled", "seed_order", "comparison_mode",
+                        "expand_count", "related_count", "candidate_count", "chars",
+                        "tokens", "old_chars", "old_tokens", "overlap_rate",
+                        "event_overlap_rate", "turn_overlap_rate", "event_overlap_count",
+                        "turn_overlap_count", "event_coverage", "old_result_count",
+                        "old_mapped_count", "old_unmapped_count", "old_mapped_event_count",
+                        "new_mapped_count", "new_unmapped_count", "new_event_count",
+                        "new_turn_count", "extra_event_count", "omitted_event_count",
+                        "comparison_scope_rejections",
+                        "scope_rejections", "truncation_reason", "timeout_reason",
+                        "elapsed_ms", "timeout_ms", "sqlite_timeout_ms",
+                    )
+                })
+                if len(result) >= read_limit:
+                    break
         except Exception:
-            records = []
+            return []
+        result.reverse()
+        return result
+
+    records: list[dict] = []
+    selected_date = candidate_dates[0]
+    for candidate_date in candidate_dates:
+        candidate_records = _read_records(candidate_date)
+        if candidate_records:
+            records = candidate_records
+            selected_date = candidate_date
+            break
+        if date:
+            break
+    date_str = selected_date.isoformat()
     status_counts: dict[str, int] = {}
     for item in records:
         status = str(item.get("status") or "unknown")
