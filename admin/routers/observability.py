@@ -192,8 +192,15 @@ async def memory_event_shadow_recall(
                         key: shadow.get(key)
                         for key in (
                             "status", "enabled", "seed_event_ids", "new_event_ids",
+                            "new_turn_ids", "seed_order", "comparison_mode",
                             "expand_count", "related_count", "candidate_count", "chars",
                             "tokens", "old_chars", "old_tokens", "overlap_rate",
+                            "event_overlap_rate", "turn_overlap_rate", "event_overlap_count",
+                            "turn_overlap_count", "event_coverage", "old_result_count",
+                            "old_mapped_count", "old_unmapped_count", "old_mapped_event_count",
+                            "new_mapped_count", "new_unmapped_count", "new_event_count",
+                            "new_turn_count", "extra_event_count", "omitted_event_count",
+                            "comparison_scope_rejections",
                             "scope_rejections", "truncation_reason", "timeout_reason",
                             "elapsed_ms",
                         )

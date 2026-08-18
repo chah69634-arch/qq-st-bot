@@ -63,13 +63,17 @@ def test_shadow_recall_collects_scoped_ids_and_metrics(sandbox):
         },
     ))
     assert result["status"] == "ok"
-    assert result["seed_event_ids"] == ["shadow-event-0", "shadow-event-1"]
+    assert result["seed_event_ids"] == ["shadow-event-1", "shadow-event-0"]
     assert "shadow-event-0" in result["new_event_ids"]
     assert result["candidate_count"] >= 2
     assert result["chars"] > 0
     assert result["tokens"] == (result["chars"] + 3) // 4
     assert result["old_chars"] == 800
     assert result["overlap_rate"] > 0
+    assert result["event_overlap_rate"] == result["overlap_rate"]
+    assert result["comparison_mode"] == "event_id_and_turn_id"
+    assert result["old_unmapped_count"] == 0
+    assert result["turn_overlap_rate"] == 0.0
     assert result["scope_rejections"] == 0
     assert "evidence about topic" not in json.dumps({k: result[k] for k in result if k.endswith("ids")})
 
@@ -157,3 +161,34 @@ def test_shadow_recall_does_not_add_a_prompt_parameter():
     from core.prompt_builder import build
 
     assert "event_shadow_recall" not in inspect.signature(build).parameters
+
+
+def test_shadow_comparison_maps_source_events_and_turns_but_not_episodic_ids():
+    from core.memory.event_shadow_recall import compare_legacy_results
+
+    scope = _scope("shadow-mapping")
+    result = {
+        "new_event_ids": ["event-user", "event-assistant", "event-extra"],
+        "new_turn_ids": ["turn-shared", "turn-extra"],
+        "new_event_turns": {
+            "event-user": "turn-shared",
+            "event-assistant": "turn-shared",
+            "event-extra": "turn-extra",
+        },
+    }
+    compared = compare_legacy_results(result, [
+        {"source_event_ids": ["event-user"], "scope": {"uid": scope.uid, "char_id": TEST_CHAR_ID, "realm": "reality"}},
+        {"turn_id": "turn-shared"},
+        {"id": "episodic-opaque-id"},
+        {"turn_id": "other-turn", "scope": {"uid": "other", "char_id": TEST_CHAR_ID, "realm": "reality"}},
+    ], scope=scope)
+    assert compared["old_result_count"] == 4
+    assert compared["old_mapped_count"] == 2
+    assert compared["old_unmapped_count"] == 2
+    assert compared["old_mapped_event_count"] == 2
+    assert compared["event_overlap_count"] == 2
+    assert compared["turn_overlap_count"] == 1
+    assert compared["omitted_event_count"] == 0
+    assert compared["extra_event_count"] == 1
+    assert compared["event_coverage"] == 1.0
+    assert compared["comparison_scope_rejections"] == 1

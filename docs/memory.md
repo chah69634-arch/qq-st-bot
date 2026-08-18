@@ -139,12 +139,17 @@ for a small grey rollout. Any enabled scope still sends only the legacy recall
 result to the model.
 
 The shadow trace is appended to the existing `recall_trace` record and contains
-seed/new `event_id`s plus counts, approximate character/token budgets, a
-Jaccard overlap rate against legacy IDs, scope rejection count, truncation and
-timeout/error status. It never contains event evidence, never creates a memory
-write, and never enters prompt layers, consolidation, Dream, Stage, or
+seed/new `event_id`s plus counts, approximate character/token budgets, explicit
+event-level and turn-level overlap/coverage, mapped versus unmapped legacy
+results, temporal seed ordering, scope rejection count, and truncation or
+timeout/error status. Episodic/vector IDs are never compared directly:
+`source_event_ids` map at event level and event-log `turn_id` maps to the
+events in that turn. The compatibility `overlap_rate` is the event-level
+metric only. It never contains event evidence, never creates a memory write,
+and never enters prompt layers, consolidation, Dream, Stage, or
 source-isolated turns. The hard timeout is fail-open: a timeout or error leaves
-the old path unchanged.
+the old path unchanged; a cancellation flag and single active worker prevent
+timed-out jobs from accumulating lock-holding work.
 
 `GET /observability/memory-event-shadow-recall?uid=...&char_id=...` (scope
 `state.read`) returns the content-free per-day shadow metrics. The existing

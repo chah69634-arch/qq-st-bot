@@ -309,6 +309,8 @@ class Pipeline:
                         scope,
                         content,
                         old_chars=0,
+                        occurred_after=_since_ts,
+                        occurred_before=_until_ts,
                     )
                 )
             except Exception as _shadow_schedule_error:
@@ -582,33 +584,49 @@ class Pipeline:
                 "old_chars": 0,
                 "old_tokens": 0,
                 "overlap_rate": 0.0,
+                "event_overlap_rate": 0.0,
+                "turn_overlap_rate": 0.0,
+                "event_coverage": 0.0,
+                "old_mapped_count": 0,
+                "old_unmapped_count": 0,
+                "new_mapped_count": 0,
+                "new_unmapped_count": 0,
+                "extra_event_count": 0,
+                "omitted_event_count": 0,
                 "scope_rejections": 0,
                 "truncation_reason": "",
                 "timeout_reason": "",
                 "elapsed_ms": 0,
             }
             if _shadow_recall_task is not None:
-                _old_ids = [
-                    item.get("id") for item in (*_episodic_trace, *_episodic_fallback_trace)
-                    if isinstance(item, dict)
-                ]
-                _old_ids.extend(
-                    item[0] for item in _semantic_hits
-                    if isinstance(item, (list, tuple)) and item
-                )
                 _old_chars = len(event_search_result or "") + len(episodic_result or "") + len(episodic_fallback_result or "")
                 # The helper has its own hard timeout; cancellation is fail-open
                 # so a trace problem cannot change the generated response.
                 _shadow_recall = await _shadow_recall_task
                 if _shadow_recall.get("enabled"):
+                    from core.memory.event_shadow_recall import compare_legacy_results as _compare_shadow_legacy
+                    _legacy_shadow_results = [
+                        {
+                            "source_event_ids": item.get("source_event_ids") or [],
+                            "source_turn_id": item.get("source_turn_id") or "",
+                            "scope": {"uid": uid, "char_id": char_id, "realm": "reality"},
+                        }
+                        for item in (*episodic_memories, *episodic_fallback)
+                        if isinstance(item, dict)
+                    ]
+                    _legacy_shadow_results.extend(
+                        {
+                            "turn_id": item.get("turn_id") or "",
+                            "scope": {"uid": uid, "char_id": char_id, "realm": "reality"},
+                        }
+                        for item in _event_log_trace
+                        if isinstance(item, dict)
+                    )
+                    _shadow_recall = _compare_shadow_legacy(
+                        _shadow_recall, _legacy_shadow_results, scope=scope,
+                    )
                     _shadow_recall["old_chars"] = _old_chars
                     _shadow_recall["old_tokens"] = (_old_chars + 3) // 4
-                    _new_ids = {str(value) for value in (_shadow_recall.get("new_event_ids") or []) if value}
-                    _old_id_set = {str(value) for value in _old_ids if value}
-                    _union = _new_ids | _old_id_set
-                    _shadow_recall["overlap_rate"] = round(
-                        len(_new_ids & _old_id_set) / len(_union), 4
-                    ) if _union else 0.0
             _write_recall_trace(uid, char_id, {
                 "ts": _dt.now().isoformat(timespec="seconds"),
                 "uid": uid,

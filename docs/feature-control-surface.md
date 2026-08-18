@@ -182,9 +182,11 @@ global flag remains off. Shadow recall runs in parallel with the legacy read
 path, records only event IDs and content-free metrics in `recall_trace`, and
 never changes prompt injection or memory writes. Use
 `GET /observability/memory-event-shadow-recall` (`state.read`) to inspect
-status, budget, overlap, rejection, truncation, and timeout counters. Turning
-the flag off or clearing the allowlists immediately falls back to the legacy
-path after config reload.
+status, budget, event/turn overlap and coverage, mapped/unmapped results,
+temporal seed ordering, rejection, truncation, and timeout counters.
+`overlap_rate` remains an event-level compatibility alias, never a comparison
+between episodic/vector IDs and ledger IDs. Turning the flag off or clearing
+the allowlists immediately falls back to the legacy path after config reload.
 
 ## Brief 158 TTS resource selection
 

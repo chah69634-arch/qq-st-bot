@@ -416,6 +416,8 @@ async def search(
 
         for block in _split_blocks("\n".join(lines[1:])):
             intensity = _parse_intensity(block)
+            turn_match = next((_TURN_ID_RE.search(line) for line in block if _TURN_ID_RE.search(line)), None)
+            turn_id = turn_match.group(1) if turn_match else ""
 
             # 改动1: 7天外仅保留 intensity>=1 的块
             if days_ago > 7 and intensity < 1:
@@ -439,7 +441,7 @@ async def search(
                             hit = sum(1 for kw in keywords if kw in body)
                             if hit > 0:
                                 relevance = hit / max(len(keywords), 1)
-                                matched.append((_score_recall(_el_sem_sim, relevance, strength_norm, decay), _seg_role, _clip_sentence(body, 60), days_ago))
+                                matched.append((_score_recall(_el_sem_sim, relevance, strength_norm, decay), _seg_role, _clip_sentence(body, 60), days_ago, turn_id))
                         _pending = []
                     elif s.startswith(">"):
                         continue
@@ -466,7 +468,7 @@ async def search(
                     hit = sum(1 for kw in keywords if kw in body)
                     if hit > 0:
                         relevance = hit / max(len(keywords), 1)
-                        matched.append((_score_recall(_el_sem_sim, relevance, strength_norm, decay), cur_role, _clip_sentence(body, 60), days_ago))
+                        matched.append((_score_recall(_el_sem_sim, relevance, strength_norm, decay), cur_role, _clip_sentence(body, 60), days_ago, turn_id))
 
     def _render_card(role: str, text: str, days_ago: int) -> str:
         coarse = (
@@ -480,12 +482,12 @@ async def search(
 
     matched.sort(key=lambda x: x[0], reverse=True)
     MIN_SCORE = 0.3  # recalibrated for X2 fusion formula (w_sem+w_kw+w_str=1.0 range)
-    selected = [(s, r, t, d) for s, r, t, d in matched[:5] if s >= MIN_SCORE]
-    result_str = "\n".join(_render_card(r, t, d) for _, r, t, d in selected) if selected else ""
+    selected = [(s, r, t, d, turn_id) for s, r, t, d, turn_id in matched[:5] if s >= MIN_SCORE]
+    result_str = "\n".join(_render_card(r, t, d) for _, r, t, d, _turn_id in selected) if selected else ""
     if return_trace:
         trace_items = [
-            {"score": round(s, 4), "role": r, "snippet": t[:80], "event_day": d}
-            for s, r, t, d in selected
+            {"score": round(s, 4), "role": r, "snippet": t[:80], "event_day": d, "turn_id": turn_id}
+            for s, r, t, d, turn_id in selected
         ]
         return result_str, trace_items
     return result_str
