@@ -46,6 +46,19 @@ _OBSERVABILITY: dict[str, Any] = {
 _EDGE_OBSERVABILITY: dict[str, Any] = {
     "attempted": 0, "written": 0, "duplicates": 0, "failed": 0,
 }
+_HOT_PATH_OBSERVABILITY: dict[str, int] = {
+    "append_count": 0,
+    "append_ms_total": 0,
+    "edge_ms_total": 0,
+    "stream_queries": 0,
+    "turn_queries": 0,
+    "edges_removed": 0,
+}
+
+# Ledger writes run before visible fanout.  The in-process per-ledger lock
+# handles ordinary contention; this short SQLite budget keeps an external
+# lock holder from delaying a chat turn for the former five seconds.
+REALTIME_BUSY_TIMEOUT_MS = 250
 
 
 @dataclass(frozen=True)
@@ -258,6 +271,10 @@ CREATE INDEX IF NOT EXISTS idx_events_turn_id ON events(turn_id);
 CREATE INDEX IF NOT EXISTS idx_events_actor ON events(actor);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 CREATE INDEX IF NOT EXISTS idx_events_realm ON events(realm);
+CREATE INDEX IF NOT EXISTS idx_events_stream_adjacency
+    ON events(uid, char_id, realm, stream, source, occurred_at, seq, event_id);
+CREATE INDEX IF NOT EXISTS idx_events_turn_partition
+    ON events(uid, char_id, realm, turn_id, source, actor);
 CREATE INDEX IF NOT EXISTS idx_event_edge_proposals_scope ON event_edge_proposals(uid, char_id, realm, created_at);
 CREATE INDEX IF NOT EXISTS idx_event_edge_proposer_runs_scope ON event_edge_proposer_runs(uid, char_id, realm, created_at);
 CREATE INDEX IF NOT EXISTS idx_event_edge_proposer_runs_day ON event_edge_proposer_runs(uid, char_id, realm, day_key);
@@ -292,9 +309,11 @@ def _lock_for(path: Path) -> threading.RLock:
 
 
 def _connect(path: Path) -> sqlite3.Connection:
-    connection = sqlite3.connect(path, timeout=5.0, check_same_thread=False)
+    connection = sqlite3.connect(
+        path, timeout=REALTIME_BUSY_TIMEOUT_MS / 1000, check_same_thread=False,
+    )
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA busy_timeout=5000")
+    connection.execute(f"PRAGMA busy_timeout={REALTIME_BUSY_TIMEOUT_MS}")
     connection.execute("PRAGMA journal_mode=WAL")
     return connection
 
@@ -323,6 +342,8 @@ def _observe_append(result: AppendResult, scope: object) -> AppendResult:
 
 def observability_snapshot() -> dict[str, Any]:
     """Return a read-only, content-free projection of ledger write health."""
+    from core.memory.source_policy import observability_snapshot as source_policy_snapshot
+
     with _OBSERVABILITY_LOCK:
         attempted = int(_OBSERVABILITY["attempted"])
         successful = int(_OBSERVABILITY["written"]) + int(_OBSERVABILITY["duplicates"])
@@ -335,6 +356,17 @@ def observability_snapshot() -> dict[str, Any]:
             "success_rate": successful / attempted if attempted else None,
             "by_character": {key: dict(value) for key, value in _OBSERVABILITY["by_character"].items()},
             "by_realm": {key: dict(value) for key, value in _OBSERVABILITY["by_realm"].items()},
+            "hot_path": {
+                **dict(_HOT_PATH_OBSERVABILITY),
+                "busy_timeout_ms": REALTIME_BUSY_TIMEOUT_MS,
+                "append_ms_average": round(
+                    _HOT_PATH_OBSERVABILITY["append_ms_total"] / attempted, 3
+                ) if attempted else None,
+                "edge_ms_average": round(
+                    _HOT_PATH_OBSERVABILITY["edge_ms_total"] / attempted, 3
+                ) if attempted else None,
+            },
+            "source_policy": source_policy_snapshot(),
         }
 
 
@@ -347,6 +379,8 @@ def _reset_observability_for_tests() -> None:
     with _OBSERVABILITY_LOCK:
         for key in _EDGE_OBSERVABILITY:
             _EDGE_OBSERVABILITY[key] = 0
+        for key in _HOT_PATH_OBSERVABILITY:
+            _HOT_PATH_OBSERVABILITY[key] = 0
 
 
 def _initialize(connection: sqlite3.Connection) -> None:
@@ -432,6 +466,7 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
     columns = tuple(EventRecord.__dataclass_fields__)
     values = tuple(getattr(record, field) for field in columns)
     placeholders = ", ".join("?" for _ in columns)
+    append_started = time.perf_counter()
     with _lock_for(path):
         try:
             with _connect(path) as connection:
@@ -454,7 +489,7 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
                         (scope.uid, scope.character_id, scope.domain, record.event_id),
                     ).fetchone()
                     if existing is not None:
-                        _ensure_deterministic_edges(repair, scope, record)
+                        _ensure_deterministic_edges(repair, scope, existing)
                         repair.commit()
             except Exception:
                 pass
@@ -463,6 +498,12 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
             _edge_observe("failed")
             logger.warning("[event_store] append failed: %s", exc)
             return _observe_append(AppendResult(False, False, record.event_id, "database_error"), scope)
+        finally:
+            with _OBSERVABILITY_LOCK:
+                _HOT_PATH_OBSERVABILITY["append_count"] += 1
+                _HOT_PATH_OBSERVABILITY["append_ms_total"] += round(
+                    (time.perf_counter() - append_started) * 1000
+                )
 
 
 def tombstone_event(scope: MemoryScope, event_id: str) -> TombstoneResult:
@@ -602,65 +643,121 @@ def _insert_edge(
 
 def _relation_hints(row: Any) -> dict[str, str]:
     try:
-        value = json.loads(str(row["relation_hints_json"] or "{}"))
+        raw = row["relation_hints_json"] if isinstance(row, sqlite3.Row) else row.relation_hints_json
+        value = json.loads(str(raw or "{}"))
     except (TypeError, ValueError, json.JSONDecodeError, IndexError):
         return {}
     return value if isinstance(value, dict) else {}
 
 
+def _stream_partition(record: EventRecord | sqlite3.Row) -> tuple[str, str]:
+    """Return the explicit adjacency partition for an event.
+
+    ``source`` is part of the stream identity.  This keeps source-isolated
+    evidence from becoming a temporal shortcut into an ordinary Reality turn.
+    """
+    stream = str(record["stream"] if isinstance(record, sqlite3.Row) else record.stream)
+    channel = str(record["channel"] if isinstance(record, sqlite3.Row) else record.channel)
+    source = record["source"] if isinstance(record, sqlite3.Row) else record.source
+    from core.memory.source_policy import partition_key
+    return stream or channel, partition_key(source)
+
+
+def _delete_edge_pair(
+    connection: sqlite3.Connection,
+    scope: MemoryScope,
+    left_event_id: str,
+    right_event_id: str,
+) -> int:
+    """Remove exactly the bidirectional adjacency pair split by a late event."""
+    cursor = connection.execute(
+        """DELETE FROM event_edges
+           WHERE uid = ? AND char_id = ?
+             AND ((from_event_id = ? AND to_event_id = ? AND relation_type = 'next')
+               OR (from_event_id = ? AND to_event_id = ? AND relation_type = 'previous'))""",
+        (
+            scope.uid, scope.character_id,
+            left_event_id, right_event_id,
+            right_event_id, left_event_id,
+        ),
+    )
+    return max(0, int(cursor.rowcount))
+
+
 def _ensure_deterministic_edges(
     connection: sqlite3.Connection,
     scope: MemoryScope,
-    record: EventRecord,
+    record: EventRecord | sqlite3.Row,
 ) -> None:
-    """Reconcile only the finite, deterministic edge set for this ledger.
+    """Update only the new event's finite deterministic neighbourhood.
 
-    No model call or fuzzy matching occurs here.  Re-running this function is
-    idempotent and is safe for concurrent append retries under the scope lock.
+    Earlier revisions rebuilt every edge in a scope for every append.  This
+    routine intentionally reads at most two stream neighbours and the current
+    turn; late insertion deletes the one now-invalid adjacency pair before
+    inserting its replacement.  It never scans the ledger or historical turns.
     """
-    rows = connection.execute(
-        """SELECT * FROM events WHERE uid = ? AND char_id = ? AND realm = ?
-           ORDER BY occurred_at ASC, seq ASC, event_id ASC""",
-        (scope.uid, scope.character_id, scope.domain),
-    ).fetchall()
-    if not rows:
-        return
+    edge_started = time.perf_counter()
     now = time.time()
-    # previous/next are stream-local.  ``stream`` is explicit when supplied;
-    # historical rows fall back to channel, preserving old ledgers.
-    streams: dict[str, list[Any]] = {}
-    for row in rows:
-        stream = str(row["stream"] or row["channel"] or "")
-        streams.setdefault(stream, []).append(row)
-    for stream_rows in streams.values():
-        for previous, current in zip(stream_rows, stream_rows[1:]):
-            _insert_edge(connection, scope, previous["event_id"], current["event_id"], "next", created_at=now)
-            _insert_edge(connection, scope, current["event_id"], previous["event_id"], "previous", created_at=now)
+    event_id = str(record["event_id"] if isinstance(record, sqlite3.Row) else record.event_id)
+    occurred_at = float(record["occurred_at"] if isinstance(record, sqlite3.Row) else record.occurred_at)
+    seq = int(record["seq"] if isinstance(record, sqlite3.Row) else record.seq)
+    stream, source = _stream_partition(record)
+    ordering = (occurred_at, occurred_at, seq, seq, event_id)
+    scope_params = (scope.uid, scope.character_id, scope.domain, stream, source)
 
-    by_turn: dict[str, list[Any]] = {}
-    for row in rows:
-        turn_id = str(row["turn_id"] or "")
-        if turn_id:
-            by_turn.setdefault(turn_id, []).append(row)
-    for turn_rows in by_turn.values():
-        users = [row for row in turn_rows if str(row["actor"] or "") == "user"]
-        for row in turn_rows:
-            if str(row["actor"] or "") != "assistant":
-                continue
-            # A normal Reality turn has one owner event and one assistant
-            # event.  Keep same_turn as a single canonical user -> assistant
-            # edge; related() is bidirectional and reply_to supplies the
-            # assistant -> user semantic direction without duplicating it.
-            for user in users[:1]:
-                _insert_edge(connection, scope, user["event_id"], row["event_id"], "same_turn", created_at=now)
-                _insert_edge(connection, scope, row["event_id"], user["event_id"], "reply_to", created_at=now)
+    with _OBSERVABILITY_LOCK:
+        _HOT_PATH_OBSERVABILITY["stream_queries"] += 2
+    predecessor = connection.execute(
+        """SELECT * FROM events
+           WHERE uid=? AND char_id=? AND realm=? AND stream=? AND source=?
+             AND (occurred_at < ? OR (occurred_at = ? AND (seq < ? OR (seq = ? AND event_id < ?))))
+           ORDER BY occurred_at DESC, seq DESC, event_id DESC LIMIT 1""",
+        (*scope_params, *ordering),
+    ).fetchone()
+    successor = connection.execute(
+        """SELECT * FROM events
+           WHERE uid=? AND char_id=? AND realm=? AND stream=? AND source=?
+             AND (occurred_at > ? OR (occurred_at = ? AND (seq > ? OR (seq = ? AND event_id > ?))))
+           ORDER BY occurred_at ASC, seq ASC, event_id ASC LIMIT 1""",
+        (*scope_params, *ordering),
+    ).fetchone()
+    if predecessor is not None and successor is not None:
+        removed = _delete_edge_pair(connection, scope, predecessor["event_id"], successor["event_id"])
+        with _OBSERVABILITY_LOCK:
+            _HOT_PATH_OBSERVABILITY["edges_removed"] += removed
+    if predecessor is not None:
+        _insert_edge(connection, scope, predecessor["event_id"], event_id, "next", created_at=now)
+        _insert_edge(connection, scope, event_id, predecessor["event_id"], "previous", created_at=now)
+    if successor is not None:
+        _insert_edge(connection, scope, event_id, successor["event_id"], "next", created_at=now)
+        _insert_edge(connection, scope, successor["event_id"], event_id, "previous", created_at=now)
 
-    for row in rows:
-        hints = _relation_hints(row)
+    turn_id = str(record["turn_id"] if isinstance(record, sqlite3.Row) else record.turn_id)
+    if turn_id:
+        with _OBSERVABILITY_LOCK:
+            _HOT_PATH_OBSERVABILITY["turn_queries"] += 1
+        turn_rows = connection.execute(
+            """SELECT * FROM events WHERE uid=? AND char_id=? AND realm=?
+               AND turn_id=? AND source=? AND actor IN ('user', 'assistant')
+               ORDER BY seq ASC, event_id ASC LIMIT 2""",
+            (scope.uid, scope.character_id, scope.domain, turn_id, source),
+        ).fetchall()
+        user = next((row for row in turn_rows if str(row["actor"] or "") == "user"), None)
+        assistant = next((row for row in turn_rows if str(row["actor"] or "") == "assistant"), None)
+        if user is not None and assistant is not None:
+            _insert_edge(connection, scope, user["event_id"], assistant["event_id"], "same_turn", created_at=now)
+            _insert_edge(connection, scope, assistant["event_id"], user["event_id"], "reply_to", created_at=now)
+
+    hints = _relation_hints(record)
+    if hints:
         for relation in ("triggered_by", "derived_from", "correction_of", "media_of", "reply_to"):
             target = str(hints.get(relation) or "")
             if target:
-                _insert_edge(connection, scope, row["event_id"], target, relation, created_at=now)
+                _insert_edge(connection, scope, event_id, target, relation, created_at=now)
+    with _OBSERVABILITY_LOCK:
+        _HOT_PATH_OBSERVABILITY["edge_ms_total"] += round(
+            (time.perf_counter() - edge_started) * 1000
+        )
 
 
 def edge_observability_snapshot(scope: MemoryScope) -> dict[str, Any]:
