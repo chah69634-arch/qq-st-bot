@@ -50,10 +50,14 @@ _STORYLINE_SYSTEM_PROMPT = """\
 只输出一个 JSON 数组，每个元素是以下三种操作之一，不要输出任何其他文字：
 [{{"op": "open_arc", "title": "≤20字新弧线标题", "tags": ["从受控tag集合选0个或多个"]}},
  {{"op": "append_node", "arc_title": "已有或本批新开弧线的标题（须与其 title 完全一致）",
-   "summary": "≤80字该阶段发生了什么", "ts": Unix时间戳数字, "span": [起始ts, 结束ts]}},
+   "summary": "≤80字该阶段发生了什么", "ts": Unix时间戳数字, "span": [起始ts, 结束ts],
+   "source_material_ids": ["只能选本批提供的 material_id，不得编造、重复或遗漏字段"]}},
  {{"op": "set_status", "arc_title": "弧线标题", "status": "active/dormant/closed 之一"}}]
 
 受控 tag 集合：{valid_tags}
+
+每个 append_node 都必须带 source_material_ids。若节点仅来自没有 material_id 的旧日志摘录，
+固定写 []；这会被标记为 legacy_unknown，绝不能猜测或生成 event ID。
 
 没有值得记录的弧线进展时返回空数组 []。"""
 
@@ -119,6 +123,55 @@ def _format_existing_arcs(arcs: list[dict]) -> str:
     return "\n".join(lines) or "（暂无活跃/半活跃弧线）"
 
 
+def _build_materials(new_episodes: list[dict], inbox_entries: list[dict]) -> list[dict]:
+    """Assign prompt-safe IDs to evidence-bearing aggregation input only."""
+    from core.memory.lineage import normalize_source_event_ids
+
+    materials: list[dict] = []
+    for kind, entries, timestamp_key, content_keys in (
+        ("episode", new_episodes, "timestamp", ("narrative_summary", "summary")),
+        ("inbox", inbox_entries, "ts", ("summary",)),
+    ):
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            summary = next((str(entry.get(key) or "").strip() for key in content_keys if entry.get(key)), "")
+            materials.append({
+                "material_id": f"m{len(materials) + 1:03d}",
+                "kind": kind,
+                "ts": float(entry.get(timestamp_key) or 0.0),
+                "summary": summary,
+                "source_event_ids": normalize_source_event_ids(entry.get("source_event_ids")),
+            })
+    return materials
+
+
+def _format_materials(materials: list[dict]) -> str:
+    lines = []
+    for material in materials:
+        date = datetime.fromtimestamp(material["ts"]).strftime("%Y-%m-%d") if material["ts"] else "未知日期"
+        lines.append(
+            f"- material_id={material['material_id']} [{material['kind']}/{date}] {material['summary']}"
+        )
+    return "\n".join(lines)
+
+
+def _source_material_ids_are_valid(ops: list, material_ids: set[str]) -> bool:
+    """Reject an entire LLM batch when an append node names invalid evidence."""
+    for op in ops:
+        if not isinstance(op, dict) or op.get("op") != "append_node":
+            continue
+        values = op.get("source_material_ids")
+        if not isinstance(values, list) or len(values) > 50:
+            return False
+        clean = [str(value).strip() for value in values]
+        if any(not value for value in clean) or len(set(clean)) != len(clean):
+            return False
+        if any(value not in material_ids for value in clean):
+            return False
+    return True
+
+
 async def _aggregate_one(char_id: str, uid: str) -> int:
     """对单个 (char_id, uid) 跑一次聚合。返回本轮实际落盘的 op 数（用于日志统计）。"""
     from core.memory import storyline as sl
@@ -146,21 +199,10 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
     if not new_episodes and not inbox_entries and not event_log_text.strip():
         return 0  # 无新素材，幂等 no-op，不调用 LLM
 
+    materials = _build_materials(new_episodes, inbox_entries)
     material_parts = []
-    if new_episodes:
-        ep_lines = "\n".join(
-            f"- [{datetime.fromtimestamp(float(e.get('timestamp', 0))).strftime('%Y-%m-%d')}] "
-            f"{e.get('narrative_summary') or e.get('summary', '')}"
-            for e in new_episodes
-        )
-        material_parts.append(f"【新增情景记忆】\n{ep_lines}")
-    if inbox_entries:
-        inbox_lines = "\n".join(
-            f"- [{datetime.fromtimestamp(float(e.get('ts', 0))).strftime('%Y-%m-%d')}] "
-            f"{e.get('summary', '')}"
-            for e in inbox_entries
-        )
-        material_parts.append(f"【淘汰归档的旧记忆批次】\n{inbox_lines}")
+    if materials:
+        material_parts.append(f"【具备精确证据的素材】\n{_format_materials(materials)}")
     if event_log_text.strip():
         material_parts.append(f"【近期对话日志摘录】\n{event_log_text}")
     new_material = "\n\n".join(material_parts)
@@ -199,13 +241,14 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
         )
         return 0
 
-    from core.memory.lineage import normalize_source_event_ids
-    source_event_ids = normalize_source_event_ids([
-        event_id
-        for entry in [*new_episodes, *inbox_entries]
-        for event_id in (entry.get("source_event_ids") or [])
-    ])
-    applied = _apply_ops(uid, char_id, ops, source_event_ids=source_event_ids)
+    material_map = {item["material_id"]: item["source_event_ids"] for item in materials}
+    if not _source_material_ids_are_valid(ops, set(material_map)):
+        logger.error(
+            "[storyline_weekly] LLM 返回非法 material ID，本轮不动 cursor uid=%s char=%s",
+            uid, char_id,
+        )
+        return 0
+    applied = _apply_ops(uid, char_id, ops, material_sources=material_map)
 
     now = time.time()
     sl.save_meta(
@@ -223,7 +266,14 @@ async def _aggregate_one(char_id: str, uid: str) -> int:
     return applied
 
 
-def _apply_ops(uid: str, char_id: str, ops: list, *, source_event_ids: list[str] | None = None) -> int:
+def _apply_ops(
+    uid: str,
+    char_id: str,
+    ops: list,
+    *,
+    material_sources: dict[str, list[str]] | None = None,
+    source_event_ids: list[str] | None = None,
+) -> int:
     """按 §1 写 API 逐条落盘。arc_title 作为 LLM 侧句柄解析回 arc_id（本批新开的弧线也纳入映射）。"""
     from core.memory import storyline as sl
 
@@ -254,11 +304,33 @@ def _apply_ops(uid: str, char_id: str, ops: list, *, source_event_ids: list[str]
                     continue
                 ts = float(op.get("ts") or now)
                 span = op.get("span")
+                if material_sources is not None:
+                    material_ids = op.get("source_material_ids")
+                    if not isinstance(material_ids, list):
+                        logger.warning("[storyline_weekly] append_node 缺少 source_material_ids，跳过 uid=%s", uid)
+                        continue
+                    clean_ids = [str(value).strip() for value in material_ids]
+                    if (
+                        len(clean_ids) > 50
+                        or any(not value or value not in material_sources for value in clean_ids)
+                        or len(set(clean_ids)) != len(clean_ids)
+                    ):
+                        logger.warning("[storyline_weekly] append_node source_material_ids 非法，跳过 uid=%s", uid)
+                        continue
+                    from core.memory.lineage import normalize_source_event_ids
+                    node_source_ids = normalize_source_event_ids([
+                        event_id
+                        for material_id in clean_ids
+                        for event_id in material_sources[material_id]
+                    ])
+                else:
+                    # Compatibility path for direct callers predating material IDs.
+                    node_source_ids = source_event_ids
                 node_id = sl.append_node(
                     uid, char_id=char_id, arc_id=arc_id,
                     summary=str(op.get("summary", ""))[:80],
                     ts=ts, span=span,
-                    source_ids=source_event_ids,
+                    source_ids=node_source_ids,
                 )
                 if node_id is not None:
                     applied += 1

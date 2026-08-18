@@ -111,7 +111,7 @@ def test_valid_ops_applied_and_cursor_advances(sandbox, fake_llm):
     fake_llm.chat = AsyncMock(return_value=json.dumps([
         {"op": "open_arc", "title": "职业转型", "tags": ["topic.learning"]},
         {"op": "append_node", "arc_title": "职业转型", "summary": "决定转行做程序员",
-         "ts": time.time(), "span": [time.time(), time.time()]},
+             "ts": time.time(), "span": [time.time(), time.time()], "source_material_ids": ["m001"]},
     ], ensure_ascii=False))
 
     _run_weekly()
