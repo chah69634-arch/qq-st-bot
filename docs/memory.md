@@ -150,20 +150,25 @@ automatic shadow results remain disabled for prompt injection.
 ## Memory Event 10: legacy migration, retention, and forget semantics
 
 `scripts/migrate_memory_events.py --uid <uid> --char-id <char_id>` defaults to
-a read-only dry run. It scans legacy Markdown `event_log` plus short-term,
-mid-term, episodic, and storyline stores without rewriting any legacy file or
-calling an LLM. The report records total, parsed, malformed,
-`legacy_unknown`, duplicate, and conflict counts. Unknown Markdown blocks keep
-only a stable `filename#sha256-prefix` reference in the evidence ledger; the
-migrator never guesses actor, original time, or causality.
+a read-only dry run. It scans the union of canonical per-character and legacy
+uid-only Markdown `event_log` directories, deduplicates deterministic
+turn/actor IDs, and reports per-source coverage alongside total, parsed,
+malformed, `legacy_unknown`, duplicate, and conflict counts. Per-message
+`speaker`/`turn_id` metadata is parsed within each Markdown block, so a normal
+user-plus-assistant turn imports both actors without guessing. Short-term,
+mid-term, episodic, and storyline stores are explicitly `inventory_only`:
+their current/legacy item counts are reported but they are never imported as
+ledger events. Unknown Markdown blocks keep only a stable
+`filename#sha256-prefix` reference in the evidence ledger; the migrator never
+guesses actor, original time, or causality.
 
 `--apply` requires a new, verified offline `backup-state` snapshot on an
 explicit protected volume. It imports at most one bounded batch per invocation
 and persists content-free progress at `event_migration_state.json`; reruns use
 deterministic IDs, so interruption is safe and old Markdown fallback remains
 available if migration fails. `GET /observability/memory-event-migration`
-(`state.read`) exposes only counters and status, never source text or local
-paths.
+(`state.read`) exposes only counters, source coverage, inventory summaries and
+status, never source text or local paths.
 
 Retention is explicit: ledger rows retain raw text, media references and their
 hash/description metadata; old Markdown day files and full-log rotations are

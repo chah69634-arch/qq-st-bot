@@ -27,6 +27,7 @@ _DAY_FILE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 _TIME_RE = re.compile(r"^##\s+(\d{2}:\d{2})\s*$")
 _MESSAGE_RE = re.compile(r"^\*\*([^*]+)\*\*[：:](.*)$")
 _SPEAKER_RE = re.compile(r"\bspeaker:(user|assistant)\b")
+_TURN_RE = re.compile(r"\bturn_id:([^\s]+)")
 _LEGACY_ARTIFACTS = (
     ("short_term", "history", "history"),
     ("mid_term", "mid_term", "mid_term"),
@@ -44,14 +45,16 @@ class MigrationEntry:
     kind: str
     actor: str
     text: str = ""
+    turn_id: str = ""
+    seq: int = 0
 
     def event(self) -> dict[str, Any]:
         unknown = self.kind == "legacy_unknown"
         reference = f"[legacy_unknown:{self.legacy_ref}]"
         return {
             "event_id": self.event_id,
-            "turn_id": f"legacy:{self.block_hash[:24]}",
-            "seq": 0,
+            "turn_id": self.turn_id or f"legacy:{self.block_hash[:24]}",
+            "seq": self.seq,
             "occurred_at": self.occurred_at,
             "ingested_at": time.time(),
             "realm": "reality",
@@ -75,8 +78,13 @@ class MigrationEntry:
 
 
 def legacy_event_log_dir(scope: MemoryScope) -> Path:
-    """Return only the old uid-only Markdown location for import."""
+    """Return the old uid-only Markdown location for import compatibility."""
     return get_paths()._p("event_log") / safe_user_id(scope.uid)
+
+
+def current_event_log_dir(scope: MemoryScope) -> Path:
+    """Return the canonical per-character Markdown event-log directory."""
+    return resolve_path(scope, "event_log")
 
 
 def _state_path(scope: MemoryScope) -> Path:
@@ -100,7 +108,8 @@ def migration_status(scope: MemoryScope) -> dict[str, Any]:
     allowed = {
         "state_version", "status", "source_digest", "total", "next_offset",
         "parsed", "malformed", "legacy_unknown", "duplicate", "conflict",
-        "written", "failed", "backup", "updated_at", "last_error",
+        "written", "failed", "backup", "updated_at", "last_error", "sources",
+        "artifacts",
     }
     return {key: state[key] for key in allowed if key in state}
 
@@ -116,6 +125,22 @@ def _date_time(path: Path, time_text: str | None) -> float | None:
         return datetime.strptime(f"{path.stem} {time_text}", "%Y-%m-%d %H:%M").timestamp()
     except ValueError:
         return None
+
+
+def _message_metadata(block: list[str], start: int, end: int) -> tuple[str, str]:
+    """Read only metadata belonging to one rendered Markdown message."""
+    speaker = ""
+    turn_id = ""
+    for line in block[start + 1:end]:
+        if not line.lstrip().startswith(">"):
+            continue
+        speaker_match = _SPEAKER_RE.search(line)
+        turn_match = _TURN_RE.search(line)
+        if speaker_match:
+            speaker = speaker_match.group(1)
+        if turn_match:
+            turn_id = turn_match.group(1).strip()
+    return speaker, turn_id
 
 
 def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, int]:
@@ -143,12 +168,6 @@ def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, in
         legacy_ref = f"{path.name}#{block_hash[:16]}"
         time_match = _TIME_RE.match(block[0]) if block else None
         occurred_at = _date_time(path, time_match.group(1) if time_match else None)
-        speaker = ""
-        for line in block:
-            match = _SPEAKER_RE.search(line)
-            if match:
-                speaker = match.group(1)
-                break
         message_indices = [index for index, line in enumerate(block) if _MESSAGE_RE.match(line)]
         emitted = 0
         for position, index in enumerate(message_indices):
@@ -159,13 +178,22 @@ def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, in
             # which actor it denotes.  Only the stable user label or matching
             # speaker metadata is admitted; contradictory fake metadata stays
             # a legacy_unknown reference.
+            next_index = message_indices[position + 1] if position + 1 < len(message_indices) else len(block)
+            speaker, turn_id = _message_metadata(block, index, next_index)
             if label.strip() == "用户":
                 actor = "user" if speaker in {"", "user"} else ""
             else:
                 actor = "assistant" if speaker == "assistant" else ""
             if actor not in {"user", "assistant"} or occurred_at is None:
+                # A valid user message in the same block must not make an
+                # unrelated ambiguous assistant line silently disappear.
+                event_id = f"legacy-{_sha(f'{legacy_ref}:{index}:unknown')[:40]}"
+                entries.append(MigrationEntry(
+                    event_id, legacy_ref, block_hash, time.time(), "legacy_unknown",
+                    "legacy_unknown", turn_id=turn_id,
+                ))
+                malformed += 1
                 continue
-            next_index = message_indices[position + 1] if position + 1 < len(message_indices) else len(block)
             continuations = [
                 line.strip() for line in block[index + 1:next_index]
                 if line.strip() and not line.lstrip().startswith(">") and line.strip() != "---"
@@ -173,11 +201,15 @@ def _block_entries(path: Path, text: str) -> tuple[list[MigrationEntry], int, in
             body = "\n".join([first_text.strip(), *continuations]).strip()
             if not body:
                 continue
-            event_id = f"legacy-{_sha(f'{legacy_ref}:{index}')[:40]}"
-            entries.append(MigrationEntry(event_id, legacy_ref, block_hash, occurred_at, "legacy_message", actor, body))
+            stable_ref = f"{path.name}:{turn_id}:{actor}" if turn_id else f"{legacy_ref}:{index}:{actor}"
+            event_id = f"legacy-{_sha(stable_ref)[:40]}"
+            entries.append(MigrationEntry(
+                event_id, legacy_ref, block_hash, occurred_at, "legacy_message", actor, body,
+                turn_id=turn_id or f"legacy:{block_hash[:24]}", seq=0 if actor == "user" else 1,
+            ))
             emitted += 1
             parsed += 1
-        if emitted == 0:
+        if emitted == 0 and not message_indices:
             # Import time is explicitly not a claim about original occurrence.
             # The original actor/time/causality remain unknown in the retained MD.
             event_id = f"legacy-{_sha(f'{legacy_ref}:unknown')[:40]}"
@@ -200,15 +232,52 @@ def _json_item_count(path: Path) -> tuple[int, int]:
     return 0, 1
 
 
+def _event_log_sources(scope: MemoryScope, source_dir: Path | None) -> list[tuple[str, Path]]:
+    if source_dir is not None:
+        return [("override", Path(source_dir))]
+    return [("current", current_event_log_dir(scope)), ("legacy", legacy_event_log_dir(scope))]
+
+
+def _deduplicate_entries(entries: list[MigrationEntry]) -> tuple[list[MigrationEntry], int, int]:
+    """Keep the first deterministic event ID and classify duplicate/conflict plans."""
+    unique: dict[str, MigrationEntry] = {}
+    duplicate = conflict = 0
+    for entry in entries:
+        existing = unique.get(entry.event_id)
+        if existing is None:
+            unique[entry.event_id] = entry
+        elif (
+            existing.kind,
+            existing.actor,
+            existing.text,
+            existing.turn_id,
+            existing.seq,
+            existing.occurred_at,
+        ) == (
+            entry.kind,
+            entry.actor,
+            entry.text,
+            entry.turn_id,
+            entry.seq,
+            entry.occurred_at,
+        ):
+            duplicate += 1
+        else:
+            conflict += 1
+    return list(unique.values()), duplicate, conflict
+
+
 def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[str, Any]:
-    """Read all requested legacy stores and return a content-free plan."""
+    """Read current and legacy Markdown sources and return a content-free plan."""
     if scope.domain != "reality":
         raise ValueError("event migration requires a reality scope")
-    directory = Path(source_dir) if source_dir is not None else legacy_event_log_dir(scope)
     entries: list[MigrationEntry] = []
     parsed = malformed = 0
     source_digests: list[str] = []
-    if directory.is_dir():
+    source_counts = {"current": 0, "legacy": 0, "override": 0}
+    for source_kind, directory in _event_log_sources(scope, source_dir):
+        if not directory.is_dir():
+            continue
         for path in sorted(directory.iterdir(), key=lambda item: item.name):
             if not path.is_file() or not _DAY_FILE_RE.fullmatch(path.name):
                 continue
@@ -217,27 +286,38 @@ def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[s
             except (OSError, UnicodeDecodeError):
                 malformed += 1
                 continue
-            source_digests.append(f"{path.name}:{_sha(content)}")
+            source_digests.append(f"{source_kind}/{path.name}:{_sha(content)}")
             file_entries, file_parsed, file_malformed = _block_entries(path, content)
             entries.extend(file_entries)
+            source_counts[source_kind] += len(file_entries)
             parsed += file_parsed
             malformed += file_malformed
-    artifacts: dict[str, dict[str, int | bool]] = {}
+    entries, duplicate, conflict = _deduplicate_entries(entries)
+    parsed = sum(1 for entry in entries if entry.kind == "legacy_message")
+    malformed = sum(1 for entry in entries if entry.kind == "legacy_unknown")
+    artifacts: dict[str, dict[str, int | bool | str]] = {}
     for name, legacy_dir, resolver_key in _LEGACY_ARTIFACTS:
         legacy_path = get_paths()._p(legacy_dir, f"{safe_user_id(scope.uid)}.json")
         current_path = resolve_path(scope, resolver_key)
-        source_path = legacy_path if legacy_path.exists() else current_path
-        count, invalid = _json_item_count(source_path)
-        artifacts[name] = {"present": source_path.exists(), "items": count, "malformed": invalid}
+        legacy_count, legacy_invalid = _json_item_count(legacy_path)
+        current_count, current_invalid = _json_item_count(current_path)
+        artifacts[name] = {
+            "mode": "inventory_only",
+            "present": legacy_path.exists() or current_path.exists(),
+            "current_items": current_count,
+            "legacy_items": legacy_count,
+            "malformed": current_invalid + legacy_invalid,
+        }
     return {
         "entries": entries,
         "total": len(entries),
         "parsed": parsed,
         "malformed": malformed,
         "legacy_unknown": malformed,
-        "duplicate": 0,
-        "conflict": 0,
+        "duplicate": duplicate,
+        "conflict": conflict,
         "source_digest": _sha("\n".join(source_digests)),
+        "sources": source_counts,
         "artifacts": artifacts,
     }
 
@@ -268,11 +348,13 @@ def apply_batch(
         "parsed": int(plan["parsed"]),
         "malformed": int(plan["malformed"]),
         "legacy_unknown": int(plan["legacy_unknown"]),
-        "duplicate": int(previous.get("duplicate", 0)) if same_source else 0,
-        "conflict": int(previous.get("conflict", 0)) if same_source else 0,
+        "duplicate": int(previous.get("duplicate", 0)) if same_source else int(plan["duplicate"]),
+        "conflict": int(previous.get("conflict", 0)) if same_source else int(plan["conflict"]),
         "written": int(previous.get("written", 0)) if same_source else 0,
         "failed": int(previous.get("failed", 0)) if same_source else 0,
         "backup": dict(backup),
+        "sources": dict(plan.get("sources") or {}),
+        "artifacts": dict(plan.get("artifacts") or {}),
         "last_error": "",
     }
     for index, entry in enumerate(entries[start:start + batch_size], start=start):

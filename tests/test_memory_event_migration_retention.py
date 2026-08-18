@@ -56,10 +56,11 @@ def test_dry_run_is_read_only_and_duplicate_blocks_are_deterministic(sandbox, tm
 
     scope = _scope("migration-dry-run")
     plan = scan_legacy(scope, source_dir=_legacy_log(tmp_path / "legacy"))
-    assert plan["total"] == 3
-    assert plan["parsed"] == 2
+    assert plan["total"] == 2
+    assert plan["parsed"] == 1
     assert plan["malformed"] == plan["legacy_unknown"] == 1
-    assert plan["entries"][0].event_id == plan["entries"][1].event_id
+    assert plan["duplicate"] == 1
+    assert plan["sources"] == {"current": 0, "legacy": 0, "override": 3}
     assert not resolve_path(scope, "event_store").exists()
     assert not resolve_path(scope, "event_migration_state").exists()
 
@@ -99,10 +100,61 @@ def test_migration_conflict_is_counted_without_overwrite(sandbox, tmp_path):
     entry = plan["entries"][0]
     assert event_store.append_event(scope, {**entry.event(), "raw_payload_json": {"legacy_ref": "other"}}).inserted
     status = event_migration.apply_batch(scope, plan, batch_size=10, backup={"verified": True})
-    # Both identical legacy blocks target the manually occupied deterministic
-    # ID, so neither may overwrite it or be mislabeled as a safe duplicate.
-    assert status["conflict"] == 2
-    assert status["duplicate"] == 0
+    # The deterministic plan has collapsed the repeated legacy block.  It may
+    # not overwrite an occupied ID with different provenance.
+    assert status["conflict"] == 1
+    assert status["duplicate"] == 1
+
+
+def test_migration_parses_each_message_actor_and_turn_id(sandbox, tmp_path):
+    from core.memory.event_migration import scan_legacy
+
+    root = tmp_path / "legacy"
+    root.mkdir()
+    (root / "2026-08-02.md").write_text(
+        "## 09:30\n**用户**：早上好\n> speaker:user turn_id:turn-9\n"
+        "**角色**：早，今天想做什么？\n> speaker:assistant turn_id:turn-9\n---\n",
+        encoding="utf-8",
+    )
+    plan = scan_legacy(_scope("migration-actors"), source_dir=root)
+    assert plan["parsed"] == 2
+    user, assistant = plan["entries"]
+    assert (user.actor, user.turn_id, user.seq) == ("user", "turn-9", 0)
+    assert (assistant.actor, assistant.turn_id, assistant.seq) == ("assistant", "turn-9", 1)
+    assert user.text == "早上好"
+    assert assistant.text == "早，今天想做什么？"
+
+
+def test_migration_default_scans_current_and_legacy_with_inventory_only_assets(sandbox):
+    from core.memory.event_migration import current_event_log_dir, legacy_event_log_dir, scan_legacy
+    from core.memory.path_resolver import resolve_path
+
+    scope = _scope("migration-union")
+    current = current_event_log_dir(scope)
+    legacy = legacy_event_log_dir(scope)
+    current.mkdir(parents=True)
+    legacy.mkdir(parents=True)
+    body = "## 10:00\n**用户**：同一条\n> speaker:user turn_id:turn-union\n---\n"
+    (current / "2026-08-03.md").write_text(body, encoding="utf-8")
+    (legacy / "2026-08-03.md").write_text(body, encoding="utf-8")
+    resolve_path(scope, "episodic").write_text("[]", encoding="utf-8")
+
+    plan = scan_legacy(scope)
+    assert plan["parsed"] == 1
+    assert plan["duplicate"] == 1
+    assert plan["sources"]["current"] == plan["sources"]["legacy"] == 1
+    assert plan["artifacts"]["episodic"]["mode"] == "inventory_only"
+    assert plan["artifacts"]["episodic"]["current_items"] == 0
+
+
+def test_migration_status_retains_content_free_sources_and_inventory(sandbox, tmp_path):
+    from core.memory import event_migration
+
+    scope = _scope("migration-observe")
+    plan = event_migration.scan_legacy(scope, source_dir=_legacy_log(tmp_path / "legacy"))
+    state = event_migration.apply_batch(scope, plan, batch_size=100, backup={"verified": True})
+    assert state["sources"]["override"] == 3
+    assert state["artifacts"]["short_term"]["mode"] == "inventory_only"
 
 
 def test_migration_backup_helper_requires_verification(monkeypatch, tmp_path):
