@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from core.memory import event_query
+from core.memory import source_policy
 from core.memory.scope import MemoryScope
 from core.tools.tool_result import ToolResult
 
@@ -173,6 +174,9 @@ async def search_events_wrapper(
         return _unknown("argument_length_exceeded")
     if limit < 1 or limit > MAX_EVENTS:
         return _unknown("limit_exceeded")
+    if source and not source_policy.role_source_allowed(source):
+        source_policy.record_rejections(1)
+        return _unknown("source_not_available")
     try:
         result = event_query.search(
             _scope(user_id, char_id), text=query, actor=actor, kind=kind, source=source,

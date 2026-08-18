@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from core.memory import event_store
+from core.memory import source_policy
 from core.memory.scope import MemoryScope
 from core.safe_write import safe_append_jsonl
 
@@ -86,7 +87,7 @@ def _safe_media_refs(raw: object) -> list[dict[str, str]]:
             continue
         projected = {
             key: str(item[key])[:512]
-            for key in ("kind", "filename", "sha256")
+            for key in ("kind", "filename", "sha256", "availability")
             if item.get(key) not in (None, "")
         }
         if projected:
@@ -148,21 +149,58 @@ def _event_projection_with_topics(
     return projected
 
 
-def _find(connection: sqlite3.Connection, scope: MemoryScope, event_id: str) -> sqlite3.Row | None:
+def _observe_default_source_filter(connection: sqlite3.Connection, scope: MemoryScope) -> None:
+    """Account for excluded isolated evidence without recording its content."""
+    try:
+        placeholders = ", ".join("?" for _ in source_policy.ISOLATED_SOURCES)
+        count = connection.execute(
+            f"SELECT COUNT(*) FROM events WHERE uid=? AND char_id=? AND realm=? AND source IN ({placeholders})",
+            (scope.uid, scope.character_id, scope.domain, *sorted(source_policy.ISOLATED_SOURCES)),
+        ).fetchone()[0]
+        source_policy.record_rejections(int(count))
+    except sqlite3.Error:
+        return
+
+
+def _find(
+    connection: sqlite3.Connection,
+    scope: MemoryScope,
+    event_id: str,
+    *,
+    source: str = "",
+    include_isolated: bool = False,
+) -> sqlite3.Row | None:
+    where = ["uid = ?", "char_id = ?", "realm = ?", "event_id = ?"]
+    params: list[Any] = [scope.uid, scope.character_id, scope.domain, event_id]
+    if source:
+        where.append("source = ?")
+        params.append(source)
+    else:
+        predicate, policy_params = source_policy.sql_predicate(include_isolated=include_isolated)
+        if predicate:
+            where.append(predicate.removeprefix(" AND "))
+            params.extend(policy_params)
     return connection.execute(
-        "SELECT * FROM events WHERE uid = ? AND char_id = ? AND realm = ? AND event_id = ?",
-        (scope.uid, scope.character_id, scope.domain, event_id),
+        f"SELECT * FROM events WHERE {' AND '.join(where)}", params,
     ).fetchone()
 
 
-def get_event(scope: MemoryScope, event_id: str) -> dict[str, Any] | None:
+def get_event(
+    scope: MemoryScope,
+    event_id: str,
+    *,
+    source: str = "",
+    include_isolated: bool = False,
+) -> dict[str, Any] | None:
     opened = _connect(scope)
     if opened is None:
         return None
     path, connection = opened
     with event_store._lock_for(path):
         try:
-            row = _find(connection, scope, event_id)
+            if not source and not include_isolated:
+                _observe_default_source_filter(connection, scope)
+            row = _find(connection, scope, event_id, source=source, include_isolated=include_isolated)
             return _event_projection_with_topics(connection, scope, row) if row is not None else None
         except sqlite3.Error as exc:
             raise EventQueryError("database_error") from exc
@@ -170,25 +208,41 @@ def get_event(scope: MemoryScope, event_id: str) -> dict[str, Any] | None:
             connection.close()
 
 
-def window(scope: MemoryScope, event_id: str, *, before: int, after: int) -> dict[str, Any] | None:
+def window(
+    scope: MemoryScope,
+    event_id: str,
+    *,
+    before: int,
+    after: int,
+    source: str = "",
+    include_isolated: bool = False,
+) -> dict[str, Any] | None:
     opened = _connect(scope)
     if opened is None:
         return None
     path, connection = opened
     with event_store._lock_for(path):
         try:
-            target = _find(connection, scope, event_id)
+            if not source and not include_isolated:
+                _observe_default_source_filter(connection, scope)
+            target = _find(connection, scope, event_id, source=source, include_isolated=include_isolated)
             if target is None:
                 return None
-            params = (scope.uid, scope.character_id, scope.domain, target["occurred_at"], target["occurred_at"], target["seq"], target["seq"], target["event_id"])
+            source_where, source_params = source_policy.sql_predicate(include_isolated=include_isolated)
+            exact_source = source or None
+            source_clause = " AND source = ?" if exact_source else source_where
+            source_values: tuple[Any, ...] = (exact_source,) if exact_source else source_params
+            params = (scope.uid, scope.character_id, scope.domain, *source_values, target["occurred_at"], target["occurred_at"], target["seq"], target["seq"], target["event_id"])
             before_rows = connection.execute(
                 """SELECT * FROM events WHERE uid = ? AND char_id = ? AND realm = ?
+                """ + source_clause + """
                 AND (occurred_at < ? OR (occurred_at = ? AND (seq < ? OR (seq = ? AND event_id < ?))))
                 ORDER BY occurred_at DESC, seq DESC, event_id DESC LIMIT ?""",
                 (*params, before + 1),
             ).fetchall()
             after_rows = connection.execute(
                 """SELECT * FROM events WHERE uid = ? AND char_id = ? AND realm = ?
+                """ + source_clause + """
                 AND (occurred_at > ? OR (occurred_at = ? AND (seq > ? OR (seq = ? AND event_id > ?))))
                 ORDER BY occurred_at ASC, seq ASC, event_id ASC LIMIT ?""",
                 (*params, after + 1),
@@ -235,6 +289,8 @@ def related(
     cursor: str,
     limit: int,
     relation_types: set[str] | None = None,
+    source: str = "",
+    include_isolated: bool = False,
 ) -> dict[str, Any] | None:
     decoded = _decode_cursor(cursor, "related", event_id)
     edge_after = int(decoded.get("edge_id", 0)) if decoded else 0
@@ -246,7 +302,9 @@ def related(
     path, connection = opened
     with event_store._lock_for(path):
         try:
-            if _find(connection, scope, event_id) is None:
+            if not source and not include_isolated:
+                _observe_default_source_filter(connection, scope)
+            if _find(connection, scope, event_id, source=source, include_isolated=include_isolated) is None:
                 return None
             relation_types = relation_types or set()
             relation_sql = ""
@@ -255,6 +313,14 @@ def related(
                 placeholders = ", ".join("?" for _ in relation_types)
                 relation_sql = f" AND COALESCE(NULLIF(e.relation_type, ''), e.edge_type) IN ({placeholders})"
                 relation_params = tuple(sorted(relation_types))
+            exact_source = source or None
+            if exact_source:
+                source_clause = " AND related.source = ?"
+                source_values: tuple[Any, ...] = (exact_source,)
+            else:
+                source_clause, source_values = source_policy.sql_predicate(
+                    "related.source", include_isolated=include_isolated,
+                )
             rows = connection.execute(
                 """SELECT e.edge_id, e.edge_type,
                    COALESCE(NULLIF(e.relation_type, ''), e.edge_type) AS relation_type,
@@ -267,8 +333,8 @@ def related(
                  AND related.realm = ?
                  AND related.event_id = CASE WHEN e.from_event_id = ? THEN e.to_event_id ELSE e.from_event_id END
                 WHERE e.uid = ? AND e.char_id = ? AND (e.from_event_id = ? OR e.to_event_id = ?) AND e.edge_id > ?"""
-                + relation_sql + " ORDER BY e.edge_id ASC LIMIT ?",
-                (scope.domain, event_id, scope.uid, scope.character_id, event_id, event_id, edge_after, *relation_params, 1001),
+                + source_clause + relation_sql + " ORDER BY e.edge_id ASC LIMIT ?",
+                (scope.domain, event_id, scope.uid, scope.character_id, event_id, event_id, edge_after, *source_values, *relation_params, 1001),
             ).fetchall()
             # One event can have several deterministic relations to the same
             # neighbour (for example same_turn + reply_to).  Paginate unique
@@ -340,10 +406,18 @@ def search(
         escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         where.append("(raw_text LIKE ? ESCAPE '\\' OR visible_text LIKE ? ESCAPE '\\' OR memory_text LIKE ? ESCAPE '\\')")
         params.extend([f"%{escaped}%"] * 3)
-    for column, value in (("actor", actor), ("kind", kind), ("source", source)):
+    for column, value in (("actor", actor), ("kind", kind)):
         if value:
             where.append(f"{column} = ?")
             params.append(value)
+    if source:
+        where.append("source = ?")
+        params.append(source)
+    else:
+        source_where, source_params = source_policy.sql_predicate(include_isolated=False)
+        if source_where:
+            where.append(source_where.removeprefix(" AND "))
+            params.extend(source_params)
     if occurred_after is not None:
         where.append("occurred_at >= ?")
         params.append(occurred_after)
@@ -365,6 +439,8 @@ def search(
     path, connection = opened
     with event_store._lock_for(path):
         try:
+            if not source:
+                _observe_default_source_filter(connection, scope)
             rows = connection.execute(
                 f"SELECT * FROM events WHERE {' AND '.join(where)} ORDER BY occurred_at ASC, seq ASC, event_id ASC LIMIT ?",
                 (*params, limit + 1),

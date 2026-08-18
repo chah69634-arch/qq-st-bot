@@ -180,13 +180,14 @@ async def get_memory_event(
     uid: str = Query(..., min_length=1, max_length=128),
     char_id: str = Query(..., min_length=1, max_length=128),
     realm: str = Query("reality", max_length=16),
+    source: str = Query("", max_length=128, description="Explicit source enables forensic access to isolated evidence"),
     _auth=Depends(require_scopes("memory.read")),
 ):
     from core.memory import event_query
 
     scope = _scope(uid, char_id, realm)
     try:
-        event = event_query.get_event(scope, event_id)
+        event = event_query.get_event(scope, event_id, source=source)
     except EventQueryError as exc:
         raise _query_error(scope, "event", exc)
     if event is None:
@@ -239,13 +240,14 @@ async def get_memory_event_window(
     realm: str = Query("reality", max_length=16),
     before: int = Query(10, ge=0, le=_MAX_WINDOW),
     after: int = Query(10, ge=0, le=_MAX_WINDOW),
+    source: str = Query("", max_length=128, description="Explicit source enables forensic access to isolated evidence"),
     _auth=Depends(require_scopes("memory.read")),
 ):
     from core.memory import event_query
 
     scope = _scope(uid, char_id, realm)
     try:
-        result = event_query.window(scope, event_id, before=before, after=after)
+        result = event_query.window(scope, event_id, before=before, after=after, source=source)
     except EventQueryError as exc:
         raise _query_error(scope, "window", exc)
     if result is None:
@@ -263,13 +265,14 @@ async def get_related_memory_events(
     realm: str = Query("reality", max_length=16),
     cursor: str = Query("", max_length=1024),
     limit: int = Query(25, ge=1, le=_MAX_RESULTS),
+    source: str = Query("", max_length=128, description="Explicit source enables forensic access to isolated evidence"),
     _auth=Depends(require_scopes("memory.read")),
 ):
     from core.memory import event_query
 
     scope = _scope(uid, char_id, realm)
     try:
-        result = event_query.related(scope, event_id, cursor=cursor, limit=limit)
+        result = event_query.related(scope, event_id, cursor=cursor, limit=limit, source=source)
     except EventQueryError as exc:
         raise _query_error(scope, "related", exc)
     if result is None:

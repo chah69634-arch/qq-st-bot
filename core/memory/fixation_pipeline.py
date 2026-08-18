@@ -1625,6 +1625,10 @@ async def handler_summarize_to_midterm(payload: dict) -> None:
         else "coplay_echo" if payload.get("coplay_echo")
         else None
     )
+    if _echo_reason is None:
+        from core.memory.source_policy import is_isolated
+        if is_isolated(payload.get("source")):
+            _echo_reason = f"source:{payload['source']}"
     if _echo_reason:
         from core.runtime_signal_observability import record
 

@@ -176,6 +176,38 @@ endpoint returns `409 physical_delete_disabled_pending_owner_policy`. No
 physical deletion of evidence or media is available until the owner confirms a
 separate retention/forget policy.
 
+## Memory Event repairs: hot path, media, lineage, and source visibility
+
+The Reality ledger's synchronous append path only queries the new event's two
+adjacent neighbours in its `(stream, source)` partition and the current turn.
+Ordering is always `(occurred_at, seq, event_id)`. A late insert removes only
+the displaced `previous`/`next` pair before writing its replacements; duplicate
+event IDs repair only that event's local neighbourhood. Full-ledger edge repair
+is not a chat-path operation. `GET /observability/memory-event-ledger` includes
+content-free append/edge timing, query-count, changed-edge, busy-budget and
+source-rejection metrics. SQLite waits are capped at 250 ms and failures remain
+fail-open for the existing short-term, event-log and visible-send paths.
+
+QQ media dual-write preserves the user caption as `raw_text`; OCR and document
+extraction remain only in `memory_text`. Image/file evidence stores only a safe
+`kind`, basename, SHA-256 and availability state, never a download URL, local
+path, QQ token or extracted text. Desktop/mobile upload behavior is unchanged.
+
+Weekly storyline aggregation assigns evidence-bearing episodic/inbox material
+short `material_id`s. An `append_node` may select only IDs from that batch; code
+expands them to the node's stored `source_ids`. Invalid/missing/duplicate IDs
+reject the whole LLM batch without advancing the cursor or clearing inbox.
+Nodes based solely on legacy event-log text use an explicit empty source list
+and resolve as `legacy_unknown`; historic nodes are never backfilled.
+
+`web`, `dream_echo`, and `coplay` are source-isolated ledger evidence. The
+shared source policy excludes them from default event query, role-tool and
+shadow-recall reads, and includes source in deterministic adjacency partitioning.
+An administrator with `memory.read` can inspect one isolated source only by
+supplying the explicit `source` parameter; projections always retain the source
+label. Source isolation remains a forensic/read boundary and does not delete
+the original evidence.
+
 ## Path truth census（writer / read / history / prompt boundary）
 
 代码 writer 是实现 authority；下表把运行时写入、兼容读取和 forensic 观测分开。表中的旧路径
