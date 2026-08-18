@@ -62,6 +62,7 @@
         </div>
         <p class="admin-inline-087" data-i18n="routing.active_binding_hint">只有清除角色卡的模型绑定后才会跟随全局；名为 <code>default</code> 的 profile 也属于固定绑定。</p>
         <div id="mr-active-character-routing-warning" role="status" aria-live="polite" class="admin-inline-087 admin-routing-warning"></div>
+        <div id="mr-event-proposer-route-status" class="config-item-meta">event_edge_proposer: -</div>
       </div>
 
       <div class="card">
@@ -90,6 +91,7 @@
         <details class="admin-inline-126">
           <summary class="admin-inline-013">各 category 是干什么的？点开看</summary>
           <div class="admin-inline-141">
+            <div><code class="admin-inline-073">event_edge_proposer</code> - Generates bounded, unreviewed relation candidates in the background; it never changes deterministic edges or recall.</div>
             <div><code class="admin-inline-073">chat</code> —— 角色的正式回复，用户实际看到的每一句话。质量要求最高，建议配主力模型。</div>
             <div><code class="admin-inline-073">intent</code> —— 判断"要不要触发某个动作"的轻量辅助判断，不面向用户，配便宜模型即可。</div>
             <div><code class="admin-inline-073">probe</code> —— 每轮先判断要不要调用工具的轻量"探针"调用，配便宜模型即可。</div>

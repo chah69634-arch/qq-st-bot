@@ -7,20 +7,32 @@ from typing import Iterable
 from core.memory.source_policy import ISOLATED_SOURCES
 
 _SOURCE_RE = re.compile(r"\bsource:([^\s]+)")
+_DATE_HEADER_RE = re.compile(r"^# \d{4}-\d{2}-\d{2}\s*$")
 
 
 def split_blocks(text: str) -> list[list[str]]:
     blocks: list[list[str]] = []
     current: list[str] = []
+    date_header = ""
+
+    def flush() -> None:
+        nonlocal current
+        if current and any(line.strip() != date_header for line in current):
+            blocks.append(current)
+        current = []
+
     for line in text.splitlines():
-        if line.startswith("## "):
-            if current:
-                blocks.append(current)
-            current = [line]
+        if _DATE_HEADER_RE.fullmatch(line):
+            flush()
+            date_header = line
+        elif line.startswith("## "):
+            flush()
+            current = [date_header, line] if date_header else [line]
         elif current or line.strip():
+            if not current and date_header:
+                current = [date_header]
             current.append(line)
-    if current:
-        blocks.append(current)
+    flush()
     return blocks
 
 

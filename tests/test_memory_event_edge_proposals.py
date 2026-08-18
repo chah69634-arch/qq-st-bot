@@ -110,6 +110,10 @@ def test_proposer_records_failures_budget_and_observability_without_memory_write
     observed = asyncio.run(memory_event_edge_proposals(uid, TEST_CHAR_ID, _auth=None))
     assert observed["failed_count"] == 1
     assert observed["by_relation"] == {}
+    assert observed["has_run"] is True
+    assert "effective_state" in observed
+    assert "route_effective" in observed
+    assert "private" not in str(observed)
 
 
 def test_proposal_observability_route_is_exposed():

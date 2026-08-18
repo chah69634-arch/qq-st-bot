@@ -123,6 +123,7 @@ def migration_status(scope: MemoryScope) -> dict[str, Any]:
         "artifacts", "already_live", "would_write", "source_isolated",
         "unknown_source", "assistant_trigger_unknown_time", "plan_duplicate",
         "plan_conflict", "ledger_duplicate", "ledger_conflict", "comparison_status",
+        "indeterminate", "indeterminate_statuses",
     }
     return {key: state[key] for key in allowed if key in state}
 
@@ -334,24 +335,22 @@ def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[s
         }
     already_live = ledger_duplicate = ledger_conflict = 0
     would_write = 0
-    comparison_status = "missing_ledger"
-    indeterminate = False
+    comparison_statuses: list[str] = []
+    indeterminate_statuses: set[str] = set()
     ledger_classifications: dict[str, str] = {}
     for entry in entries:
         if entry.event_id in conflicted_event_ids:
             continue
         status, existing = event_store.migration_evidence_status(scope, entry.event_id)
+        comparison_statuses.append(status)
         if status in {"missing_ledger", "not_found"}:
             ledger_classifications[entry.event_id] = "would_write"
-            comparison_status = "ok" if status == "not_found" else comparison_status
             would_write += 1
             continue
         if status != "ok" or existing is None:
             ledger_classifications[entry.event_id] = status
-            comparison_status = status
-            indeterminate = True
+            indeterminate_statuses.add(status)
             continue
-        comparison_status = "ok"
         expected = entry.event()
         same = (
             existing["turn_id"] == expected["turn_id"]
@@ -375,6 +374,12 @@ def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[s
         else:
             ledger_classifications[entry.event_id] = "conflict"
             ledger_conflict += 1
+    if indeterminate_statuses:
+        comparison_status = sorted(indeterminate_statuses)[0]
+    elif comparison_statuses and all(status == "missing_ledger" for status in comparison_statuses):
+        comparison_status = "missing_ledger"
+    else:
+        comparison_status = "ok"
     return {
         "entries": entries,
         "total": len(entries),
@@ -388,9 +393,11 @@ def scan_legacy(scope: MemoryScope, *, source_dir: Path | None = None) -> dict[s
         "ledger_duplicate": ledger_duplicate,
         "ledger_conflict": ledger_conflict,
         "already_live": already_live,
-        "would_write": 0 if indeterminate else would_write,
+        "would_write": 0 if indeterminate_statuses else would_write,
         "comparison_status": comparison_status,
-        "conflicted_event_ids": conflicted_event_ids,
+        "indeterminate": bool(indeterminate_statuses),
+        "indeterminate_statuses": sorted(indeterminate_statuses),
+        "conflicted_event_ids": sorted(conflicted_event_ids),
         "ledger_classifications": ledger_classifications,
         "source_isolated": sum(entry.source in {"web", "dream_echo", "coplay"} for entry in entries),
         "unknown_source": sum(entry.unknown_source for entry in entries),
@@ -437,6 +444,8 @@ def apply_batch(
         "ledger_duplicate": int(plan.get("ledger_duplicate", 0)),
         "ledger_conflict": int(plan.get("ledger_conflict", 0)),
         "comparison_status": str(plan.get("comparison_status") or ""),
+        "indeterminate": bool(plan.get("indeterminate", False)),
+        "indeterminate_statuses": list(plan.get("indeterminate_statuses") or []),
         "written": int(previous.get("written", 0)) if same_source else 0,
         "failed": int(previous.get("failed", 0)) if same_source else 0,
         "already_live": int(plan.get("already_live", 0)),
@@ -449,6 +458,13 @@ def apply_batch(
         "artifacts": dict(plan.get("artifacts") or {}),
         "last_error": "",
     }
+    if state["indeterminate"]:
+        state["status"] = "paused"
+        state["last_error"] = state["comparison_status"] or "indeterminate"
+        state["updated_at"] = time.time()
+        if not safe_write_json(_state_path(scope), state, keep_bak=True):
+            raise RuntimeError("migration_state_write_failed")
+        return migration_status(scope)
     for index, entry in enumerate(entries[start:start + batch_size], start=start):
         if entry.event_id in set(plan.get("conflicted_event_ids") or ()):
             state["last_error"] = "plan_conflict"

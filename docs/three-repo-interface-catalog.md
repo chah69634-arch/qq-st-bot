@@ -418,3 +418,14 @@ status. Shadow observability retains bounded timeout/busy/cancelled outcomes;
 proposer observability adds content-free source-policy input/filtered counts.
 All remain under the existing `memory.read` or `state.read` scopes, and no
 prompt text, evidence body, or complete receipt/event-ID inventory is exposed.
+
+# Brief 216 / MER-11 backend-only control and observability closure
+
+No desktop, mobile, WebSocket, relay, or channel contract changed. Admin Runtime
+Configuration now distinguishes desired/effective state for shadow recall and
+the relation proposer; Model Routing separately exposes the effective proposer
+category route. The Memory Event evidence page consumes the existing scoped
+`state.read` endpoints for content-free run, budget, timeout, source-policy,
+mapping, coverage, and latest-run metrics. Empty scopes are reported as not run.
+Both features remain off by default; shadow never enters the production prompt,
+and proposer rows remain unreviewed candidates rather than deterministic edges.

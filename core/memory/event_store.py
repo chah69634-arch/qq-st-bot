@@ -1197,6 +1197,7 @@ def edge_proposal_observability_snapshot(
     result: dict[str, Any] = {
         "scope": {"uid": scope.uid, "char_id": scope.character_id, "realm": scope.domain},
         "runs": 0, "candidate_count": 0, "failed_count": 0, "duplicate_count": 0,
+        "inserted_count": 0, "latest_run_at": 0.0, "by_status": {}, "by_error": {},
         "by_relation": {}, "daily": {"day_key": day_key, "calls": 0, "tokens": 0,
                                        "call_limit": daily_call_limit, "token_limit": daily_token_limit},
     }
@@ -1210,17 +1211,37 @@ def edge_proposal_observability_snapshot(
             with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) as connection:
                 run_row = connection.execute(
                     """SELECT COUNT(*), COALESCE(SUM(candidate_count), 0),
-                              COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0)
+                              COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0),
+                              COALESCE(MAX(created_at), 0)
                        FROM event_edge_proposer_runs WHERE uid=? AND char_id=? AND realm=?""",
                     (scope.uid, scope.character_id, scope.domain),
                 ).fetchone()
-                result["runs"], result["candidate_count"], result["failed_count"] = map(int, run_row)
+                result["runs"] = int(run_row[0])
+                result["candidate_count"] = int(run_row[1])
+                result["failed_count"] = int(run_row[2])
+                result["latest_run_at"] = float(run_row[3])
+                for status, count in connection.execute(
+                    """SELECT status, COUNT(*) FROM event_edge_proposer_runs
+                       WHERE uid=? AND char_id=? AND realm=? GROUP BY status""",
+                    (scope.uid, scope.character_id, scope.domain),
+                ):
+                    result["by_status"][str(status or "unknown")] = int(count)
+                for error_code, count in connection.execute(
+                    """SELECT error_code, COUNT(*) FROM event_edge_proposer_runs
+                       WHERE uid=? AND char_id=? AND realm=? AND error_code != '' GROUP BY error_code""",
+                    (scope.uid, scope.character_id, scope.domain),
+                ):
+                    result["by_error"][str(error_code)] = int(count)
                 for row in connection.execute(
                     """SELECT relation_type, COUNT(*) FROM event_edge_proposals
                        WHERE uid=? AND char_id=? AND realm=? GROUP BY relation_type""",
                     (scope.uid, scope.character_id, scope.domain),
                 ):
                     result["by_relation"][str(row[0])] = int(row[1])
+                result["inserted_count"] = sum(result["by_relation"].values())
+                result["duplicate_count"] = max(
+                    0, result["candidate_count"] - result["inserted_count"],
+                )
                 if day_key:
                     day = connection.execute(
                         """SELECT COUNT(*), COALESCE(SUM(token_budget), 0)

@@ -137,17 +137,44 @@ async def memory_event_edge_proposals(
     char_id: str,
     _auth=Depends(require_scopes("state.read")),
 ):
-    from core.memory.event_store import edge_proposal_observability_snapshot
+    from core.memory.event_store import edge_proposal_observability_snapshot, existing_ledger_health_code
     from core.memory.scope import MemoryScope
     from core.scheduler.triggers.event_edge_proposer import _config, _day_key, discovery_observability_snapshot
+    from core.model_registry import resolve_category_info
 
     cfg = _config()
+    scope = MemoryScope.reality_scope(uid, char_id)
     result = edge_proposal_observability_snapshot(
-        MemoryScope.reality_scope(uid, char_id), day_key=_day_key(),
+        scope, day_key=_day_key(),
         daily_call_limit=int(cfg["max_daily_calls"]),
         daily_token_limit=int(cfg["max_daily_tokens"]),
     )
-    result["discovery"] = discovery_observability_snapshot()
+    discovery = discovery_observability_snapshot()
+    health = existing_ledger_health_code(scope)
+    route = resolve_category_info("event_edge_proposer", char_id=char_id)
+    route_effective = bool(route.get("effective_preset") and route.get("model"))
+    enabled = bool(cfg["enabled"])
+    if not enabled:
+        effective_state = "disabled"
+    elif not route_effective:
+        effective_state = "blocked-by-route"
+    elif health not in {"ok", "missing"}:
+        effective_state = "blocked-by-schema"
+    elif discovery.get("runs") and not discovery.get("eligible_scopes"):
+        effective_state = "enabled-but-no-scope"
+    elif result["runs"]:
+        effective_state = "enabled-and-running"
+    else:
+        effective_state = "enabled-not-run"
+    result.update({
+        "desired_enabled": enabled,
+        "effective_state": effective_state,
+        "schema_health": health,
+        "route_effective": route_effective,
+        "route": route,
+        "discovery": discovery,
+        "has_run": bool(result["runs"]),
+    })
     return result
 
 
@@ -191,8 +218,7 @@ async def memory_event_shadow_recall(
                     records.append({
                         key: shadow.get(key)
                         for key in (
-                            "status", "enabled", "seed_event_ids", "new_event_ids",
-                            "new_turn_ids", "seed_order", "comparison_mode",
+                            "status", "enabled", "seed_order", "comparison_mode",
                             "expand_count", "related_count", "candidate_count", "chars",
                             "tokens", "old_chars", "old_tokens", "overlap_rate",
                             "event_overlap_rate", "turn_overlap_rate", "event_overlap_count",
@@ -211,6 +237,25 @@ async def memory_event_shadow_recall(
     for item in records:
         status = str(item.get("status") or "unknown")
         status_counts[status] = status_counts.get(status, 0) + 1
+    from core.memory.event_shadow_recall import config as shadow_config, enabled_for
+    from core.memory.event_store import existing_ledger_health_code
+
+    cfg = shadow_config()
+    scope_enabled = enabled_for(uid, char_id, cfg)
+    any_rollout = bool(cfg.get("enabled") or cfg.get("uids") or cfg.get("char_ids"))
+    health = existing_ledger_health_code(scope)
+    if not any_rollout:
+        effective_state = "disabled"
+    elif not scope_enabled:
+        effective_state = "enabled-but-no-scope"
+    elif health not in {"ok", "missing"}:
+        effective_state = "blocked-by-schema"
+    elif records:
+        effective_state = "enabled-and-running"
+    else:
+        effective_state = "enabled-not-run"
+    completed = status_counts.get("ok", 0)
+    coverage_values = [float(item.get("event_coverage") or 0.0) for item in records]
     return {
         "uid": uid,
         "char_id": char_id,
@@ -218,6 +263,29 @@ async def memory_event_shadow_recall(
         "records": records,
         "count": len(records),
         "status_counts": status_counts,
+        "desired": {
+            "enabled": bool(cfg.get("enabled", False)),
+            "uids": sorted(str(value) for value in (cfg.get("uids") or [])),
+            "char_ids": sorted(str(value) for value in (cfg.get("char_ids") or [])),
+        },
+        "scope_enabled": scope_enabled,
+        "effective_state": effective_state,
+        "schema_health": health,
+        "has_run": bool(records),
+        "summary": {
+            "calls": len(records),
+            "completed": completed,
+            "timeouts": status_counts.get("timeout", 0),
+            "busy": status_counts.get("busy", 0),
+            "cancelled": status_counts.get("cancelled", 0),
+            "rejected": sum(int(item.get("scope_rejections") or 0) for item in records),
+            "mapped_events": sum(int(item.get("new_mapped_count") or 0) for item in records),
+            "mapped_turns": sum(int(item.get("new_turn_count") or 0) for item in records),
+            "unmapped_old": sum(int(item.get("old_unmapped_count") or 0) for item in records),
+            "unmapped_new": sum(int(item.get("new_unmapped_count") or 0) for item in records),
+            "average_coverage": round(sum(coverage_values) / len(coverage_values), 4) if coverage_values else None,
+        },
+        "latest_date": date_str if records else "",
     }
 
 

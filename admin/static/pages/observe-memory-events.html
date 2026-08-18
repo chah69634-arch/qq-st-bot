@@ -24,5 +24,17 @@
 </section>
 
 <section class="card">
+  <div class="card-header"><h3>Shadow recall evidence</h3><button type="button" class="btn btn-ghost btn-sm" data-action="loadMemoryEventShadowObservability">Refresh</button></div>
+  <p class="admin-inline-087">Uses the UID and character above. Metrics are aggregate-only and never expose prompt text, message bodies, or event IDs.</p>
+  <div id="event-shadow-observability" class="empty">Not run</div>
+</section>
+
+<section class="card">
+  <div class="card-header"><h3>Edge proposer evidence</h3><button type="button" class="btn btn-ghost btn-sm" data-action="loadMemoryEventProposerObservability">Refresh</button></div>
+  <p class="admin-inline-087">Proposals are unreviewed candidates. They do not change deterministic edges, recall, or memory facts.</p>
+  <div id="event-proposer-observability" class="empty">Not run</div>
+</section>
+
+<section class="card">
   <pre id="event-query-result" class="raw-output" data-i18n="memory_events.waiting">等待查询</pre>
 </section>

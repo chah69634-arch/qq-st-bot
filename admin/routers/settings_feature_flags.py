@@ -51,15 +51,36 @@ class EventShadowRecallUpdate(BaseModel):
 @router.get("/settings/feature-flags", summary="读取功能开关白名单")
 async def get_feature_flags(auth=Depends(require_scopes("admin"))):
     cfg = get_config()
-    return {"flags": {
-        name: {
+    flags = {}
+    for name, (section, key, label) in FLAGS.items():
+        enabled = bool(cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS))
+        item = {
             "enabled": bool(cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS)),
+            "desired_enabled": enabled,
             "label": label,
             "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
             "restart_required": name in RESTART_REQUIRED_FLAGS,
         }
-        for name, (section, key, label) in FLAGS.items()
-    }}
+        if name == "event_edge_proposer":
+            from core.scheduler.triggers.event_edge_proposer import discovery_observability_snapshot
+            discovery = discovery_observability_snapshot()
+            if not enabled:
+                item["effective_state"] = "disabled"
+            elif discovery.get("runs") and not discovery.get("eligible_scopes"):
+                item["effective_state"] = "enabled-but-no-scope"
+            elif discovery.get("completed_scopes"):
+                item["effective_state"] = "enabled-and-running"
+            else:
+                item["effective_state"] = "enabled-not-run"
+            item["description"] = "只生成未采纳的候选关系；不改变正式记忆或确定性关系边"
+        elif name == "event_shadow_recall":
+            shadow = _shadow_settings()
+            item["effective_state"] = shadow["effective_state"]
+            item["description"] = "只比较新旧召回并写脱敏观测；不进入正式 prompt"
+        else:
+            item["effective_state"] = "enabled" if enabled else "disabled"
+        flags[name] = item
+    return {"flags": flags}
 
 
 @router.put("/settings/feature-flags", summary="批量更新功能开关并返回实际生效方式")
@@ -96,10 +117,20 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
 
 def _shadow_settings() -> dict:
     cfg = get_config().get("event_shadow_recall") or {}
+    enabled = bool(cfg.get("enabled", False))
+    uids = [str(value) for value in (cfg.get("uids") or []) if str(value)]
+    char_ids = [str(value) for value in (cfg.get("char_ids") or []) if str(value)]
     return {
-        "enabled": bool(cfg.get("enabled", False)),
-        "uids": [str(value) for value in (cfg.get("uids") or []) if str(value)],
-        "char_ids": [str(value) for value in (cfg.get("char_ids") or []) if str(value)],
+        "enabled": enabled,
+        "desired_enabled": enabled,
+        "uids": uids,
+        "char_ids": char_ids,
+        "apply_mode": "hot_reload",
+        "effective_state": (
+            "enabled-for-all" if enabled
+            else "allowlist-active" if uids or char_ids
+            else "disabled"
+        ),
     }
 
 

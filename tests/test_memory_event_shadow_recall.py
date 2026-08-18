@@ -131,7 +131,11 @@ def test_shadow_rollout_settings_are_hot_reloaded(tmp_path, monkeypatch):
     result = asyncio.run(flags.update_event_shadow_recall_settings(
         flags.EventShadowRecallUpdate(enabled=False, uids=["one", "one"], char_ids=[TEST_CHAR_ID]), auth=None,
     ))
-    assert result == {"enabled": False, "uids": ["one"], "char_ids": [TEST_CHAR_ID], "reload_status": "reloaded"}
+    assert result == {
+        "enabled": False, "desired_enabled": False, "uids": ["one"],
+        "char_ids": [TEST_CHAR_ID], "apply_mode": "hot_reload",
+        "effective_state": "allowlist-active", "reload_status": "reloaded",
+    }
     saved = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert saved["event_shadow_recall"]["char_ids"] == [TEST_CHAR_ID]
 
@@ -155,9 +159,34 @@ def test_shadow_trace_observability_omits_query_text(sandbox):
     })
     result = asyncio.run(memory_event_shadow_recall(uid, TEST_CHAR_ID, _auth=None))
     assert result["status_counts"] == {"ok": 1}
-    assert result["records"][0]["new_event_ids"] == ["shadow-event-1", "shadow-event-2"]
+    assert "new_event_ids" not in result["records"][0]
+    assert "seed_event_ids" not in result["records"][0]
     assert result["records"][0]["sqlite_timeout_ms"] == 40
+    assert result["has_run"] is True
+    assert result["summary"]["calls"] == 1
+    assert "private query must not be projected" not in str(result)
     assert "query" not in result["records"][0]
+
+
+def test_shadow_observability_empty_scope_and_auth_are_explicit(sandbox, monkeypatch):
+    from fastapi.testclient import TestClient
+    from admin.admin_server import app
+
+    secret = "shadow-observability-state-read"
+    monkeypatch.setattr("admin.auth.get_admin_secret", lambda: secret)
+    client = TestClient(app, raise_server_exceptions=False)
+    params = {"uid": "shadow-never-ran", "char_id": TEST_CHAR_ID}
+    assert client.get("/observability/memory-event-shadow-recall", params=params).status_code == 401
+    response = client.get(
+        "/observability/memory-event-shadow-recall", params=params,
+        headers={"Authorization": f"Bearer {secret}"},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["has_run"] is False
+    assert result["latest_date"] == ""
+    assert "records" in result and result["records"] == []
+    assert "event_id" not in response.text and "query" not in response.text
 
 
 def test_shadow_recall_does_not_add_a_prompt_parameter():

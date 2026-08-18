@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -217,6 +218,33 @@ def test_migration_dry_run_reports_schema_mismatch_without_would_write(sandbox, 
     assert plan["comparison_status"] == "schema_mismatch"
     assert plan["would_write"] == 0
     assert plan["ledger_classifications"][plan["entries"][0].event_id] == "schema_mismatch"
+
+
+def test_migration_dry_run_report_is_json_serializable_and_conflicts_are_stable(sandbox, tmp_path):
+    from core.memory import event_migration
+
+    scope = _scope("migration-json-report")
+    plan = event_migration.scan_legacy(scope, source_dir=_legacy_log(tmp_path / "json-report"))
+    report = {key: value for key, value in plan.items() if key != "entries"}
+    encoded = json.dumps(report, ensure_ascii=False, sort_keys=True)
+    assert json.loads(encoded)["conflicted_event_ids"] == sorted(plan["conflicted_event_ids"])
+
+
+def test_migration_mixed_comparison_keeps_indeterminate_status(sandbox, tmp_path, monkeypatch):
+    from core.memory import event_migration
+
+    statuses = iter((("not_found", None), ("schema_mismatch", None)))
+    monkeypatch.setattr(
+        event_migration.event_store, "migration_evidence_status",
+        lambda *_args, **_kwargs: next(statuses),
+    )
+    plan = event_migration.scan_legacy(
+        _scope("migration-mixed-status"), source_dir=_legacy_log(tmp_path / "mixed-status"),
+    )
+    assert plan["comparison_status"] == "schema_mismatch"
+    assert plan["indeterminate"] is True
+    assert plan["indeterminate_statuses"] == ["schema_mismatch"]
+    assert plan["would_write"] == 0
 
 
 def test_migration_locked_status_is_explicit_and_does_not_advance(sandbox, tmp_path, monkeypatch):

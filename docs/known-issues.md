@@ -220,3 +220,15 @@ additional production sources.
 - `roadmap`: production producers for `triggered_by`, `derived_from`,
   `correction_of`, and `media_of` remain limited to evidence-backed call sites.
   No synthetic stimulus/media events were added to close the repair gate.
+
+## Memory Event repair status (Brief 216)
+
+- `closed`: MER-11 fixed dry-run JSON serialization, aggregate indeterminate
+  migration status, cross-date Markdown source filtering, and storyline physical
+  date deduplication. Backend control and content-free observability now expose
+  desired/effective/route/run distinctions without projecting bodies or IDs.
+- `observe`: historical migration remains an operator action after read-only
+  dry-run and verified backup. Shadow and proposer stay disabled by default and
+  must be rolled out per scope; candidate relations are not accepted edges.
+- `roadmap`: production producers for `triggered_by`, `derived_from`,
+  `correction_of`, and `media_of` remain unchanged and limited.

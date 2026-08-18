@@ -249,3 +249,19 @@ one independent editor. Provider keys are write-only; advanced key/value rows ar
 folded and boolean values use a selector rather than free text. Resource labels
 are logical and redacted, with no local physical-path input. Preview success is
 reported as synthesis success only, never as client playback or provider health.
+
+## Brief 216 Memory Event control and effective state
+
+The backend-only shadow recall and relation proposer remain disabled by default.
+Runtime Configuration shows desired state, effective state, and apply mode. The
+shadow card retains global, UID, and character allowlists and hot-reload result.
+The proposer flag states that it writes unreviewed candidates only; Model Routing
+shows the effective `event_edge_proposer` preset and model separately from the
+feature flag. Effective states distinguish disabled, no eligible scope, running,
+schema blocked, route blocked, and enabled but not yet run.
+
+The Memory Event evidence page consumes the existing `state.read` endpoints and
+shows aggregate calls, budgets, source filtering, failures, timeouts, coverage,
+and latest-run evidence. Empty evidence is labelled `未运行`, never healthy.
+No prompt, body, event ID, token text, or local path is projected. Desktop and
+mobile clients do not add settings or consume these backend diagnostics.

@@ -469,14 +469,15 @@ def _collect_event_log_since(
                 block_key = _block_key(block)
                 material_id = f"eventlog:{hashlib.sha256((day + ':' + block_key).encode()).hexdigest()[:24]}"
                 legacy_material_id = f"eventlog:{hashlib.sha256((day + ':' + '\n'.join(block).strip()).encode()).hexdigest()[:24]}"
+                dedupe_key = f"{day}:{block_key}"
                 if (
                     not block_key
-                    or block_key in seen_keys
+                    or dedupe_key in seen_keys
                     or material_id in consumed_ids
                     or legacy_material_id in consumed_ids
                 ):
                     continue
-                seen_keys.add(block_key)
+                seen_keys.add(dedupe_key)
                 kept.append("\n".join(block))
                 material_ids.append(material_id)
             if kept:

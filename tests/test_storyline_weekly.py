@@ -292,6 +292,22 @@ def test_event_log_source_tagged_blocks_filtered_from_llm_input(sandbox, fake_ll
     assert "辞职去学画画" in llm_input, "无 source 标记的块应正常进入聚合输入"
 
 
+def test_event_log_same_text_is_kept_across_days_and_deduped_within_day(sandbox):
+    from core.scheduler.triggers.storyline_weekly import _collect_event_log_since
+
+    uid = "storyline-physical-day-dedupe"
+    body = "## 09:00\n**user**: repeated real occurrence\n> speaker:user\n---\n"
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, "2026-08-01", body)
+    _write_day_file(sandbox, TEST_CHAR_ID, uid, "2026-08-02", body)
+    legacy = sandbox._p("event_log") / uid
+    legacy.mkdir(parents=True, exist_ok=True)
+    (legacy / "2026-08-02.md").write_text(body, encoding="utf-8")
+
+    text, _cursor, material_ids = _collect_event_log_since(uid, TEST_CHAR_ID, {})
+    assert text.count("repeated real occurrence") == 2
+    assert len(material_ids) == 2
+
+
 # ── 6. 空 registry → warning + 不调用 LLM ────────────────────────────────────
 
 def test_empty_registry_skips(fake_llm, caplog):

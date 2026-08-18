@@ -117,3 +117,17 @@ def test_admin_ui_consumes_feature_flag_restart_contract():
     )
     assert "item.restart_required" in source
     assert "result.reload_status === 'restart_required'" in source
+
+
+def test_memory_event_flags_report_desired_and_effective_state(monkeypatch):
+    monkeypatch.setattr(mod, "get_config", lambda: {
+        "event_edge_proposer": {"enabled": False},
+        "event_shadow_recall": {"enabled": False, "uids": ["scoped-owner"]},
+    })
+
+    result = asyncio.run(mod.get_feature_flags(auth=None))["flags"]
+    assert result["event_edge_proposer"]["desired_enabled"] is False
+    assert result["event_edge_proposer"]["effective_state"] == "disabled"
+    assert result["event_shadow_recall"]["desired_enabled"] is False
+    assert result["event_shadow_recall"]["effective_state"] == "allowlist-active"
+    assert result["event_shadow_recall"]["apply_mode"] == "hot_reload"

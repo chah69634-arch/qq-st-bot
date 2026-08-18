@@ -11,6 +11,7 @@ import asyncio
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from core.memory import event_log
+from core.memory.event_log_source import filter_recallable_text
 
 
 def _day_text(sandbox, uid: str, char_id: str = TEST_CHAR_ID) -> str:
@@ -100,3 +101,16 @@ def test_old_event_log_vector_blob_cannot_boost_ranking(sandbox, monkeypatch):
     ))
     assert result == ""
     assert trace == []
+
+
+def test_cross_date_source_filter_does_not_swallow_next_date_header():
+    text = (
+        "# 2026-08-01\n## 23:59\n**user**: isolated\n> speaker:user source:web\n---\n"
+        "# 2026-08-02\n## 00:01\n**user**: retained\n> speaker:user\n---\n"
+    )
+    filtered, skipped = filter_recallable_text(text)
+    assert skipped == 1
+    assert "2026-08-01" not in filtered
+    assert "isolated" not in filtered
+    assert "# 2026-08-02" in filtered
+    assert "retained" in filtered
