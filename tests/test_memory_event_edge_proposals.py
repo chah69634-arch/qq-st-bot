@@ -122,6 +122,16 @@ def test_proposal_observability_route_is_exposed():
     assert "/observability/memory-event-edge-proposals" in app.openapi()["paths"]
 
 
+def test_proposer_config_keeps_one_second_scope_timeout_minimum(monkeypatch):
+    from core.scheduler.triggers import event_edge_proposer as proposer
+
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"event_edge_proposer": {"scope_timeout_seconds": 0.01}},
+    )
+    assert proposer._config()["scope_timeout_seconds"] == 1
+
+
 def test_scheduler_discovers_only_existing_healthy_sqlite3_ledgers(sandbox, monkeypatch):
     from core.memory.path_resolver import resolve_path
     from core.scheduler import loop
@@ -164,14 +174,21 @@ def test_scheduler_scope_timeout_releases_discovery_loop(sandbox, monkeypatch):
     from core.scheduler.triggers import event_edge_proposer as proposer
 
     uid = "proposal-timeout-owner"
+    healthy_uid = "proposal-timeout-healthy-owner"
     _seed(uid)
+    _seed(healthy_uid)
+    completed: list[str] = []
 
-    async def slow_propose(*_args):
-        await asyncio.sleep(1)
+    async def slow_propose(found_uid, *_args):
+        if found_uid == uid:
+            await asyncio.sleep(1)
+            return
+        completed.append(found_uid)
 
     monkeypatch.setattr(proposer, "_config", lambda: {
-        "enabled": True, "scope_timeout_seconds": 0.01,
+        "enabled": True, "scope_timeout_seconds": 1,
     })
+    monkeypatch.setattr(proposer, "_scope_timeout_seconds", lambda _cfg: 0.01)
     monkeypatch.setattr(proposer, "_propose_scope", slow_propose)
     monkeypatch.setattr(loop, "_is_ready", lambda _name: True)
     monkeypatch.setattr(loop, "_mark", lambda _name: None)
@@ -181,7 +198,10 @@ def test_scheduler_scope_timeout_releases_discovery_loop(sandbox, monkeypatch):
     )
 
     asyncio.run(proposer._check_event_edge_proposer())
-    assert proposer.discovery_observability_snapshot()["timed_out_scopes"] >= 1
+    discovery = proposer.discovery_observability_snapshot()
+    assert discovery["timed_out_scopes"] >= 1
+    assert discovery["completed_scopes"] >= 1
+    assert completed == [healthy_uid]
 
 
 def test_proposer_filters_isolated_sources_before_text_projection_and_write(sandbox):

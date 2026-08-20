@@ -79,6 +79,11 @@ def _config() -> dict[str, int | bool]:
     return cfg
 
 
+def _scope_timeout_seconds(cfg: dict[str, int | bool]) -> float:
+    """Return the effective per-scope timeout; tests may inject a short clock."""
+    return float(cfg["scope_timeout_seconds"])
+
+
 def _record_discovery(**counts: int) -> None:
     with _DISCOVERY_LOCK:
         _DISCOVERY["runs"] = int(_DISCOVERY["runs"]) + 1
@@ -263,7 +268,7 @@ async def _check_event_edge_proposer() -> None:
                     await _propose_scope(scope.uid, char_id, cfg)
 
             try:
-                await asyncio.wait_for(_run_scope(), timeout=float(cfg["scope_timeout_seconds"]))
+                await asyncio.wait_for(_run_scope(), timeout=_scope_timeout_seconds(cfg))
                 counters["completed_scopes"] += 1
             except TimeoutError:
                 counters["timed_out_scopes"] += 1
