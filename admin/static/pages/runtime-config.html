@@ -15,15 +15,15 @@
 </div>
 
 <div class="card">
-  <div class="card-header"><h3>Memory Event shadow rollout</h3><button class="btn btn-ghost btn-sm" data-action="loadEventShadowRecallSettings" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087">Only compares old and event-ledger recall. Results are excluded from the production prompt.</p>
+  <div class="card-header"><h3 data-i18n="memory_event.shadow.title">Memory Event shadow rollout</h3><button class="btn btn-ghost btn-sm" data-action="loadEventShadowRecallSettings" data-i18n="common.refresh">刷新</button></div>
+  <p class="admin-inline-087" data-i18n="memory_event.shadow.hint">Only compares old and event-ledger recall. Results are excluded from the production prompt.</p>
   <div class="config-item-meta"><span id="event-shadow-effective">effective: -</span><span id="event-shadow-apply-mode">apply: -</span></div>
   <div class="form-row">
-    <label class="checkbox-row"><input type="checkbox" id="event-shadow-enabled"><span>全局启用</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="event-shadow-enabled"><span data-i18n="memory_event.shadow.global_enable">全局启用</span></label>
   </div>
   <div class="form-row">
-    <label class="field"><span>UID allowlist</span><textarea id="event-shadow-uids" rows="3" spellcheck="false"></textarea></label>
-    <label class="field"><span>Character ID allowlist</span><textarea id="event-shadow-char-ids" rows="3" spellcheck="false"></textarea></label>
+    <label class="field"><span data-i18n="memory_event.shadow.uid_allowlist">UID allowlist</span><textarea id="event-shadow-uids" rows="3" spellcheck="false"></textarea></label>
+    <label class="field"><span data-i18n="memory_event.shadow.char_allowlist">Character ID allowlist</span><textarea id="event-shadow-char-ids" rows="3" spellcheck="false"></textarea></label>
   </div>
   <button class="btn btn-primary btn-sm" data-action="saveEventShadowRecallSettings" data-i18n="common.save">保存</button>
 </div>
