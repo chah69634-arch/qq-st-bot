@@ -36,6 +36,10 @@ data/
 │   ├── channel_queue.json
 │   ├── mobile_queue.json
 │   ├── agent_actions.json
+│   ├── companion/
+│   │   ├── receipts/{caller_label}/
+│   │   ├── sessions/{caller_label}.json
+│   │   └── stats.json
 │   ├── pending_perception/
 │   ├── observability/api_calls-YYYY-MM-DD.jsonl  # 外部 API 调用总账，保留最近 7 天
 │   ├── scheduler_user_state.json

@@ -18,12 +18,9 @@ from core.companion.models import (
 
 
 def _fixture_root() -> Path:
-    return (
-        Path(__file__).parents[2]
-        / "PresenceKit-stardew-companion"
-        / "protocol"
-        / "presencekit-external-companion-v1"
-    )
+    # Ordinary pytest must be self-contained. Cross-repository compatibility is
+    # exercised separately by an explicit pinned checkout job.
+    return Path(__file__).parent / "fixtures" / "external_companion_v1"
 
 
 def _fixture(name: str) -> dict:

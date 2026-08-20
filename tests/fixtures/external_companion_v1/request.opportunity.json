@@ -1,0 +1,18 @@
+{
+  "contract": "presencekit-external-companion-v1",
+  "kind": "opportunity",
+  "source": "stardew-companion",
+  "session_id": "fixture-session-a",
+  "event_id": "fixture-event-a",
+  "created_at": "2026-08-16T00:00:00Z",
+  "activity_kind": "cozy_game",
+  "salience": "normal",
+  "retention_policy": "bounded_observation",
+  "user_authored": false,
+  "provenance": {
+    "origin": "external_companion",
+    "authority": "stardew-companion",
+    "user_authored": false
+  },
+  "summary": "A fictional companion opportunity for protocol validation."
+}

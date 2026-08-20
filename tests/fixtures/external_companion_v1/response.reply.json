@@ -1,0 +1,19 @@
+{
+  "contract": "presencekit-external-companion-v1",
+  "request_id": "fixture-event-a",
+  "status": "accepted",
+  "reply": {
+    "message_id": "fixture-reply-a",
+    "content": "A fictional bounded reply for protocol validation.",
+    "created_at": "2026-08-16T00:00:01Z",
+    "ttl_ms": 300000,
+    "requires_ack": true,
+    "user_authored": false,
+    "proactive": false,
+    "provenance": {
+      "origin": "presencekit.server",
+      "authority": "presencekit.server",
+      "user_authored": false
+    }
+  }
+}

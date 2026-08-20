@@ -41,6 +41,13 @@ REGISTRY: dict[str, PathMeta] = {
     "agent_actions":          PathMeta("runtime",   "shared",          "global",        "ignore"),
     "owner_turn_receipts_root": PathMeta("runtime", "reality", "global", "ignore"),
     "owner_turn_receipt":     PathMeta("runtime", "reality", "per_user", "ignore"),
+    # Companion ingress stores bounded metadata only; caller-scoped files
+    # mirror the owner-turn receipt classification.
+    "companion_root":          PathMeta("runtime", "reality", "global",   "ignore"),
+    "companion_receipt":       PathMeta("runtime", "reality", "per_user", "ignore"),
+    "companion_receipts_root": PathMeta("runtime", "reality", "global",   "ignore"),
+    "companion_session":       PathMeta("runtime", "reality", "per_user", "ignore"),
+    "companion_stats":         PathMeta("runtime", "reality", "global",   "ignore"),
     "diary_mirror_root":      PathMeta("runtime", "reality", "per_user", "ignore"),
     "diary_mirror_manifest":  PathMeta("runtime", "reality", "per_user", "ignore"),
     "diary_mirror_status":    PathMeta("runtime", "reality", "per_user", "ignore"),

@@ -65,9 +65,12 @@ times, and prune metadata. It never returns token values, request content,
 summary, reply text, owner IDs, character text, or filesystem paths. There is
 no companion-specific user setting: this is a fixed server capability.
 
-The companion repository keeps the corresponding sanitized request/reply/error
-fixtures under its own `protocol/presencekit-external-companion-v1/` directory.
-Those fixtures contain no token, account, private character text, or local
+The backend keeps a minimal sanitized request/reply fixture copy under
+`tests/fixtures/external_companion_v1/` so ordinary single-repository pytest is
+self-contained. The companion repository keeps its corresponding protocol
+fixtures under `protocol/presencekit-external-companion-v1/`; cross-repository
+compatibility is run only by an explicit job with pinned checkouts. Neither
+fixture set contains a token, account, private character text, or local
 filesystem path.
 
 ## Event-model boundary

@@ -1,0 +1,18 @@
+{
+  "contract": "presencekit-external-companion-v1",
+  "kind": "phone_message",
+  "source": "stardew-companion",
+  "session_id": "fixture-session-a",
+  "event_id": "fixture-event-phone",
+  "created_at": "2026-08-16T00:00:00Z",
+  "activity_kind": "cozy_game",
+  "salience": "normal",
+  "retention_policy": "ephemeral",
+  "user_authored": true,
+  "provenance": {
+    "origin": "companion_phone_input",
+    "authority": "stardew-companion",
+    "user_authored": true
+  },
+  "content": "A fictional phone message for protocol validation."
+}
