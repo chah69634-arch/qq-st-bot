@@ -169,6 +169,19 @@ async def test_companion_service_freezes_context_and_disables_tools_and_fanout(
     assert calls[0]["fanout"] == []
     assert calls[0]["envelope"].can_write_memory is False
     assert calls[0]["provenance_source"] == "external_companion"
+    assert calls[0]["audit_extras"]["user_authored"] is False
+    assert calls[0]["audit_extras"]["provenance_origin"] == "external_companion"
+
+    phone_fixture = _fixture("request.phone-message.json")
+    phone_fixture["created_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    phone_request = PhoneMessageRequest.model_validate(phone_fixture)
+    phone_response = await service.handle_event(phone_request, caller_label="companion-fixture")
+    assert phone_response.status.value == "accepted"
+    assert calls[1]["provenance_source"] == "companion_phone_input"
+    assert calls[1]["audit_extras"]["user_authored"] is True
+    assert calls[1]["audit_extras"]["provenance_origin"] == "companion_phone_input"
+    assert calls[1]["envelope"].can_write_memory is True
+    assert calls[1]["fanout"] == []
 
 
 def test_companion_auth_scope_isolated_and_runtime_failure_has_no_receipt(sandbox, monkeypatch):

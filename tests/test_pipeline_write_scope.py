@@ -151,8 +151,15 @@ async def test_post_process_passes_active_char_id_to_capture_turn(
 
     original_ct = _fp.capture_turn
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None, source=""):
+    captured_calls: list[dict] = []
+
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None, source="", event_channel="", event_source="", visible_reply=None, raw_user_text=None, media_refs=None):
         captured_char_ids.append(char_id)
+        captured_calls.append({
+            "char_id": char_id,
+            "event_channel": event_channel,
+            "event_source": event_source,
+        })
         return turn_id or f"{uid}_spy"
 
     monkeypatch.setattr(_fp, "capture_turn", _spy_ct)
@@ -173,12 +180,19 @@ async def test_post_process_passes_active_char_id_to_capture_turn(
             content="你好",
             reply="在的",
             envelope=env,
+            event_channel="desktop",
+            event_source="user_chat",
         )
 
     assert captured_char_ids, "capture_turn must be called"
     assert captured_char_ids[0] == "character_b", (
         f"post_process must pass char_id='character_b', got {captured_char_ids[0]!r}"
     )
+    assert captured_calls[0] == {
+        "char_id": "character_b",
+        "event_channel": "desktop",
+        "event_source": "user_chat",
+    }
 
 
 # ── 4. Active character switch: post_process uses new char_id ─────────────────
@@ -196,8 +210,15 @@ async def test_post_process_uses_new_char_id_after_switch(
 
     captured_char_ids: list[str] = []
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None, source=""):
+    captured_calls: list[dict] = []
+
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, audit_extras=None, source="", event_channel="", event_source="", visible_reply=None, raw_user_text=None, media_refs=None):
         captured_char_ids.append(char_id)
+        captured_calls.append({
+            "char_id": char_id,
+            "event_channel": event_channel,
+            "event_source": event_source,
+        })
         return turn_id or f"{uid}_spy"
 
     monkeypatch.setattr(_fp, "capture_turn", _spy_ct)

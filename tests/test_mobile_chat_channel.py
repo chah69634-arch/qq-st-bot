@@ -167,7 +167,9 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
     assert "level" not in result
     assert prompt_channels == ["mobile"]
     assert probe_channels == ["mobile"]
-    assert capture_origins == [{"origin": "mobile"}]
+    assert len(capture_origins) == 1
+    assert capture_origins[0]["origin"] == "mobile"
+    assert capture_origins[0]["user_authored"] is True
     assert mobile_channel.active is True
     assert desktop_channel.active is False
     assert sink_calls[0]["exclude_origin_channel"] == "mobile"
