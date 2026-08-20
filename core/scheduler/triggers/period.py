@@ -29,6 +29,8 @@ def _days_elapsed(uid: str, today: _date | None = None) -> int | None:
 
 def propose(ctx: dict | None = None):
     ctx = ctx or {}
+    if not _cfg().get("period_reminder", True):
+        return None
     uid = str(ctx.get("uid") or _owner_id() or "").strip()
     if not uid:
         return None
@@ -42,8 +44,10 @@ def propose(ctx: dict | None = None):
 
     if 0 <= days_elapsed <= 7:
         ratio = 1 - (days_elapsed / 7)
+        stage = "current"
     elif 26 <= days_elapsed <= 30:
         ratio = (days_elapsed - 26) / 4
+        stage = "upcoming"
     else:
         return None
 
@@ -58,6 +62,14 @@ def propose(ctx: dict | None = None):
         requires_state=[TriggerState.CHATTING, TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=True,
         execute=_make_period_execute(days_elapsed),
+        metadata={
+            "autonomy_evidence": [{
+                "fact": "period_reminder_window",
+                "stage": stage,
+                "days_elapsed": min(30, max(0, int(days_elapsed))),
+            }],
+            "autonomy_action_mode": "talk",
+        },
     )
 
 

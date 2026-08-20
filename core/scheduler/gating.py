@@ -156,24 +156,15 @@ def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     ctx = _build_context(uid)
     proposals = _collect_native_proposals(ctx)
     picked, reason, candidates = _decide(uid, proposals)
-    if picked is not None and picked.trigger_name == "dream_exit":
-        metadata = picked.metadata or {}
-        dream_id = str(metadata.get("dream_id") or "")
+    if picked is not None and picked.trigger_name in MIGRATED_TRIGGERS:
         char_id = str(picked.char_id or ctx.get("char_id") or "")
-        if dream_id and char_id:
+        if char_id:
             try:
-                from core.autonomy.signal_adapters import emit_trigger_signal
+                from core.autonomy.signal_adapters import emit_scheduler_proposal_signal
 
-                emit_trigger_signal(
-                    uid,
-                    char_id,
-                    "dream_exit",
-                    evidence=[{"fact": "dream_exit_ready", "dream_id": dream_id}],
-                    priority=min(1.0, max(0.1, float(picked.urgency))),
-                    urgency=min(1.0, max(0.1, float(picked.urgency))),
-                )
+                emit_scheduler_proposal_signal(uid, char_id, picked)
             except Exception as exc:
-                logger.warning("[gating] dream_exit signal enqueue failed: %s", exc)
+                logger.warning("[gating] scheduler winner signal enqueue failed: %s", exc)
     state = get_current_state(uid)
     log_path = get_paths().gating_shadow_log()
     safe_append_jsonl(
@@ -218,24 +209,11 @@ async def decide_and_execute_event(
     if picked is None or picked.execute is None:
         return picked, reason, None
     if picked.trigger_name in MIGRATED_TRIGGERS:
-        from core.autonomy.signal_adapters import emit_trigger_signal
+        from core.autonomy.signal_adapters import emit_scheduler_proposal_signal
         from core.scheduler.loop import _active_char_id_or_none
         char_id = picked.char_id or _active_char_id_or_none()
         if char_id:
-            emit_trigger_signal(
-                uid,
-                char_id,
-                picked.trigger_name,
-                evidence=[
-                    {
-                        "fact": "event_proposal_candidate",
-                        "trigger": picked.trigger_name,
-                        **({"dream_id": picked.metadata.get("dream_id")} if picked.trigger_name == "dream_exit" and picked.metadata and picked.metadata.get("dream_id") else {}),
-                    }
-                ],
-                priority=min(1.0, max(0.1, float(picked.urgency))),
-                urgency=min(1.0, max(0.1, float(picked.urgency))),
-            )
+            emit_scheduler_proposal_signal(uid, char_id, picked)
         return picked, "queued_autonomy_signal", None
     result = await picked.execute(dry_run=dry_run)
     return picked, reason, result

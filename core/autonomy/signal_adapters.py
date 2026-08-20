@@ -35,6 +35,7 @@ _MIGRATED_TRIGGER_TTLS = {
     "birthday_afternoon": 60 * 60,
     "birthday_night": 60 * 60,
     "period_reminder": 30 * 60,
+    "festival": 20 * 60,
 }
 
 _DESKTOP_WAKE_TTL_SECONDS = 10 * 60
@@ -95,6 +96,80 @@ def emit_trigger_signal(
     prefix = "routine" if name in ROUTINE_TRIGGER_NAMES else "trigger"
     key = f"{prefix}:{name}:{int(now // max(60, dedupe_bucket_seconds))}"
     return store.enqueue_signal(uid, char_id, signal, dedupe_key=key)
+
+
+def emit_scheduler_proposal_signal(
+    uid: str,
+    char_id: str,
+    proposal: Any,
+    *,
+    now: float | None = None,
+) -> tuple[bool, str]:
+    """Persist the selected scheduler winner as bounded factual evidence.
+
+    The scheduler has already applied its proposal competition and admission
+    rules before this adapter is called.  This function deliberately ignores
+    legacy executors and prompt factories: a winner becomes one autonomy
+    signal, never another delivery path.
+    """
+    name = str(getattr(proposal, "trigger_name", "") or "").strip()
+    if not name:
+        return False, "missing_trigger"
+    metadata = getattr(proposal, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    evidence = _scheduler_proposal_evidence(name, metadata)
+    action_mode = str(metadata.get("autonomy_action_mode") or ActionMode.TALK.value)
+    if action_mode not in {item.value for item in ActionMode}:
+        action_mode = ActionMode.TALK.value
+    memory_query = metadata.get("autonomy_memory_query")
+    if not isinstance(memory_query, (str, dict)):
+        memory_query = None
+    try:
+        urgency = min(1.0, max(0.1, float(getattr(proposal, "urgency", 0.2))))
+    except (TypeError, ValueError):
+        urgency = 0.2
+    return emit_trigger_signal(
+        uid,
+        char_id,
+        name,
+        evidence=evidence,
+        reason=f"Selected scheduler winner: {name}.",
+        priority=urgency,
+        urgency=urgency,
+        memory_query=memory_query,
+        action_mode=action_mode,
+        now=now,
+    )
+
+
+def _scheduler_proposal_evidence(name: str, metadata: dict[str, Any]) -> list[dict]:
+    """Return a small allowlisted projection rather than arbitrary metadata."""
+    fields_by_trigger = {
+        "festival": ("fact", "festival_key", "reality_date", "calendar_source"),
+        "period_reminder": ("fact", "stage", "days_elapsed"),
+        "dream_exit": ("fact", "dream_id"),
+    }
+    allowed = fields_by_trigger.get(name)
+    raw = metadata.get("autonomy_evidence")
+    if isinstance(raw, list) and allowed:
+        projected: list[dict] = []
+        for item in raw[:4]:
+            if not isinstance(item, dict):
+                continue
+            row = {
+                key: value
+                for key, value in item.items()
+                if key in allowed and isinstance(value, (str, int, float, bool))
+            }
+            if row:
+                projected.append(row)
+        if projected:
+            return projected
+    if name == "dream_exit":
+        dream_id = str(metadata.get("dream_id") or "").strip()
+        if dream_id:
+            return [{"fact": "dream_exit_ready", "dream_id": dream_id[:128]}]
+    return [{"fact": "scheduler_proposal_winner", "trigger": name}]
 
 
 def adapt_routine(

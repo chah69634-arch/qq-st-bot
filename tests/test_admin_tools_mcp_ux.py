@@ -41,7 +41,7 @@ def test_mcp_ux_preserves_remote_raw_boundary_and_domain_selector_contract():
     source = read_admin_client_source()
     page = read_admin_page("mcp")
     for marker in (
-        "const MCP_DEFAULT_HEADERS = Object.freeze({ Authorization: 'Bearer ${MCP_TOKEN}' });",
+        "const MCP_DEFAULT_HEADERS = Object.freeze({});",
         "allowEmpty: true",
         "mcp.header.name",
         "mcp.metadata.mapping_help",

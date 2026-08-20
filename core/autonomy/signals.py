@@ -8,6 +8,6 @@ __all__ = [
     "adapt_routine", "adapt_time_background", "adapt_heart_rate",
     "adapt_memory_reactivation", "adapt_topic_followup", "adapt_desktop_wake",
     "enqueue_desktop_wake_signal", "adapt_restart", "adapt_trigger",
-    "collect_external_signals", "emit_trigger_signal",
+    "collect_external_signals", "emit_trigger_signal", "emit_scheduler_proposal_signal",
     "registered_signal_adapter",
 ]

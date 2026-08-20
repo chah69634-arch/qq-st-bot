@@ -292,13 +292,15 @@ async function loadObserveAutonomy() {
   const runsEl = document.getElementById('autonomy-runs');
   if (!overviewEl) return;
   try {
-    const [status, effectiveState, config, runs, tools] = await Promise.all([
+    const [status, effectiveState, config, runs, tools, opportunities] = await Promise.all([
       api('GET', '/admin/autonomy/status'), api('GET', '/admin/autonomy/effective-state'),
       api('GET', '/admin/autonomy/config'),
       api('GET', '/admin/autonomy/runs'), api('GET', '/admin/autonomy/tools'),
+      api('GET', '/observability/autonomy-opportunities?limit=100'),
     ]);
     _renderAutonomyOverview(overviewEl, status, config, effectiveState);
     _renderAutonomyRuns(runsEl, runs.runs || []);
+    _renderAutonomyFunnel(document.getElementById('autonomy-funnel'), opportunities.funnel || {});
     if ((runs.runs || []).length) await loadAutonomyPrompt(runs.runs[0].id);
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
@@ -320,6 +322,27 @@ async function loadObserveAutonomy() {
     _renderAutonomyTools(host, tools.tools || []);
     await loadSelfManagement();
   } catch (e) { overviewEl.innerHTML = `<div class="empty">读取唤醒状态失败：${escapeHtml(e.message)}</div>`; }
+}
+
+function _renderAutonomyFunnel(host, funnel) {
+  if (!host) return;
+  const windows = [['24h', '近 24 小时'], ['7d', '近 7 天']];
+  const labels = {
+    no_candidate: 'No candidate', producer_matched: 'Producer matched',
+    signal_queued: '信号入队', opportunity_created: '机会创建', admission_allowed: '准入通过',
+    blocked_user_active: '用户活跃阻断', daily_budget: '每日预算', minimum_interval: '最小间隔',
+    expired: '过期', talk_unavailable: 'Talk 不可用', evaluated_silent: '模型静默',
+    tools_only: '仅工具', talk_gate_rejected: 'Talk gate 拒绝', talk_sent: '已发送',
+  };
+  const keys = Object.keys(labels);
+  host.innerHTML = windows.map(([key, title]) => {
+    const data = funnel[key] || {};
+    const totals = data.totals || {};
+    const rows = Object.entries(data.by_source || {});
+    const totalLine = keys.filter(name => totals[name]).map(name => `${labels[name]} ${totals[name]}`).join('；') || '暂无可用记录';
+    const sourceTable = rows.length ? `<table><thead><tr><th>来源</th>${keys.map(name => `<th>${escapeHtml(labels[name])}</th>`).join('')}</tr></thead><tbody>${rows.map(([source, counts]) => `<tr><td>${escapeHtml(source)}</td>${keys.map(name => `<td>${Number(counts[name] || 0)}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '';
+    return `<section class="autonomy-funnel-window"><strong>${escapeHtml(title)}</strong><p class="autonomy-hint">${escapeHtml(totalLine)}</p>${sourceTable}</section>`;
+  }).join('');
 }
 
 async function loadSelfManagement() {

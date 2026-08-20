@@ -2,6 +2,15 @@
 
 ---
 
+## MCP optional authentication (Brief 195)
+
+The MCP import form starts with an empty header map. A bearer header is added
+only by an explicit operator action, for example `Authorization: Bearer
+${MCP_TOKEN}`. Empty headers are passed through as `{}` so unauthenticated MCP
+servers can connect; an explicitly configured missing environment variable
+continues to fail closed in the backend resolver. Header values are never
+returned by the settings read projection or written to the UI URL.
+
 ## Memory Event read tools (Brief 201)
 
 Path C owner-private function calling may expose the three read-only tools

@@ -237,7 +237,113 @@ async def opportunities(limit: int = 50, auth=Depends(require_scopes("state.read
     for item in entries:
         status = str(item.get("status") or "unknown")
         counts[status] = counts.get(status, 0) + 1
-    return {"uid": uid, "char_id": char_id, "entries": entries, "count": len(entries), "status_counts": counts}
+    return {
+        "uid": uid,
+        "char_id": char_id,
+        "entries": entries,
+        "count": len(entries),
+        "status_counts": counts,
+        "funnel": _opportunity_funnel(state),
+    }
+
+
+_FUNNEL_DISPOSITIONS = (
+    "no_candidate",
+    "producer_matched",
+    "signal_queued",
+    "opportunity_created",
+    "admission_allowed",
+    "blocked_user_active",
+    "daily_budget",
+    "minimum_interval",
+    "expired",
+    "talk_unavailable",
+    "evaluated_silent",
+    "tools_only",
+    "talk_gate_rejected",
+    "talk_sent",
+)
+
+
+def _opportunity_funnel(state: dict, *, now: float | None = None) -> dict:
+    """Aggregate durable, content-free delivery evidence for 24h and 7d."""
+    now = time.time() if now is None else float(now)
+    jobs = {str(row.get("id") or ""): row for row in state.get("jobs", []) if isinstance(row, dict)}
+    return {
+        "24h": _funnel_window(state, jobs, cutoff=now - 24 * 3600),
+        "7d": _funnel_window(state, jobs, cutoff=now - 7 * 24 * 3600),
+    }
+
+
+def _funnel_window(state: dict, jobs: dict[str, dict], *, cutoff: float) -> dict:
+    by_source: dict[str, dict[str, int]] = {}
+
+    def add(source: str, disposition: str, count: int = 1) -> None:
+        source = str(source or "unknown")[:80]
+        row = by_source.setdefault(source, {key: 0 for key in _FUNNEL_DISPOSITIONS})
+        row[disposition] = row.get(disposition, 0) + count
+
+    for row in state.get("pending_signals", []):
+        if not isinstance(row, dict) or float(row.get("queued_at") or 0) < cutoff:
+            continue
+        signal = row.get("signal") or {}
+        if isinstance(signal, dict):
+            source = signal.get("source", "unknown")
+            add(source, "producer_matched")
+            add(source, "signal_queued")
+
+    for job in jobs.values():
+        if float(job.get("created_at") or 0) < cutoff:
+            continue
+        sources = _job_signal_sources(job)
+        for source in sources:
+            add(source, "producer_matched")
+            add(source, "opportunity_created")
+
+    for run in state.get("runs", []):
+        if not isinstance(run, dict) or float(run.get("finished_at") or run.get("started_at") or 0) < cutoff:
+            continue
+        job = jobs.get(str(run.get("job_id") or ""), {})
+        sources = _job_signal_sources(job) or [str(run.get("source") or "autonomy")]
+        disposition = _funnel_disposition(run)
+        for source in sources:
+            add(source, disposition)
+            if disposition not in {"blocked_user_active", "daily_budget", "minimum_interval", "expired"}:
+                add(source, "admission_allowed")
+
+    totals = {key: sum(row.get(key, 0) for row in by_source.values()) for key in _FUNNEL_DISPOSITIONS}
+    return {"by_source": by_source, "totals": totals}
+
+
+def _job_signal_sources(job: dict) -> list[str]:
+    sources = [str(value) for value in job.get("signal_sources", []) if str(value)]
+    if sources:
+        return sorted(set(sources))
+    signals = (job.get("opportunity") or {}).get("signals") if isinstance(job.get("opportunity"), dict) else []
+    return sorted({str(item.get("source") or "") for item in signals or [] if isinstance(item, dict) and item.get("source")})
+
+
+def _funnel_disposition(run: dict) -> str:
+    disposition = str(run.get("disposition") or "")
+    evaluation = str(run.get("evaluation_status") or "")
+    if bool(run.get("talk_sent")) or evaluation == "talk_sent":
+        return "talk_sent"
+    if evaluation == "evaluated_silent":
+        return "evaluated_silent"
+    if evaluation == "tools_completed_no_talk":
+        return "tools_only"
+    if disposition in {"blocked_user_active", "canceled_user_activity"}:
+        return "blocked_user_active"
+    if disposition == "suppressed_daily_budget":
+        return "daily_budget"
+    if disposition == "duplicate":
+        return "minimum_interval"
+    if disposition == "expired":
+        return "expired"
+    events = run.get("events") or []
+    if any(isinstance(event, dict) and event.get("status") == "talk_unavailable" for event in events):
+        return "talk_unavailable"
+    return "talk_gate_rejected"
 
 
 @router.get("/admin/autonomy/runs/{run_id}/prompt", summary="Read one autonomy prompt snapshot")

@@ -709,6 +709,12 @@ await record_assistant_turn(
 Pipeline 未注入时，只有未迁移 compatibility trigger 才可降级直接发送 prompt 原文（不经过 LLM）。
 迁移触发器在 pipeline lookup 之前就已转为 autonomy signal，因此不会因为 pipeline 缺失而恢复旧直发。
 
+Brief 195 进一步收口 tick 型 migrated proposal：`write_shadow_tick()` 完成原有 state、DND、
+active-user、cooldown、budget 与 winner 竞争后，只把选中的 winner 转为一个 durable autonomy
+signal。适配器不会读取 legacy prompt 或调用 executor、`_pipeline_send()`、`talk_gate.send()`
+或 channel。`festival` 与 `period_reminder` 仅携带 factual evidence；七夕通过 scheduler-local
+现实日期与 `lunar_python` 农历转换识别，转换不可用时 fail-closed 为无候选。
+
 `_pipeline_send` 支持 `output_mode` 参数（默认 `"speak"`）：
 
 | `output_mode` | 行为 |

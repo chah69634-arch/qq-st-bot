@@ -779,6 +779,9 @@ jsonschema-specifications==2025.9.1 \
     --hash=sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe \
     --hash=sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d
     # via jsonschema
+lunar-python==1.4.8 \
+    --hash=sha256:3aa11cc73c25e70ddf0ba5bdac7398c03acc9491a3aa512a91c9642973b669d6
+    # via -r requirements-full.txt
 lxml==6.1.1 \
     --hash=sha256:05a82eb6e1530a64f26225b55cbd178113bd0b5af1c2b625f25e5296742c26d2 \
     --hash=sha256:07a4a68e286ee7a1ed7dfb8af83e615757c0ccfe9f18c6b4ea6771388d9ba8c9 \

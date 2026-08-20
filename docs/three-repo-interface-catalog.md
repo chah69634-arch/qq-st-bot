@@ -318,7 +318,7 @@ ack 和游标推进，不得另造一套消息真值。
 | Reality / Dream Prompt 资产 | `/settings/prompt-assets`、`/dream/settings` | 两套页面分离 | 受限选择/编辑 | 不能交叉提交字段 |
 | sensor / screen peek | `/sensor/realtime`、`/sensor/behavior/status`、`/settings/screen-peek`、`/perception/visual/config` | 本地采样 + 后端 opt-in | screen upload 开关 + 原生过滤 | 任何扩大采集范围的改动都需隐私回归 |
 | mobile proactive delivery | `/mobile/*`、`/settings/relay`、`/observability/*` | 不消费 mobile queue | 前台 poll + Android relay | relay 只 signal，正文回源 |
-| scheduler/autonomy | `/scheduler/*`、`/admin/autonomy/*`、`/observability/autonomy-opportunities` | 只接收结果 | 只接收结果 | 不在客户端复制触发规则 |
+| scheduler/autonomy | `/scheduler/*`、`/admin/autonomy/*`、`/observability/autonomy-opportunities` | 管理面显示 24h/7d 无正文漏斗 | 只接收结果 | 不在客户端复制触发规则；主动正文仍由后端 `talk_owner` 投递 |
 | 花园/日记/hidden state | `/garden/state`、`/diary/*`、`/debug/user-hidden-state` | 只读 UI | 只读 UI | 写接口和长期状态仍由后端拥有 |
 
 “后端存在配置字段”不等于“已经有用户可用设置 UI”；“有设置 UI”也不等于“有有效状态

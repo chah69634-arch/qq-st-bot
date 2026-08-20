@@ -90,6 +90,11 @@ def _get_today_festival(today: date | None = None) -> tuple[str, str] | None:
         if prompt:
             return ("character_birthday", prompt)
 
+    # Lunar dates are calculated from the scheduler's local reality date.
+    # An unavailable converter is a normal fail-closed miss for this candidate.
+    if _is_lunar_date(today, month=7, day=7):
+        return ("qixi", "（今天是七夕，空气里有一点和往常不一样的安静。）")
+
     # 以下节日保留硬编码
     # 白色情人节 3.14
     if m == 3 and d == 14:
@@ -121,6 +126,26 @@ def _get_today_festival(today: date | None = None) -> tuple[str, str] | None:
         return ("spring_eve", "（你感觉年关快到了，街上好像有点不一样的气氛。）")
 
     return None
+
+
+def _is_lunar_date(today: date, *, month: int, day: int) -> bool:
+    try:
+        from lunar_python import Solar
+
+        lunar = Solar.fromYmd(today.year, today.month, today.day).getLunar()
+        # lunar_python uses a negative month number for leap months.
+        return bool(lunar.getMonth() == month and lunar.getDay() == day)
+    except Exception as exc:
+        logger.debug("[festival] lunar conversion unavailable: %s", type(exc).__name__)
+        return False
+
+
+def _festival_calendar_source(key: str) -> str:
+    if key == "qixi":
+        return "chinese_lunar"
+    if key in {"anniversary", "character_birthday"}:
+        return "character_card"
+    return "gregorian"
 
 
 async def _check_festival(force: bool = False):
@@ -218,7 +243,8 @@ def propose_festival(ctx: dict | None = None):
     now = ctx.get("now_dt") or datetime.now()
     if not (14 <= now.hour < 20):
         return None
-    if _get_today_festival(now.date()) is None:
+    festival = _get_today_festival(now.date())
+    if festival is None:
         return None
     if not _owner_id():
         return None
@@ -228,13 +254,23 @@ def propose_festival(ctx: dict | None = None):
     from core.scheduler.state_machine import TriggerState
     from core.scheduler.urgency import UrgencyTier, urgency_in_tier
 
+    key, prompt = festival
     return TriggerProposal(
         trigger_name="festival",
         urgency=urgency_in_tier(UrgencyTier.WINDOW_EVENT, daytime_window_ratio(now, 14, 20)),
         topic_source="random",
         requires_state=[TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=False,
-        execute=_make_festival_execute(_get_today_festival(now.date())[1]),
+        execute=_make_festival_execute(prompt),
+        metadata={
+            "autonomy_evidence": [{
+                "fact": "calendar_festival",
+                "festival_key": key,
+                "reality_date": now.date().isoformat(),
+                "calendar_source": _festival_calendar_source(key),
+            }],
+            "autonomy_action_mode": "talk",
+        },
     )
 
 

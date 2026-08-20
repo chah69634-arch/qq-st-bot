@@ -2,7 +2,7 @@ let _mcpImport = null;
 let _mcpConsoleData = null;
 let _mcpConsolePending = null;
 const MCP_EXPANDED_SERVERS_STORAGE_KEY = 'qq_admin_mcp_expanded_servers_v1';
-const MCP_DEFAULT_HEADERS = Object.freeze({ Authorization: 'Bearer ${MCP_TOKEN}' });
+const MCP_DEFAULT_HEADERS = Object.freeze({});
 
 function _loadMcpExpandedServers() {
   try {

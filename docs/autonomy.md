@@ -104,6 +104,22 @@ Prompt snapshot 仍位于现有 admin-only run prompt endpoint 后面，不包�
 
 ## Migration Registry
 
+### Scheduler winner adapter (Brief 195)
+
+Tick-based migrated proposals remain subject to the existing scheduler state,
+DND, active-user, cooldown, budget and winner competition. Only the selected
+winner reaches `emit_scheduler_proposal_signal()`; it is projected as bounded
+factual evidence and stored for the next `autonomy.runner.tick()`. The adapter
+never reads a legacy prompt factory or executor. `festival` carries a stable
+festival key, local reality date and calendar source; `period_reminder` carries
+only its `current|upcoming` stage and a bounded elapsed-day value. `dream_exit`
+retains its `dream_id` lifecycle evidence.
+
+`GET /observability/autonomy-opportunities` additionally returns content-free
+24-hour and 7-day funnel aggregates by source. They distinguish queued signal,
+opportunity creation, admission, blocking, model silence, tools-only, talk-gate
+rejection and delivered talk; prompt snapshots remain admin-only.
+
 `core/scheduler/gating.py::MIGRATED_TRIGGERS` 是 retired-speech registry。集合中的名称仍可能出现在 cooldown、proposer 或 audit code 中，但 gating layer 永远不会运行它们的 executor，兼容性 `_pipeline_send` boundary 只能持久化 signal。范围包括 time-based greeting/reminder 和 recall、watch 与 sensor event、diary 与 period reminder、overflow、presence nag、dream exit、festival/timenode、garden event、coplay commentary 和 letter writer。
 
 Maintenance-only task 有意不在该 registry 中。例如 `diary_inject`、episodic/log cleanup、memory janitor、event-log salvage、hidden-state decay/consolidation、storyline aggregation 和 garden state maintenance。它们继续修改自己拥有的 state，但不会创建 assistant turn 或进入 `talk_owner`。

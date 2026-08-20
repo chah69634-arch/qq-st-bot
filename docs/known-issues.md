@@ -5,6 +5,14 @@
 
 ## 当前仍存在
 
+### AUTONOMY-195：生产校准观察
+
+**状态**：`observe`
+
+Brief 195 已提供按 source/disposition 的 24h/7d 漏斗和隔离 `talk_sent` 回归；实际部署仍需先积累
+festival、period 与普通 routine 的转化样本，再决定是否调整 source-specific signal 语义或 prompt
+决策准则。不得以提高随机概率或绕过 DND、Dream、用户活跃、预算、冷却或连续未回复上限替代校准。
+
 ### SENSOR-1：sensor signal-first 尚未恢复旧行为 action payload
 
 **状态**：`open`（文档/代码边界已确认，未在本轮改业务代码）
