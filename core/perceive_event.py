@@ -107,6 +107,19 @@ class PerceiveResult:
     # follow-up work must reuse this value instead of resolving the active role
     # a second time after the gate.
     char_id: Optional[str] = None
+    # Frozen only for accepted reality ingress.  Rejected/signal-only callers
+    # must not manufacture a turn from this result.
+    context: object | None = None
+
+    @property
+    def ingress_event_id(self) -> str:
+        """Explicit v1 name; event_id remains a read-only compatibility alias."""
+        return self.event_id
+
+    @property
+    def existing_ingress_event_id(self) -> Optional[str]:
+        """Explicit v1 name; existing_turn_id remains a compatibility alias."""
+        return self.existing_turn_id
 
 
 # ── module-level dedup state ─────────────────────────────────────────────────
@@ -186,6 +199,7 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
     The caller may enter its declared next stage only on ACCEPTED. Duplicate
     events must not enqueue work, fanout, or trigger post_process.
     """
+    started_at = time.monotonic()
     resolved_char = _resolve_char_id(event.uid, event.char_id)
     event_id = event.event_id or str(uuid.uuid4())
     dedupe_key = _make_dedupe_key(event, resolved_char)
@@ -209,7 +223,7 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
                 "source=%s uid=%s",
                 dedupe_key, first_eid, age, event.source, event.uid,
             )
-            return PerceiveResult(
+            result = PerceiveResult(
                 status=PerceiveStatus.DUPLICATE,
                 event_id=event_id,
                 dedupe_key=dedupe_key,
@@ -217,6 +231,8 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
                 existing_turn_id=first_eid,
                 char_id=resolved_char,
             )
+            _observe(event, result, started_at=started_at)
+            return result
         # Reserve slot immediately so concurrent arrivals are rejected.
         _dedup_registry[dedupe_key] = (now, event_id)
 
@@ -234,13 +250,15 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
             )
             async with _dedup_lock:
                 _dedup_registry.pop(dedupe_key, None)
-            return PerceiveResult(
+            result = PerceiveResult(
                 status=PerceiveStatus.BLOCKED_DREAM,
                 event_id=event_id,
                 dedupe_key=dedupe_key,
                 reason="dream guard check raised exception (fail-closed)",
                 char_id=resolved_char,
             )
+            _observe(event, result, started_at=started_at)
+            return result
         if guard != DreamGuardStatus.ALLOW:
             # BLOCK_UNCERTAIN means the dream state file is unreadable/corrupt/unknown.
             # This is fail-closed: trigger/wake/scheduler turns must NOT proceed.
@@ -259,25 +277,55 @@ async def receive_perceive_event(event: PerceiveEvent) -> PerceiveResult:
                 )
             async with _dedup_lock:
                 _dedup_registry.pop(dedupe_key, None)
-            return PerceiveResult(
+            result = PerceiveResult(
                 status=PerceiveStatus.BLOCKED_DREAM,
                 event_id=event_id,
                 dedupe_key=dedupe_key,
                 reason=f"dream guard: {guard}",
                 char_id=resolved_char,
             )
+            _observe(event, result, started_at=started_at)
+            return result
 
     logger.info(
         "[perceive_event] ACCEPTED source=%s uid=%s char_id=%s event_id=%s",
         event.source, event.uid, resolved_char, event_id,
     )
-    return PerceiveResult(
+    context = None
+    if resolved_char:
+        try:
+            from core.event_context import EventContext
+            context = EventContext.from_ingress(
+                uid=event.uid, char_id=resolved_char, ingress_event_id=event_id,
+                dedupe_key=dedupe_key, source=event.source, channel=event.channel,
+                kind=event.kind, actor="user" if event.kind == "user_message" else "system",
+                occurred_at=event.created_at,
+            )
+        except Exception:
+            logger.warning("[perceive_event] EventContext construction failed", exc_info=True)
+    result = PerceiveResult(
         status=PerceiveStatus.ACCEPTED,
         event_id=event_id,
         dedupe_key=dedupe_key,
         reason="accepted",
         char_id=resolved_char,
+        context=context,
     )
+    _observe(event, result, started_at=started_at)
+    return result
+
+
+def _observe(event: PerceiveEvent, result: PerceiveResult, *, started_at: float) -> None:
+    """Best-effort observer kept outside the gate's admission semantics."""
+    try:
+        from core.event_context_observer import record
+        record(
+            stage="ingress", disposition=result.status.value, context=result.context,
+            error_code="missing_scope" if result.status == PerceiveStatus.ACCEPTED and result.context is None else "",
+            duplicate=result.status == PerceiveStatus.DUPLICATE, started_at=started_at,
+        )
+    except Exception:
+        pass
 
 
 def record_perceive_result(event: PerceiveEvent, result: PerceiveResult) -> None:

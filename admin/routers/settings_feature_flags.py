@@ -48,6 +48,10 @@ class EventShadowRecallUpdate(BaseModel):
     char_ids: list[str] | None = None
 
 
+class EventContextObserverUpdate(BaseModel):
+    mode: str
+
+
 @router.get("/settings/feature-flags", summary="读取功能开关白名单")
 async def get_feature_flags(auth=Depends(require_scopes("admin"))):
     cfg = get_config()
@@ -134,6 +138,11 @@ def _shadow_settings() -> dict:
     }
 
 
+def _event_context_observer_settings() -> dict:
+    from core.event_context_observer import snapshot
+    return snapshot()
+
+
 @router.get("/settings/event-shadow-recall", summary="读取 Memory Event shadow recall 灰度设置")
 async def get_event_shadow_recall_settings(auth=Depends(require_scopes("admin"))):
     return _shadow_settings()
@@ -161,3 +170,25 @@ async def update_event_shadow_recall_settings(
     from core import config_loader
     config_loader.reload_config()
     return {**_shadow_settings(), "reload_status": "reloaded"}
+
+
+@router.get("/settings/event-context-observer", summary="读取 EventContext 旁路观测设置")
+async def get_event_context_observer_settings(auth=Depends(require_scopes("admin"))):
+    return _event_context_observer_settings()
+
+
+@router.put("/settings/event-context-observer", summary="更新 EventContext 旁路观测设置")
+async def update_event_context_observer_settings(
+    body: EventContextObserverUpdate,
+    auth=Depends(require_scopes("admin")),
+):
+    # Enforcing is deliberately not available before Brief 217-D's S1 soak.
+    mode = str(body.mode).strip().lower()
+    if mode not in {"disabled", "observe"}:
+        raise HTTPException(status_code=422, detail="mode must be disabled or observe before enforcing soak")
+    full_cfg = read_config_file(CONFIG_FILE)
+    full_cfg.setdefault("event_context_observer", {})["mode"] = mode
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    return {**_event_context_observer_settings(), "reload_status": "reloaded"}

@@ -266,3 +266,14 @@ shows aggregate calls, budgets, source filtering, failures, timeouts, coverage,
 and latest-run evidence. Empty evidence is labelled `未运行`, never healthy.
 No prompt, body, event ID, token text, or local path is projected. Desktop and
 mobile clients do not add settings or consume these backend diagnostics.
+
+## Brief 217 EventContext observer
+
+`event_context_observer.mode` is a hot-reloaded backend-only control with
+`disabled` as the default and `observe` as the only enabled mode before S1
+soak. `GET`/`PUT /settings/event-context-observer` require `admin`; the update
+endpoint deliberately rejects `enforcing` until Brief 217-D's staged soak
+criteria are met. `GET /observability/event-context` requires `state.read` and
+returns only desired/effective/run state, aggregate counters, latency buckets,
+and redacted status codes. It never returns source text, complete IDs, user IDs,
+or media data. No desktop/mobile setting or protocol is introduced.

@@ -207,6 +207,7 @@ async def record_assistant_turn(
     visible_assistant_text: Optional[str] = None,
     raw_user_text: Optional[str] = None,
     media_refs: Optional[list[dict]] = None,
+    event_context=None,
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -261,6 +262,22 @@ async def record_assistant_turn(
     ledger_channel = event_channel or exclude_origin_channel or (
         "scheduler" if source != TurnSource.USER_CHAT else "unknown"
     )
+    if event_context is None and char_id:
+        # Compatibility adapter for established chat paths that predate the
+        # gate. It has an explicit frozen scope and never resolves active role.
+        try:
+            from core.event_context import EventContext
+            import uuid
+            event_context = EventContext.from_ingress(
+                uid=uid, char_id=char_id, ingress_event_id=str(uuid.uuid4()),
+                dedupe_key="legacy-turn", source=source.value, channel=ledger_channel,
+                kind="user_message" if source == TurnSource.USER_CHAT else "trigger",
+                actor="user" if source == TurnSource.USER_CHAT else "system",
+            )
+            from core.event_context_observer import record as observe_context
+            observe_context(stage="adapter", disposition="legacy_context", context=event_context)
+        except Exception:
+            logger.debug("[turn_sink] EventContext compatibility adapter failed", exc_info=True)
 
     post_info: dict | None = None
     async with _maybe_conversation_gate(uid, bypass_gate):
@@ -287,6 +304,7 @@ async def record_assistant_turn(
                 visible_reply=visible_text,
                 raw_user_text=raw_user_text,
                 media_refs=media_refs,
+                event_context=event_context,
             )
         else:
             if schedule_slow:

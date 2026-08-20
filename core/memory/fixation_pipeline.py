@@ -594,12 +594,16 @@ def _append_event_ledger(
     occurred_at: float,
     relation_hints: dict[str, str] | None = None,
     topics: set[str] | None = None,
+    event_context=None,
 ) -> None:
     """Best-effort dual-write of message evidence; never affects legacy memory."""
     try:
         from core.memory.event_store import append_event, append_topics
 
         scope = MemoryScope.reality_scope(uid, char_id)
+        if event_context is not None:
+            if event_context.scope != scope or event_context.turn_id != turn_id:
+                raise ValueError("event_context scope or turn_id mismatch")
         ledger_source = source or str(getattr(getattr(envelope, "source", None), "value", "") or "")
         ledger_channel = channel or ("scheduler" if trigger_name else "unknown")
         common = {
@@ -609,6 +613,8 @@ def _append_event_ledger(
             "realm": "reality",
             "channel": ledger_channel,
             "source": ledger_source,
+            "ingress_event_id": str(getattr(event_context, "ingress_event_id", "") or ""),
+            "causation_id": str(getattr(event_context, "causation_id", "") or ""),
             "media_refs_json": media_refs or [],
             "redaction_state": "memory_cleaned",
         }
@@ -676,6 +682,11 @@ def _append_event_ledger(
                 record["kind"],
                 result.error_code,
             )
+        try:
+            from core.event_context_observer import record as observe_context
+            observe_context(stage="evidence", disposition="committed", context=event_context)
+        except Exception:
+            pass
     except Exception as exc:
         # The evidence ledger is additive in this phase. Its failure must not
         # block short_term, event_log, send, or the slow queue.
@@ -691,6 +702,12 @@ def _append_event_ledger(
         except Exception:
             pass
         logger.warning("[fixation] event ledger dual-write failed: %s", exc)
+        try:
+            from core.event_context_observer import record as observe_context
+            observe_context(stage="evidence", disposition="failed", context=event_context,
+                            error_code="identity_mismatch" if isinstance(exc, ValueError) else "append_failed")
+        except Exception:
+            pass
 
 
 def capture_turn(
@@ -715,6 +732,7 @@ def capture_turn(
     derived_from_event_id: str = "",
     correction_of_event_id: str = "",
     media_of_event_id: str = "",
+    event_context=None,
 ) -> str:
     """
     生成 turn_id，写 short_term + event_log。
@@ -740,6 +758,15 @@ def capture_turn(
 
     ts = time.time()
     turn_id = turn_id or f"{uid}_{int(ts * 1000)}"
+
+    if event_context is not None:
+        expected_scope = MemoryScope.reality_scope(uid, char_id)
+        if event_context.scope != expected_scope:
+            raise ValueError("event_context scope does not match capture_turn")
+        if event_context.turn_id and event_context.turn_id != turn_id:
+            raise ValueError("event_context turn_id does not match capture_turn")
+        if not event_context.turn_id:
+            event_context = event_context.with_turn(turn_id)
 
     if not envelope.can_write_memory:
         return turn_id
@@ -834,6 +861,7 @@ def capture_turn(
             "media_of": media_of_event_id,
         },
         topics=_event_topics,
+        event_context=event_context,
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")

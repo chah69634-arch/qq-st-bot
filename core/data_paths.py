@@ -479,6 +479,10 @@ class DataPaths:
         """Brief 56 shadow-only VLM observation trace (never stores images)."""
         return self._p("runtime", "perception", "visual_trace.jsonl")
 
+    def event_context_trace(self) -> Path:
+        """Content-free Brief 217 EventContext propagation trace."""
+        return self._p("runtime", "observability", "event_context.jsonl")
+
     def api_call_log(self) -> Path:
         """Fail-open external API observability ledger, rotated by the writer."""
         return self._p("runtime", "observability", "api_calls.jsonl")

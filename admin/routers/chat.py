@@ -109,6 +109,23 @@ async def run_owner_chat_turn(
         logger.error("[owner_chat] scope freeze 失败，本轮中止: %s", _scope_err)
         raise HTTPException(status_code=503, detail="active character 状态异常，本轮中止")
 
+    # Freeze ingress identity alongside the already-frozen memory scope. The
+    # compatibility path is explicit and content-free; no active role lookup
+    # occurs after this point.
+    event_context = None
+    try:
+        from core.event_context import EventContext
+        import uuid as _uuid
+        event_context = EventContext.from_ingress(
+            uid=user_id, char_id=_frozen_scope.character_id,
+            ingress_event_id=str(_uuid.uuid4()), dedupe_key="owner-chat",
+            source=provenance_source or turn_source, channel=provenance_channel,
+            kind="user_message" if turn_source == "user_chat" else "trigger",
+            actor="user" if turn_source == "user_chat" else "system",
+        )
+    except Exception:
+        logger.debug("[owner_chat] EventContext compatibility construction failed", exc_info=True)
+
     # Brief 28 · Path C 总闸：开关开 + owner（此端点固定 owner）+ chat preset 为
     # function_calling。为真时跳过探针，主生成走 run_agentic_loop。
     from core import tool_dispatcher as _td_loop
@@ -357,6 +374,7 @@ async def run_owner_chat_turn(
             event_channel=provenance_channel,
             raw_user_text=_probe_text,
             media_refs=media_refs,
+            event_context=event_context,
         )
         _t_post = time.monotonic() - _t0
 

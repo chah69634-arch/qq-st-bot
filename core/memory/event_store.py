@@ -23,7 +23,7 @@ from core.memory.scope import MemoryScope, require_character_id
 logger = logging.getLogger(__name__)
 
 SCHEMA_NAME = "memory_event_ledger"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 EDGE_RELATION_TYPES = frozenset({
     "previous", "next", "same_turn", "reply_to", "triggered_by",
     "derived_from", "correction_of", "media_of",
@@ -84,6 +84,10 @@ class EventRecord:
     channel: str = ""
     stream: str = ""
     source: str = ""
+    # Nullable provenance links for Brief 217. Evidence IDs stay in event_id;
+    # these identify the ingress that caused the actual turn.
+    ingress_event_id: str = ""
+    causation_id: str = ""
     raw_payload_json: str = ""
     raw_text: str = ""
     visible_text: str = ""
@@ -133,6 +137,8 @@ class EventRecord:
             channel=str(self.channel or ""),
             stream=str(self.stream or self.channel or ""),
             source=str(self.source or ""),
+            ingress_event_id=str(self.ingress_event_id or ""),
+            causation_id=str(self.causation_id or ""),
             raw_payload_json=str(self.raw_payload_json or ""),
             raw_text=str(self.raw_text or ""),
             visible_text=str(self.visible_text or ""),
@@ -209,6 +215,8 @@ CREATE TABLE IF NOT EXISTS events (
     channel TEXT NOT NULL DEFAULT '',
     stream TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT '',
+    ingress_event_id TEXT NOT NULL DEFAULT '',
+    causation_id TEXT NOT NULL DEFAULT '',
     raw_payload_json TEXT NOT NULL DEFAULT '',
     raw_text TEXT NOT NULL DEFAULT '',
     visible_text TEXT NOT NULL DEFAULT '',
@@ -407,6 +415,10 @@ def _initialize(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE events ADD COLUMN stream TEXT NOT NULL DEFAULT ''")
     if "relation_hints_json" not in event_columns:
         connection.execute("ALTER TABLE events ADD COLUMN relation_hints_json TEXT NOT NULL DEFAULT ''")
+    for column in ("ingress_event_id", "causation_id"):
+        if column not in event_columns:
+            connection.execute(f"ALTER TABLE events ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_ingress_event ON events(ingress_event_id)")
     edge_columns = {row[1] for row in connection.execute("PRAGMA table_info(event_edges)")}
     for column, definition in (
         ("relation_type", "TEXT NOT NULL DEFAULT ''"),

@@ -1514,6 +1514,7 @@ class Pipeline:
         visible_reply: str | None = None,
         raw_user_text: str | None = None,
         media_refs: list[dict] | None = None,
+        event_context=None,
     ) -> dict:
         """
         Brief 37：send 前必须走完的关键路径——只做毫秒级本地落盘（capture_turn），
@@ -1625,6 +1626,7 @@ class Pipeline:
                     visible_reply=visible_reply,
                     raw_user_text=raw_user_text,
                     media_refs=media_refs,
+                    event_context=event_context.with_turn(_turn_id) if event_context is not None else None,
                 )
                 _critical_written = True
                 logger.debug(f"[pipeline.post_process_critical] capture_turn: {_turn_id}")

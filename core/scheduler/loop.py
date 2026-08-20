@@ -596,6 +596,7 @@ async def _pipeline_send(
                         envelope=_envelope,
                         audit_extras=_audit_extras,
                         frozen_scope=_frozen_scope,
+                        event_context=pe_result.context,
                     )
                 if output_mode == "return":
                     return reply

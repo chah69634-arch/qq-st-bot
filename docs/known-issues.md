@@ -264,3 +264,12 @@ additional production sources.
   must be rolled out per scope; candidate relations are not accepted edges.
 - `roadmap`: production producers for `triggered_by`, `derived_from`,
   `correction_of`, and `media_of` remain unchanged and limited.
+
+## Memory Event identity soak (Brief 217)
+
+- `observe`: EventContext now carries the frozen Reality ingress scope through
+  the turn sink to ledger evidence provenance. The observer defaults to
+  `disabled`; enforcement is intentionally unavailable until the focused S0
+  matrix and S1 short soak have accumulated the required restart, duplicate,
+  multi-channel, and ledger-unavailable samples. No recall, prompt, ranking,
+  Dream/Stage lifecycle, or client protocol consumes this trace.

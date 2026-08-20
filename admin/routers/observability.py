@@ -421,6 +421,12 @@ async def perceive_events(
     }
 
 
+@router.get("/observability/event-context", summary="读取 EventContext 身份链旁路观测")
+async def event_context_observability(_auth=Depends(require_scopes("state.read"))):
+    from core.event_context_observer import snapshot
+    return snapshot()
+
+
 @router.get(
     "/observability/resource-completeness",
     summary="资源完整性/功能状态检查：哪个开关没开、哪个功能缺素材、哪个还没做（2026-07-25）",
