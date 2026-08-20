@@ -270,7 +270,7 @@ async def _check_event_edge_proposer() -> None:
             try:
                 await asyncio.wait_for(_run_scope(), timeout=_scope_timeout_seconds(cfg))
                 counters["completed_scopes"] += 1
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 counters["timed_out_scopes"] += 1
                 logger.warning("[event_edge_proposer] scope timed out char_id=%s", char_id)
             except Exception:
