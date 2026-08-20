@@ -468,7 +468,9 @@ def _collect_event_log_since(
                     continue
                 block_key = _block_key(block)
                 material_id = f"eventlog:{hashlib.sha256((day + ':' + block_key).encode()).hexdigest()[:24]}"
-                legacy_material_id = f"eventlog:{hashlib.sha256((day + ':' + '\n'.join(block).strip()).encode()).hexdigest()[:24]}"
+                legacy_material = day + ':' + '\n'.join(block).strip()
+                legacy_digest = hashlib.sha256(legacy_material.encode()).hexdigest()[:24]
+                legacy_material_id = f"eventlog:{legacy_digest}"
                 dedupe_key = f"{day}:{block_key}"
                 if (
                     not block_key

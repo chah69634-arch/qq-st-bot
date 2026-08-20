@@ -184,14 +184,13 @@ def test_event_log_union_reads_canonical_and_legacy_with_independent_checkpoints
 
 
 def test_v2_cursor_rescan_is_stopped_by_legacy_receipt(sandbox):
-    import hashlib
     from core.scheduler.triggers.storyline_weekly import _collect_event_log_since
 
     uid = "storyline-v2-receipt"
-    day = datetime.now().strftime("%Y-%m-%d")
+    day = "2026-08-01"
     block = "## 09:00\n**user**: already-consumed"
     _write_day_file(sandbox, TEST_CHAR_ID, uid, day, block + "\n---\n")
-    old_receipt = f"eventlog:{hashlib.sha256((day + ':' + block).encode()).hexdigest()[:24]}"
+    old_receipt = "eventlog:b5420c384371ef030f67e92a"
 
     text, cursor, material_ids = _collect_event_log_since(
         uid, TEST_CHAR_ID, {"version": 2, "day": day, "offset": 0},
