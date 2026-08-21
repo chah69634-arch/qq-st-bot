@@ -54,6 +54,8 @@ REGISTRY: dict[str, PathMeta] = {
     "diary_mirror_entry":     PathMeta("canonical", "reality", "per_user", "ignore"),
     "pending_perception_dir": PathMeta("runtime",   "shared",          "global",        "ignore"),
     "visual_trace_log":      PathMeta("runtime",   "shared",          "global",        "ignore"),
+    # Opt-in, content-free EventContext propagation observability ledger.
+    "event_context_trace":   PathMeta("forensic",  "shared",          "global",        "ignore"),
     "spend_ledger":          PathMeta("runtime",   "shared",          "global",        "ignore"),
     "activity_snapshot":      PathMeta("runtime",   "character_inner", "per_char",      "ignore"),
     "dreams_tmp_dir":         PathMeta("runtime",   "dream",           "per_char_user", "ignore"),

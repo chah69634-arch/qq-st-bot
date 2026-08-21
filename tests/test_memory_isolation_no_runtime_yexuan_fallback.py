@@ -14,6 +14,7 @@ P1-0H: 运行期 yexuan fallback 审计测试
   T3: scheduler/time_based.py yexuan_inner_diary() 无 char_id
 """
 
+import ast
 import json
 import pathlib
 import re
@@ -120,12 +121,63 @@ def test_no_unexpected_return_yexuan_in_core_garden():
 # 2. slow_queue 新 payload 路径都携带 char_id
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _slow_queue_payloads(source_path: str) -> list[tuple[str, ast.expr]]:
+    """Inspect enqueue arguments structurally rather than by source formatting."""
+    tree = ast.parse(_read_src(source_path), filename=source_path)
+    assignments: dict[str, ast.expr] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    assignments[target.id] = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value:
+            assignments[node.target.id] = node.value
+
+    payloads: list[tuple[str, ast.expr]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or len(node.args) < 2:
+            continue
+        if not (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "enqueue"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "slow_queue"
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            continue
+        payload = node.args[1]
+        if isinstance(payload, ast.Name):
+            payload = assignments.get(payload.id, payload)
+        payloads.append((node.args[0].value, payload))
+    return payloads
+
+
+def _assert_scoped_payload_has_char_id(source_path: str, handler_name: str, payload: ast.expr) -> None:
+    if handler_name == "consistency_check":
+        return
+    assert isinstance(payload, ast.Dict), (
+        f"{source_path}: enqueue({handler_name!r}) payload must be a dict literal or named dict"
+    )
+    keys = {
+        key.value for key in payload.keys
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+    assert "char_id" in keys, f"{source_path}: enqueue({handler_name!r}) payload missing char_id"
+
+
 def test_pipeline_slow_queue_payloads_carry_char_id():
     """
     pipeline.py 的 slow_queue.enqueue 调用（capture_turn_retry /
     summarize_to_midterm / user_profile_update）都包含 char_id 键。
     用源码扫描确认：每个 enqueue 块内 "char_id" 出现在 "}" 之前。
     """
+    payloads = _slow_queue_payloads("core/pipeline.py")
+    assert payloads, "pipeline.py should enqueue at least one slow task"
+    for handler_name, payload in payloads:
+        _assert_scoped_payload_has_char_id("core/pipeline.py", handler_name, payload)
+    return
+
     src = _read_src("core/pipeline.py")
     # 找到所有 enqueue(...) 块
     for m in re.finditer(r'slow_queue\.enqueue\([^)]+\{', src):
@@ -156,6 +208,12 @@ def test_fixation_pipeline_slow_queue_payloads_carry_char_id():
     """
     fixation_pipeline.py 的 slow_queue.enqueue 调用都携带 char_id。
     """
+    payloads = _slow_queue_payloads("core/memory/fixation_pipeline.py")
+    assert payloads, "fixation_pipeline.py should enqueue at least one slow task"
+    for handler_name, payload in payloads:
+        _assert_scoped_payload_has_char_id("core/memory/fixation_pipeline.py", handler_name, payload)
+    return
+
     src = _read_src("core/memory/fixation_pipeline.py")
     for m in re.finditer(r'slow_queue\.enqueue\([^)]+\{', src):
         start = m.start()

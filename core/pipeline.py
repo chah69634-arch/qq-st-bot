@@ -1612,24 +1612,30 @@ class Pipeline:
                     else "coplay" if coplay_echo
                     else ""
                 )
+                _capture_turn_kwargs = {
+                    "turn_id": _turn_id,
+                    "trigger_name": trigger_name,
+                    "envelope": envelope,
+                    "char_id": char_id,
+                    "audit_extras": audit_extras,
+                    "source": _source,
+                    "event_channel": event_channel,
+                    "event_source": event_source,
+                    "visible_reply": visible_reply,
+                    "raw_user_text": raw_user_text,
+                    "media_refs": media_refs,
+                }
+                # Legacy callers have no ingress context. Do not add an
+                # optional keyword argument when there is no context to carry.
+                if _turn_context is not None:
+                    _capture_turn_kwargs["event_context"] = _turn_context
+                    _capture_turn_kwargs["observer_started_at"] = _critical_started_at
                 _turn_id = _capture_turn(
                     user_id,
                     content,
                     reply,
                     "neutral",
-                    turn_id=_turn_id,
-                    trigger_name=trigger_name,
-                    envelope=envelope,
-                    char_id=char_id,
-                    audit_extras=audit_extras,
-                    source=_source,
-                    event_channel=event_channel,
-                    event_source=event_source,
-                    visible_reply=visible_reply,
-                    raw_user_text=raw_user_text,
-                    media_refs=media_refs,
-                    event_context=_turn_context,
-                    observer_started_at=_critical_started_at,
+                    **_capture_turn_kwargs,
                 )
                 _critical_written = True
                 try:

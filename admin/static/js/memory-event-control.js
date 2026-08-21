@@ -38,6 +38,27 @@ async function saveEventShadowRecallSettings() {
   } catch (error) { toast(error.message, 'err'); }
 }
 
+async function loadEventContextObserverSettings() {
+  const enabled = document.getElementById('event-context-observer-enabled');
+  if (!enabled) return;
+  try {
+    const settings = await api('GET', '/settings/event-context-observer');
+    enabled.checked = settings.desired === 'observe';
+    document.getElementById('event-context-observer-effective').textContent = `effective: ${settings.effective_state || 'unknown'}`;
+    document.getElementById('event-context-observer-state').textContent = `state: ${settings.run_state || 'unknown'}`;
+  } catch (error) { toast(error.message, 'err'); }
+}
+
+async function saveEventContextObserverSettings() {
+  try {
+    const result = await api('PUT', '/settings/event-context-observer', {
+      mode: document.getElementById('event-context-observer-enabled')?.checked ? 'observe' : 'disabled',
+    });
+    toast(`Saved · ${result.reload_status || 'reloaded'}`, 'ok');
+    await loadEventContextObserverSettings();
+  } catch (error) { toast(error.message, 'err'); }
+}
+
 function _memoryEventScopeQuery() {
   const uid = (document.getElementById('event-query-uid')?.value || '').trim();
   const charId = (document.getElementById('event-query-char-id')?.value || '').trim();

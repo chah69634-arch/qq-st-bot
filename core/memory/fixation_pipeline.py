@@ -1753,16 +1753,20 @@ async def handler_capture_turn_retry(payload: dict) -> None:
         from core.event_context import EventContext
         event_context = EventContext.from_payload(payload["event_context"])
     async with locks.uid_lock(uid):
+        capture_kwargs = {
+            "turn_id": payload["turn_id"],
+            "trigger_name": payload.get("trigger_name", ""),
+            "envelope": _env,
+            "char_id": char_id,
+        }
+        if event_context is not None:
+            capture_kwargs["event_context"] = event_context
         capture_turn(
             uid,
             payload["user_content"],
             payload["reply"],
             payload.get("emotion", "neutral"),
-            turn_id=payload["turn_id"],
-            trigger_name=payload.get("trigger_name", ""),
-            envelope=_env,
-            char_id=char_id,
-            event_context=event_context,
+            **capture_kwargs,
         )
     logger.info(f"[fixation] capture_turn retry 完成: {payload['turn_id']}")
 

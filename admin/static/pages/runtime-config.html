@@ -29,6 +29,16 @@
 </div>
 
 <div class="card">
+  <div class="card-header"><h3>EventContext observer</h3><button class="btn btn-ghost btn-sm" data-action="loadEventContextObserverSettings" data-i18n="common.refresh">Refresh</button></div>
+  <p class="admin-inline-087">Records redacted propagation metadata only. It never changes the production write path.</p>
+  <div class="config-item-meta"><span id="event-context-observer-effective">effective: -</span><span id="event-context-observer-state">state: -</span></div>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="event-context-observer-enabled"><span>Enable observation</span></label>
+  </div>
+  <button class="btn btn-primary btn-sm" data-action="saveEventContextObserverSettings" data-i18n="common.save">Save</button>
+</div>
+
+<div class="card">
   <div class="card-header"><h3 data-i18n="status.proxy.title">代理配置</h3><button class="btn btn-ghost btn-sm" data-action="loadProxy" data-i18n="common.refresh">刷新</button></div>
   <p class="admin-inline-087" data-i18n="status.proxy.hint">仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
   <div class="form-row">

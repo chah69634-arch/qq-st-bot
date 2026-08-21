@@ -269,7 +269,7 @@ mobile clients do not add settings or consume these backend diagnostics.
 
 ## Brief 217 EventContext observer
 
-`event_context_observer.mode` is a hot-reloaded backend-only control with
+`event_context_observer.mode` is a hot-reloaded admin runtime-config control with
 `disabled` as the default and `observe` as the only enabled mode before S1
 soak. `GET`/`PUT /settings/event-context-observer` require `admin`; the update
 endpoint deliberately rejects `enforcing` until Brief 217-D's staged soak

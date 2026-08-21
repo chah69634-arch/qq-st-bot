@@ -1,6 +1,7 @@
 function loadRuntimeConfig() {
   loadFeatureFlags();
   loadEventShadowRecallSettings();
+  loadEventContextObserverSettings();
   loadProxy();
   loadContextConfig();
   loadLlmParams();
