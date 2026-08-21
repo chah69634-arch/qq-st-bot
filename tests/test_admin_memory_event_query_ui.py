@@ -38,7 +38,7 @@ def test_shadow_recall_rollout_controls_are_registered_and_cache_busted():
     assert "loadEventShadowRecallSettings();" in runtime
     assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'" in core
     assert '<script src="/static/js/settings.js?v=brief-216-memory-event-control-1"></script>' in index
-    assert '<script src="/static/js/runtime-config.js?v=brief-204-event-shadow-recall-1"></script>' in index
+    assert '<script src="/static/js/runtime-config.js?v=brief-217-event-context-observer-1"></script>' in index
     assert '<script src="/static/js/memory-event-control.js?v=brief-216-memory-event-control-1"></script>' in index
 
 
