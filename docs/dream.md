@@ -1,5 +1,7 @@
 # docs/dream.md — Dream System 总览与设计原则
 
+跑团模式的设计提案见 [`docs/rpg-dream-mode-design.md`](rpg-dream-mode-design.md)。该模式尚未实现；后端接口、隔离测试和观测端点完成前，不属于当前可用 Dream mode。
+
 ## Path authority（以代码和 data-taxonomy 为准）
 
 | 层级 | 当前事实 | authority / 边界 |
