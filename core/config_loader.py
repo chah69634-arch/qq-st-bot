@@ -18,6 +18,11 @@ _base_config_mtime: float | None = None
 _DATA_PREFIX_ENV = "YEXUAN_DATA_PREFIX"
 
 
+def get_config_path() -> Path:
+    """Return the base config path used by the runtime and admin writers."""
+    return _CONFIG_PATH
+
+
 def _config_mtimes() -> tuple[float, float | None]:
     """Return the tracked config mtimes; a local file is optional."""
     main_mtime = _CONFIG_PATH.stat().st_mtime

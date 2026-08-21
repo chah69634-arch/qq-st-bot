@@ -359,6 +359,17 @@ def test_global_toggle_writes_config_and_hot_syncs(tmp_path, monkeypatch):
     assert cfg["mcp_servers"]["enabled"] is True
 
 
+def test_mcp_admin_uses_runtime_config_path(monkeypatch, tmp_path):
+    """The admin writer must follow PRESENCEKIT_CONFIG_PATH/runtime loader path."""
+    from admin.routers import settings_mcp
+    from core import config_loader
+
+    configured = tmp_path / "server-config.yaml"
+    monkeypatch.setattr(config_loader, "_CONFIG_PATH", configured)
+    monkeypatch.setattr(settings_mcp, "CONFIG_FILE", None)
+    assert settings_mcp._config_file() == configured
+
+
 def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeypatch):
     """Brief 115 根治：单 server 更新的热重载已恢复（同上）。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: []\n")

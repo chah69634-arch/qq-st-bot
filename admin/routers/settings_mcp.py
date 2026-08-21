@@ -14,10 +14,11 @@ from pydantic import BaseModel, Field
 
 from admin.auth import require_scopes
 from admin.config_control import read_config_file, write_config_file
-from core.config_loader import get_config
+from core.config_loader import get_config, get_config_path
 
 router = APIRouter()
-CONFIG_FILE = Path("config.yaml")
+# Tests may override this path; production resolves the runtime loader's path.
+CONFIG_FILE: Path | None = None
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _REMOTE_TRANSPORTS = ("sse", "streamable-http")
 _CONSOLE_CONFIRM_TTL_S = 120
@@ -180,11 +181,16 @@ def _normalize_tool_timeouts(raw: object) -> dict[str, float]:
 
 
 def _read_config() -> dict:
-    return read_config_file(CONFIG_FILE)
+    return read_config_file(_config_file())
 
 
 def _write_config(cfg: dict) -> None:
-    write_config_file(CONFIG_FILE, cfg)
+    write_config_file(_config_file(), cfg)
+
+
+def _config_file() -> Path:
+    """Use the same base config file as the runtime loader."""
+    return CONFIG_FILE if CONFIG_FILE is not None else get_config_path()
 
 
 def _safe_headers(headers: object) -> dict[str, str]:
