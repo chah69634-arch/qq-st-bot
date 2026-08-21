@@ -53,6 +53,13 @@ class RpgObservabilityResponse(BaseModel):
     path_health: str
     dream_id_hash: str | None
     char_id_hash: str | None
+    event_count: int
+    dice_count: int
+    branch_count: int
+    pending_receipt_count: int
+    recovery_conflict_count: int
+    invalid_proposal_count: int
+    latency_bucket: str
 
 
 def _uid() -> str:

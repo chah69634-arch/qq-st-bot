@@ -311,12 +311,15 @@ The mirror is not a general vault browser and is never copied into tracked
 authored assets. It is consumed only through the existing diary tool framing
 and source-isolation rules.
 
-## RPG Dream Session (Brief 219)
+## RPG Dream Session (Briefs 219-220)
 
 `data/runtime/dreams/{char_id}/rpg/{uid}/{dream_id}/session.json` is canonical
-Dream-domain per-character/per-user state and is gitignored. Brief 219 creates
-only `session.json`; `events.jsonl`, `dice.jsonl`, and `transcript.jsonl` are
-reserved for later briefs and must not be pre-created as empty pseudo-ledgers.
+Dream-domain per-character/per-user state and is gitignored. Brief 220 derives
+`events.jsonl`, `dice.jsonl`, `receipts.json`, `kernel_stats.json`, and `snapshot.json` beside that
+registered session path; it does not introduce an independent DataPaths root.
+The append-only event/dice ledgers are authoritative evidence, `receipts.json`
+and `kernel_stats.json` are recovery/observability metadata, and `snapshot.json` is replaceable derived cache. They
+are backend-only runtime data, never authored assets or Reality memory.
 
 ## Authored asset management (Brief 158)
 

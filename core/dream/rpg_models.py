@@ -3,13 +3,109 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
+import re
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 RPG_SCHEMA_VERSION = 1
 RPG_SESSION_ACTIVE = "active"
 RPG_SESSION_CLOSED = "closed"
 RPG_SESSION_UNCERTAIN = "uncertain"
 RPG_SESSION_STATUSES = frozenset({RPG_SESSION_ACTIVE, RPG_SESSION_CLOSED, RPG_SESSION_UNCERTAIN})
+RPG_OUTCOMES = frozenset({"critical_failure", "failure", "success_with_cost", "success", "critical_success"})
+RPG_DECISIONS = frozenset({"automatic_success", "automatic_failure", "roll", "reject"})
+RPG_KNOWLEDGE_STATES = frozenset({"unknown", "suspected", "known", "misbelieved"})
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+
+
+class _StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class RollSpec(_StrictModel):
+    dice_count: int = Field(ge=1, le=10)
+    dice_sides: int = Field(ge=2, le=100)
+    modifier: int = Field(ge=-50, le=50)
+    dc: int = Field(ge=1, le=200)
+
+
+class FactProjection(_StrictModel):
+    fact_id: str = Field(min_length=1, max_length=80)
+    value: str = Field(min_length=1, max_length=500)
+    knowledge: Literal["unknown", "suspected", "known", "misbelieved"] | None = None
+
+    @field_validator("fact_id")
+    @classmethod
+    def validate_fact_id(cls, value: str) -> str:
+        if not _SAFE_ID.fullmatch(value):
+            raise ValueError("fact_id must be a safe identifier")
+        return value
+
+
+class EventProjections(_StrictModel):
+    public: tuple[FactProjection, ...] = Field(default=(), max_length=32)
+    player: tuple[FactProjection, ...] = Field(default=(), max_length=32)
+    character: tuple[FactProjection, ...] = Field(default=(), max_length=32)
+    kp_private: tuple[FactProjection, ...] = Field(default=(), max_length=32)
+
+
+class SceneUpdate(_StrictModel):
+    key: str = Field(min_length=1, max_length=80)
+    value: str = Field(min_length=1, max_length=500)
+
+    @field_validator("key")
+    @classmethod
+    def validate_key(cls, value: str) -> str:
+        if not _SAFE_ID.fullmatch(value):
+            raise ValueError("scene update key must be a safe identifier")
+        return value
+
+
+class OutcomeBranch(_StrictModel):
+    projections: EventProjections
+    scene_updates: tuple[SceneUpdate, ...] = Field(default=(), max_length=32)
+
+
+class KpProposal(_StrictModel):
+    """The only accepted kernel input. It proposes, but never states facts."""
+    request_id: str = Field(min_length=1, max_length=80)
+    decision: Literal["automatic_success", "automatic_failure", "roll", "reject"]
+    check_type: str = Field(min_length=1, max_length=80)
+    reason_code: str = Field(min_length=1, max_length=80)
+    scene_id: str | None = Field(default=None, max_length=80)
+    roll_spec: RollSpec | None = None
+    outcome_branches: dict[str, OutcomeBranch] = Field(default_factory=dict, max_length=5)
+    character_should_respond: bool = False
+
+    @field_validator("request_id", "check_type", "reason_code", "scene_id")
+    @classmethod
+    def validate_safe_ids(cls, value: str | None) -> str | None:
+        if value is not None and not _SAFE_ID.fullmatch(value):
+            raise ValueError("proposal identifiers must be safe identifiers")
+        return value
+
+    @field_validator("outcome_branches")
+    @classmethod
+    def validate_branch_names(cls, value: dict[str, OutcomeBranch]) -> dict[str, OutcomeBranch]:
+        if set(value) - RPG_OUTCOMES:
+            raise ValueError("unknown outcome branch")
+        return value
+
+    @model_validator(mode="after")
+    def validate_resolution_shape(self) -> "KpProposal":
+        if self.decision == "roll":
+            if self.roll_spec is None or set(self.outcome_branches) != RPG_OUTCOMES:
+                raise ValueError("roll requires roll_spec and all five outcome branches")
+        elif self.decision in {"automatic_success", "automatic_failure"}:
+            if self.roll_spec is not None:
+                raise ValueError("automatic decisions cannot contain roll_spec")
+            expected = "success" if self.decision == "automatic_success" else "failure"
+            if set(self.outcome_branches) != {expected}:
+                raise ValueError("automatic decision requires exactly its resolved branch")
+        elif self.roll_spec is not None or self.outcome_branches:
+            raise ValueError("reject cannot contain roll or outcome branches")
+        return self
 
 
 @dataclass(frozen=True)

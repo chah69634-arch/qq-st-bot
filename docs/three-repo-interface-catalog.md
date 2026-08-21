@@ -420,7 +420,7 @@ proposer observability adds content-free source-policy input/filtered counts.
 All remain under the existing `memory.read` or `state.read` scopes, and no
 prompt text, evidence body, or complete receipt/event-ID inventory is exposed.
 
-# Brief 219 / RPG Dream foundation
+# Briefs 219-220 / RPG Dream backend foundation and adjudication kernel
 
 `GET /dream/capabilities`, `GET /dream/rpg/state`, and
 `GET /observability/dream-rpg` are backend contracts only. `POST /dream/enter`
@@ -428,7 +428,12 @@ accepts `dream_mode="rpg"` with a required existing Scenario `script_id`; while
 active, `POST /dream/chat` returns `RPG_ENDPOINT_REQUIRED` (409). No desktop,
 mobile, WebSocket, relay, or client settings contract exists yet: **open:
 backend foundation only**. Clients must discover future availability from
-`/dream/capabilities`, not runtime files or a hard-coded mode list.
+`/dream/capabilities`, not runtime files or a hard-coded mode list. Brief 220
+extends only the existing content-free `GET /observability/dream-rpg` payload
+with event/dice/branch and recovery aggregate counts. The adjudication,
+correction, ledger, snapshot, and dice APIs are internal Python calls, not REST,
+WebSocket, relay, desktop, or mobile interfaces. **open: no gameplay endpoint
+or client setting surface**.
 
 # Brief 216 / MER-11 backend-only control and observability closure
 
