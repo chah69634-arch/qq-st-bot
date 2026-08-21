@@ -46,7 +46,7 @@ from admin.routers import (
     character, chat, owner_turn, diary_sync,
     scheduler, watch, sensor, period,
     garden, mobile, diary, chat_log,
-    mood, activity, dream,
+    mood, activity, dream, dream_rpg,
     reading, gomoku, dream_seed,
     hidden_state_debug, hardware, observe,
     group, group_dream, relationship_facts,
@@ -102,6 +102,7 @@ app.include_router(chat_log.router,  prefix="/chat-log",  tags=["聊天日志"])
 app.include_router(mobile.router,    prefix="",           tags=["手机端"])
 app.include_router(phone_control.router, prefix="",        tags=["手机自动化"])
 app.include_router(dream.router,     prefix="",           tags=["梦境"])
+app.include_router(dream_rpg.router, prefix="",           tags=["梦境 RPG"])
 app.include_router(hidden_state_debug.router, prefix="", tags=["观测"])
 app.include_router(observe.router,            prefix="", tags=["观测"])
 app.include_router(hardware.router, prefix="/hardware", tags=["硬件"])

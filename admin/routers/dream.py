@@ -44,7 +44,7 @@ _VALID_BOUNDARY_LEVEL = frozenset({"vague", "body_perceptible", "numbers_visible
 # fail-open 回退到 _default 内容，不崩），保证 CI/fresh 环境里这六个值恒合法。
 _VALID_WORLD_LAYER_BUILTIN = frozenset({"reality_derived", "abo", "vampire", "cat", "flower_bud", "custom"})
 _VALID_LUCID_MODE = frozenset({"lucid_shared", "non_lucid"})
-_VALID_DREAM_MODE = frozenset({"sandbox", "scenario", "mirror"})
+_VALID_DREAM_MODE = frozenset({"sandbox", "scenario", "mirror", "rpg"})
 _VALID_SCENARIO_INJECTION_MODE = frozenset({"strict_stage", "full_script"})
 
 _ENUM_VALIDATORS: dict[str, frozenset] = {
@@ -365,6 +365,22 @@ async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
 
     uid = _owner_uid()
 
+    from core.dream.dream_state import DreamStatus, read_state_checked
+    current_state, state_ok = read_state_checked(uid)
+    if (
+        state_ok
+        and current_state.get("status") == DreamStatus.DREAM_ACTIVE.value
+        and current_state.get("dream_mode") == "rpg"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RPG_ENDPOINT_REQUIRED",
+                "message": "RPG Dream input must use the RPG round endpoint.",
+                "retryable": False,
+            },
+        )
+
     from core.conversation_gate import conversation_lock
     from core.dream.dream_pipeline import dream_turn
 
@@ -463,6 +479,14 @@ async def dream_wake(body: dict = Body(default={}), _auth=Depends(require_scopes
     if not state_ok:
         raise HTTPException(status_code=503, detail="dream_state_unavailable")
     status = state.get("status")
+    if state.get("dream_mode") == "rpg":
+        close_result = await force_exit_dream(
+            uid,
+            exit_mechanism="user_hard_exit",
+            exit_initiator="user",
+            exit_reason="rpg_wake_hard_exit",
+        )
+        return {"retained": False, **close_result}
     dream_id = str(state.get("dream_id") or "").strip()
     requested_dream_id = _requested_dream_id(body)
 

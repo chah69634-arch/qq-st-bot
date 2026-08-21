@@ -311,6 +311,13 @@ The mirror is not a general vault browser and is never copied into tracked
 authored assets. It is consumed only through the existing diary tool framing
 and source-isolation rules.
 
+## RPG Dream Session (Brief 219)
+
+`data/runtime/dreams/{char_id}/rpg/{uid}/{dream_id}/session.json` is canonical
+Dream-domain per-character/per-user state and is gitignored. Brief 219 creates
+only `session.json`; `events.jsonl`, `dice.jsonl`, and `transcript.jsonl` are
+reserved for later briefs and must not be pre-created as empty pseudo-ledgers.
+
 ## Authored asset management (Brief 158)
 
 `userdata/` remains the only writer target for private voice assets and

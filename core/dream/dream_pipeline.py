@@ -367,6 +367,13 @@ async def dream_turn(
 
     state = read_state(uid)
     status = state.get("status")
+    if state.get("dream_mode") == "rpg":
+        return {
+            "reply": "",
+            "exit_accepted": False,
+            "force_exited": False,
+            "error": "RPG_ENDPOINT_REQUIRED",
+        }
     if status not in (
         DreamStatus.DREAM_ACTIVE.value,
         DreamStatus.DREAM_EXIT_REQUESTED.value,
@@ -876,6 +883,9 @@ async def force_exit_dream(
             "duplicate_count": duplicate_count or state.get("exit_duplicate_count", 0),
         }
 
+    if state.get("dream_mode") == "rpg":
+        return _force_exit_rpg_dream(uid, state, dream_id)
+
     if status != DreamStatus.DREAM_CLOSING.value:
         state["status"] = DreamStatus.DREAM_CLOSING.value
         write_state(uid, state)
@@ -889,6 +899,25 @@ async def force_exit_dream(
         exit_initiator=exit_initiator,
         exit_reason=exit_reason,
     )
+
+
+def _force_exit_rpg_dream(uid: str, state: dict[str, Any], dream_id: str) -> dict[str, Any]:
+    """Hard-close an RPG session without archive, summary, afterglow, or LLM."""
+    from core.dream.dream_state import DreamStatus, clear_local_state, write_state
+    from core.dream.rpg_store import close
+
+    char_id = str(state.get("char_id") or DEFAULT_CHAR_ID)
+    _core, health = close(uid, dream_id, char_id=char_id)
+    closed_at = time.time()
+    state = clear_local_state(state)
+    state.update({"status": DreamStatus.REALITY_CHAT.value, "last_dream_id": dream_id,
+                  "last_dream_mode": "rpg", "last_exited_at": closed_at,
+                  "last_archive_ok": health == "ok", "last_exit_reason": "rpg_hard_exit",
+                  "last_rpg_session_health": health, "forced_impression_rounds_left": 0})
+    write_state(uid, state)
+    return {"ok": True, "exited": True, "already_closed": False, "closed_now": True,
+            "dream_id": dream_id, "dream_mode": "rpg", "archive_ok": health == "ok",
+            "exited_at": closed_at, "rpg_session_health": health}
 
 
 async def enter_dream(
@@ -935,6 +964,12 @@ async def enter_dream(
     # ── Phase A: dream_mode mid-session write guard ───────────────────────────
     # Fail-loud with a specific error before the generic status barrier, so callers
     # know whether the block is "wrong mode" or "session still open".
+    if dream_mode == "rpg":
+        from core.dream.dream_state import read_state_checked
+        state, state_ok = read_state_checked(uid)
+        if not state_ok:
+            return {"ok": False, "error": "dream_state_unavailable"}
+
     _ACTIVE_BARRIER = frozenset({
         DreamStatus.DREAM_ACTIVE.value,
         DreamStatus.DREAM_CLOSING.value,
@@ -942,6 +977,11 @@ async def enter_dream(
     })
     _current_status = state.get("status")
     if _current_status in _ACTIVE_BARRIER:
+        if char_id != state.get("char_id"):
+            return {
+                "ok": False,
+                "error": "dream already active; cannot switch character mid-session",
+            }
         _current_mode = state.get("dream_mode")
         if dream_mode != _current_mode:
             return {
@@ -961,6 +1001,16 @@ async def enter_dream(
                         f"cannot replace with script_id={script_id!r} mid-session"
                     ),
                 }
+        if dream_mode == "rpg":
+            _current_script = (state.get("rpg_session") or {}).get("script_id")
+            if script_id and _current_script and script_id != _current_script:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"rpg already active with script_id={_current_script!r}; "
+                        f"cannot replace with script_id={script_id!r} mid-session"
+                    ),
+                }
         return {
             "ok": False,
             "error": f"dream session still active (status={_current_status!r}); close first",
@@ -973,6 +1023,36 @@ async def enter_dream(
     }
     if state.get("status") not in allowed:
         return {"ok": False, "error": f"cannot enter dream from status={state.get('status')}"}
+
+    if dream_mode == "rpg":
+        if not script_id:
+            return {"ok": False, "error": "dream_mode=rpg requires script_id"}
+        try:
+            from core.dream.scenario_loader import load_script
+            from core.dream.rpg_models import RpgCore
+            from core.dream.rpg_store import create
+            load_script(script_id)
+        except (FileNotFoundError, ValueError) as exc:
+            return {"ok": False, "error": f"rpg scenario load failed: {exc}"}
+        dream_id = f"dream_{uid}_{int(time.time())}"
+        now = time.time()
+        core = RpgCore(dream_id=dream_id, script_id=script_id, owner_uid=str(uid), char_id=char_id, created_at=now, updated_at=now)
+        if not create(core):
+            return {"ok": False, "error": "rpg_session_create_failed"}
+        state.update({"status": DreamStatus.DREAM_ACTIVE.value, "dream_id": dream_id, "dream_started_at": now,
+                      "char_id": char_id, "dream_mode": "rpg", "rpg_session": {"script_id": script_id, "status": "active"}})
+        for key in ("context_snapshot", "scenario_core", "mirror_core", "frozen_world", "lucid_mode"):
+            state.pop(key, None)
+        if not write_state(uid, state):
+            from core.dream.rpg_store import mark_uncertain
+            mark_uncertain(
+                uid,
+                dream_id,
+                char_id=char_id,
+                error_code="RPG_DREAM_STATE_WRITE_FAILED",
+            )
+            return {"ok": False, "error": "rpg_dream_state_write_failed"}
+        return {"ok": True, "dream_id": dream_id, "dream_mode": "rpg", "script_id": script_id}
 
     dream_id = f"dream_{uid}_{int(time.time())}"
     from core.pipeline_registry import get as _get_pl_enter

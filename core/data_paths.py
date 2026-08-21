@@ -592,6 +592,11 @@ class DataPaths:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "dreams", char_id, "state", safe_user_id(user_id), "dream_state.json")
 
+    def dream_rpg_session_path(self, user_id: str | int, dream_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """RPG session root; later briefs add event/dice/transcript ledgers beside it."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "dreams", safe_user_id(char_id), "rpg", safe_user_id(user_id), safe_user_id(dream_id), "session.json")
+
     def dream_settings_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "dreams", char_id, "settings", safe_user_id(user_id) + ".json")

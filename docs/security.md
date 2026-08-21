@@ -183,6 +183,16 @@ owner retention policy confirmation.
   fixture 在每个测试前后清零——这是模块级进程状态，忘记重置会导致某个测试文件里密集的
   no-token/wrong-token 用例把后面无关测试一起拖进 429。
 
+## RPG Dream Foundation (Brief 219)
+
+RPG session storage is reached exclusively through `core.sandbox.get_paths()`
+and is registered as Dream-domain per-character/per-user state. The public
+state and observability endpoints are scope-protected (`activity` and
+`state.read` respectively). Observability hashes identifiers and excludes
+prompts, player/KP text, script content, dice seeds, tokens, and absolute paths.
+An unreadable or partial session is fail-closed as `uncertain`; it is never
+promoted into a playable or recoverable session.
+
 ## 守卫测试
 
 `tests/test_sec_auth2_scopes.py`：scope 展开、registry 加载/热重载/过滤/create+rotate+delete、

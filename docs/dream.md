@@ -730,6 +730,23 @@ QUIET、DND、gap、budget 或 winner；发送成功后才写 `last_greeted_drea
 §六的完整状态图——v1 没有 `DREAM_EXIT_REQUESTED` / `DREAM_LOCKED` / `REALITY_AFTERGLOW`，
 硬退直接回 `REALITY_CHAT`。
 
+## RPG Dream Foundation (Brief 219)
+
+`rpg` is a fourth, backend-only Dream mode. Entry requires an existing authored
+Scenario `script_id`; owner, active character, script, mode, and dream ID are
+frozen for the session. Its authoritative core lives in the isolated
+`runtime/dreams/{char_id}/rpg/{uid}/{dream_id}/session.json` tree and contains
+only identity, status, and cursors. It contains no prompts, player/KP text,
+seeds, tokens, or model output.
+
+While RPG is active, ordinary `POST /dream/chat` returns the stable
+`RPG_ENDPOINT_REQUIRED` 409 and never reaches the normal Dream pipeline.
+`/dream/exit` and `/dream/wake` remain immediate LLM-free hard exits. RPG does
+not write archive transcript, summary, afterglow, impression, hidden state, or
+Reality continuation. `GET /dream/capabilities`, `GET /dream/rpg/state`, and
+`GET /observability/dream-rpg` are the foundation projections; corrupt or
+partial RPG cores project as `uncertain`, never as resumable state.
+
 ## 十二、WAKE 二次确认与一次性封存（Brief 176）
 
 `DREAM_EXIT_REQUESTED` 表示 soft retention 正在等待用户选择，梦仍是 current session；只有用户选择确认醒来，且 `_do_close_dream()` 返回 `closed_now=true` 或可信的 `already_closed`，才算 confirmed wake。用户选择留下时，`/dream/resume` 必须携带并匹配同一 `dream_id`，仅恢复为 `DREAM_ACTIVE`，不清理 current transcript。

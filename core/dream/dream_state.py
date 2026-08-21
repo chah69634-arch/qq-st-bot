@@ -47,6 +47,7 @@ class DreamMode(str, Enum):
     sandbox = "sandbox"
     scenario = "scenario"
     mirror = "mirror"
+    rpg = "rpg"
 
 
 _VALID_DREAM_MODES: frozenset[str] = frozenset(m.value for m in DreamMode)
@@ -334,6 +335,7 @@ def clear_local_state(state: dict[str, Any]) -> dict[str, Any]:
         "last_assistant_turn_id",  # reconciler CAS identity, cleared at dream close
         "scenario_core",  # scenario kernel — session-local, cleared at dream close
         "mirror_core",  # mirror kernel — session-local, cleared at dream close
+        "rpg_session",
     ):
         out.pop(key, None)
     return out
