@@ -1,5 +1,6 @@
 """Contract tests for the separate mobile reality-chat endpoint."""
 
+import inspect
 from types import SimpleNamespace
 
 import pytest
@@ -192,3 +193,76 @@ async def test_mobile_chat_dream_guard_blocks_before_owner_turn(sandbox, monkeyp
     with pytest.raises(HTTPException) as exc:
         await mobile.mobile_chat({"message": "你好"}, _auth=True)
     assert exc.value.status_code == 409
+
+
+async def test_mobile_chat_reaches_turn_sink_with_pipeline_critical_contract(monkeypatch):
+    """Exercise mobile -> owner chat -> turn sink without mocking either boundary."""
+    from admin.routers import chat, mobile
+    from core.memory.scope import MemoryScope
+    from core.pipeline import Pipeline
+
+    critical_calls = []
+
+    class _Character:
+        name = "Companion"
+
+    class _Pipeline:
+        character = _Character()
+        _active_character_id = "companion"
+
+        def _current_reality_scope(self, uid):
+            return MemoryScope.reality_scope(uid, "companion")
+
+        async def fetch_context(self, *_args, **_kwargs):
+            return {}
+
+        def build_prompt(self, *_args, **_kwargs):
+            return [], {}
+
+        async def run_llm(self, _messages):
+            return "mobile reply"
+
+        async def post_process_critical(self, uid, content, reply, **kwargs):
+            # Bind against the production method instead of accepting arbitrary
+            # kwargs silently. This catches turn_sink/Pipeline signature drift.
+            inspect.signature(Pipeline.post_process_critical).bind(
+                None, uid, content, reply, **kwargs
+            )
+            critical_calls.append(kwargs)
+            return {
+                "turn_id": "turn-mobile-real-chain",
+                "critical_written": True,
+                "emotion": "neutral",
+                "char_id": "companion",
+                "scope_payload": {},
+                "should_update_profile": False,
+                "profile_recent": [],
+            }
+
+        async def post_process_slow(self, *_args, **_kwargs):
+            return {"emotion": "neutral", "turn_id": "turn-mobile-real-chain"}
+
+    async def fake_probe(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: _Pipeline())
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"scheduler": {"owner_id": "owner"}},
+    )
+    monkeypatch.setattr(chat, "_check_reality_not_in_dream", lambda _uid: None)
+    monkeypatch.setattr("core.scheduler.loop.mark_user_active", lambda: None)
+    monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda _uid: None)
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_user_message", lambda _uid: None)
+    monkeypatch.setattr("core.scheduler.sensor_events.notify_chat_happened", lambda: None)
+    monkeypatch.setattr("core.tool_dispatcher.tool_loop_active", lambda _uid: False)
+    monkeypatch.setattr(chat, "_probe_and_execute_tools", fake_probe)
+    monkeypatch.setattr("core.coplay.session.is_active", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr("channels.registry._channels", {})
+
+    result = await mobile.mobile_chat({"message": "hello"}, _auth=True)
+
+    assert result["turn_id"] == result["msg_id"] == "turn-mobile-real-chain"
+    assert len(critical_calls) == 1
+    assert critical_calls[0]["provenance_source"] == ""
+    assert critical_calls[0]["event_channel"] == "mobile"
