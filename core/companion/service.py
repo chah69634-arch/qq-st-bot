@@ -272,6 +272,7 @@ async def handle_event(
                         },
                         provenance_source="external_companion",
                         schedule_slow=False,
+                        event_context=gate.context,
                     )
                     reply = _reply_from_text(_clean_reply(result.get("reply")), proactive=True)
                     status = CompanionStatus.ACCEPTED if reply is not None else CompanionStatus.MUTED
@@ -304,6 +305,8 @@ async def handle_event(
                     },
                     provenance_source="companion_phone_input",
                     schedule_slow=True,
+                    ingress_event_id=f"companion-phone:{key}",
+                    ingress_dedupe_key=key,
                 )
                 reply = _reply_from_text(_clean_reply(result.get("reply")), proactive=False)
                 status = CompanionStatus.ACCEPTED if reply is not None else CompanionStatus.MUTED

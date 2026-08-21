@@ -53,6 +53,9 @@ async def run_owner_chat_turn(
     provenance_source: str = "",
     schedule_slow: bool = True,
     media_refs: list[dict] | None = None,
+    event_context=None,
+    ingress_event_id: str = "",
+    ingress_dedupe_key: str = "",
 ) -> dict:
     """
     手机/桌宠共用的 owner 对话入口。
@@ -112,19 +115,26 @@ async def run_owner_chat_turn(
     # Freeze ingress identity alongside the already-frozen memory scope. The
     # compatibility path is explicit and content-free; no active role lookup
     # occurs after this point.
-    event_context = None
     try:
         from core.event_context import EventContext
-        import uuid as _uuid
-        event_context = EventContext.from_ingress(
-            uid=user_id, char_id=_frozen_scope.character_id,
-            ingress_event_id=str(_uuid.uuid4()), dedupe_key="owner-chat",
-            source=provenance_source or turn_source, channel=provenance_channel,
-            kind="user_message" if turn_source == "user_chat" else "trigger",
-            actor="user" if turn_source == "user_chat" else "system",
-        )
+        if event_context is None:
+            import uuid as _uuid
+            ingress_id = str(ingress_event_id or _uuid.uuid4())
+            dedupe_key = str(ingress_dedupe_key or ingress_id)
+            event_context = EventContext.from_ingress(
+                uid=user_id, char_id=_frozen_scope.character_id,
+                ingress_event_id=ingress_id, dedupe_key=dedupe_key,
+                source=provenance_source or turn_source, channel=provenance_channel,
+                kind="user_message" if turn_source == "user_chat" else "trigger",
+                actor="user" if turn_source == "user_chat" else "system",
+            )
+            from core.event_context_observer import record as _record_event_context
+            _record_event_context(stage="ingress", disposition="accepted", context=event_context)
+        elif event_context.scope != _frozen_scope:
+            raise ValueError("event_context scope does not match owner chat scope")
     except Exception:
-        logger.debug("[owner_chat] EventContext compatibility construction failed", exc_info=True)
+        logger.error("[owner_chat] EventContext construction failed", exc_info=True)
+        raise HTTPException(status_code=503, detail="event context 状态异常，本轮中止")
 
     # Brief 28 · Path C 总闸：开关开 + owner（此端点固定 owner）+ chat preset 为
     # function_calling。为真时跳过探针，主生成走 run_agentic_loop。

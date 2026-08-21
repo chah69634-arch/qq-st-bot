@@ -1571,7 +1571,9 @@ class Pipeline:
         _should_update_profile = False
         _profile_recent: list = []
         import time as _time
+        _critical_started_at = _time.monotonic()
         _turn_id = f"{user_id}_{int(_time.time() * 1000)}"
+        _turn_context = event_context.with_turn(_turn_id) if event_context is not None else None
         _critical_written = False
 
         async with _locks.uid_lock(user_id):
@@ -1626,9 +1628,18 @@ class Pipeline:
                     visible_reply=visible_reply,
                     raw_user_text=raw_user_text,
                     media_refs=media_refs,
-                    event_context=event_context.with_turn(_turn_id) if event_context is not None else None,
+                    event_context=_turn_context,
+                    observer_started_at=_critical_started_at,
                 )
                 _critical_written = True
+                try:
+                    from core.event_context_observer import record as _record_event_context
+                    _record_event_context(
+                        stage="critical", disposition="written", context=_turn_context,
+                        orphan=_turn_context is None, started_at=_critical_started_at,
+                    )
+                except Exception:
+                    pass
                 logger.debug(f"[pipeline.post_process_critical] capture_turn: {_turn_id}")
                 # 语义索引：event_log 条目异步写入向量库（fail-open）
                 if envelope.can_write_memory:
@@ -1643,6 +1654,17 @@ class Pipeline:
                         logger.debug("[pipeline.post_process_critical] vector_store upsert schedule error: %s", _vs_e)
             except Exception as e:
                 log_error("post_process.capture_turn", e)
+                try:
+                    from core.event_context_observer import record as _record_event_context
+                    _record_event_context(
+                        stage="critical", disposition="failed", context=_turn_context,
+                        error_code="identity_mismatch" if isinstance(e, ValueError) else "capture_failed",
+                        orphan=_turn_context is None,
+                        scope_match=bool(_turn_context is None or _turn_context.scope == scope),
+                        started_at=_critical_started_at,
+                    )
+                except Exception:
+                    pass
                 if envelope.can_write_memory:
                     slow_queue.enqueue("capture_turn_retry", {
                         "turn_id": _turn_id,
@@ -1653,6 +1675,7 @@ class Pipeline:
                         "trigger_name": trigger_name,
                         "char_id": char_id,
                         "scope": scope_payload,
+                        "event_context": _turn_context.to_payload() if _turn_context is not None else None,
                     })
 
         if pending_paths:

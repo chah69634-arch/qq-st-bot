@@ -287,6 +287,23 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
 
             from core.turn_sink import TurnSource, record_assistant_turn
             from core.write_envelope import stamp_trigger
+            from core.event_context import EventContext
+
+            event_context = EventContext.from_ingress(
+                uid=uid,
+                char_id=char_id,
+                ingress_event_id=f"dream-exit:{dream_id}",
+                dedupe_key=f"dream-exit:{dream_id}",
+                source="dream_exit_continuation",
+                channel="system",
+                kind="trigger",
+                actor="system",
+            )
+            try:
+                from core.event_context_observer import record as observe_context
+                observe_context(stage="ingress", disposition="accepted", context=event_context)
+            except Exception:
+                pass
 
             turn_result = await record_assistant_turn(
                 assistant_text=str(reply),
@@ -303,6 +320,7 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
                 },
                 frozen_scope=scope,
                 char_id=char_id,
+                event_context=event_context,
             )
             if turn_result is None:
                 raise RuntimeError("turn_sink_returned_none")

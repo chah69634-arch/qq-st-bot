@@ -273,3 +273,9 @@ additional production sources.
   matrix and S1 short soak have accumulated the required restart, duplicate,
   multi-channel, and ledger-unavailable samples. No recall, prompt, ranking,
   Dream/Stage lifecycle, or client protocol consumes this trace.
+## Memory Event identity soak repair (Brief 217)
+
+- `observe`: startup and the enable endpoint now upgrade/check existing ledgers;
+  durable trace aggregation survives process restarts. Enforcement remains
+  unavailable until the focused S0 matrix and S1 short soak collect the required
+  restart, duplicate, multi-channel, and ledger-unavailable samples.

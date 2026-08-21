@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 # ── 日志基础配置 ──────────────────────────────────────────────────────────────
@@ -181,6 +182,24 @@ def _init_modules():
     from core.memory.pending_perception import cleanup_stale as _cleanup_stale
     _cleanup_stale()
 
+    # Memory Event DDL is maintenance-only. Upgrade every existing canonical
+    # ledger before channels, scheduler, or admin services can accept turns.
+    from core.memory.event_store import initialize_existing_ledgers
+    _event_init = initialize_existing_ledgers()
+    logger.info(
+        "[startup] Memory Event ledgers discovered=%s healthy=%s upgraded=%s failed=%s",
+        _event_init["discovered"], _event_init["healthy"],
+        _event_init["upgraded"], _event_init["failed"],
+    )
+    _event_observer_mode = str((cfg.get("event_context_observer") or {}).get("mode", "disabled")).lower()
+    if _event_observer_mode == "observe" and (
+        _event_init["failed"] or _event_init.get("truncated")
+    ):
+        logger.critical(
+            "[startup blocked] EventContext observe requires all existing Memory Event ledgers healthy"
+        )
+        sys.exit(1)
+
     # v1 is the first supported compatibility baseline.  Do this only after
     # configuration, auth, character loading, and Pipeline initialization have
     # succeeded, so a copied preview data directory is marked only by a viable
@@ -325,6 +344,27 @@ async def handle_message(message: dict):
         _log_error("main.handle_message.char_refresh", _char_err)
         return
     _char_id = _frozen_scope.character_id
+
+    try:
+        import uuid as _uuid
+        from core.event_context import EventContext
+        _qq_ingress_id = str(message.get("event_id") or _uuid.uuid4())
+        _event_context = EventContext.from_ingress(
+            uid=user_id,
+            char_id=_char_id,
+            ingress_event_id=_qq_ingress_id,
+            dedupe_key=_qq_ingress_id,
+            source="qq",
+            channel="qq",
+            kind="user_message",
+            actor="user",
+            occurred_at=float(message.get("timestamp") or time.time()),
+        )
+        from core.event_context_observer import record as _record_event_context
+        _record_event_context(stage="ingress", disposition="accepted", context=_event_context)
+    except Exception as _context_err:
+        _log_error("main.handle_message.event_context", _context_err)
+        return
 
     # ── 步骤2：会话状态由共用 pre-tool router 消费 ───────────────────────────
     state = ss.get(session_key)
@@ -485,6 +525,7 @@ async def handle_message(message: dict):
             loop_executed=_loop_active,
             raw_user_text=_trusted_user_text,
             media_refs=media_refs,
+            event_context=_event_context,
         )
 
 
@@ -498,6 +539,7 @@ async def _reply_with_tool_result(
     target_id: str,
     is_group: bool,
     frozen_scope=None,
+    event_context=None,
 ):
     """工具确认流程结束后，用完整 prompt 生成角色语气回复。
 
@@ -566,6 +608,7 @@ async def _reply_with_tool_result(
             pending_paths=_meta.get("pending_paths", []),
             memory_reply="\n".join(memory_segments),
             coplay_echo=_coplay_is_active(user_id, char_id=_char_id),
+            event_context=event_context,
         )
 
 
@@ -676,6 +719,7 @@ async def _qq_reality_reply_adapter(
     memory_reply: str | None = None,
     raw_user_text: str | None = None,
     media_refs: list[dict] | None = None,
+    event_context=None,
 ) -> None:
     """
     QQ LLM_ASSISTANT_REPLY 统一出口（R1-D: turn_sink 统一链路）。
@@ -738,6 +782,7 @@ async def _qq_reality_reply_adapter(
             visible_assistant_text="\n".join(clean),
             raw_user_text=raw_user_text,
             media_refs=media_refs,
+            event_context=event_context,
         )
     except Exception as _ts_err:
         _log_error("qq_reality_reply_adapter.turn_sink", _ts_err)

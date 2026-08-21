@@ -595,7 +595,8 @@ def _append_event_ledger(
     relation_hints: dict[str, str] | None = None,
     topics: set[str] | None = None,
     event_context=None,
-) -> None:
+    observer_started_at: float | None = None,
+) -> dict[str, object]:
     """Best-effort dual-write of message evidence; never affects legacy memory."""
     try:
         from core.memory.event_store import append_event, append_topics
@@ -655,8 +656,10 @@ def _append_event_ledger(
                 },
             })
 
+        append_results = []
         for record in records:
             result = append_event(scope, record)
+            append_results.append(result)
             if result.ok:
                 append_topics(scope, result.event_id, topics or set())
                 continue
@@ -682,11 +685,32 @@ def _append_event_ledger(
                 record["kind"],
                 result.error_code,
             )
+        succeeded = sum(1 for result in append_results if result.ok)
+        failed_results = [result for result in append_results if not result.ok]
+        disposition = (
+            "committed" if append_results and succeeded == len(append_results)
+            else "partial" if succeeded
+            else "failed"
+        )
+        error_code = failed_results[0].error_code if failed_results else ""
         try:
             from core.event_context_observer import record as observe_context
-            observe_context(stage="evidence", disposition="committed", context=event_context)
+            observe_context(
+                stage="evidence",
+                disposition=disposition,
+                context=event_context,
+                error_code=error_code,
+                orphan=event_context is None,
+                started_at=observer_started_at,
+            )
         except Exception:
             pass
+        return {
+            "disposition": disposition,
+            "attempted": len(append_results),
+            "succeeded": succeeded,
+            "error_code": error_code,
+        }
     except Exception as exc:
         # The evidence ledger is additive in this phase. Its failure must not
         # block short_term, event_log, send, or the slow queue.
@@ -704,10 +728,20 @@ def _append_event_ledger(
         logger.warning("[fixation] event ledger dual-write failed: %s", exc)
         try:
             from core.event_context_observer import record as observe_context
-            observe_context(stage="evidence", disposition="failed", context=event_context,
-                            error_code="identity_mismatch" if isinstance(exc, ValueError) else "append_failed")
+            observe_context(
+                stage="evidence",
+                disposition="failed",
+                context=event_context,
+                error_code="identity_mismatch" if isinstance(exc, ValueError) else "append_failed",
+                orphan=event_context is None,
+                started_at=observer_started_at,
+            )
         except Exception:
             pass
+        return {
+            "disposition": "failed", "attempted": 0, "succeeded": 0,
+            "error_code": "identity_mismatch" if isinstance(exc, ValueError) else "append_failed",
+        }
 
 
 def capture_turn(
@@ -733,6 +767,7 @@ def capture_turn(
     correction_of_event_id: str = "",
     media_of_event_id: str = "",
     event_context=None,
+    observer_started_at: float | None = None,
 ) -> str:
     """
     生成 turn_id，写 short_term + event_log。
@@ -862,6 +897,7 @@ def capture_turn(
         },
         topics=_event_topics,
         event_context=event_context,
+        observer_started_at=observer_started_at,
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
@@ -1712,6 +1748,10 @@ async def handler_capture_turn_retry(payload: dict) -> None:
         can_write_memory=True,
         can_affect_mood=False,
     )
+    event_context = None
+    if payload.get("event_context") is not None:
+        from core.event_context import EventContext
+        event_context = EventContext.from_payload(payload["event_context"])
     async with locks.uid_lock(uid):
         capture_turn(
             uid,
@@ -1722,6 +1762,7 @@ async def handler_capture_turn_retry(payload: dict) -> None:
             trigger_name=payload.get("trigger_name", ""),
             envelope=_env,
             char_id=char_id,
+            event_context=event_context,
         )
     logger.info(f"[fixation] capture_turn retry 完成: {payload['turn_id']}")
 

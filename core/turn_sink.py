@@ -275,7 +275,10 @@ async def record_assistant_turn(
                 actor="user" if source == TurnSource.USER_CHAT else "system",
             )
             from core.event_context_observer import record as observe_context
-            observe_context(stage="adapter", disposition="legacy_context", context=event_context)
+            observe_context(
+                stage="adapter", disposition="legacy_context",
+                context=event_context, orphan=True,
+            )
         except Exception:
             logger.debug("[turn_sink] EventContext compatibility adapter failed", exc_info=True)
 

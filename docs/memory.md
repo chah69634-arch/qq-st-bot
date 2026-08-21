@@ -1899,3 +1899,18 @@ comparison. The proposer first selects event IDs and sources, filters isolated
 events before projecting text, and validates both proposal endpoints again at
 write time. Shadow recall and edge proposal generation remain disabled by
 default and do not enter the Reality prompt.
+
+# Memory Event identity soak readiness (Brief 217 repair)
+
+`core.memory.event_store.initialize_existing_ledgers()` is the bounded startup
+upgrade pass for existing canonical SQLite ledgers. It upgrades v3 files before
+realtime writes and reports `status`, `upgraded`, `failed`, and `truncated` in
+the event-store projection. It does not create missing scopes. The EventContext
+observer remains fail-open for sending, but its admin setting refuses to enable
+`observe` unless the readiness pass returns `ok`.
+
+The observer snapshot rebuilds redacted counts, latency percentiles, and
+ingress-to-evidence linkage from its durable JSONL trace, so restarts do not
+reset a soak. Missing timing is `not_measured`; failed ledger appends are
+`evidence:failed`, never committed. Versioned owner turns use the stable client
+turn ID, and companion phone turns use the existing receipt hash.

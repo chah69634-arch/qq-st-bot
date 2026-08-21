@@ -37,6 +37,20 @@ def test_event_context_rejects_dream_and_evidence_without_turn():
         context.evidence_id("assistant")
 
 
+def test_event_context_payload_round_trip_preserves_frozen_identity():
+    context = EventContext.from_ingress(
+        uid="owner-roundtrip", char_id="char-roundtrip", ingress_event_id="ing-roundtrip",
+        dedupe_key="dedupe-roundtrip", source="qq", channel="qq", kind="user_message",
+        actor="user", occurred_at=123.0, ingested_at=124.0,
+    ).with_turn("turn-roundtrip")
+
+    restored = EventContext.from_payload(context.to_payload())
+
+    assert restored == context
+    with pytest.raises(ValueError, match="schema_version"):
+        EventContext.from_payload({**context.to_payload(), "schema_version": 999})
+
+
 @pytest.mark.asyncio
 async def test_perceive_result_exposes_explicit_ingress_aliases(monkeypatch):
     from core.perceive_event import PerceiveEvent, PerceiveStatus, clear_dedup_registry_for_test, receive_perceive_event

@@ -277,3 +277,9 @@ criteria are met. `GET /observability/event-context` requires `state.read` and
 returns only desired/effective/run state, aggregate counters, latency buckets,
 and redacted status codes. It never returns source text, complete IDs, user IDs,
 or media data. No desktop/mobile setting or protocol is introduced.
+## Brief 217 EventContext readiness repair
+
+The observer remains backend-only and defaults to `disabled`. Its read projection
+now includes startup ledger readiness, persistent chain linkage, and latency
+percentiles. Enabling `observe` reruns existing-ledger initialization and returns
+503 without changing config if a ledger fails or the bounded scan truncates.

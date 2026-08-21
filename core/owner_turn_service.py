@@ -109,6 +109,7 @@ async def run_legacy_owner_turn(
     *,
     reply_to: dict | None = None,
     trusted_user_text: str | None = None,
+    ingress_event_id: str = "",
     executor: Callable[..., Awaitable[dict]],
 ) -> dict:
     """Run the one existing reality chain with a fixed caller context."""
@@ -122,6 +123,9 @@ async def run_legacy_owner_turn(
         kwargs["allowed_tool_categories"] = context.allowed_tool_categories
     if context.allowed_tool_names is not None:
         kwargs["allowed_tool_names"] = context.allowed_tool_names
+    if ingress_event_id:
+        kwargs["ingress_event_id"] = ingress_event_id
+        kwargs["ingress_dedupe_key"] = ingress_event_id
     return await executor(message, context.provenance_channel, **kwargs)
 
 
@@ -206,7 +210,11 @@ async def _execute_and_record(
 ) -> dict:
     try:
         result = await run_legacy_owner_turn(
-            message, context, reply_to=reply_to, executor=executor,
+            message,
+            context,
+            reply_to=reply_to,
+            ingress_event_id=f"owner:{context.token_label}:{client_turn_id}",
+            executor=executor,
         )
         canonical_turn_id = str(result.get("turn_id") or "")
         if not canonical_turn_id:

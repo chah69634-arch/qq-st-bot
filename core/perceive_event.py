@@ -321,6 +321,7 @@ def _observe(event: PerceiveEvent, result: PerceiveResult, *, started_at: float)
         from core.event_context_observer import record
         record(
             stage="ingress", disposition=result.status.value, context=result.context,
+            ingress_event_id=result.existing_ingress_event_id or result.ingress_event_id,
             error_code="missing_scope" if result.status == PerceiveStatus.ACCEPTED and result.context is None else "",
             duplicate=result.status == PerceiveStatus.DUPLICATE, started_at=started_at,
         )

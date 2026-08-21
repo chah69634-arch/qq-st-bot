@@ -250,6 +250,7 @@ def _parse_event(raw: dict) -> dict | None:
         "content": content,
         "sender_name": sender_name,
         "timestamp": raw.get("time", int(time.time())),
+        "event_id": f"qq:{raw['message_id']}" if raw.get("message_id") is not None else "",
         "image_urls": image_urls,
         "file_info": file_info,
     }

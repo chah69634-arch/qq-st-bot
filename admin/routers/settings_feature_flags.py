@@ -186,6 +186,17 @@ async def update_event_context_observer_settings(
     mode = str(body.mode).strip().lower()
     if mode not in {"disabled", "observe"}:
         raise HTTPException(status_code=422, detail="mode must be disabled or observe before enforcing soak")
+    if mode == "observe":
+        from core.memory.event_store import initialize_existing_ledgers
+        readiness = initialize_existing_ledgers()
+        if readiness.get("status") != "ok":
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "event_ledger_not_ready",
+                    "startup_readiness": readiness,
+                },
+            )
     full_cfg = read_config_file(CONFIG_FILE)
     full_cfg.setdefault("event_context_observer", {})["mode"] = mode
     write_config_file(CONFIG_FILE, full_cfg)

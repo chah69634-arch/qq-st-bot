@@ -201,3 +201,10 @@ left by a prior process is treated as uncertain rather than rerun.
 | `docs/trigger-decision-layer.md` | Stimulus 决策层设计（gating / propose / state machine） |
 | `docs/scheduler.md` | 调度器触发器（stimulus 的主要生产者之一） |
 | `docs/tools.md` | Tool 系统（独立 `kind=tool` 仍是 deferred design） |
+## EventContext identity contract (Brief 217)
+
+`EventContext` is not a universal event envelope, dispatcher, or replacement
+for channel datapaths. It freezes one accepted Reality ingress identity,
+memory scope, source/channel, causation ID, and optional canonical turn ID so
+downstream evidence can prove which ingress produced it. Dream and Stage keep
+their own lifecycle boundaries.

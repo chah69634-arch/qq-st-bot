@@ -116,6 +116,48 @@ def test_event_store_upgrade_and_corrupt_database_fail_closed(sandbox):
     assert result.ok is False and result.error_code == "database_error"
 
 
+def test_startup_initialization_upgrades_existing_v3_ledgers_in_place(sandbox):
+    from core.memory import event_store
+
+    scope = _scope("event-store-startup-upgrade", TEST_CHAR_ID)
+    path = event_store.resolve_path(scope, "event_store")
+    assert event_store.initialize(scope).healthy
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP INDEX IF EXISTS idx_events_ingress_event")
+        connection.execute("ALTER TABLE events DROP COLUMN ingress_event_id")
+        connection.execute("ALTER TABLE events DROP COLUMN causation_id")
+        connection.execute("PRAGMA user_version=3")
+        connection.commit()
+    event_store._VERIFIED_SCHEMA_PATHS.discard(str(path))
+
+    result = event_store.initialize_existing_ledgers()
+
+    assert result["status"] == "ok"
+    assert result["discovered"] == 1
+    assert result["upgraded"] == 1
+    assert result["failed"] == 0
+    with sqlite3.connect(path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == event_store.SCHEMA_VERSION
+    assert {"ingress_event_id", "causation_id"} <= columns
+
+
+def test_startup_initialization_reports_corrupt_existing_ledger(sandbox):
+    from core.memory import event_store
+
+    scope = _scope("event-store-startup-corrupt", TEST_CHAR_ID)
+    path = event_store.resolve_path(scope, "event_store")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"not sqlite")
+
+    result = event_store.initialize_existing_ledgers()
+
+    assert result["status"] == "attention"
+    assert result["discovered"] == 1
+    assert result["failed"] == 1
+    assert result["error_codes"] == {"database_error": 1}
+
+
 def test_healthy_append_trace_has_no_schema_maintenance(sandbox, monkeypatch):
     from core.memory import event_store
 

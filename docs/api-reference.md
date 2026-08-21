@@ -66,3 +66,5 @@ scope；只读端点通常允许对应的 read scope。
 1. 后端先改 router，再更新本页的端点族、scope 和消费方。
 2. 客户端仓不得再维护独立的后端端点清单；应链接到本页，并以 OpenAPI schema 生成或校验调用。
 3. 改鉴权时同时更新 [security.md](security.md) 与本页的“鉴权与连接”。
+| GET | `/observability/event-context` | `state.read` | Brief 217 persistent ingress/turn/evidence aggregation with startup readiness, chain counts, and latency percentiles; no bodies, complete IDs, user IDs, media, or paths |
+| GET/PUT | `/settings/event-context-observer` | `admin` | Backend-only `disabled`/`observe`; enabling reruns ledger readiness and returns 503 without changing config when not ready |

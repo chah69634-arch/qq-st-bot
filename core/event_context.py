@@ -28,6 +28,8 @@ class EventContext:
     turn_id: str = ""
 
     def __post_init__(self) -> None:
+        if self.schema_version != 1:
+            raise ValueError("unsupported EventContext schema_version")
         if self.scope.domain != "reality":
             raise ValueError("EventContext only permits a reality scope")
         for name in ("ingress_event_id", "dedupe_key", "source", "channel", "kind"):
@@ -81,3 +83,30 @@ class EventContext:
             "occurred_at": self.occurred_at,
             "ingested_at": self.ingested_at,
         }
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, object]) -> "EventContext":
+        if not isinstance(payload, dict):
+            raise TypeError("EventContext payload must be a dict")
+        required = {
+            "schema_version", "scope", "ingress_event_id", "dedupe_key",
+            "turn_id", "causation_id", "source", "channel", "kind",
+            "actor", "occurred_at", "ingested_at",
+        }
+        missing = sorted(required - set(payload))
+        if missing:
+            raise ValueError(f"EventContext payload missing: {', '.join(missing)}")
+        return cls(
+            schema_version=int(payload["schema_version"]),
+            scope=MemoryScope.from_payload(payload["scope"]),
+            ingress_event_id=str(payload["ingress_event_id"]),
+            dedupe_key=str(payload["dedupe_key"]),
+            turn_id=str(payload["turn_id"]),
+            causation_id=str(payload["causation_id"]),
+            source=str(payload["source"]),
+            channel=str(payload["channel"]),
+            kind=str(payload["kind"]),
+            actor=str(payload["actor"]),
+            occurred_at=float(payload["occurred_at"]),
+            ingested_at=float(payload["ingested_at"]),
+        )

@@ -384,6 +384,15 @@ terminal receipts。`GET /observability/companion-events` 是对应的 `state.re
 - persistent state owner
 - communication path
 
+## Brief 217 EventContext startup gate
+
+During `_init_modules()`, existing Reality event ledgers are discovered and
+upgraded before channel or scheduler work starts. With observer mode set to
+`observe`, any failed ledger or bounded-scan truncation aborts startup. When the
+service starts with observation disabled, the PUT setting repeats this check
+before enabling observation. Schema work stays outside the realtime send path,
+while a failed trace write remains fail-open.
+
 ## Brief 176：Dream WAKE 确认与跨进程收口
 
 Dream 的 `DREAM_EXIT_REQUESTED` 是退出确认待决态，不是已关闭态。客户端的“留下”通过带同一 `dream_id` 的 `/dream/resume` 恢复 `DREAM_ACTIVE`；“还是要醒来”、再次 WAKE 或 Esc 通过唯一的 `force_exit_dream()` / `_do_close_dream()` 收口。只有后端确认 close/archive 成功后，桌面窗口才关闭；请求失败时保留 current session 和可重试出口。

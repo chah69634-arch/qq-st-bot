@@ -430,3 +430,4 @@ category route. The Memory Event evidence page consumes the existing scoped
 mapping, coverage, and latest-run metrics. Empty scopes are reported as not run.
 Both features remain off by default; shadow never enters the production prompt,
 and proposer rows remain unreviewed candidates rather than deterministic edges.
+| `/settings/event-context-observer`, `/observability/event-context` | Brief 217 backend-only identity soak control and durable aggregation | No desktop/mobile protocol or settings UI; `admin` writes and `state.read` reads redacted readiness, linkage, and latency only |

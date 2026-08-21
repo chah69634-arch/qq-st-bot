@@ -182,7 +182,13 @@ async def test_capture_turn_failure_enqueues_retry(sandbox, monkeypatch):
     monkeypatch.setattr("core.memory.mood_state.update", lambda *args, **kwargs: None)
 
     from core.write_envelope import stamp_trigger
+    from core.event_context import EventContext
+    from core.memory.scope import MemoryScope
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
+    event_context = EventContext.from_ingress(
+        uid="uid3", char_id="companion", ingress_event_id="ingress-retry",
+        dedupe_key="dedupe-retry", source="scheduler", channel="system", kind="trigger",
+    )
     result = await record_assistant_turn(
         assistant_text="嗯。",
         uid="uid3",
@@ -191,12 +197,18 @@ async def test_capture_turn_failure_enqueues_retry(sandbox, monkeypatch):
         fanout=[],
         pipeline=pipeline,
         envelope=stamp_trigger(),
+        char_id="companion",
+        frozen_scope=MemoryScope.reality_scope("uid3", "companion"),
+        event_context=event_context,
     )
 
     assert result.written_to_memory is False
     retry = [item for item in enqueued if item[0] == "capture_turn_retry"]
     assert retry, f"expected capture_turn_retry in {enqueued}"
     assert retry[0][1]["trigger_name"] == "night_reminder"
+    restored = EventContext.from_payload(retry[0][1]["event_context"])
+    assert restored.ingress_event_id == "ingress-retry"
+    assert restored.turn_id == result.turn_id
 
 
 async def test_conversation_gate_serializes_concurrent_turns():

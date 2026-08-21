@@ -46,3 +46,29 @@ def test_capture_turn_rejects_cross_scope_context(sandbox):
             "owner-b", "hello", "reply", turn_id="turn-b", char_id="char-b",
             envelope=stamp_user_chat(), event_context=context,
         )
+
+
+def test_failed_ledger_append_is_not_reported_as_committed(sandbox, monkeypatch):
+    from core.memory.event_store import AppendResult
+    from core.event_context_observer import reset_for_tests, snapshot
+
+    monkeypatch.setattr("core.event_context_observer.config", lambda: {"mode": "observe"})
+    reset_for_tests()
+    context = EventContext.from_ingress(
+        uid="owner-fail", char_id="char-fail", ingress_event_id="ingress-fail",
+        dedupe_key="dedupe-fail", source="desktop", channel="desktop", kind="user_message",
+    )
+    monkeypatch.setattr(
+        event_store, "append_event",
+        lambda _scope, event: AppendResult(False, False, event["event_id"], "busy"),
+    )
+
+    capture_turn(
+        "owner-fail", "hello", "reply", turn_id="turn-fail", char_id="char-fail",
+        envelope=stamp_user_chat(), event_context=context,
+    )
+
+    result = snapshot()
+    assert result["counts"]["evidence:failed"] == 1
+    assert "evidence:committed" not in result["counts"]
+    assert result["errors"]["busy"] == 1

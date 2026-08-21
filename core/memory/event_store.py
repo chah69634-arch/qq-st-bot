@@ -62,6 +62,14 @@ _HOT_PATH_OBSERVABILITY: dict[str, int] = {
     "locked": 0,
     "schema_mismatch": 0,
 }
+_STARTUP_INITIALIZATION: dict[str, Any] = {
+    "status": "not_run",
+    "discovered": 0,
+    "healthy": 0,
+    "upgraded": 0,
+    "failed": 0,
+    "error_codes": {},
+}
 
 # Ledger writes run before visible fanout.  The in-process per-ledger lock
 # handles ordinary contention; this short SQLite budget keeps an external
@@ -385,6 +393,7 @@ def observability_snapshot() -> dict[str, Any]:
                 ) if attempted else None,
             },
             "source_policy": source_policy_snapshot(),
+            "startup_initialization": dict(_STARTUP_INITIALIZATION),
         }
 
 
@@ -401,33 +410,51 @@ def _reset_observability_for_tests() -> None:
             _PROPOSER_SOURCE_OBSERVABILITY[key] = 0
         for key in _HOT_PATH_OBSERVABILITY:
             _HOT_PATH_OBSERVABILITY[key] = 0
+        _STARTUP_INITIALIZATION.update({
+            "status": "not_run", "discovered": 0, "healthy": 0,
+            "upgraded": 0, "failed": 0, "error_codes": {},
+        })
 
 
 def _initialize(connection: sqlite3.Connection) -> None:
     version = int(connection.execute("PRAGMA user_version").fetchone()[0])
     if version > SCHEMA_VERSION:
         raise RuntimeError("unsupported_schema_version")
-    connection.executescript(_SCHEMA_SQL)
-    # v1 ledgers already had the compatibility edge_type column.  Additive
-    # ALTERs keep those ledgers readable and preserve manually inserted edges.
-    event_columns = {row[1] for row in connection.execute("PRAGMA table_info(events)")}
+    existing_tables = {
+        str(row[0])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    # Add columns before the complete schema script creates indexes that refer
+    # to them. This is required for in-place v3 -> v4 upgrades.
+    event_columns = (
+        {row[1] for row in connection.execute("PRAGMA table_info(events)")}
+        if "events" in existing_tables else set()
+    )
     if "stream" not in event_columns:
-        connection.execute("ALTER TABLE events ADD COLUMN stream TEXT NOT NULL DEFAULT ''")
+        if event_columns:
+            connection.execute("ALTER TABLE events ADD COLUMN stream TEXT NOT NULL DEFAULT ''")
     if "relation_hints_json" not in event_columns:
-        connection.execute("ALTER TABLE events ADD COLUMN relation_hints_json TEXT NOT NULL DEFAULT ''")
+        if event_columns:
+            connection.execute("ALTER TABLE events ADD COLUMN relation_hints_json TEXT NOT NULL DEFAULT ''")
     for column in ("ingress_event_id", "causation_id"):
-        if column not in event_columns:
+        if event_columns and column not in event_columns:
             connection.execute(f"ALTER TABLE events ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_ingress_event ON events(ingress_event_id)")
-    edge_columns = {row[1] for row in connection.execute("PRAGMA table_info(event_edges)")}
+    edge_columns = (
+        {row[1] for row in connection.execute("PRAGMA table_info(event_edges)")}
+        if "event_edges" in existing_tables else set()
+    )
     for column, definition in (
         ("relation_type", "TEXT NOT NULL DEFAULT ''"),
         ("origin", "TEXT NOT NULL DEFAULT 'system'"),
         ("confidence", "REAL NOT NULL DEFAULT 1.0"),
         ("schema_version", "INTEGER NOT NULL DEFAULT 2"),
     ):
-        if column not in edge_columns:
+        if edge_columns and column not in edge_columns:
             connection.execute(f"ALTER TABLE event_edges ADD COLUMN {column} {definition}")
+    connection.executescript(_SCHEMA_SQL)
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_ingress_event ON events(ingress_event_id)")
     connection.execute("UPDATE event_edges SET relation_type = edge_type WHERE relation_type = ''")
     connection.execute("UPDATE event_edges SET schema_version = ? WHERE schema_version IS NULL OR schema_version = 0", (SCHEMA_VERSION,))
     if version < SCHEMA_VERSION:
@@ -455,6 +482,73 @@ def initialize(scope: MemoryScope) -> SchemaStatus:
         except Exception as exc:
             logger.warning("[event_store] initialize failed: %s", exc)
             return SchemaStatus(SCHEMA_NAME, SCHEMA_VERSION, None, path.exists(), False, error_code="database_error")
+
+
+def initialize_existing_ledgers(*, max_ledgers: int = 1000) -> dict[str, Any]:
+    """Upgrade existing canonical ledgers before realtime services start.
+
+    Discovery is metadata-only and bounded. Missing scopes are never created;
+    only ``runtime/memory/{char_id}/{uid}/event_store.sqlite3`` files are
+    accepted. Callers decide whether failures should block startup.
+    """
+    from core.data_paths import safe_user_id
+    from core.sandbox import get_paths
+
+    root = get_paths().memory_char_root().parent
+    ledgers: list[tuple[MemoryScope, Path]] = []
+    try:
+        character_dirs = sorted(root.iterdir()) if root.exists() else []
+    except OSError:
+        character_dirs = []
+    limit = max(1, int(max_ledgers))
+    for char_dir in character_dirs:
+        if not char_dir.is_dir() or char_dir.is_symlink():
+            continue
+        try:
+            char_id = safe_user_id(char_dir.name)
+            user_dirs = sorted(char_dir.iterdir())
+        except (OSError, ValueError):
+            continue
+        for user_dir in user_dirs:
+            if not user_dir.is_dir() or user_dir.is_symlink():
+                continue
+            try:
+                uid = safe_user_id(user_dir.name)
+            except ValueError:
+                continue
+            path = user_dir / "event_store.sqlite3"
+            if path.is_file() and not path.is_symlink():
+                ledgers.append((MemoryScope.reality_scope(uid, char_id), path))
+                if len(ledgers) > limit:
+                    break
+        if len(ledgers) > limit:
+            break
+
+    truncated = len(ledgers) > limit
+    ledgers = ledgers[:limit]
+
+    result: dict[str, Any] = {
+        "status": "ok", "discovered": len(ledgers), "healthy": 0,
+        "upgraded": 0, "failed": 0, "error_codes": {},
+        "truncated": truncated,
+    }
+    for scope, _path_value in ledgers:
+        before = schema_status(scope)
+        status = initialize(scope)
+        if status.healthy:
+            result["healthy"] += 1
+            if before.schema_version != SCHEMA_VERSION:
+                result["upgraded"] += 1
+            continue
+        result["failed"] += 1
+        code = status.error_code or "schema_mismatch"
+        result["error_codes"][code] = int(result["error_codes"].get(code, 0)) + 1
+    if result["failed"] or result["truncated"]:
+        result["status"] = "attention"
+    with _OBSERVABILITY_LOCK:
+        _STARTUP_INITIALIZATION.clear()
+        _STARTUP_INITIALIZATION.update(result)
+    return dict(result)
 
 
 def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> AppendResult:
