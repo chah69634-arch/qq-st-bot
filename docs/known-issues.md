@@ -1,6 +1,6 @@
 # docs/known-issues.md — 已知问题与技术债
 
-> 最近核对：2026-08-20（补充 AUTONOMY-195 生产零发言判断；暂不调整运行参数）。
+> 最近核对：2026-08-23（补充 SCHED-1/SCHED-2 调度器后续风险；23 点日记回归已修复）。
 > 这里只保留仍需行动或观察的条目；已关闭条目的完整背景保留在 Git 历史。
 
 ## 当前仍存在
@@ -36,6 +36,31 @@ producer matched -> signal queued -> opportunity created -> admission allowed
 `evaluated_silent`、talk gate 拒绝和 sink 交付失败。只有当有效的高价值 signal 已稳定到达模型、
 `talk_owner` 可用且仍长期 `evaluated_silent` 时，才评估 source-specific signal 语义或 prompt 决策准则；
 不得新增 festival/period 直发出口，也不得恢复 legacy `_pipeline_send()`。
+
+### SCHED-1：`practice_help` 的 autonomy 边界审计
+
+**状态**：`roadmap`（中工单；不阻断 `inner_diary_write`）
+
+`practice_help` 的 `UrgencyTier.AMBIENT` 回归已经修复，且 proposer 单点异常现在不会越过
+scheduler tick 边界。但该 proposer 的 `execute` 回调仍通过 `execute_prompt()` 直接发言，尚未完成
+signal-first/autonomy 契约审计。后续必须单独决定它是迁移到 autonomy，还是作为明确登记的兼容路径保留。
+
+若迁移，只能传递受限事实和稳定标识，不得把练习作品原文或任意 prompt metadata 直接写入 signal，
+并补齐 TTL、dedupe、talk gate 和 autonomy 观测。若暂不迁移，必须保持独立开关或默认关闭，不能让
+它以未登记状态混在普通 proposer 中。该工单不得改变 `inner_diary_write` 的静默维护边界，也不得
+让 `daily_journal` 重新承担日记落盘副作用。
+
+### SCHED-2：`inner_diary_write` 持久任务化
+
+**状态**：`roadmap`（大工单；当前不改变触发器行为）
+
+当前角色日记仍由 scheduler 在 23:00-05:00 维护窗口内直接生成，并以 logical day 文件存在性做幂等。
+进程重启、LLM 超时或维护轮次中断时，仍可能错过当日窗口；这不是本次 `AMBIENT` 回归的修复范围。
+
+长期方案应评估带幂等键的后台维护 job，例如
+`inner_diary_write:{char_id}:{logical_day}`：scheduler tick 只负责发现并入队，worker 负责锁、重试、
+成功确认和失败退避。实施前必须明确持久 slow queue、只读观测端点、跨角色并发、备份和恢复策略，
+不能通过修改 `daily_journal` 或恢复旧的主动发言路径来替代。
 
 ### SENSOR-1：sensor signal-first 尚未恢复旧行为 action payload
 
