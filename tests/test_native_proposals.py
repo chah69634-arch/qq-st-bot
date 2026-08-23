@@ -128,11 +128,48 @@ def test_gating_shadow_isolates_proposer_failure_and_logs(monkeypatch, caplog):
 
     with caplog.at_level("WARNING", logger="core.scheduler.gating"):
         proposals = gating._collect_native_proposals({"uid": "u1", "now_ts": 123.0})
+        proposals_again = gating._collect_native_proposals({"uid": "u1", "now_ts": 124.0})
 
     assert [p.trigger_name for p in proposals] == ["period_reminder"]
+    assert [p.trigger_name for p in proposals_again] == ["period_reminder"]
     assert "name=broken" in caplog.text
     assert "exception=AttributeError" in caplog.text
+    assert "message=AMBIENT" in caplog.text
     assert "tick_ts=123.0" in caplog.text
+    warning_records = [
+        record for record in caplog.records
+        if "name=broken" in record.message
+    ]
+    assert len(warning_records) == 1
+    assert warning_records[0].exc_info is not None
+    proposer_registry._reset_for_tests()
+
+
+def test_gating_shadow_isolates_malformed_proposer_result(monkeypatch, caplog):
+    from core.scheduler import gating
+    from core.scheduler import proposer_registry
+    from core.scheduler.gating import TriggerProposal
+    from core.scheduler.state_machine import TriggerState
+
+    native = TriggerProposal(
+        trigger_name="period_reminder",
+        urgency=0.8,
+        topic_source="mood_match",
+        requires_state=[TriggerState.QUIET],
+        bypass_state_machine=True,
+    )
+
+    proposer_registry._reset_for_tests()
+    monkeypatch.setattr(proposer_registry, "_BUILTINS_LOADED", True)
+    proposer_registry.register_proposer("malformed", lambda ctx: object())
+    proposer_registry.register_proposer("healthy_after_malformed", lambda ctx: native)
+
+    with caplog.at_level("WARNING", logger="core.scheduler.gating"):
+        proposals = gating._collect_native_proposals({"uid": "u1", "now_ts": 125.0})
+
+    assert [p.trigger_name for p in proposals] == ["period_reminder"]
+    assert "name=malformed" in caplog.text
+    assert "message=proposer returned object" in caplog.text
     proposer_registry._reset_for_tests()
 
 

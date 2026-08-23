@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 import inspect
 import logging
+import threading
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -18,6 +19,10 @@ from core.scheduler.execution import ExecuteFn, is_live_mode
 from core.scheduler.state_machine import TriggerState, get_state as get_current_state
 
 logger = logging.getLogger(__name__)
+
+_PROPOSER_ERROR_LOG_INTERVAL_SECONDS = 5 * 60
+_proposer_error_last_logged: dict[str, float] = {}
+_proposer_error_log_lock = threading.Lock()
 
 
 MIGRATED_TRIGGERS: frozenset[str] = frozenset({
@@ -229,6 +234,32 @@ def _build_context(uid: str) -> dict:
     }
 
 
+def _log_proposer_failure(entry_name: str, ctx: dict, exc: Exception) -> None:
+    """Log proposer failures with bounded frequency while preserving traceback context."""
+    now = time.time()
+    should_log = False
+    with _proposer_error_log_lock:
+        last = _proposer_error_last_logged.get(entry_name)
+        if last is None or now - last >= _PROPOSER_ERROR_LOG_INTERVAL_SECONDS:
+            _proposer_error_last_logged[entry_name] = now
+            should_log = True
+        if len(_proposer_error_last_logged) > 128:
+            oldest = min(_proposer_error_last_logged, key=_proposer_error_last_logged.get)
+            _proposer_error_last_logged.pop(oldest, None)
+    if not should_log:
+        return
+
+    message = " ".join(str(exc).split())[:200]
+    logger.warning(
+        "[gating] proposer failed: name=%s exception=%s message=%s tick_ts=%s",
+        entry_name,
+        type(exc).__name__,
+        message,
+        ctx.get("now_ts", now),
+        exc_info=True,
+    )
+
+
 def _collect_native_proposals(ctx: dict) -> list[TriggerProposal]:
     from core.scheduler.proposer_registry import iter_proposers
 
@@ -236,18 +267,18 @@ def _collect_native_proposals(ctx: dict) -> list[TriggerProposal]:
     for entry in iter_proposers():
         try:
             item = entry.fn(ctx)
-        except Exception as exc:
-            logger.warning(
-                "[gating] proposer failed: name=%s exception=%s tick_ts=%s",
-                entry.name,
-                type(exc).__name__,
-                ctx.get("now_ts", time.time()),
-            )
-            continue
-        if item is not None:
+            if item is None:
+                continue
+            if not isinstance(item, TriggerProposal):
+                raise TypeError(
+                    f"proposer returned {type(item).__name__}, expected TriggerProposal"
+                )
             if item.char_id is None and ctx.get("char_id"):
                 item = replace(item, char_id=str(ctx["char_id"]))
-            proposals.append(item)
+        except Exception as exc:
+            _log_proposer_failure(entry.name, ctx, exc)
+            continue
+        proposals.append(item)
     return proposals
 
 
