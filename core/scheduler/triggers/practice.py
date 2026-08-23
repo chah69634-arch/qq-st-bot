@@ -54,7 +54,7 @@ def propose_practice_help(ctx: dict|None=None):
     async def execute(*,dry_run:bool):
         from core.scheduler.execution import execute_prompt
         return await execute_prompt(trigger_name="practice_help",prompt_factory=lambda:f"（你练习{stalled['name']}时卡住了，想请用户看看。作品片段：{snippet}）",dry_run=dry_run,would_mark=["practice_help"],reads_cache_ok=True,recall_policy="none")
-    return TriggerProposal(trigger_name="practice_help",urgency=urgency_in_tier(UrgencyTier.AMBIENT,0.5),topic_source="mood_match",requires_state=[TriggerState.QUIET],bypass_state_machine=False,execute=execute)
+    return TriggerProposal(trigger_name="practice_help",urgency=urgency_in_tier(UrgencyTier.FILLER,0.5),topic_source="mood_match",requires_state=[TriggerState.QUIET],bypass_state_machine=False,execute=execute)
 
 def _register_proposers():
     from core.scheduler.proposer_registry import register_proposer

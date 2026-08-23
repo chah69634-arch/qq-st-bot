@@ -234,7 +234,16 @@ def _collect_native_proposals(ctx: dict) -> list[TriggerProposal]:
 
     proposals: list[TriggerProposal] = []
     for entry in iter_proposers():
-        item = entry.fn(ctx)
+        try:
+            item = entry.fn(ctx)
+        except Exception as exc:
+            logger.warning(
+                "[gating] proposer failed: name=%s exception=%s tick_ts=%s",
+                entry.name,
+                type(exc).__name__,
+                ctx.get("now_ts", time.time()),
+            )
+            continue
         if item is not None:
             if item.char_id is None and ctx.get("char_id"):
                 item = replace(item, char_id=str(ctx["char_id"]))

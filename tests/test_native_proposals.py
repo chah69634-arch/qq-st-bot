@@ -107,6 +107,35 @@ def test_gating_shadow_collects_native_from_registry(monkeypatch):
     proposer_registry._reset_for_tests()
 
 
+def test_gating_shadow_isolates_proposer_failure_and_logs(monkeypatch, caplog):
+    from core.scheduler import gating
+    from core.scheduler import proposer_registry
+    from core.scheduler.gating import TriggerProposal
+    from core.scheduler.state_machine import TriggerState
+
+    native = TriggerProposal(
+        trigger_name="period_reminder",
+        urgency=0.8,
+        topic_source="mood_match",
+        requires_state=[TriggerState.QUIET],
+        bypass_state_machine=True,
+    )
+
+    proposer_registry._reset_for_tests()
+    monkeypatch.setattr(proposer_registry, "_BUILTINS_LOADED", True)
+    proposer_registry.register_proposer("broken", lambda ctx: (_ for _ in ()).throw(AttributeError("AMBIENT")))
+    proposer_registry.register_proposer("healthy", lambda ctx: native)
+
+    with caplog.at_level("WARNING", logger="core.scheduler.gating"):
+        proposals = gating._collect_native_proposals({"uid": "u1", "now_ts": 123.0})
+
+    assert [p.trigger_name for p in proposals] == ["period_reminder"]
+    assert "name=broken" in caplog.text
+    assert "exception=AttributeError" in caplog.text
+    assert "tick_ts=123.0" in caplog.text
+    proposer_registry._reset_for_tests()
+
+
 def test_window_event_proposals_use_window_tier(monkeypatch):
     from core.scheduler.triggers import festival, timenode
 
@@ -122,6 +151,24 @@ def test_window_event_proposals_use_window_tier(monkeypatch):
 
     assert 0.70 <= t.urgency <= 0.89
     assert 0.70 <= f.urgency <= 0.89
+
+
+def test_practice_help_stall_uses_filler_tier(monkeypatch):
+    from core.scheduler.triggers import practice
+
+    now = 1_000_000.0
+    monkeypatch.setattr(practice, "_cfg", lambda: {"enabled": True, "help_proposer": True})
+    monkeypatch.setattr(practice.time, "time", lambda: now)
+    monkeypatch.setattr(
+        "core.growth.interest_state.active_interests",
+        lambda char_id: [{"id": "i1", "name": "topic", "stalled_since": now - 8 * 86400}],
+    )
+    monkeypatch.setattr("core.growth.practice_session.recent_works", lambda *args, **kwargs: [])
+
+    proposal = practice.propose_practice_help({"uid": "u1", "char_id": "c1"})
+
+    assert proposal.trigger_name == "practice_help"
+    assert 0.10 <= proposal.urgency <= 0.29
 
 
 def test_weather_heavy_propose_uses_window_event_tier(monkeypatch):
