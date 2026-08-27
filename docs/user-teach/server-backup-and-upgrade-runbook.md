@@ -247,3 +247,42 @@ git pull --ff-only origin main
 - 服务器可只保留最近 2 份已回传且哈希一致的归档，但删除前再次确认本地文件可读。
 - 至少保留两种物理介质；任何离开可信设备的副本都应使用操作系统或成熟归档工具加密。
 - 记录每份备份的日期、运行版本、服务器哈希、本地哈希和恢复演练结果。
+
+## 服务器状态同步到本地
+
+服务器备份回传并完成哈希校验后，如需将最新状态同步到已有的 Windows 本地项目，不要替换整个项目目录。源码、`.venv/` 和 `.git/` 保留本地版本，只同步备份中的受保护状态。
+
+将回传的 `.tar.gz` 解包到独立的恢复演练目录。
+在本地项目中验证快照：
+
+```powershell
+
+python main.py backup-state verify "<解包后的快照目录>"
+
+```
+
+先恢复到新的空目录并完成恢复验证：
+
+```powershell
+
+python main.py backup-state restore "<解包后的快照目录>" --target "<恢复演练目录>"
+
+```
+
+确认 `.presencekit-recovery/recovery-report.json` 中 `overall_status` 为 `ok` 后，再同步到本地项目。
+
+同步 `data/` 和 `userdata/` 时复制目录内容，而不是将目录本身再次嵌套：
+
+```powershell
+
+robocopy "<恢复演练目录>\data" "<本地项目>\data" /E
+
+robocopy "<恢复演练目录>\userdata" "<本地项目>\userdata" /E
+
+```
+
+不要使用会产生 `data/data/` 或 `userdata/userdata/` 层级的目录复制方式。
+
+`config.yaml`、`config.local.yaml`、`secrets.local.yaml` 按本地部署需求决定是否同步；其中 `config.local.yaml` 和 `secrets.local.yaml` 可能包含本地环境专属配置，不应无条件覆盖。
+
+同步完成后启动本地 PresenceKit 并检查运行状态。确认正常后，可删除本次解包和恢复演练产生的临时目录；已校验的 `.tar.gz` 及其 `.sha256` 应作为正式备份保留。
