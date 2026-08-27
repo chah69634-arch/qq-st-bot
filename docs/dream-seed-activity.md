@@ -18,6 +18,8 @@ POST /activity/dream_seed/start
 - 不写 `short_term`、`event_log`、`hidden_state` 或 Dream archive。
 - close 调用独立 LLM 提炼，写入 reality-scoped `dream_seed.json`。
 - 种子 TTL 为 12 小时，入梦时一次性消费。
+- **Session TTL**：idle 12h / hard max 24h；`find_active_session` 会 lazy-expire。
+- **放弃关闭**：transcript 不足、蒸馏为空或 seed 保存失败时仍关闭 session（无 seed），禁止留下永久 `active` 僵尸（Brief 224）。聊天 turn 会刷新 `updated_at`。
 
 ## 路径
 

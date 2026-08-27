@@ -18,15 +18,69 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from datetime import datetime
 from pathlib import Path
 
 from core.safe_write import safe_write_json
 from core.sandbox import get_paths
 
+from core.activity.registry import get_activity_meta
 from core.activity.session import ActivitySession, new_session_id, now_iso
 from core.activity.types import ALLOWED_ACTIVITY_TYPES
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_session_ts(value: str) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def _session_is_stale(session: ActivitySession, *, now: float | None = None) -> bool:
+    meta = get_activity_meta(session.activity_type)
+    if meta is None:
+        return False
+    current = time.time() if now is None else float(now)
+    idle_ttl = int(meta.idle_ttl_seconds or 0)
+    max_age = int(meta.max_age_seconds or 0)
+    updated_at = _parse_session_ts(session.updated_at)
+    created_at = _parse_session_ts(session.created_at)
+    if idle_ttl > 0 and updated_at is not None and current - updated_at >= idle_ttl:
+        return True
+    if max_age > 0 and created_at is not None and current - created_at >= max_age:
+        return True
+    return False
+
+
+def _expire_session(session: ActivitySession, *, reason: str) -> None:
+    """Persist a stale active session as closed without activity-specific distill."""
+    if session.status == "closed":
+        return
+    session.status = "closed"
+    state = dict(session.state or {})
+    state["closed_at"] = time.time()
+    state["close_reason"] = reason
+    session.state = state
+    session.updated_at = now_iso()
+    try:
+        save_session(session)
+        logger.info(
+            "[activity_store] lazy-expired session %s type=%s reason=%s",
+            session.session_id,
+            session.activity_type,
+            reason,
+        )
+    except ActivityPersistenceError:
+        logger.exception(
+            "[activity_store] failed to persist lazy-expire for %s",
+            session.session_id,
+        )
 
 
 class ActivityPersistenceError(RuntimeError):
@@ -79,14 +133,19 @@ def load_session(
 # ── 查询 ──────────────────────────────────────────────────────────────────────
 
 def find_active_session(
-    char_id: str, uid: str, activity_type: str
+    char_id: str, uid: str, activity_type: str, *, now: float | None = None
 ) -> ActivitySession | None:
-    """返回该 (char_id, uid, activity_type) 下最新的 active session，无则返回 None。"""
+    """返回该 (char_id, uid, activity_type) 下最新的 active session，无则返回 None。
+
+    Stale actives (per ActivityMeta idle/max TTL) are closed in place and ignored so
+    autonomy, UI, and create_session share one truth source.
+    """
     _validate_activity_type(activity_type)
     root = get_paths().activity_sessions_root(char_id=char_id, uid=uid, activity_type=activity_type)
     if not root.exists():
         return None
     candidates: list[ActivitySession] = []
+    current = time.time() if now is None else float(now)
     for session_dir in root.iterdir():
         if not session_dir.is_dir():
             continue
@@ -95,8 +154,12 @@ def find_active_session(
             continue
         try:
             s = ActivitySession.from_dict(json.loads(p.read_text(encoding="utf-8")))
-            if s.status == "active":
-                candidates.append(s)
+            if s.status != "active":
+                continue
+            if _session_is_stale(s, now=current):
+                _expire_session(s, reason="stale_ttl")
+                continue
+            candidates.append(s)
         except Exception:
             continue
     if not candidates:

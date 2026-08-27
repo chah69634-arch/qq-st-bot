@@ -74,6 +74,14 @@ def append_turn(uid: str, session_id: str, role: str, content: str, *, char_id: 
             "ts": now_iso(),
         },
     )
+    # Keep idle TTL honest: chat activity must refresh session.updated_at.
+    store.update_state(
+        require_character_id(char_id),
+        safe_user_id(uid),
+        ACTIVITY_TYPE,
+        session_id,
+        dict(session.state or {}),
+    )
     return True
 
 
@@ -119,8 +127,46 @@ async def generate_reply(uid: str, session_id: str, user_msg: str, *, char_id: s
     ) or "").strip()
 
 
+def _abandon_close(
+    uid: str,
+    session_id: str,
+    *,
+    char_id: str,
+    session: ActivitySession,
+    reason: str,
+) -> None:
+    """Close without producing a seed. Never leave an immortal active session."""
+    new_state = dict(session.state or {})
+    new_state["closed_at"] = time.time()
+    new_state["close_reason"] = reason
+    store.update_state(
+        require_character_id(char_id),
+        safe_user_id(uid),
+        ACTIVITY_TYPE,
+        session_id,
+        new_state,
+    )
+    store.close_session(
+        require_character_id(char_id),
+        safe_user_id(uid),
+        ACTIVITY_TYPE,
+        session_id,
+    )
+    logger.info(
+        "[dream_seed] abandon-close uid=%s char=%s session=%s reason=%s",
+        uid,
+        char_id,
+        session_id,
+        reason,
+    )
+
+
 async def close_session(uid: str, session_id: str, *, char_id: str) -> Optional[str]:
-    """Distill and save a seed, then close the activity session."""
+    """Distill and save a seed, then close the activity session.
+
+    Abandon / distill / save failures still close the session so autonomy cannot
+    be permanently blocked by a leftover active dream_seed.
+    """
     from core import llm_client
 
     session = get_session(uid, session_id, char_id=char_id)
@@ -138,6 +184,9 @@ async def close_session(uid: str, session_id: str, *, char_id: str) -> Optional[
     )
     chat_turns = [t for t in turns if t.get("type") in {"user_chat", "assistant_chat"}]
     if len(chat_turns) < 2:
+        _abandon_close(
+            uid, session_id, char_id=char_id, session=session, reason="insufficient_transcript"
+        )
         return None
 
     dialogue = "\n".join(
@@ -156,9 +205,15 @@ async def close_session(uid: str, session_id: str, *, char_id: str) -> Optional[
         max_tokens_override=120,
     ) or "").strip()
     if not seed_text:
+        _abandon_close(
+            uid, session_id, char_id=char_id, session=session, reason="distill_empty"
+        )
         return None
 
     if not save_seed(uid, seed_text, session_id=session_id, char_id=char_id):
+        _abandon_close(
+            uid, session_id, char_id=char_id, session=session, reason="seed_save_failed"
+        )
         return None
 
     new_state = dict(session.state)

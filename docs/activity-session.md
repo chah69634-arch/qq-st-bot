@@ -66,6 +66,18 @@ data/runtime/activity/{char_id}/{uid}/{activity_type}/{session_id}/session.json
 
 同一 `(uid, char_id, activity_type)` 最多允许一个 active session。调用 `create_session()` 时若已有 active session，先将其 `close` 再创建新 session（不静默覆盖，旧 session 仍可按 session_id 查询，status = "closed"）。
 
+## Stale TTL（Brief 224）
+
+`ActivityMeta` 声明 per-type `idle_ttl_seconds`（相对 `updated_at`）与 `max_age_seconds`（相对 `created_at`）。  
+`find_active_session()` lazy-expire 过期的 active session（写入 `closed` + `close_reason=stale_ttl`），不蒸馏业务产物。  
+这样 autonomy admission、UI state、create 共用同一真相源，避免僵尸 active 永久挡住主动开口。
+
+| type | idle TTL | hard max |
+|---|---|---|
+| `dream_seed` | 12h | 24h |
+| `gomoku` / `chess` | 72h | 7d |
+| `reading` | 7d | 14d |
+
 ## LLM 与 Activity 的关系
 
 LLM **可以讨论**当前进行的 activity（例如棋局、阅读进度），但：

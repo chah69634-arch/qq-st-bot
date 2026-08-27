@@ -100,7 +100,10 @@ def test_close_requires_at_least_two_transcript_entries(sandbox):
     dream_seed.append_turn(UID, session.session_id, "user", "海边", char_id=CHAR)
 
     assert asyncio.run(dream_seed.close_session(UID, session.session_id, char_id=CHAR)) is None
-    assert dream_seed.get_session(UID, session.session_id, char_id=CHAR).status == "active"
+    closed = dream_seed.get_session(UID, session.session_id, char_id=CHAR)
+    assert closed is not None
+    assert closed.status == "closed"
+    assert closed.state.get("close_reason") == "insufficient_transcript"
     assert not _seed_path().exists()
 
 

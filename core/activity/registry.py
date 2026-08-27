@@ -57,6 +57,10 @@ class ActivityMeta:
     has_companion_chat: bool = False
     # 相对于项目根目录的 docs 文件路径
     docs_path: str = ""
+    # Idle TTL from updated_at; hard max from created_at. 0 disables that bound.
+    # find_active_session lazy-expires stale actives so autonomy/UI share one truth.
+    idle_ttl_seconds: int = 0
+    max_age_seconds: int = 0
 
 
 ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
@@ -90,6 +94,8 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         ),
         has_companion_chat=True,
         docs_path="docs/reading-activity.md",
+        idle_ttl_seconds=7 * 24 * 3600,
+        max_age_seconds=14 * 24 * 3600,
     ),
     ActivityMeta(
         id="gomoku",
@@ -116,6 +122,8 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         ),
         has_companion_chat=True,
         docs_path="docs/gomoku-activity.md",
+        idle_ttl_seconds=72 * 3600,
+        max_age_seconds=7 * 24 * 3600,
     ),
     ActivityMeta(
         id="chess",
@@ -143,6 +151,8 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         ),
         has_companion_chat=True,
         docs_path="docs/chess-activity.md",
+        idle_ttl_seconds=72 * 3600,
+        max_age_seconds=7 * 24 * 3600,
     ),
     ActivityMeta(
         id="dream_seed",
@@ -166,6 +176,8 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         ),
         has_companion_chat=True,
         docs_path="docs/dream-seed-activity.md",
+        idle_ttl_seconds=12 * 3600,
+        max_age_seconds=24 * 3600,
     ),
 )
 
