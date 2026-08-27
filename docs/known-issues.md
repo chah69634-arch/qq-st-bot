@@ -10,7 +10,7 @@
 **状态**：`observe`（2026-08-27 已定位并修复一类假沉默；模型决策偏置仍待部署后观察）
 
 Brief 195 已提供按 source/disposition 的 24h/7d 漏斗和隔离 `talk_sent` 回归。  
-**2026-08-27 现场数据（Brief 224）**：`yexuan/1043484516` 当日 `evaluations=266`、`talks=0`，
+**2026-08-27 现场数据（Brief 224）**：`yexuan/<owner_uid>` 当日 `evaluations=266`、`talks=0`，
 留存 runs 全是 `blocked_user_active`。根因不是“没候选/模型太保守”，而是：
 
 1. 卡住的 `dream_seed` ActivitySession（自 2026-08-06 `active`）让 admission 永久返回 `blocked_user_active`

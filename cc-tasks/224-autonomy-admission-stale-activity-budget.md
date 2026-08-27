@@ -3,9 +3,9 @@
 > 状态：实施中（2026-08-27）  
 > 范围：运维急救（可回传数据）+ 代码根治；不恢复 `_pipeline_send`，不抬随机开口概率。
 
-## 一、现场证据（yexuan / 1043484516）
+## 一、现场证据（yexuan / `<owner_uid>`）
 
-拉回 `data/runtime/autonomy/yexuan/1043484516/state.json`：
+拉回 `data/runtime/autonomy/yexuan/<owner_uid>/state.json`：
 
 - `config.enabled=true`，`talk_enabled=true`
 - `daily.evaluations=266`，`daily.talks=0`（预算默认 12）
@@ -14,7 +14,7 @@
 
 卡死会话：
 
-`data/runtime/activity/yexuan/1043484516/dream_seed/ab0a34138aa64a02b7ddf1a3883c4fd5/session.json`  
+`data/runtime/activity/yexuan/<owner_uid>/dream_seed/<session_id>/session.json`  
 `status=active` 自 2026-08-06，从未关闭。
 
 根因链：
@@ -47,6 +47,6 @@
 
 ## 三、验收
 
-- `find_active_session(yexuan, 1043484516, dream_seed) is None`
+- `find_active_session(yexuan, <owner_uid>, dream_seed) is None`
 - 相关 pytest 通过（含翻转短 close 预期）
 - 部署后观测：`blocked_user_active` 下降；出现真实 `evaluated_silent` 或 `talk_sent`；若仍长期 `talks=0` 再单开模型决策校准，不再猜供给/admission
