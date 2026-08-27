@@ -499,20 +499,30 @@ def _dream_retry_child(
 
 
 def _update_finish_counters(state: dict, job: Job, run: Run) -> None:
-    evaluated_at = run.finished_at or time.time()
+    from core.autonomy.models import is_admission_only_disposition
+
+    finished_at = run.finished_at or time.time()
     sources = job.signal_sources or [job.source]
+    admission_only = is_admission_only_disposition(run.disposition)
     for source in sources:
         source_state = state.setdefault("sources", {}).setdefault(source, {})
-        source_state["last_evaluated_at"] = evaluated_at
-        if source == "interval" and state["config"].get("interval", {}).get("enabled"):
-            source_state["next_due_at"] = evaluated_at + int(state["config"]["interval"].get("seconds") or 0)
-        elif source == "overflow":
-            source_state["next_due_at"] = evaluated_at + int(state["config"].get("min_interval_seconds") or 0)
+        # Always record attempts for observability, but only real evaluations
+        # advance last_evaluated_at / min_interval / interval due clocks.
+        source_state["last_attempt_at"] = finished_at
+        if not admission_only:
+            source_state["last_evaluated_at"] = finished_at
+            if source == "interval" and state["config"].get("interval", {}).get("enabled"):
+                source_state["next_due_at"] = finished_at + int(state["config"]["interval"].get("seconds") or 0)
+            elif source == "overflow":
+                source_state["next_due_at"] = finished_at + int(state["config"].get("min_interval_seconds") or 0)
     roll_daily(state)
-    state["daily"]["evaluations"] += 1
-    state["daily"]["tools"] += len(run.tool_names)
-    state["daily"]["talks"] += int(run.talk_sent)
+    if not admission_only:
+        state["daily"]["evaluations"] += 1
+        state["daily"]["tools"] += len(run.tool_names)
+        state["daily"]["talks"] += int(run.talk_sent)
     circuit = state.setdefault("circuit", {"consecutive_failures": 0, "open_until": 0.0})
+    if admission_only:
+        return
     failure = run.disposition in {"tool_failed", "tool_outcome_unknown", "llm_failed", "timeout", "lease_lost"}
     if failure:
         circuit["consecutive_failures"] = int(circuit.get("consecutive_failures") or 0) + 1

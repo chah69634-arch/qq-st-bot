@@ -94,7 +94,14 @@ opportunity，不恢复旧的 `_pipeline_send` 直发路径。
 | `talk_sent` | `talk_owner` 已通过 `turn_sink` 交付。 |
 | `canceled_user_activity` | 真实用户 turn 优先，取消了本次运行。 |
 | `expired` | Signal/opportunity 在评估前达到 TTL。 |
-| `blocked_or_failed` | Gate、budget、lease、model 或 tool failure 停止了评估。 |
+| `admission_blocked` | 未进入模型：用户活跃 / Dream / budget / duplicate / circuit 等 admission 门。 |
+| `blocked_or_failed` | 进入评估后的 gate、lease、model 或 tool failure。 |
+
+### 评估预算与 admission 记账（Brief 224）
+
+- `daily.evaluations` **只统计进入模型评估的 run**。纯 admission 拦截（如 `blocked_user_active`、`duplicate`、`suppressed_daily_budget`）只写 `sources.*.last_attempt_at`，**不**增加 evaluations，也**不**推进 `last_evaluated_at` / min_interval 冷却。
+- 若当日 `talks == 0`，evaluation budget **不得**把整天静音；`talks > 0` 且 evaluations 用尽时才返回 `suppressed_daily_budget`。
+- Activity 僵尸 session 由 `find_active_session` 按类型 TTL lazy-expire；`dream_seed` 放弃/蒸馏失败也会关闭 session，避免永久挡住 autonomy。
 
 Prompt snapshot 仍位于现有 admin-only run prompt endpoint 后面，不包含在这个 state-read surface 中。
 

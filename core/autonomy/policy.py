@@ -92,7 +92,13 @@ def admission(uid: str, char_id: str, state: dict) -> str | None:
     from core.autonomy.store import roll_daily
     roll_daily(state)
     daily = state.get("daily", {})
-    if int(daily.get("evaluations") or 0) >= int(cfg.get("daily_evaluation_budget") or 0):
+    budget = int(cfg.get("daily_evaluation_budget") or 0)
+    evaluations = int(daily.get("evaluations") or 0)
+    talks = int(daily.get("talks") or 0)
+    # Budget must not permanently mute a day that never got a real talk_sent.
+    # Admission-only retries no longer burn evaluations, but this兜底 still
+    # protects older state and any remaining counter leak.
+    if budget > 0 and evaluations >= budget and talks > 0:
         return Disposition.SUPPRESSED_DAILY_BUDGET.value
     latest = max(
         (float((value or {}).get("last_evaluated_at") or 0) for value in state.get("sources", {}).values()),

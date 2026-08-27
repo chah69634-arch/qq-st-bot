@@ -218,6 +218,23 @@ class Disposition(_StrEnum):
     CIRCUIT_OPEN = "circuit_open"
 
 
+# Dispositions that never entered the model. They must not burn evaluation
+# budget or advance source last_evaluated_at / min_interval cooldown.
+ADMISSION_ONLY_DISPOSITIONS = frozenset({
+    Disposition.SUPPRESSED_PROACTIVE_OFF.value,
+    Disposition.CIRCUIT_OPEN.value,
+    Disposition.BLOCKED_DREAM.value,
+    Disposition.BLOCKED_DREAM_UNCERTAIN.value,
+    Disposition.BLOCKED_USER_ACTIVE.value,
+    Disposition.SUPPRESSED_DAILY_BUDGET.value,
+    Disposition.DUPLICATE.value,
+})
+
+
+def is_admission_only_disposition(disposition: str) -> bool:
+    return str(disposition or "") in ADMISSION_ONLY_DISPOSITIONS
+
+
 def evaluation_status_for(disposition: str) -> str:
     value = str(disposition or "")
     if value == Disposition.COMPLETED_NO_OP.value:
@@ -228,6 +245,8 @@ def evaluation_status_for(disposition: str) -> str:
         return "talk_sent"
     if value == Disposition.CANCELED_BY_USER_ACTIVITY.value:
         return "canceled_user_activity"
+    if is_admission_only_disposition(value):
+        return "admission_blocked"
     return "blocked_or_failed" if value else "unevaluated"
 
 

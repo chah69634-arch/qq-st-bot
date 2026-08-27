@@ -68,9 +68,12 @@ def test_cooldown_and_daily_budget_reach_admission(sandbox, monkeypatch):
     state["sources"] = {"interval": {"last_evaluated_at": time.time()}}
     assert policy.admission("owner", "char", state) == "duplicate"
     state["sources"] = {}
-    state["daily"] = {"day": "", "evaluations": 2, "tools": 0, "talks": 0}
+    # talks>0 is required before evaluation budget can mute the day.
+    state["daily"] = {"day": "", "evaluations": 2, "tools": 0, "talks": 1}
     monkeypatch.setattr("core.autonomy.store.roll_daily", lambda _state: None)
     assert policy.admission("owner", "char", state) == "suppressed_daily_budget"
+    state["daily"] = {"day": "", "evaluations": 2, "tools": 0, "talks": 0}
+    assert policy.admission("owner", "char", state) is None
 
 
 def test_self_capability_override_reaches_runner_tick(sandbox):

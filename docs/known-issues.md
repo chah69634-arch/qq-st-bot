@@ -7,35 +7,21 @@
 
 ### AUTONOMY-195：生产校准观察
 
-**状态**：`observe`
+**状态**：`observe`（2026-08-27 已定位并修复一类假沉默；模型决策偏置仍待部署后观察）
 
-Brief 195 已提供按 source/disposition 的 24h/7d 漏斗和隔离 `talk_sent` 回归；实际部署仍需先积累
-festival、period 与普通 routine 的转化样本，再决定是否调整 source-specific signal 语义或 prompt
-决策准则。不得以提高随机概率或绕过 DND、Dream、用户活跃、预算、冷却或连续未回复上限替代校准。
+Brief 195 已提供按 source/disposition 的 24h/7d 漏斗和隔离 `talk_sent` 回归。  
+**2026-08-27 现场数据（Brief 224）**：`yexuan/1043484516` 当日 `evaluations=266`、`talks=0`，
+留存 runs 全是 `blocked_user_active`。根因不是“没候选/模型太保守”，而是：
 
-**当前判断（2026-08-20，尚无生产数据验证）**：现场表现为 autonomy 有运行记录但从未主动说话，
-目前不能归因为一个单独的“开口概率过低”。主动发言没有统一随机概率，而是以下串联漏斗；任一阶段
-为零都会得到相同的用户体感：
+1. 卡住的 `dream_seed` ActivitySession（自 2026-08-06 `active`）让 admission 永久返回 `blocked_user_active`
+2. admission-only 失败仍计入 `daily.evaluations` 并推进 `last_evaluated_at`，打爆预算并触发跨 source 冷却
 
-```text
-producer matched -> signal queued -> opportunity created -> admission allowed
--> talk_owner available -> model selected talk_owner -> talk gate allowed -> sink delivered
-```
+已做：运维关闭僵尸 session + 重置当日计数；代码侧 per-type activity TTL、dream_seed 放弃也关闭、
+admission-only 不计评估预算、`talks==0` 预算兜底。详见 `cc-tasks/224-autonomy-admission-stale-activity-budget.md`。
 
-优先怀疑三类因素叠加：
-
-1. 历史上部分 migrated tick trigger 的 proposal 只进入 shadow、未进入 signal，造成候选供给不足；
-   Brief 195 的实现需通过生产漏斗确认该段已恢复，而不能只凭隔离测试宣布开口率正常。
-2. admission 只接受严格 `QUIET`，并受 conversation lock/queue、activity、Dream、circuit、每日评估预算
-   和最短评估间隔限制。静默评估同样会消耗 evaluation budget 和 interval，低价值 signal 可能先占用
-   后续高价值 signal 的评估机会。
-3. 通过 admission 后仍由模型显式选择 `talk_owner`；普通文本不会交付。当前 prompt 强调这是内部评估、
-   允许静默、无可靠历史 anchor 时保持克制，因此可能形成保守的模型决策偏置。这不是代码掷骰概率。
-
-生产观察必须先区分：无候选、未入队/过期、admission 阻断、`talk_owner` 不可用、模型
-`evaluated_silent`、talk gate 拒绝和 sink 交付失败。只有当有效的高价值 signal 已稳定到达模型、
-`talk_owner` 可用且仍长期 `evaluated_silent` 时，才评估 source-specific signal 语义或 prompt 决策准则；
-不得新增 festival/period 直发出口，也不得恢复 legacy `_pipeline_send()`。
+部署后继续观察漏斗。只有高价值 signal 已稳定到达模型、`talk_owner` 可用且仍长期
+`evaluated_silent` 时，才评估 prompt 决策准则；不得新增 festival/period 直发出口，也不得恢复
+legacy `_pipeline_send()`。
 
 ### SCHED-1：`practice_help` 的 autonomy 边界审计
 

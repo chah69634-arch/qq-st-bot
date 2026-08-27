@@ -235,6 +235,9 @@ def build_effective_state(uid: str, char_id: str) -> dict:
     cooldown = cooldown_status(uid, char_id, state, now=now)
     budget = daily_evaluation_budget(state)
     used = daily_evaluation_used(state)
+    talks = max(0, int((state.get("daily") or {}).get("talks") or 0))
+    # Mirror policy.admission: a zero-talk day is not muted by evaluation budget.
+    budget_blocks = bool(budget > 0 and used >= budget and talks > 0)
     pending = [row for row in state.get("jobs", []) if row.get("status") in {"pending", "processing"}]
     processing = next((row for row in pending if row.get("status") == "processing"), None)
     circuit_until = float((state.get("circuit") or {}).get("open_until") or 0)
@@ -264,7 +267,7 @@ def build_effective_state(uid: str, char_id: str) -> dict:
         proactive_state, reason = "queued", "autonomy_job_pending"
     elif circuit_until > now:
         proactive_state, reason = "blocked", "circuit_open"
-    elif used >= budget:
+    elif budget_blocks:
         proactive_state, reason = "blocked", "daily_evaluation_budget_exhausted"
     elif cooldown["blocked"]:
         proactive_state, reason = "cooled_down", "minimum_interval_not_elapsed"
@@ -288,7 +291,7 @@ def build_effective_state(uid: str, char_id: str) -> dict:
         "proactive": {
             "state": proactive_state,
             "reason": reason,
-            "can_evaluate": bool(scheduler_effective and scheduler_runtime["available"] and autonomy_effective and not cooldown["blocked"] and used < budget and circuit_until <= now),
+            "can_evaluate": bool(scheduler_effective and scheduler_runtime["available"] and autonomy_effective and not cooldown["blocked"] and not budget_blocks and circuit_until <= now),
             "can_talk": talk_effective,
         },
         "scheduler": {
@@ -337,8 +340,10 @@ def build_effective_state(uid: str, char_id: str) -> dict:
                 consumer=RUNTIME_CONSUMERS["autonomy.daily_evaluation_budget"],
             ),
             "used": used,
+            "talks": talks,
             "remaining": max(0, budget - used),
-            "blocked": used >= budget,
+            "blocked": budget_blocks,
+            "zero_talk_bypass": bool(budget > 0 and used >= budget and talks == 0),
         },
         "daily_talk_budget": {
             "configured_value": ledger["daily_budget"],
