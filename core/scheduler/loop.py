@@ -1088,7 +1088,26 @@ async def _loop():
                         from core.autonomy.runner import tick as _autonomy_tick
                         _autonomy_char = _active_char_id_or_none()
                         if _autonomy_char:
-                            await _autonomy_tick(oid, _autonomy_char)
+                            try:
+                                from core.autonomy import store as _autonomy_store
+                                _autonomy_cfg = _autonomy_store.load(
+                                    oid, _autonomy_char
+                                ).get("config", {})
+                                _autonomy_timeout = max(
+                                    1.0,
+                                    float(_autonomy_cfg.get("total_timeout_seconds") or 120),
+                                ) + 10.0
+                            except Exception:
+                                _autonomy_timeout = 130.0
+                            # Keep a stalled autonomy evaluation from wedging
+                            # the scheduler maintenance loop. The runner has
+                            # its own job timeout; this outer bound also covers
+                            # claim/finalization and is deliberately slightly
+                            # larger than the configured default.
+                            await asyncio.wait_for(
+                                _autonomy_tick(oid, _autonomy_char),
+                                timeout=_autonomy_timeout,
+                            )
                     except Exception as exc:
                         logger.error("[scheduler] autonomy tick failed: %s", exc, exc_info=True)
 

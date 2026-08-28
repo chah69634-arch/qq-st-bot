@@ -459,8 +459,9 @@ async def run_job(job: Job) -> Run:
 
     keeper = asyncio.create_task(_keep_lease())
     try:
-        async with lock:
-            result = await _run_locked(job, state, run)
+        # Do not hold the owner conversation gate across the autonomy LLM/tool
+        # evaluation.  Visible delivery re-enters the short turn-sink gate.
+        result = await _run_locked(job, state, run)
         _record_dream_exit_outcome(job, result)
         if lease_lost.is_set():
             result.disposition = Disposition.LEASE_LOST.value

@@ -341,4 +341,42 @@ def test_successful_talk_uses_turn_sink_then_records_shared_ledger(sandbox, monk
     sent, reason = asyncio.run(talk_gate.send("owner", "char", "可以聊一句。", source="manual", run_id="run"))
     assert sent and reason == "sent"
     assert [item[0] for item in order] == ["sink", "ledger"]
+    assert order[0][1]["bypass_gate"] is False
     assert order[1][1]["uid"] == "owner"
+
+
+@pytest.mark.asyncio
+async def test_run_job_does_not_hold_conversation_lock_during_evaluation(
+    sandbox, monkeypatch
+):
+    from core.autonomy import runner
+    from core.autonomy.models import Job, Run
+
+    class ForbiddenLock:
+        def locked(self):
+            return False
+
+        async def __aenter__(self):
+            raise AssertionError("autonomy evaluation entered conversation_lock")
+
+        async def __aexit__(self, *_args):
+            return False
+
+    job = Job(uid="owner", char_id="char", source="manual")
+    state = {"config": {}}
+    monkeypatch.setattr(runner.store, "load", lambda *_args: state)
+    monkeypatch.setattr(runner.store, "renew", lambda *_args: True)
+    monkeypatch.setattr(runner.policy, "admission", lambda *_args: None)
+    monkeypatch.setattr(
+        "core.conversation_gate.conversation_lock", lambda _uid: ForbiddenLock()
+    )
+
+    async def evaluate(_job, _state, run):
+        await asyncio.sleep(0)
+        run.disposition = "completed_no_op"
+        return runner._finish(run)
+
+    monkeypatch.setattr(runner, "_run_locked", evaluate)
+    result = await asyncio.wait_for(runner.run_job(job), timeout=1)
+    assert isinstance(result, Run)
+    assert result.disposition == "completed_no_op"

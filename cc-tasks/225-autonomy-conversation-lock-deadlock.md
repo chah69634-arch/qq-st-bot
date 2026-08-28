@@ -79,14 +79,21 @@ record_assistant_turn(..., bypass_gate=False)
 4. 224 的 admission/预算/TTL 语义保持不变。
 5. 回归测试必须覆盖：评估进行中 owner chat 仍能进入；`talk_owner` 在持锁上下文中能 send 且不死锁。
 
+### 实现语义（评审修订）
+
+- Autonomy 的 LLM / tool 评估阶段不得持有 `conversation_lock`。保留进入评估前的 `lock.locked()` admission 检查，但它不提供跨 await 的互斥保证。
+- 可见的 autonomy talk 发送仍必须经过 turn sink 的短临界区锁。禁止用 `bypass_gate=True` 绕过整个发送路径；该参数仅适用于调用方已明确持有同一把锁的既有 adapter 场景。
+- `talk_gate.send()` 从 autonomy 评估调用时应使用正常 gate 语义，在发送/落盘阶段重新获取锁；评估期间 owner chat 可以并行，发送阶段按 UID 串行化。
+- 移除外层锁后，发送前必须重新执行 hard-policy / user-activity 检查，不得把一次性 `locked()` 结果当作锁的持有证明。
+- scheduler 对 autonomy tick 增加外层 `wait_for`，超时值略大于 `total_timeout_seconds`；timeout/cancel 后 run/job 必须 terminalize 或可由 lease 安全回收，lease keeper 必须停止。
+
 ## 四、推荐改法（按优先级）
 
 ### 1. 立刻止血（P0）
 
-`core/autonomy/talk_gate.py::send` → `record_assistant_turn(..., bypass_gate=True)`。
+不要单独把 `talk_gate.send()` 改成 `bypass_gate=True`。这只能解除自死锁，仍会让 autonomy 的整段 LLM 评估占用 owner 锁。
 
-理由：外层 `run_job` 已经持锁（若仍持锁）；`turn_sink` 文档写明 `bypass_gate=True` 给「已在 conversation_lock 内」的调用方。QQ adapter 已有先例。  
-若第 2 步改为「评估不持锁」，send 时再短持锁也可以，但 **当前代码在修完第 2 步之前必须 bypass**，否则死锁仍在。
+正确语义是：评估阶段不持锁；`talk_gate.send()` 走正常 turn-sink gate，在可见发送和关键落盘阶段短持 `conversation_lock`。`bypass_gate=True` 仅适用于调用方已明确持有同一把锁的既有 adapter 场景，不作为 autonomy 默认路径。
 
 ### 2. 评估与聊天解耦（P0，产品正确）
 
@@ -142,6 +149,7 @@ record_assistant_turn(..., bypass_gate=False)
 2. 单测：`run_job` 评估中（mock 慢 LLM），并发 `run_owner_chat_turn` 能获取锁或明确不等待评估结束（按第 2 步语义）。
 3. 手工：部署后 QUIET 期让 autonomy 跑起来，同时从 mobile 发消息，应秒级进入 `[owner_chat/timing]`，而不是一直转圈。
 4. 若仍转圈：`locked_conversation_uids()` 和最新 autonomy run 的 `started_at`/`finished_at`/`disposition` 必须能对上。
+5. 必须证明 autonomy 发送没有绕过正常短锁写入；scheduler tick 超时后 job 不会永久保持 `processing`，且 lease keeper 已停止。
 
 ## 八、运维（现网已卡死时）
 
