@@ -47,6 +47,7 @@ scope；只读端点通常允许对应的 read scope。
 | GET/POST/PUT/DELETE | `/lorebook*`、`/jailbreak-entries*` | prompt_assets | 管理面 Prompt 资产 |
 | GET/POST/PUT/DELETE | `/scheduler/*`、`/garden/*`、`/mood/*` | scheduler | 管理面状态和手动触发 |
 | GET/POST/PATCH | `/dream/*` | dream | PresenceKit-desktop 梦境界面 |
+| GET/POST | `/dream/rpg/*` | activity | RPG Dream 双栏客户端；见 [rpg-dream-client-guide.md](rpg-dream-client-guide.md) |
 | GET/POST | `/sensor/*`、`/watch/*` | sensor | Emerald-mobile、桌宠 |
 | GET/POST | `/activity/*`（reading/gomoku/chess/dream_seed） | activity | PresenceKit-desktop 活动界面 |
 | GET/POST | `/coplay/*` | coplay | PresenceKit-desktop 陪玩控制 |

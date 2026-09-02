@@ -12,6 +12,10 @@ UI and mobile consumption remain `open`; clients must use generated
 `/openapi.json` schemas and `docs/rpg-dream-api.md`, not runtime files or
 proposed payload examples.
 
+The shared legacy `/dream/enter` and `/dream/archive*` routes still publish
+generic object schemas in OpenAPI. The client guide lists their bounded fields;
+strict typed request/response models are a follow-up backend hardening item.
+
 ### AUTONOMY-195：生产校准观察
 
 **状态**：`observe`（2026-08-27 已定位并修复一类假沉默；模型决策偏置仍待部署后观察）

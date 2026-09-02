@@ -425,15 +425,12 @@ prompt text, evidence body, or complete receipt/event-ID inventory is exposed.
 `GET /dream/capabilities`, `GET /dream/rpg/state`, and
 `GET /observability/dream-rpg` are backend contracts only. `POST /dream/enter`
 accepts `dream_mode="rpg"` with a required existing Scenario `script_id`; while
-active, `POST /dream/chat` returns `RPG_ENDPOINT_REQUIRED` (409). No desktop,
-mobile, WebSocket, relay, or client settings contract exists yet: **open:
-backend foundation only**. Clients must discover future availability from
-`/dream/capabilities`, not runtime files or a hard-coded mode list. Brief 220
-extends the content-free `GET /observability/dream-rpg` payload with event/dice/
-branch and recovery aggregate counts. The v1 gameplay, transcript, correction,
-archive, and capability endpoints are backend REST contracts documented in
-`docs/rpg-dream-api.md`. Desktop remains **open: client not implemented** and
-must consume generated OpenAPI; mobile remains **open: no v1 UI consumer**.
+active, `POST /dream/chat` returns `RPG_ENDPOINT_REQUIRED` (409). The v1
+gameplay, transcript, correction, archive, and capability endpoints are
+backend REST contracts documented in `docs/rpg-dream-api.md` and
+`docs/rpg-dream-client-guide.md`. Desktop remains **open: client not
+implemented** and must consume generated OpenAPI; mobile remains **open: no v1
+UI consumer**. There is no RPG WebSocket or relay contract.
 
 # Brief 216 / MER-11 backend-only control and observability closure
 

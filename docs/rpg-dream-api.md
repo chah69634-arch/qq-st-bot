@@ -3,7 +3,8 @@
 RPG Dream is a backend-only Dream mode. Clients discover support from
 `GET /dream/capabilities`; they must not read runtime files or infer fields from
 WebSocket frames. Desktop remains open until its client work order consumes
-this contract, and mobile has no v1 UI consumer.
+this contract, and mobile has no v1 UI consumer. See
+`docs/rpg-dream-client-guide.md` for display and recovery behavior.
 
 All RPG endpoints use the `activity` scope except
 `GET /observability/dream-rpg`, which uses `state.read`.
