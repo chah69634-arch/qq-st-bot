@@ -730,7 +730,7 @@ QUIET、DND、gap、budget 或 winner；发送成功后才写 `last_greeted_drea
 §六的完整状态图——v1 没有 `DREAM_EXIT_REQUESTED` / `DREAM_LOCKED` / `REALITY_AFTERGLOW`，
 硬退直接回 `REALITY_CHAT`。
 
-## RPG Dream Foundation (Briefs 219-220)
+## RPG Dream Backend (Briefs 219-222)
 
 `rpg` is a fourth, backend-only Dream mode. Entry requires an existing authored
 Scenario `script_id`; owner, active character, script, mode, and dream ID are
@@ -739,20 +739,22 @@ frozen for the session. Its authoritative core lives in the isolated
 only identity, status, and cursors. It contains no prompts, player/KP text,
 seeds, tokens, or model output.
 
-Brief 220 adds an internal-only deterministic adjudication kernel. It accepts
-only strict structured `KpProposal` input, records append-only resolution and
-correction events, derives branch snapshots, and audits bounded `NdM + modifier
-vs DC` rolls. There is still no player turn endpoint, LLM/KP invocation,
-ordinary tool-loop access, client protocol, or Reality-memory/afterglow/stimulus
-integration. A pending receipt plus request ID makes recovery replay the same
-audited roll rather than roll again; malformed ledgers fail closed.
+Brief 220 adds an internal-only deterministic adjudication kernel. Briefs
+221-222 add a bounded two-lane player turn endpoint, transcript, correction,
+and player-only archive projections. KP and character calls stay inside the
+RPG runtime; there is no ordinary tool-loop, channel broadcast, or
+Reality-memory/afterglow/stimulus integration. A pending receipt plus request
+ID makes recovery replay the same audited roll rather than roll again;
+malformed ledgers fail closed.
 
 While RPG is active, ordinary `POST /dream/chat` returns the stable
 `RPG_ENDPOINT_REQUIRED` 409 and never reaches the normal Dream pipeline.
 `/dream/exit` and `/dream/wake` remain immediate LLM-free hard exits. RPG does
-not write archive transcript, summary, afterglow, impression, hidden state, or
-Reality continuation. `GET /dream/capabilities`, `GET /dream/rpg/state`, and
-`GET /observability/dream-rpg` are the foundation projections; corrupt or
+not write Reality memory, summary, afterglow, impression, hidden state, or
+continuation. `GET /dream/capabilities`, `GET /dream/rpg/state`,
+`POST /dream/rpg/turn`, `GET /dream/rpg/transcript`,
+`POST /dream/rpg/corrections`, and `GET /observability/dream-rpg` are safe
+projections; corrupt or
 partial RPG cores project as `uncertain`, never as resumable state.
 
 ## 十二、WAKE 二次确认与一次性封存（Brief 176）

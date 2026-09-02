@@ -193,7 +193,7 @@ prompts, player/KP text, script content, dice seeds, tokens, and absolute paths.
 An unreadable or partial session is fail-closed as `uncertain`; it is never
 promoted into a playable or recoverable session.
 
-## RPG Dream adjudication kernel (Brief 220)
+## RPG Dream adjudication and runtime (Briefs 220-222)
 
 The internal RPG adjudication functions are not exposed as HTTP, WebSocket, or
 ordinary tool-loop operations. They accept no client-provided owner, character,
@@ -202,7 +202,9 @@ continues to require `state.read` and exposes only aggregate counters and
 identifier hashes; it excludes event text, projections, rolls, faces, DC,
 modifier, seed/nonce, receipt details, and local paths. Corrupt session or
 ledger data transitions the session to fail-closed `uncertain` rather than
-attempting automatic replay outside its request-id receipt protocol.
+attempting automatic replay outside its request-id receipt protocol. Turn,
+transcript, and archive responses are player-only and never expose KP prompts,
+hidden facts, dice seed/faces/DC, or absolute paths.
 
 ## 守卫测试
 

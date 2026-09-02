@@ -5,6 +5,13 @@
 
 ## 当前仍存在
 
+### RPG Dream client handoff
+
+The RPG backend contract is complete through Brief 222. Desktop dual-column
+UI and mobile consumption remain `open`; clients must use generated
+`/openapi.json` schemas and `docs/rpg-dream-api.md`, not runtime files or
+proposed payload examples.
+
 ### AUTONOMY-195：生产校准观察
 
 **状态**：`observe`（2026-08-27 已定位并修复一类假沉默；模型决策偏置仍待部署后观察）
