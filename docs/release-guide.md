@@ -99,7 +99,7 @@ python scripts/build_release.py --version vX.Y.Z
 > installations must migrate through backup and fresh installation.**
 
 v0.x 是 preview / beta，不支持自动升级或数据连续性承诺。升级到 v1 时先停止服务，独立备份
-`data/`、`userdata/`、`config.yaml`、`config.local.yaml`（如有）和 `secrets.local.yaml`（如有），
+`data/`、`userdata/`、`config.yaml` 和 `secrets.local.yaml`（如有），
 然后在**新空目录**安装 v1 并复制这些受保护内容。不要复制旧程序资产或环境：
 `characters/`、`content/`、`defaults/`、`examples/`、`core/`、`scripts/`、`.venv/`。
 

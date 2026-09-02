@@ -25,7 +25,7 @@ from typing import Any
 RELEASES_URL = "https://api.github.com/repos/cicikat/PresenceKit/releases?per_page=100"
 ASSET_RE = re.compile(r"^PresenceKit-(.+)-win64-setup\.zip$")
 PROTECTED_ROOTS = frozenset({"data", "userdata", ".venv"})
-PROTECTED_FILES = frozenset({"config.yaml", "config.local.yaml", "secrets.local.yaml"})
+PROTECTED_FILES = frozenset({"config.yaml", "secrets.local.yaml"})
 PROTECTED_PATHS = frozenset({PurePosixPath("tools/uv.exe")})
 BACKUP_MANIFEST_NAME = "_update_backup_manifest.json"
 BACKUP_MANIFEST_SCHEMA_VERSION = 1

@@ -55,19 +55,6 @@ def _changed_paths(before: object, after: object, prefix: tuple[str, ...] = ()) 
     return [prefix] if before != after else []
 
 
-def _is_shadowed(local: Mapping[str, Any], path: tuple[str, ...]) -> bool:
-    current: object = local
-    for part in path:
-        if not isinstance(current, Mapping) or part not in current:
-            return False
-        current = current[part]
-    return True
-
-
-def _display_path(path: tuple[str, ...]) -> str:
-    return ".".join(path) or "<root>"
-
-
 def _value_at(value: Mapping[str, Any], path: tuple[str, ...]) -> object:
     current: object = value
     for part in path:
@@ -97,7 +84,7 @@ def _apply_path(target: dict[str, Any], source: Mapping[str, Any], path: tuple[s
 
 
 def write_config_file(path: Path, updated: dict[str, Any]) -> None:
-    """Atomically persist an admin edit, rejecting keys shadowed by local config."""
+    """Atomically persist an admin edit to the single runtime config."""
     if not isinstance(updated, dict):
         raise HTTPException(status_code=500, detail="待写入配置顶层必须是 mapping")
 
@@ -106,21 +93,6 @@ def write_config_file(path: Path, updated: dict[str, Any]) -> None:
         current = _load_mapping(path)
         baseline = updated.original if isinstance(updated, ConfigDocument) else current
         changed = _changed_paths(baseline, updated)
-        local_path = path.with_name("config.local.yaml")
-        local = _load_mapping(local_path) if local_path.exists() else {}
-        conflicts = [_display_path(item) for item in changed if _is_shadowed(local, item)]
-        if conflicts:
-            shown = ", ".join(conflicts[:8])
-            if len(conflicts) > 8:
-                shown += f" 等 {len(conflicts)} 项"
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "设置未保存：以下字段由 config.local.yaml 覆盖，管理面修改不会生效："
-                    f"{shown}。请先移除对应本地覆盖。"
-                ),
-            )
-
         merged = deepcopy(current)
         for changed_path in changed:
             _apply_path(merged, updated, changed_path)

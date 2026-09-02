@@ -67,7 +67,6 @@ PROTECTION_ROOTS: tuple[ProtectionRoot, ...] = (
     ProtectionRoot("data", PurePosixPath("data"), True, "directory"),
     ProtectionRoot("userdata", PurePosixPath("userdata"), False, "directory"),
     ProtectionRoot("config", PurePosixPath("config.yaml"), True, "file"),
-    ProtectionRoot("config_local", PurePosixPath("config.local.yaml"), False, "file"),
     ProtectionRoot("secrets_local", PurePosixPath("secrets.local.yaml"), False, "file"),
     ProtectionRoot("legacy_private_assets", PurePosixPath("."), False, "legacy_selector"),
 )
@@ -337,8 +336,6 @@ def _record_belongs_to_root(path: PurePosixPath, root_id: str) -> bool:
         return path.parts[0] == "userdata"
     if root_id == "config":
         return path == PurePosixPath("config.yaml")
-    if root_id == "config_local":
-        return path == PurePosixPath("config.local.yaml")
     if root_id == "secrets_local":
         return path == PurePosixPath("secrets.local.yaml")
     if root_id == "legacy_private_assets":
@@ -426,7 +423,7 @@ def _read_manifest(snapshot: Path) -> dict[str, Any]:
     if not isinstance(payload.get("optional_missing_files"), list) or not isinstance(payload.get("files"), list):
         raise BackupError("manifest_invalid", "manifest 文件清单无效。")
     optional = payload["optional_missing_files"]
-    allowed_optional = {"userdata", "config.local.yaml", "secrets.local.yaml"}
+    allowed_optional = {"userdata", "secrets.local.yaml"}
     if any(not isinstance(item, str) for item in optional) or len(optional) != len(set(optional)) or not set(optional).issubset(allowed_optional):
         raise BackupError("manifest_invalid", "manifest 的可选缺失状态无效。")
     return payload
@@ -478,7 +475,7 @@ def verify_snapshot(snapshot: Path) -> dict[str, Any]:
         if PurePosixPath("data/layout_version.json") not in seen:
             errors.append({"code": "missing_file", "path": "data/layout_version.json"})
         optional_missing = set(manifest["optional_missing_files"])
-        for optional_path in ("config.local.yaml", "secrets.local.yaml"):
+        for optional_path in ("secrets.local.yaml",):
             if (PurePosixPath(optional_path) in seen) == (optional_path in optional_missing):
                 errors.append({"code": "manifest_invalid", "path": optional_path})
         actual: set[PurePosixPath] = set()

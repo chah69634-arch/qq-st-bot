@@ -12,7 +12,7 @@
 
 - `data/`，但排除明确的派生/取证缓存：vector index 与 SQLite sidecar、memory index、image cache、inbox、普通日志、debug 输出、pending perception 文件、选择性启用的 LLM request log，以及临时 service PID marker；
 - 存在时的 `userdata/`；
-- 必需的 `config.yaml`，以及存在时的 `config.local.yaml` 和 `secrets.local.yaml`；
+- 必需的 `config.yaml`，以及存在时的 `secrets.local.yaml`；
 - 仍为兼容性保留的 legacy 私有 authored-asset 子树：私有 cards/notes、Reality/Dream 资产、贴纸和非 example 的按角色 content。公共 `bundled/`、defaults、examples、源代码、虚拟环境、构建输出、release-updater backup 和普通日志不会被复制。
 
 inventory 集中在 `core.backup_state.PROTECTION_ROOTS`。未来经过审计的私有根目录必须在这里分类；已知但未分类的根目录会导致创建失败，而不是被静默省略。

@@ -168,7 +168,7 @@ secrets file and the admin panel — the panel lands on the "配置"
 
 > **PresenceKit v1.0.0 is the first supported update baseline. Preview v0.x
 > installations must migrate through backup and fresh installation.** Back up
-> `data/`, `userdata/`, `config.yaml`, optional `config.local.yaml`, and
+> `data/`, `userdata/`, `config.yaml`, and
 > optional `secrets.local.yaml`; install v1 into a new directory and copy only
 > those protected items. Do not copy preview program trees such as
 > `characters/`, `content/`, `defaults/`, `examples/`, `core/`, `scripts/`, or

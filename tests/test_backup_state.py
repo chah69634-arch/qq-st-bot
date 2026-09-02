@@ -143,7 +143,7 @@ def test_missing_required_root_and_optional_files(tmp_path: Path):
     root = _install(tmp_path / "optional")
     target = _create(root, tmp_path / "optional")
     manifest = json.loads((target / backup.MANIFEST_NAME).read_text(encoding="utf-8"))
-    assert {"config.local.yaml", "secrets.local.yaml"}.issubset(manifest["optional_missing_files"])
+    assert "secrets.local.yaml" in manifest["optional_missing_files"]
 
 
 @pytest.mark.parametrize("relative", ["inside", "data/inside", "userdata/inside"])

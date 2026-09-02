@@ -62,7 +62,6 @@ def _v1_install(tmp_path: Path, version: str = "v1.0.0") -> Path:
     (install / "userdata" / "characters").mkdir(parents=True)
     (install / "userdata" / "characters" / "card.json").write_text('{"private": true}', encoding="utf-8")
     (install / "config.yaml").write_text("private: config", encoding="utf-8")
-    (install / "config.local.yaml").write_text("private: local", encoding="utf-8")
     (install / "secrets.local.yaml").write_text("private: secret", encoding="utf-8")
     _write_layout(install)
     (install / "data" / "state.json").write_text('{"private": true}', encoding="utf-8")
@@ -116,7 +115,7 @@ def test_v1_forward_update_keeps_protected_data_and_replaces_bundled(tmp_path, m
     protected_before = {
         name: _tree_digest(install / name) if (install / name).is_dir()
         else hashlib.sha256((install / name).read_bytes()).hexdigest()
-        for name in ("data", "userdata", "config.yaml", "config.local.yaml", "secrets.local.yaml")
+        for name in ("data", "userdata", "config.yaml", "secrets.local.yaml")
     }
     archive, checksum = _release(tmp_path, target)
     monkeypatch.setattr(updater, "_service_is_running", lambda: False)

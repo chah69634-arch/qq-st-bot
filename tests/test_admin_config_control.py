@@ -22,33 +22,6 @@ def test_write_config_file_is_atomic_and_persists(tmp_path):
     assert not path.with_suffix(".yaml.tmp").exists()
 
 
-def test_write_config_file_rejects_shadowed_local_key(tmp_path):
-    path = tmp_path / "config.yaml"
-    local_path = tmp_path / "config.local.yaml"
-    path.write_text("model_presets:\n  active_routing: default\n", encoding="utf-8")
-    local_path.write_text("model_presets:\n  active_routing: fixed\n", encoding="utf-8")
-
-    with pytest.raises(HTTPException) as exc:
-        config_control.write_config_file(path, {"model_presets": {"active_routing": "other"}})
-
-    assert exc.value.status_code == 409
-    assert "model_presets.active_routing" in str(exc.value.detail)
-    assert _read(path)["model_presets"]["active_routing"] == "default"
-
-
-def test_write_config_file_allows_unrelated_local_override(tmp_path):
-    path = tmp_path / "config.yaml"
-    local_path = tmp_path / "config.local.yaml"
-    path.write_text("practice:\n  enabled: false\nproxy:\n  http: ''\n", encoding="utf-8")
-    local_path.write_text("proxy:\n  http: http://local-proxy\n", encoding="utf-8")
-
-    updated = _read(path)
-    updated["practice"]["enabled"] = True
-    config_control.write_config_file(path, updated)
-
-    assert _read(path)["practice"]["enabled"] is True
-
-
 def test_write_failure_keeps_original_config(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"
     path.write_text("practice:\n  enabled: false\n", encoding="utf-8")
@@ -92,49 +65,3 @@ def test_settings_routers_do_not_write_config_directly():
             violations.append(path.name)
     assert violations == []
 
-
-def test_feature_flag_endpoint_surfaces_local_override_conflict(tmp_path, monkeypatch):
-    from admin.routers import settings_feature_flags as flags
-
-    path = tmp_path / "config.yaml"
-    path.write_text("practice:\n  enabled: false\n", encoding="utf-8")
-    path.with_name("config.local.yaml").write_text(
-        "practice:\n  enabled: false\n", encoding="utf-8"
-    )
-    monkeypatch.setattr(flags, "CONFIG_FILE", path)
-
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(flags.update_feature_flags(flags.FeatureFlagsUpdate(flags={"practice": True})))
-
-    assert exc.value.status_code == 409
-    assert _read(path)["practice"]["enabled"] is False
-
-
-def test_model_routing_endpoint_does_not_report_shadowed_write_as_success(tmp_path, monkeypatch):
-    from admin.routers import settings_llm
-
-    path = tmp_path / "config.yaml"
-    path.write_text(
-        "model_presets:\n"
-        "  active_routing: default\n"
-        "  presets:\n"
-        "    base: {provider_kind: openai}\n"
-        "  routing_profiles:\n"
-        "    default: {chat: base}\n"
-        "    alternate: {chat: base}\n",
-        encoding="utf-8",
-    )
-    path.with_name("config.local.yaml").write_text(
-        "model_presets:\n  active_routing: default\n", encoding="utf-8"
-    )
-    monkeypatch.setattr(settings_llm, "CONFIG_FILE", path)
-
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(
-            settings_llm.set_active_routing(
-                settings_llm.ActiveRoutingUpdate(active_routing="alternate")
-            )
-        )
-
-    assert exc.value.status_code == 409
-    assert _read(path)["model_presets"]["active_routing"] == "default"

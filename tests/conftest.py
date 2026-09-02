@@ -56,7 +56,6 @@ def _configure_public_test_environment() -> None:
         encoding="utf-8",
     )
     os.environ["PRESENCEKIT_CONFIG_PATH"] = str(config_path)
-    os.environ["PRESENCEKIT_CONFIG_LOCAL_PATH"] = str(local_path)
 
 
 _configure_public_test_environment()

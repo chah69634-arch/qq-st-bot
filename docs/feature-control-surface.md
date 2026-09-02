@@ -8,9 +8,8 @@
 练习明确失败并进入 scheduler 异常记录，不会静默回落 chat。
 
 所有写入 `config.yaml` 的设置端点统一经过 `admin.config_control`：写请求按进程内锁串行，
-用临时文件原子替换，并以读取时快照做三方合并，避免并发设置覆盖无关字段。若待修改字段
-在 `config.local.yaml` 中存在覆盖，接口返回 HTTP 409 且不改写 base config；管理面不得把
-这种冲突显示为保存成功。local override 仍由部署者直接维护，不通过管理 API 静默删除或改写。
+用临时文件原子替换，并以读取时快照做三方合并，避免并发设置覆盖无关字段。运行时只使用
+`config.yaml`；管理面和手工编辑修改的是同一份配置。
 
 - persona 级：`/settings/model-routing`、`/settings/tts-desktop`、`/settings/tts-auto-play`、`/settings/tool-loop`、`/settings/thinking`、`GET/PUT /output-segment-enforce`，供客户端使用；不返回模型密钥。段落兜底开关热更新 `output.segment_enforce`，只影响发送副本（桌面流式 delta、最终 canonical 与非流式输出），默认关闭。
 - admin 专用配置：`/model-presets/*`、`/proxy`、`/tts-config`、`/sticker-config`、`/scheduler/config`、`/settings/relay`、`/settings/mcp`。routing profile 也包含 `sensor_judge` 与 `scenario_reconcile`：前者是后台裁决专用 category，后者是 Dream 发送后的语义校准 category；两者都应映射到稳定的轻量 `chat_completions` preset，缺失时分别兼容回退 `intent → chat`。它们使用短 timeout 与零 SDK retry，未在桌面设置页单独暴露。preset 的 `api_protocol` 由管理面和 `PUT /model-presets/presets/{name}` 管理，取值为 `chat_completions`（默认）或 `responses`；它独立于 `provider_kind` 与 `tool_call_mode`，保存后热重载，不会静默切换 API。`POST /model-presets/presets/{name}/rename` 会原子重命名 preset 并更新所有 routing profile 引用，随后热重载。
