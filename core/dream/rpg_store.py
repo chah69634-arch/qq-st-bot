@@ -40,6 +40,14 @@ def receipts_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_
     return session_dir(uid, dream_id, char_id=char_id) / "receipts.json"
 
 
+def transcript_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
+    return session_dir(uid, dream_id, char_id=char_id) / "transcript.jsonl"
+
+
+def turn_receipts_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
+    return session_dir(uid, dream_id, char_id=char_id) / "turn_receipts.json"
+
+
 def kernel_stats_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
     return session_dir(uid, dream_id, char_id=char_id) / "kernel_stats.json"
 
@@ -91,6 +99,10 @@ def append_dice(uid: str | int, dream_id: str, record: dict[str, Any], *, char_i
     return safe_append_jsonl(dice_path(uid, dream_id, char_id=char_id), record)
 
 
+def append_transcript(uid: str | int, dream_id: str, entry: dict[str, Any], *, char_id: str = DEFAULT_CHAR_ID) -> bool:
+    return safe_append_jsonl(transcript_path(uid, dream_id, char_id=char_id), entry)
+
+
 def read_jsonl_with_health(path: Path) -> tuple[list[dict[str, Any]], str]:
     """Read an append-only ledger without treating corruption as an empty log."""
     if not path.exists():
@@ -111,6 +123,24 @@ def read_jsonl_with_health(path: Path) -> tuple[list[dict[str, Any]], str]:
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Compatibility reader for diagnostics; mutation paths must use health."""
     return read_jsonl_with_health(path)[0]
+
+
+def read_transcript(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> tuple[list[dict[str, Any]], bool]:
+    rows, health = read_jsonl_with_health(transcript_path(uid, dream_id, char_id=char_id))
+    return rows, health == "invalid"
+
+
+def load_turn_receipts(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict[str, dict[str, Any]]:
+    path = turn_receipts_path(uid, dream_id, char_id=char_id)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def save_turn_receipts(uid: str | int, dream_id: str, receipts: dict[str, dict[str, Any]], *, char_id: str = DEFAULT_CHAR_ID) -> bool:
+    return safe_write_json(turn_receipts_path(uid, dream_id, char_id=char_id), receipts)
 
 
 def read_events(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict[str, Any]]:

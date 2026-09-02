@@ -112,6 +112,7 @@ _CALL_TIMEOUTS: dict[str, float] = {
     "monologue":      10.0,
     "scenario_reconcile": 8.0,
     "event_edge_proposer": 30.0,
+    "rpg_kp":        30.0,
 }
 _DEFAULT_CALL_TIMEOUT: float = 90.0
 

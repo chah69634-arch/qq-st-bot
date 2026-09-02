@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
 from core.data_paths import DEFAULT_CHAR_ID
+from core.dream.rpg_models import (
+    RpgCorrectionRequest, RpgCorrectionResponse, RpgEntry, RpgTranscriptResponse, RpgTurnRequest, RpgTurnResponse,
+)
 
 router = APIRouter()
 
@@ -39,6 +42,7 @@ class RpgSessionProjection(BaseModel):
 
 class RpgStateResponse(BaseModel):
     session: RpgSessionProjection | None
+    scene: dict = {}
 
 
 class RpgObservabilityResponse(BaseModel):
@@ -99,6 +103,13 @@ def _current():
     return projection(core, health=health, since=state.get("dream_started_at"))
 
 
+def _kernel_http(exc: Exception) -> HTTPException:
+    code = getattr(exc, "code", "RPG_INTERNAL_ERROR")
+    retryable = code in {"RPG_ROUND_BUSY", "RPG_REVISION_CONFLICT", "RPG_COMMIT_UNCERTAIN", "RPG_SESSION_UNCERTAIN", "RPG_KP_UNAVAILABLE"}
+    status = 409 if code in {"RPG_ROUND_BUSY", "RPG_REVISION_CONFLICT", "RPG_IDEMPOTENCY_CONFLICT", "RPG_REQUEST_CONFLICT", "RPG_NOT_ACTIVE", "RPG_ENDPOINT_REQUIRED"} else 422
+    return HTTPException(status_code=status, detail={"code": code, "message": code, "retryable": retryable})
+
+
 @router.get("/dream/capabilities", response_model=DreamCapabilitiesResponse, summary="Dream mode capabilities")
 async def dream_capabilities(_auth=Depends(require_scopes("activity"))):
     from core.dream.dream_state import DreamMode
@@ -107,7 +118,73 @@ async def dream_capabilities(_auth=Depends(require_scopes("activity"))):
 
 @router.get("/dream/rpg/state", response_model=RpgStateResponse, summary="RPG Dream safe session state")
 async def rpg_state(_auth=Depends(require_scopes("activity"))):
-    return RpgStateResponse(session=_current())
+    session = _current()
+    scene = {}
+    if session:
+        try:
+            from core.dream.rpg_store import read_events
+            from core.dream.rpg_projection import derive_snapshot
+            events = read_events(_uid(), session["dream_id"], char_id=session["char_id"])
+            scene = derive_snapshot(events, active_branch_id=session.get("active_branch_id"), revision=session.get("scene_revision", 0)).get("scene", {})
+        except Exception:
+            scene = {}
+    return RpgStateResponse(session=session, scene=scene)
+
+
+@router.post("/dream/rpg/turn", response_model=RpgTurnResponse, summary="Run one RPG Dream round")
+async def rpg_turn(body: RpgTurnRequest, _auth=Depends(require_scopes("activity"))):
+    state = _current()
+    if state is None:
+        raise _kernel_http(type("E", (), {"code": "RPG_NOT_ACTIVE"})())
+    if body.dream_id != state["dream_id"]:
+        raise _kernel_http(type("E", (), {"code": "RPG_DREAM_ID_MISMATCH"})())
+    try:
+        from core.dream.rpg_runtime import run_turn
+        return await run_turn(_uid(), dream_id=body.dream_id, request_id=body.request_id, lane=body.lane, message=body.message, expected_revision=body.expected_scene_revision, char_id=state["char_id"])
+    except Exception as exc:
+        if hasattr(exc, "code"):
+            raise _kernel_http(exc) from exc
+        raise
+
+
+@router.get("/dream/rpg/transcript", response_model=RpgTranscriptResponse, summary="Read RPG Dream transcript")
+async def rpg_transcript(dream_id: str, before: str | None = Query(default=None, max_length=160), limit: int = Query(default=50, ge=1, le=200), _auth=Depends(require_scopes("activity"))):
+    state = _current()
+    if state is None:
+        raise _kernel_http(type("E", (), {"code": "RPG_NOT_ACTIVE"})())
+    if dream_id != state["dream_id"]:
+        raise _kernel_http(type("E", (), {"code": "RPG_DREAM_ID_MISMATCH"})())
+    try:
+        from core.dream.rpg_runtime import transcript_projection
+        return RpgTranscriptResponse(**transcript_projection(_uid(), dream_id, char_id=state["char_id"], before=before, limit=limit))
+    except Exception as exc:
+        if hasattr(exc, "code"):
+            raise _kernel_http(exc) from exc
+        raise
+
+
+@router.post("/dream/rpg/corrections", response_model=RpgCorrectionResponse, summary="Apply an RPG correction")
+async def rpg_correction(body: RpgCorrectionRequest, _auth=Depends(require_scopes("activity"))):
+    state = _current()
+    if state is None:
+        raise _kernel_http(type("E", (), {"code": "RPG_NOT_ACTIVE"})())
+    if body.dream_id != state["dream_id"]:
+        raise _kernel_http(type("E", (), {"code": "RPG_DREAM_ID_MISMATCH"})())
+    text = body.text.strip() or body.reason.strip()
+    try:
+        from core.dream import rpg_corrections, rpg_store
+        fn = getattr(rpg_corrections, body.operation)
+        result = fn(_uid(), body.dream_id, body.target_round_id, text, request_id=body.request_id, expected_revision=body.expected_scene_revision, char_id=state["char_id"])
+        rows, _partial = rpg_store.read_transcript(_uid(), body.dream_id, char_id=state["char_id"])
+        entry = next((row for row in reversed(rows) if row.get("correlation_id") == body.request_id), None)
+        if entry is None:
+            entry = {"entry_id": "entry_" + body.request_id, "lane": "shared", "kind": "correction", "content": body.operation, "ts": __import__("time").time(), "correlation_id": body.request_id, "revision": result.get("revision", 0), "branch_id": result.get("branch_id")}
+            rpg_store.append_transcript(_uid(), body.dream_id, entry, char_id=state["char_id"])
+        return RpgCorrectionResponse(dream_id=body.dream_id, request_id=body.request_id, operation=body.operation, scene_revision=int(result.get("revision", 0)), active_branch_id=str(result.get("branch_id") or state.get("active_branch_id") or "root"), idempotent=bool(result.get("idempotent")), entry=RpgEntry.model_validate(entry))
+    except Exception as exc:
+        if hasattr(exc, "code"):
+            raise _kernel_http(exc) from exc
+        raise
 
 
 @router.get(

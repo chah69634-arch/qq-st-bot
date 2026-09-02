@@ -23,6 +23,66 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class RpgTurnRequest(_StrictModel):
+    dream_id: str = Field(min_length=1, max_length=160)
+    request_id: str = Field(min_length=1, max_length=128)
+    lane: Literal["character", "kp"]
+    message: str = Field(min_length=1, max_length=12000)
+    expected_scene_revision: int = Field(ge=0)
+
+
+class RpgEntry(_StrictModel):
+    entry_id: str
+    lane: Literal["character", "kp", "shared"]
+    kind: str
+    content: str = Field(max_length=12000)
+    ts: float
+    correlation_id: str
+    revision: int | None = None
+    branch_id: str | None = None
+
+
+class RpgTurnResponse(_StrictModel):
+    dream_id: str
+    round_id: str
+    request_id: str
+    status: Literal["completed", "partial", "failed"]
+    scene_revision: int = Field(ge=0)
+    entries: tuple[RpgEntry, ...] = ()
+    character_reply_generated: bool = False
+    dice_roll_ids: tuple[str, ...] = ()
+    error: str | None = None
+
+
+class RpgTranscriptResponse(_StrictModel):
+    items: tuple[RpgEntry, ...] = ()
+    next_before: str | None = None
+    has_more: bool = False
+    partial_read: bool = False
+    scene_revision: int = Field(ge=0)
+    active_branch_id: str
+
+
+class RpgCorrectionRequest(_StrictModel):
+    dream_id: str = Field(min_length=1, max_length=160)
+    request_id: str = Field(min_length=1, max_length=128)
+    operation: Literal["clarify", "retcon", "branch"]
+    target_round_id: str = Field(min_length=1, max_length=128)
+    text: str = Field(default="", max_length=500)
+    reason: str = Field(default="", max_length=500)
+    expected_scene_revision: int = Field(ge=0)
+
+
+class RpgCorrectionResponse(_StrictModel):
+    dream_id: str
+    request_id: str
+    operation: Literal["clarify", "retcon", "branch"]
+    scene_revision: int
+    active_branch_id: str
+    idempotent: bool = False
+    entry: RpgEntry
+
+
 class RollSpec(_StrictModel):
     dice_count: int = Field(ge=1, le=10)
     dice_sides: int = Field(ge=2, le=100)
