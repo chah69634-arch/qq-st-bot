@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.event_context import EventContext
-from core.event_context_observer import record, reset_for_tests, snapshot
+from core.event_context_observer import enforcing_readiness, record, reset_for_tests, snapshot
 
 
 def test_disabled_observer_does_not_write_or_count(monkeypatch, sandbox):
@@ -62,3 +62,10 @@ def test_observer_marks_committed_chain_without_ingress_as_orphan(monkeypatch, s
     record(stage="evidence", disposition="committed", context=context, orphan=True)
 
     assert snapshot()["chains"]["orphan"] == 1
+
+
+def test_enforcing_readiness_requires_s1_samples(monkeypatch, sandbox):
+    monkeypatch.setattr("core.event_context_observer.config", lambda: {"mode": "observe"})
+    reset_for_tests()
+    assert enforcing_readiness()["ready"] is False
+    assert "canonical_turns:0/200" in enforcing_readiness()["missing"]

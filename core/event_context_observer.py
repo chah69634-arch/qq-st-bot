@@ -223,5 +223,48 @@ def snapshot() -> dict[str, Any]:
     }
 
 
+def enforcing_readiness() -> dict[str, Any]:
+    """Return the deterministic S1 gate used before enabling enforcement."""
+    snap = snapshot()
+    counts = snap.get("counts", {})
+    chains = snap.get("chains", {})
+    canonical_turns = sum(
+        int(value or 0) for key, value in counts.items()
+        if key == "evidence:committed"
+    )
+    stimuli = sum(
+        int(value or 0) for key, value in counts.items()
+        if key == "ingress:accepted"
+    )
+    errors = snap.get("errors", {})
+    hard_failures = {
+        key: int(errors.get(key, 0) or 0)
+        for key in ("scope_mismatch", "realm_mismatch", "orphan", "duplicate_turn")
+        if int(errors.get(key, 0) or 0) > 0
+    }
+    # S1 uses the later of the two sample thresholds.  Duration is deliberately
+    # left to the operator; durable sample counts and hard red lines are safe to
+    # evaluate automatically without trusting wall-clock timestamps.
+    sample_ready = canonical_turns >= 200 and stimuli >= 100
+    ready = sample_ready and not hard_failures and int(chains.get("orphan", 0) or 0) == 0
+    missing = []
+    if canonical_turns < 200:
+        missing.append(f"canonical_turns:{canonical_turns}/200")
+    if stimuli < 100:
+        missing.append(f"stimuli:{stimuli}/100")
+    if hard_failures:
+        missing.append("hard_failures")
+    if int(chains.get("orphan", 0) or 0):
+        missing.append("orphan_chains")
+    return {
+        "ready": ready,
+        "canonical_turns": canonical_turns,
+        "stimuli": stimuli,
+        "missing": missing,
+        "hard_failures": hard_failures,
+        "sample_rule": "canonical_turns>=200 and stimuli>=100",
+    }
+
+
 def reset_for_tests() -> None:
     _COUNTS.clear(); _LATEST.clear()

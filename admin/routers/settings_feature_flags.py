@@ -182,10 +182,15 @@ async def update_event_context_observer_settings(
     body: EventContextObserverUpdate,
     auth=Depends(require_scopes("admin")),
 ):
-    # Enforcing is deliberately not available before Brief 217-D's S1 soak.
+    # Enforcing is available only after the durable S1 sample gate passes.
     mode = str(body.mode).strip().lower()
-    if mode not in {"disabled", "observe"}:
-        raise HTTPException(status_code=422, detail="mode must be disabled or observe before enforcing soak")
+    if mode not in {"disabled", "observe", "enforcing"}:
+        raise HTTPException(status_code=422, detail="mode must be disabled, observe, or enforcing")
+    if mode == "enforcing":
+        from core.event_context_observer import enforcing_readiness
+        readiness = enforcing_readiness()
+        if not readiness["ready"]:
+            raise HTTPException(status_code=409, detail={"code": "event_context_soak_not_ready", "readiness": readiness})
     if mode == "observe":
         from core.memory.event_store import initialize_existing_ledgers
         readiness = initialize_existing_ledgers()

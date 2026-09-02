@@ -270,10 +270,11 @@ mobile clients do not add settings or consume these backend diagnostics.
 ## Brief 217 EventContext observer
 
 `event_context_observer.mode` is a hot-reloaded admin runtime-config control with
-`disabled` as the default and `observe` as the only enabled mode before S1
-soak. `GET`/`PUT /settings/event-context-observer` require `admin`; the update
-endpoint deliberately rejects `enforcing` until Brief 217-D's staged soak
-criteria are met. `GET /observability/event-context` requires `state.read` and
+`disabled` as the default. `GET`/`PUT /settings/event-context-observer` require
+`admin`; `observe` records content-free traces, while `enforcing` is accepted
+only when the durable S1 sample gate has at least 200 committed canonical turns
+and 100 accepted stimuli with no hard identity/orphan failures. Otherwise the
+endpoint returns readiness gaps and leaves the mode unchanged. `GET /observability/event-context` requires `state.read` and
 returns only desired/effective/run state, aggregate counters, latency buckets,
 and redacted status codes. It never returns source text, complete IDs, user IDs,
 or media data. No desktop/mobile setting or protocol is introduced.
