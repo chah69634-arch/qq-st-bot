@@ -447,7 +447,7 @@ fs_access:
     - "__pycache__"
     - "config.yaml"
     - "token"
-  max_read_chars: 4000            # 单次读取截断
+  max_read_chars: 10000           # 单次读取截断
   max_list_entries: 100           # 单次列目录条数上限
 ```
 

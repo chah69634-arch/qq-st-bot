@@ -286,3 +286,8 @@ robocopy "<恢复演练目录>\userdata" "<本地项目>\userdata" /E
 `config.yaml`、`config.local.yaml`、`secrets.local.yaml` 按本地部署需求决定是否同步；其中 `config.local.yaml` 和 `secrets.local.yaml` 可能包含本地环境专属配置，不应无条件覆盖。
 
 同步完成后启动本地 PresenceKit 并检查运行状态。确认正常后，可删除本次解包和恢复演练产生的临时目录；已校验的 `.tar.gz` 及其 `.sha256` 应作为正式备份保留。
+\n+Windows 正确校验命令：使用项目依赖所在的 Python 解释器绝对路径，不要使用 WindowsApps 占位的 `python.exe`。命令格式：
+
+```powershell
+& "<Python 绝对路径>" main.py backup-state verify "<解压后的快照目录>"
+```

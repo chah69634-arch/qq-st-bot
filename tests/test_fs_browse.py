@@ -6,6 +6,10 @@ import pytest
 from core import tool_dispatcher
 from core.tools import fs_browse
 
+
+def test_fs_read_default_limit_is_10k():
+    assert fs_browse._DEFAULT_MAX_READ_CHARS == 10000
+
 _FS_TOOL_SPECS = {
     name: dict(tool_dispatcher._TOOL_REGISTRY[name])
     for name in ("fs_list", "fs_read")
