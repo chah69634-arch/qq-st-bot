@@ -48,6 +48,14 @@ def turn_receipts_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_
     return session_dir(uid, dream_id, char_id=char_id) / "turn_receipts.json"
 
 
+def archive_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
+    return get_paths().dream_rpg_archive_path(uid, dream_id, char_id=char_id)
+
+
+def archive_metadata_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
+    return get_paths().dream_rpg_archive_metadata_path(uid, dream_id, char_id=char_id)
+
+
 def kernel_stats_path(uid: str | int, dream_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
     return session_dir(uid, dream_id, char_id=char_id) / "kernel_stats.json"
 

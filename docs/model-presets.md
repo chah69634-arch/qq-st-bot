@@ -2,6 +2,8 @@
 
 ## 概述
 
+RPG Dream uses the independent `rpg_kp` call category for neutral structured adjudication. It falls back to the active profile's chat preset when absent, with a bounded 30-second timeout and no SDK retry.
+
 把"只能跑一个 DeepSeek"重构成"按任务分流的多模型 preset 系统"：
 - 主对话可以走 Claude / DS / 本地；轻量调用（probe / summary / detect_emotion）可以指向便宜模型。
 - 每个 preset 自带**生成参数默认适配**（provider 白名单过滤）和 **prompt 结构适配**（narrative / xml）。

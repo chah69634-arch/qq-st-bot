@@ -902,21 +902,32 @@ async def force_exit_dream(
 
 
 def _force_exit_rpg_dream(uid: str, state: dict[str, Any], dream_id: str) -> dict[str, Any]:
-    """Hard-close an RPG session without archive, summary, afterglow, or LLM."""
+    """Hard-close an RPG session with a player-only archive and no LLM."""
     from core.dream.dream_state import DreamStatus, clear_local_state, write_state
     from core.dream.rpg_store import close
 
     char_id = str(state.get("char_id") or DEFAULT_CHAR_ID)
+    from core.dream.rpg_archive import archive_session
+    archive_ok, archive_reason = archive_session(uid, dream_id, char_id=char_id)
+    if not archive_ok:
+        state["status"] = DreamStatus.DREAM_CLOSING.value
+        state["last_rpg_archive_reason"] = archive_reason
+        write_state(uid, state)
+        return {"ok": True, "exited": False, "already_closed": False, "closed_now": False,
+                "dream_id": dream_id, "dream_mode": "rpg", "archive_ok": False,
+                "rpg_archive_reason": archive_reason, "rpg_session_health": "closing"}
     _core, health = close(uid, dream_id, char_id=char_id)
     closed_at = time.time()
     state = clear_local_state(state)
     state.update({"status": DreamStatus.REALITY_CHAT.value, "last_dream_id": dream_id,
                   "last_dream_mode": "rpg", "last_exited_at": closed_at,
-                  "last_archive_ok": health == "ok", "last_exit_reason": "rpg_hard_exit",
+                  "last_archive_ok": archive_ok and health == "ok", "last_exit_reason": "rpg_hard_exit",
+                  "last_rpg_archive_reason": archive_reason,
                   "last_rpg_session_health": health, "forced_impression_rounds_left": 0})
     write_state(uid, state)
     return {"ok": True, "exited": True, "already_closed": False, "closed_now": True,
-            "dream_id": dream_id, "dream_mode": "rpg", "archive_ok": health == "ok",
+            "dream_id": dream_id, "dream_mode": "rpg", "archive_ok": archive_ok and health == "ok",
+            "rpg_archive_reason": archive_reason,
             "exited_at": closed_at, "rpg_session_health": health}
 
 

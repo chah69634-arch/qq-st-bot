@@ -420,7 +420,7 @@ proposer observability adds content-free source-policy input/filtered counts.
 All remain under the existing `memory.read` or `state.read` scopes, and no
 prompt text, evidence body, or complete receipt/event-ID inventory is exposed.
 
-# Briefs 219-220 / RPG Dream backend foundation and adjudication kernel
+# Briefs 219-222 / RPG Dream backend contract
 
 `GET /dream/capabilities`, `GET /dream/rpg/state`, and
 `GET /observability/dream-rpg` are backend contracts only. `POST /dream/enter`
@@ -429,11 +429,11 @@ active, `POST /dream/chat` returns `RPG_ENDPOINT_REQUIRED` (409). No desktop,
 mobile, WebSocket, relay, or client settings contract exists yet: **open:
 backend foundation only**. Clients must discover future availability from
 `/dream/capabilities`, not runtime files or a hard-coded mode list. Brief 220
-extends only the existing content-free `GET /observability/dream-rpg` payload
-with event/dice/branch and recovery aggregate counts. The adjudication,
-correction, ledger, snapshot, and dice APIs are internal Python calls, not REST,
-WebSocket, relay, desktop, or mobile interfaces. **open: no gameplay endpoint
-or client setting surface**.
+extends the content-free `GET /observability/dream-rpg` payload with event/dice/
+branch and recovery aggregate counts. The v1 gameplay, transcript, correction,
+archive, and capability endpoints are backend REST contracts documented in
+`docs/rpg-dream-api.md`. Desktop remains **open: client not implemented** and
+must consume generated OpenAPI; mobile remains **open: no v1 UI consumer**.
 
 # Brief 216 / MER-11 backend-only control and observability closure
 

@@ -2,6 +2,8 @@
 
 管理服务的设置面分三层：
 
+RPG Dream's `rpg_kp` route is a backend capability, not a client setting; its effective route is visible with the other model categories.
+
 后台练习盲评不属于管理面热更新 API，但其模型选择遵循同一模型路由真值：
 `practice.reviewer_category` 是 routing profile category（默认 `consolidation`）；可选旧字段
 `practice.reviewer_preset` 是严格的直接 preset 名并优先于 category。未知 preset 会让该次

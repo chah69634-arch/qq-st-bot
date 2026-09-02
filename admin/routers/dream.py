@@ -272,6 +272,19 @@ async def dream_archive_list(
             if _SAFE_DREAM_ID_RE.fullmatch(stem):
                 files.append((path, stem))
     items = [_archive_metadata(dream_id, selected_char, path) for path, dream_id in files]
+    # RPG archives are player-only and physically isolated from solo Dream archives.
+    try:
+        from core.dream.rpg_archive import read_archive
+        rpg_root = get_paths().dream_rpg_archive_owner_dir(_owner_uid(), char_id=selected_char)
+        if rpg_root.is_dir():
+            for metadata_path in rpg_root.glob("*/metadata.json"):
+                rpg_id = metadata_path.parent.name
+                if not _SAFE_DREAM_ID_RE.fullmatch(rpg_id):
+                    continue
+                rows, metadata, partial = read_archive(_owner_uid(), rpg_id, char_id=selected_char)
+                items.append({"dream_id": rpg_id, "char_id": selected_char, "started_at": None, "ended_at": metadata.get("archived_at"), "valid_turns": len(rows), "valid_user_turns": sum(1 for row in rows if row.get("kind") == "user_action"), "valid_assistant_turns": sum(1 for row in rows if row.get("kind") in {"character_reply", "character_followup"}), "dream_mode": "rpg", "world_name": "rpg", "exit_mechanism": "rpg_hard_exit", "exit_initiator": "user", "completion": "archived", "exit_reason": "rpg_hard_exit", "summary_present": False, "summary_created_at": None, "summary_title": "", "summary_preview": "", "archive_parse_error": partial})
+    except Exception:
+        logger.debug("[dream_archive] RPG archive scan failed", exc_info=True)
     items.sort(key=lambda item: float(item.get("ended_at") or 0), reverse=True)
     page = items[offset:offset + limit]
     return {
@@ -294,6 +307,13 @@ async def dream_archive_detail(
     selected_char = _validated_archive_char_id(char_id)
     path = _archive_path(selected_id, selected_char)
     if not path.is_file():
+        try:
+            from core.dream.rpg_archive import read_archive
+            rows, metadata, partial = read_archive(_owner_uid(), selected_id, char_id=selected_char)
+            if rows or metadata:
+                return {"dream_id": selected_id, "char_id": selected_char, "metadata": {"dream_id": selected_id, "char_id": selected_char, "dream_mode": "rpg", "completion": "archived", "archive_parse_error": partial, **metadata}, "messages": rows, "partial_read": partial}
+        except Exception:
+            logger.debug("[dream_archive] RPG archive read failed", exc_info=True)
         raise HTTPException(status_code=404, detail="dream archive 不存在")
     turns, parse_error = _read_archive_file(path)
     if parse_error and not turns:

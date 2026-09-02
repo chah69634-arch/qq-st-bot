@@ -597,6 +597,18 @@ class DataPaths:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "dreams", safe_user_id(char_id), "rpg", safe_user_id(user_id), safe_user_id(dream_id), "session.json")
 
+    def dream_rpg_archive_path(self, user_id: str | int, dream_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "dreams", safe_user_id(char_id), "rpg_archive", safe_user_id(user_id), safe_user_id(dream_id), "transcript.jsonl")
+
+    def dream_rpg_archive_metadata_path(self, user_id: str | int, dream_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "dreams", safe_user_id(char_id), "rpg_archive", safe_user_id(user_id), safe_user_id(dream_id), "metadata.json")
+
+    def dream_rpg_archive_owner_dir(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "dreams", safe_user_id(char_id), "rpg_archive", safe_user_id(user_id))
+
     def dream_settings_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "dreams", char_id, "settings", safe_user_id(user_id) + ".json")

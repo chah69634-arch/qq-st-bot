@@ -146,6 +146,8 @@ REGISTRY: dict[str, PathMeta] = {
     "dreams_invariants_dir":  PathMeta("canonical", "dream",           "per_char_user", "ignore"),
     "dream_state_path":       PathMeta("canonical", "dream",           "per_user",      "ignore"),
     "dream_rpg_session_path": PathMeta("canonical", "dream",           "per_char_user", "ignore"),
+    "dream_rpg_archive_path": PathMeta("archive", "dream",                "per_char_user", "ignore"),
+    "dream_rpg_archive_metadata_path": PathMeta("archive", "dream",       "per_char_user", "ignore"),
     "dream_settings_path":    PathMeta("canonical", "dream",           "per_user",      "ignore"),
 
     # ── archive: 只追加，仅供人工复盘 ─────────────────────────────────────────

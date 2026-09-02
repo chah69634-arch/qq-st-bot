@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
@@ -16,17 +16,20 @@ router = APIRouter()
 
 
 class RpgCapability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     available: bool = True
     contract_version: str = "rpg/v1"
     max_primary_characters: int = 1
 
 
 class DreamCapabilitiesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     supported_modes: list[str]
     rpg: RpgCapability
 
 
 class RpgSessionProjection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     dream_id: str
     char_id: str
     script_id: str | None
@@ -41,11 +44,13 @@ class RpgSessionProjection(BaseModel):
 
 
 class RpgStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     session: RpgSessionProjection | None
-    scene: dict = {}
+    scene: dict = Field(default_factory=dict)
 
 
 class RpgObservabilityResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     session_count: int
     active_session_count: int
     round_count: int
