@@ -229,11 +229,12 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── canonical: shared toy-project files, writable only through whitelist ─
     "very_formal_project_dir": PathMeta("canonical", "shared",         "global",        "ignore"),
-    "character_document_root": PathMeta("canonical", "character_library", "per_char_user", "ignore"),
-    "character_document_index": PathMeta("canonical", "character_library", "per_char_user", "ignore"),
-    "character_document_stats": PathMeta("canonical", "character_library", "per_char_user", "ignore"),
-    "character_document_blob_dir": PathMeta("canonical", "character_library", "per_char_user", "ignore"),
-    "character_inner_diary": PathMeta("canonical", "character", "per_char", "ignore"),
+    "character_document_root": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
+    "character_document_index": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
+    "character_document_stats": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
+    "character_document_blob_dir": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
+    "character_inner_diary": PathMeta("canonical", "character_inner", "per_char", "ignore"),
+    "dream_rpg_archive_owner_dir": PathMeta("runtime", "dream", "per_char_user", "ignore"),
     "root_dir":               PathMeta("runtime",   "shared",          "global",        "ignore"),
     "test_data_archive_root": PathMeta("archive",   "shared",          "global",        "ignore"),
 

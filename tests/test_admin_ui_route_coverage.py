@@ -31,6 +31,8 @@ _ROUTE_RE = re.compile(r'@router\.(post|patch|put)\(\s*"([^"]+)"')
 # (METHOD, 完整路径) -> 白名单理由（一行，说明为什么管理面板不需要接这个接口）。
 # 新增写接口默认要求要么出现在 index.html 里，要么显式加进这里。
 NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
+    ("POST", "/dream/rpg/turn"): "RPG runtime client route",
+    ("POST", "/dream/rpg/corrections"): "RPG runtime correction route",
     # ── 桌宠客户端（Emerald-client）专属通道 ────────────────────────────
     ("POST", "/desktop/chat"): "桌宠对话入口，由 Emerald-client 直连，非管理面板功能",
     ("POST", "/mobile/chat"): "手机普通对话入口，由 PresenceKit-mobile 直连，非管理面板功能",
