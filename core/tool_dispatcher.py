@@ -125,9 +125,9 @@ def _web_search_wrapper(query: str, uid: str | None = None, char_id: str | None 
     return search(query, uid=uid, char_id=char_id)
 
 
-async def _read_diary_wrapper(user_id: str, date: str = "") -> str:
+async def _read_diary_wrapper(user_id: str, date: str = "", *, char_id: str | None = None) -> str:
     from core.tools.character_recall import read_character_diary_for_user
-    return await read_character_diary_for_user(user_id, _active_char_id(), date_str=date)
+    return await read_character_diary_for_user(user_id, char_id or _active_char_id(), date_str=date)
 
 
 async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
@@ -135,9 +135,11 @@ async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
     return read_watch_for_user(user_id, query)
 
 
-async def _search_diary_wrapper(user_id: str, query: str = "") -> str:
+async def _search_diary_wrapper(
+    user_id: str, query: str = "", date: str = "", *, char_id: str | None = None,
+) -> str:
     from core.tools.character_recall import search_character_diary_for_user
-    return await search_character_diary_for_user(user_id, _active_char_id(), query)
+    return await search_character_diary_for_user(user_id, char_id or _active_char_id(), query, date_str=date)
 
 
 async def _search_documents_wrapper(user_id: str, query: str = "", media_type: str = "", *, char_id: str) -> str:
@@ -525,18 +527,39 @@ async def _toy_job_status_wrapper(job_id: str | None = None) -> str:
     return await toy_job_status(job_id=job_id)
 
 
-async def _read_toy_file_wrapper(file_key: str) -> str:
+async def _read_toy_file_wrapper(file_key: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
+    if user_id and char_id:
+        from core.character_document_library import read as read_document
+        from core.character_document_library import search as search_documents
+        for row in search_documents(user_id, char_id, source="character_note"):
+            if row.get("filename") == file_key:
+                scoped = read_document(user_id, char_id, str(row.get("document_id") or ""))
+                if scoped is not None:
+                    return str(scoped.get("content") or "")
+        return "No scoped toybox note found."
     from core.tools.toybox import read_toy_file
     return read_toy_file(file_key=file_key)
-
 
 async def _write_toy_file_wrapper(
     file_key: str,
     content: str,
     mode: str = "overwrite",
+    *,
+    user_id: str | None = None,
+    char_id: str | None = None,
 ) -> str:
-    from core.tools.toybox import write_toy_file
-    return write_toy_file(file_key=file_key, content=content, mode=mode)
+    from core.tools.toybox import read_toy_file, write_toy_file
+    result = write_toy_file(file_key=file_key, content=content, mode=mode)
+    if user_id and char_id:
+        from core.character_document_library import store_upload
+        import hashlib
+        mirrored = read_toy_file(file_key=file_key)
+        store_upload(
+            uid=user_id, char_id=char_id, filename=file_key,
+            media_type="text/plain", sha256=hashlib.sha256(mirrored.encode("utf-8")).hexdigest(),
+            searchable_text=mirrored, source="character_note",
+        )
+    return result
 
 
 async def _peek_screen_content_wrapper() -> str:
@@ -698,6 +721,8 @@ _TOOL_REGISTRY["read_diary"] = {
     "dangerous": False,
     "category": "info",
     "persist": True,
+    "write_short_term": False,
+    "echo_event_log": False,
     "examples": [
         "帮我看看今天的日记",
         "你来读读我写的日记",
@@ -744,12 +769,18 @@ _TOOL_REGISTRY["search_diary"] = {
     "dangerous": False,
     "category": "memory",
     "persist": True,
+    "write_short_term": False,
+    "echo_event_log": False,
     "parameters": {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
                 "description": "用于检索的主题或关键词，例如“失眠”“焦虑”或“考试”；省略时返回最近片段。",
+            },
+            "date": {
+                "type": "string",
+                "description": "可选的精确日期，例如“2026-09-03”或“9月3日”。",
             },
         },
         "required": [],
@@ -2134,9 +2165,17 @@ async def _execute_structured_impl(
         elif tool_name in _SCOPED_MEMORY_READ_TOOLS:
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
-        elif tool_name in (
-            "add_reminder", "read_diary", "read_watch", "search_diary",
-        ):
+        elif tool_name in ("read_diary", "search_diary"):
+            _require_memory_read_scope(user_id, char_id)
+            if func in (_read_diary_wrapper, _search_diary_wrapper):
+                result = await func(user_id=user_id, char_id=char_id, **tool_args)
+            else:
+                # Preserve the historical signature for test/local extensions
+                # that replace the legacy callable in the registry.
+                result = await func(user_id=user_id, **tool_args)
+        elif tool_name in ("read_toy_file", "write_toy_file"):
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name in ("add_reminder", "read_watch"):
             result = await func(user_id=user_id, **tool_args)
         elif tool_name in (
             "revise_memory", "forget_episodic", "clear_midterm", "revise_user_profile",
@@ -2184,7 +2223,7 @@ async def _execute_structured_impl(
                 from core.memory.tool_read_log import record_read, format_read_memo
                 record_read(user_id, char_id, _fingerprint)
                 memo = format_read_memo(tool_name, tool_args)
-                if memo:
+                if memo and _TOOL_REGISTRY.get(tool_name, {}).get("write_short_term", True):
                     from core.memory.short_term import append as _st_append, _sanitize_assistant_message
                     sanitized = _sanitize_assistant_message(memo, uid=user_id)
                     _st_append(user_id, "assistant", sanitized, char_id=char_id)

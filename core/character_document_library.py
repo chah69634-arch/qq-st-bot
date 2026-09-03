@@ -18,12 +18,23 @@ _READ_CAP = 2_000
 _RESULT_CAP = 8
 
 
+def _query_terms(query: str) -> list[str]:
+    value = str(query or "").strip().casefold()
+    if not value:
+        return []
+    terms = {part for part in value.split() if part}
+    if len(terms) == 1 and " " not in value:
+        for length in (2, 3, 4):
+            terms.update(value[index:index + length] for index in range(len(value) - length + 1))
+    return sorted(terms, key=len, reverse=True)
+
+
 @dataclass(frozen=True)
 class DocumentRecord:
     document_id: str
     uid: str
     char_id: str
-    source: Literal["upload_file", "upload_image"]
+    source: Literal["upload_file", "upload_image", "character_note"]
     created_at: str
     filename: str
     media_type: str
@@ -92,7 +103,8 @@ def _summary(text: str) -> str:
 
 def store_upload(
     *, uid: str, char_id: str, filename: str, media_type: str,
-    sha256: str, searchable_text: str, source: Literal["upload_file", "upload_image"],
+    sha256: str, searchable_text: str,
+    source: Literal["upload_file", "upload_image", "character_note"],
     raw_bytes: bytes | None = None,
 ) -> str | None:
     """Store a bounded derived representation; raw bytes require explicit opt-in."""
@@ -131,14 +143,18 @@ def store_upload(
         return None
 
 
-def search(uid: str, char_id: str, query: str = "", *, media_type: str = "") -> list[dict]:
+def search(
+    uid: str, char_id: str, query: str = "", *, media_type: str = "", source: str = "",
+) -> list[dict]:
     uid, char_id = safe_user_id(uid), safe_user_id(char_id)
-    terms = [term.casefold() for term in str(query).split() if term.strip()]
+    terms = _query_terms(query)
     results = []
     for row in _load(uid, char_id):
         if row.get("deleted_at") or row.get("uid") != uid or row.get("char_id") != char_id:
             continue
         if media_type and str(row.get("media_type")) != media_type:
+            continue
+        if source and str(row.get("source")) != source:
             continue
         haystack = " ".join(str(row.get(key) or "") for key in ("filename", "summary", "searchable_text")).casefold()
         if terms and not all(term in haystack for term in terms):

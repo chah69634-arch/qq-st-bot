@@ -875,4 +875,6 @@ prompt by default and do not write short-term, event-log, episodic, identity, or
 storyline memory. Upload ingestion stores bounded derived text; raw bytes require
 the explicit `character_document_library.retain_raw_uploads` flag. The admin-only
 `GET /observability/character-library` route exposes aggregate counts and failures
-without content or filesystem paths.
+without content or filesystem paths. `search_character_notes` also includes
+only toybox mirror records from the same `uid + char_id` bucket; `read_diary`
+and `search_diary` use the active character diary path. All are bounded reads.
