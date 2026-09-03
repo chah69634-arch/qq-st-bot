@@ -219,6 +219,15 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 
 When editing a JS or CSS file loaded directly by `admin/static/index.html`, update that asset's `?v=` query version in `index.html`. When editing a page fragment under `admin/static/pages/`, also update `ADMIN_UI_FRAGMENT_VERSION` in `admin/static/js/core.js` and the `core.js` query version in `index.html`. Do not rely on a browser refresh or the default StaticFiles cache behavior to verify a page change.
 
+**强制验收：管理面板静态改动必须实际刷新并核对可见结果。** 每次修改
+`admin/static/index.html`、`admin/static/pages/`、`admin/static/js/` 或
+`admin/static/*.css` 后，必须同时完成：
+
+1. 更新对应资源的 `?v=`；页面 fragment 还要更新 `ADMIN_UI_FRAGMENT_VERSION`。
+2. 启动/复用本地 admin 服务后，用浏览器执行硬刷新（清除该页面缓存，不能只依赖普通刷新）。
+3. 实际打开受影响页面，确认新增/修改的文字、控件和状态可见；不能仅凭源码、构建成功或接口存在宣称 UI 完成。
+4. 若浏览器启动或连接被环境阻断，必须在最终报告中明确写“浏览器实测未完成”，并记录已完成的替代验证。
+
 ## Commands
 
 ```bash

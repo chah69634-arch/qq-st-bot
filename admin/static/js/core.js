@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-223-rpg-dream-admin-2';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
