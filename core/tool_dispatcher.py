@@ -25,6 +25,16 @@ from core.tools.garden_tools import water_garden
 
 logger = logging.getLogger(__name__)
 
+
+def _active_char_id() -> str:
+    try:
+        from core.pipeline_registry import get as _get_pipeline
+        from core.data_paths import DEFAULT_CHAR_ID
+        return str(getattr(_get_pipeline(), "_active_character_id", None) or DEFAULT_CHAR_ID)
+    except Exception:
+        from core.data_paths import DEFAULT_CHAR_ID
+        return DEFAULT_CHAR_ID
+
 # ─── 工具注册表 ────────────────────────────────────────────────────────────────
 _TOOL_REGISTRY: dict[str, dict] = {}
 
@@ -39,6 +49,9 @@ _TOOL_FALLBACKS = {
     "add_reminder": "备忘录暂时写不进去，稍后再试",
     "read_diary": "日记暂时读不到",
     "read_watch": "身体数据暂时读取不到",
+    "search_documents": "资料暂时检索不到",
+    "read_document": "资料暂时读取不到",
+    "search_character_notes": "角色手记暂时检索不到",
 }
 
 
@@ -113,8 +126,8 @@ def _web_search_wrapper(query: str, uid: str | None = None, char_id: str | None 
 
 
 async def _read_diary_wrapper(user_id: str, date: str = "") -> str:
-    from core.tools.diary_tool import read_diary_for_user
-    return await read_diary_for_user(user_id, date_str=date)
+    from core.tools.character_recall import read_character_diary_for_user
+    return await read_character_diary_for_user(user_id, _active_char_id(), date_str=date)
 
 
 async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
@@ -123,8 +136,23 @@ async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
 
 
 async def _search_diary_wrapper(user_id: str, query: str = "") -> str:
-    from core.tools.diary_search import search_diary_for_user
-    return await search_diary_for_user(user_id, query)
+    from core.tools.character_recall import search_character_diary_for_user
+    return await search_character_diary_for_user(user_id, _active_char_id(), query)
+
+
+async def _search_documents_wrapper(user_id: str, query: str = "", media_type: str = "", *, char_id: str) -> str:
+    from core.tools.character_recall import search_documents_for_user
+    return await search_documents_for_user(user_id, char_id, query, media_type)
+
+
+async def _read_document_wrapper(user_id: str, document_id: str, offset: int = 0, *, char_id: str) -> str:
+    from core.tools.character_recall import read_document_for_user
+    return await read_document_for_user(user_id, char_id, document_id, offset)
+
+
+async def _search_character_notes_wrapper(user_id: str, query: str = "", *, char_id: str) -> str:
+    from core.tools.character_recall import search_character_notes_for_user
+    return await search_character_notes_for_user(user_id, char_id, query)
 
 
 async def _get_profile_wrapper(user_id: str, *, char_id: str) -> str:
@@ -210,6 +238,7 @@ from pathlib import Path as _Path
 _MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "phone_control"})
 _SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({
     "get_profile", "get_episodic", "search_events", "expand_event_window", "get_related_events",
+    "search_documents", "read_document", "search_character_notes",
 })
 
 
@@ -663,7 +692,7 @@ _TOOL_REGISTRY["web_search"] = {
 _TOOL_REGISTRY["read_diary"] = {
     "func": _read_diary_wrapper,
     "description": (
-        "读取用户指定日期的日记。仅在用户明确邀请{char}阅读、查看或评价日记时调用；"
+        "读取角色指定日期的日记。仅在用户明确询问过去手记、邀请{char}核实或评价日记时调用；"
         "不要因为日常对话中偶然提到“日记”而自行读取。"
     ),
     "dangerous": False,
@@ -889,6 +918,41 @@ _TOOL_REGISTRY["get_episodic"] = {
         "required": [],
     },
     "trace_args": ["topic"],
+}
+
+_TOOL_REGISTRY["search_documents"] = {
+    "func": _search_documents_wrapper,
+    "description": "检索当前用户与当前角色私有资料库中的已上传文档和图片描述。需要核实用户以前发来的材料时调用。",
+    "dangerous": False, "category": "info", "trace_result": False, "echo_event_log": False,
+    "examples": ["我之前发给你的那份文件", "找一下那张图片", "查查我上传的资料"],
+    "keywords": ["之前发的文件", "上传的资料", "那张图片", "找一下文档"],
+    "parameters": {"type": "object", "properties": {
+        "query": {"type": "string", "description": "资料名称、主题或关键词。"},
+        "media_type": {"type": "string", "description": "可选的精确媒体类型筛选，例如 text/markdown 或 image/png。"},
+    }, "required": ["query"]},
+}
+
+_TOOL_REGISTRY["read_document"] = {
+    "func": _read_document_wrapper,
+    "description": "按 document_id 读取一份已检索到的私有资料；只读本次搜索返回的 id，不要猜测 id。",
+    "dangerous": False, "category": "info", "trace_result": False, "echo_event_log": False,
+    "examples": ["读取检索结果里的 doc_...", "继续读这份资料"],
+    "keywords": ["读这份资料", "打开文档", "继续读文件"],
+    "parameters": {"type": "object", "properties": {
+        "document_id": {"type": "string", "description": "search_documents 返回的稳定 document_id。"},
+        "offset": {"type": "integer", "description": "可选正文偏移量，用于继续读取。", "minimum": 0},
+    }, "required": ["document_id"]},
+}
+
+_TOOL_REGISTRY["search_character_notes"] = {
+    "func": _search_character_notes_wrapper,
+    "description": "检索当前角色在当前用户对话范围内的日记和手记。用户问角色以前写过什么、是否记下过某事时调用。",
+    "dangerous": False, "category": "info", "trace_result": False, "echo_event_log": False,
+    "examples": ["你以前写过这个吗", "翻翻你的手记", "你那天记了什么"],
+    "keywords": ["你的手记", "你写过", "翻翻笔记", "你那天记了什么"],
+    "parameters": {"type": "object", "properties": {
+        "query": {"type": "string", "description": "要核实的主题或关键词。"},
+    }, "required": ["query"]},
 }
 
 _TOOL_REGISTRY["search_events"] = {
@@ -1911,6 +1975,7 @@ async def _execute_structured_impl(
                 tool=tool_name, origin=origin, status=status,
                 args_digest=action_trace.build_args_digest(tool_name, tool_args),
                 result_digest=action_trace.build_result_digest(tool_name, digest_source),
+                echo_event_log=bool(_TOOL_REGISTRY.get(tool_name, {}).get("echo_event_log", True)),
                 **trace_kwargs,
             )
         except Exception as _at_err:

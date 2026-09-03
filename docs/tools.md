@@ -866,3 +866,13 @@ Their default queries exclude `web`, `dream_echo`, `coplay`, and conservative
 `legacy_unknown` evidence. Explicit source selection remains an authenticated
 admin-only forensic capability; role tools cannot request isolated sources.
 The repair adds no tool, desktop/mobile protocol, or prompt injection path.
+
+## Brief 228 character knowledge recall
+
+`search_documents`, `read_document`, and `search_character_notes` are explicit,
+bounded, frozen-`uid + char_id` recall tools. They do not inject results into the
+prompt by default and do not write short-term, event-log, episodic, identity, or
+storyline memory. Upload ingestion stores bounded derived text; raw bytes require
+the explicit `character_document_library.retain_raw_uploads` flag. The admin-only
+`GET /observability/character-library` route exposes aggregate counts and failures
+without content or filesystem paths.

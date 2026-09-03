@@ -636,6 +636,7 @@ async def upload_ingest(
     multipart 上传 + 可选用户附言 + channel 标记。
     """
     from core import media_processor
+    from core.config_loader import get_config as _cfg
 
     upload_files = [file] if file else (files or [])
     if not upload_files:
@@ -658,7 +659,11 @@ async def upload_ingest(
         if len(data) > 5 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="文件超过 5MB 上限")
 
-        result = await media_processor.ingest_file_bytes(data, fname)
+        owner_uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
+        from core.data_paths import DEFAULT_CHAR_ID
+        from core import pipeline_registry
+        active_char = getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
+        result = await media_processor.ingest_file_bytes(data, fname, uid=owner_uid, char_id=active_char)
         if result is None:
             raise HTTPException(status_code=422, detail="文件读取失败")
 
@@ -700,7 +705,11 @@ async def upload_ingest(
             }
             for data, filename in items
         ]
-        descriptions = await media_processor.ingest_image_bytes(items)
+        owner_uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
+        from core.data_paths import DEFAULT_CHAR_ID
+        from core import pipeline_registry
+        active_char = getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
+        descriptions = await media_processor.ingest_image_bytes(items, uid=owner_uid, char_id=active_char)
         if descriptions is None:
             raise HTTPException(status_code=422, detail="图片识别失败")
 

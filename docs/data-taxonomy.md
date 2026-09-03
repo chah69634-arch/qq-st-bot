@@ -333,3 +333,12 @@ directories are read-only fallbacks.
 Live2D and 3D uploads are deliberately reported as `partial`/backend-only until
 the desktop repository exposes an authenticated list/download or install
 contract. An upload is not evidence that the desktop renderer can load it.
+
+## Character knowledge library (Brief 228)
+
+`data/runtime/character_library/{char_id}/{uid}/` is a private, gitignored
+Reality-scoped bucket containing `index.json`, `stats.json`, and optional
+`blobs/{document_id}` files. The index stores bounded derived text and metadata;
+raw bytes are retained only when `character_document_library.retain_raw_uploads`
+is explicitly enabled. Deleted records remain as tombstones and this bucket is
+not a prompt layer or a memory-consolidation source.

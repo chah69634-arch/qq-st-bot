@@ -279,6 +279,13 @@ endpoint returns readiness gaps and leaves the mode unchanged. `GET /observabili
 returns only desired/effective/run state, aggregate counters, latency buckets,
 and redacted status codes. It never returns source text, complete IDs, user IDs,
 or media data. No desktop/mobile setting or protocol is introduced.
+## Brief 228 character document retention
+
+`character_document_library.retain_raw_uploads` is an admin-only deployment
+configuration switch and defaults to `false`. It is read during upload import;
+there is no desktop/mobile setting or hot-reload endpoint. Observability reports
+effective retention counts without content, raw bytes, or filesystem paths.
+
 ## Brief 217 EventContext readiness repair
 
 The observer remains backend-only and defaults to `disabled`. Its read projection

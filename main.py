@@ -382,7 +382,7 @@ async def handle_message(message: dict):
     if file_info:
         try:
             from core.media_processor import process_file_with_evidence
-            file_text, file_ref = await process_file_with_evidence(file_info)
+            file_text, file_ref = await process_file_with_evidence(file_info, uid=user_id, char_id=_char_id)
             media_refs.append(file_ref)
             if file_text:
                 fname = file_info.get("name", "文件")
@@ -394,7 +394,7 @@ async def handle_message(message: dict):
     if image_urls and not media_context:
         try:
             from core.media_processor import process_image_with_evidence
-            img_desc, image_ref = await process_image_with_evidence(image_urls[0], content)
+            img_desc, image_ref = await process_image_with_evidence(image_urls[0], content, uid=user_id, char_id=_char_id)
             media_refs.append(image_ref)
             if img_desc:
                 media_context = f"（你发来了一张图片，图片内容：{img_desc}，回应必须细腻且有分量）"

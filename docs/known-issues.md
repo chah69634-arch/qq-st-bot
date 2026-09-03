@@ -295,6 +295,13 @@ additional production sources.
   matrix and S1 short soak have accumulated the required restart, duplicate,
   multi-channel, and ledger-unavailable samples. No recall, prompt, ranking,
   Dream/Stage lifecycle, or client protocol consumes this trace.
+### KNOW-228: character knowledge client surface
+
+The scoped character knowledge library and admin observability endpoint are
+implemented. Desktop/mobile browsing and upload-management UI are intentionally
+not added in this brief; they remain `roadmap` and must be specified in the
+three-repo interface catalog before client work begins.
+
 ## Memory Event identity soak repair (Brief 217)
 
 - `observe`: startup and the enable endpoint now upgrade/check existing ledgers;

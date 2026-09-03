@@ -84,7 +84,7 @@ def _media_ref(kind: str, filename: str, data: bytes | None, *, availability: st
     return ref
 
 
-async def process_image_with_evidence(url: str, user_text: str = "") -> tuple[str | None, dict[str, str]]:
+async def process_image_with_evidence(url: str, user_text: str = "", *, uid: str = "", char_id: str = "") -> tuple[str | None, dict[str, str]]:
     """Process one QQ image once and return its description plus safe evidence."""
     try:
         data = await download_bytes(url)
@@ -92,7 +92,7 @@ async def process_image_with_evidence(url: str, user_text: str = "") -> tuple[st
             return None, _media_ref("image", _guess_image_filename(url, b""), None, availability="unavailable")
 
         filename = _guess_image_filename(url, data)
-        result = await ingest_image_bytes([(data, filename)])
+        result = await ingest_image_bytes([(data, filename)], **({"uid": uid, "char_id": char_id} if uid and char_id else {}))
         if not result:
             return None, _media_ref("image", filename, data, availability="unavailable")
         return result[0], _media_ref("image", filename, data)
@@ -185,6 +185,7 @@ def _normalize_image(data: bytes, filename: str) -> tuple[bytes, str]:
 
 async def ingest_image_bytes(
     items: list[tuple[bytes, str]],
+    *, uid: str = "", char_id: str = "",
 ) -> list[str] | None:
     """批量图片落盘 + vision 识别 + cache。"""
     global LAST_IMAGE_STORED_PATHS
@@ -210,6 +211,14 @@ async def ingest_image_bytes(
             cached = _load_image_cache(sha256)
             if cached:
                 descriptions[index] = cached
+                if uid and char_id:
+                    try:
+                        from core.character_document_library import store_upload
+                        store_upload(uid=uid, char_id=char_id, filename=Path(filename).name,
+                                     media_type={".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif"}.get(suffix, "image/jpeg"),
+                                     sha256=sha256, searchable_text=cached, source="upload_image", raw_bytes=data)
+                    except Exception:
+                        logger.warning("[media_processor] character library cached image import failed", exc_info=True)
                 continue
 
             normalized, media_type = _normalize_image(data, filename)
@@ -241,6 +250,12 @@ async def ingest_image_bytes(
         vision_messages = [{"role": "user", "content": content_blocks}]
         result = await llm_client.chat(vision_messages, use_vision=True)
         if not result:
+            if uid and char_id:
+                try:
+                    from core.character_document_library import record_failure
+                    record_failure(uid=uid, char_id=char_id, reason="vision_empty")
+                except Exception:
+                    logger.debug("[media_processor] character library vision telemetry failed", exc_info=True)
             return None
 
         parsed = _split_vision_result(result, len(prepared))
@@ -260,6 +275,16 @@ async def ingest_image_bytes(
 
             path.write_bytes(item["data"])
             _save_image_cache(item["sha256"], description, path, filename)
+            if uid and char_id:
+                try:
+                    from core.character_document_library import store_upload
+                    store_upload(
+                        uid=uid, char_id=char_id, filename=filename,
+                        media_type=item["media_type"], sha256=item["sha256"],
+                        searchable_text=description, source="upload_image", raw_bytes=item["data"],
+                    )
+                except Exception:
+                    logger.warning("[media_processor] character library image import failed", exc_info=True)
             LAST_IMAGE_STORED_PATHS.append(str(path))
             descriptions[item["index"]] = description
 
@@ -385,7 +410,7 @@ def gc_image_cache(max_age_days: int = 30, max_files: int = 500) -> int:
     return count
 
 
-async def ingest_file_bytes(data: bytes, filename: str) -> tuple[str, Path] | None:
+async def ingest_file_bytes(data: bytes, filename: str, *, uid: str = "", char_id: str = "") -> tuple[str, Path] | None:
     """落盘到 data/inbox/ + 解析。"""
     original_name = Path(filename or "file").name or "file"
     suffix = Path(original_name).suffix.lower()
@@ -412,7 +437,23 @@ async def ingest_file_bytes(data: bytes, filename: str) -> tuple[str, Path] | No
     text = parse_file_bytes(data, original_name)
     if text is None:
         logger.warning(f"[media_processor] 文件解析失败，已保留落盘文件: {path}")
+        if uid and char_id:
+            try:
+                from core.character_document_library import record_failure
+                record_failure(uid=uid, char_id=char_id, reason="file_parse")
+            except Exception:
+                logger.debug("[media_processor] character library parse telemetry failed", exc_info=True)
         return "", path
+    if uid and char_id:
+        try:
+            from core.character_document_library import store_upload
+            store_upload(
+                uid=uid, char_id=char_id, filename=original_name,
+                media_type={".txt": "text/plain", ".md": "text/markdown", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}.get(suffix, "application/octet-stream"),
+                sha256=_hash_bytes(data), searchable_text=text, source="upload_file", raw_bytes=data,
+            )
+        except Exception:
+            logger.warning("[media_processor] character library file import failed", exc_info=True)
     return text, path
 
 
@@ -422,7 +463,7 @@ async def process_file(file_info: dict) -> str | None:
     return text
 
 
-async def process_file_with_evidence(file_info: dict) -> tuple[str | None, dict[str, str]]:
+async def process_file_with_evidence(file_info: dict, *, uid: str = "", char_id: str = "") -> tuple[str | None, dict[str, str]]:
     """Process one QQ file once and return text plus a safe media reference."""
     name = Path(str(file_info.get("name", "") or "file")).name or "file"
     try:
@@ -460,7 +501,7 @@ async def process_file_with_evidence(file_info: dict) -> tuple[str | None, dict[
 
         evidence = _media_ref("file", name, data)
 
-        result = await ingest_file_bytes(data, name)
+        result = await ingest_file_bytes(data, name, **({"uid": uid, "char_id": char_id} if uid and char_id else {}))
         if result is None:
             suffix = Path(name).suffix.lower()
             if suffix and suffix not in SUPPORTED_SUFFIXES:

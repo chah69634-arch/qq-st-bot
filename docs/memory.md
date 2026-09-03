@@ -1914,3 +1914,13 @@ ingress-to-evidence linkage from its durable JSONL trace, so restarts do not
 reset a soak. Missing timing is `not_measured`; failed ledger appends are
 `evidence:failed`, never committed. Versioned owner turns use the stable client
 turn ID, and companion phone turns use the existing receipt hash.
+
+## Brief 228: character knowledge recall is not long-term memory
+
+Uploaded files/images and character-authored notes live in a separate
+`character_library` runtime bucket partitioned by `uid + char_id`. Import is
+fail-open and records only content-free failure counters. Recall is explicit and
+bounded through `search_documents`, `read_document`, and `search_character_notes`;
+it is not prompt-injected by default and never enters short-term, event-log,
+episodic, identity, or storyline memory. Deletion tombstones the index and removes
+an optionally retained raw blob.

@@ -170,6 +170,9 @@ tools:
     enabled: true
   search_diary:
     enabled: true
+character_document_library:
+  # Derived text/vision descriptions are indexed; original uploads are discarded by default.
+  retain_raw_uploads: false
   read_watch:
     enabled: true
   get_profile:

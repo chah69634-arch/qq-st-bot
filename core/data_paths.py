@@ -458,6 +458,10 @@ class DataPaths:
     def yexuan_inner_diary(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "characters", char_id, "inner", "diary")
 
+    def character_inner_diary(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Canonical per-character authored diary path."""
+        return self._p("runtime", "characters", safe_user_id(char_id), "inner", "diary")
+
     def history(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("chars", char_id, "history")
 
@@ -469,6 +473,20 @@ class DataPaths:
 
     def diary_fallback(self) -> Path:
         return self._p("diary_fallback")
+
+    def character_document_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Private searchable material, isolated by the Reality uid and character."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "character_library", safe_user_id(char_id), safe_user_id(user_id))
+
+    def character_document_index(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self.character_document_root(user_id, char_id=char_id) / "index.json"
+
+    def character_document_stats(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self.character_document_root(user_id, char_id=char_id) / "stats.json"
+
+    def character_document_blob_dir(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self.character_document_root(user_id, char_id=char_id) / "blobs"
 
     def pending_perception_dir(self) -> Path:
         p = self._p("runtime", "pending_perception")

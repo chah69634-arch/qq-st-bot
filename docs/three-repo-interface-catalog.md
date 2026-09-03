@@ -443,3 +443,12 @@ mapping, coverage, and latest-run metrics. Empty scopes are reported as not run.
 Both features remain off by default; shadow never enters the production prompt,
 and proposer rows remain unreviewed candidates rather than deterministic edges.
 | `/settings/event-context-observer`, `/observability/event-context` | Brief 217 identity soak control and durable aggregation | Admin Runtime Config exposes `disabled`/`observe`; no desktop/mobile protocol. `admin` writes and `state.read` reads redacted readiness, linkage, and latency only |
+
+## Brief 228 character knowledge recall
+
+| Interface | Scope / consumers | Status |
+|---|---|---|
+| `search_documents`, `read_document`, `search_character_notes` | Explicit owner tool loop; frozen `uid + char_id`; bounded results; no automatic memory writes | `current`, backend |
+| `GET /observability/character-library?uid=&char_id=` | Admin `state.read`; aggregate counts/failures only | `current`, admin-only |
+| `DELETE /character-library/{document_id}?uid=&char_id=` | Admin `admin`; tombstone and optional raw-blob cleanup | `current`, admin-only |
+| Desktop/mobile settings and protocol | No new client UI or payload in Brief 228 | `roadmap`, backend capability remains admin-only |
